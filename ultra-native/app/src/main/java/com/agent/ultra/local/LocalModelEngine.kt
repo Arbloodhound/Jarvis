@@ -1,6 +1,8 @@
 package com.agent.ultra.local
 
 import android.content.Context
+import com.agent.ultra.agent.ThermalGuard
+import com.agent.ultra.agent.ThermalPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -210,8 +212,9 @@ class LocalModelEngine(private val context: Context) {
 
     /**
      * [thinkBudget] non-null: the reasoning trace is capped, hidden from [onToken] and
-     * from the returned text (only the answer comes back). [threads] <= 0 keeps the
-     * current thread count.
+     * from the returned text (only the answer comes back). Threads: the thermal policy's
+     * count for the level read once the lock is held ([threads] > 0 can only lower it); native
+     * always gets an explicit count, and it stays fixed for the whole call.
      */
     suspend fun generate(
         prompt: String,
@@ -234,7 +237,8 @@ class LocalModelEngine(private val context: Context) {
             val sb = StringBuilder()
             val t0 = System.currentTimeMillis()
             val faults0 = PageFaults.read()
-            val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, threads) { piece ->
+            val nThreads = ThermalPolicy.resolveThreads(threads, ThermalGuard.level, baseThreads())
+            val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, nThreads) { piece ->
                 if (thinkBudget == null) {
                     sb.append(piece); onToken(piece); null
                 } else {
@@ -249,7 +253,7 @@ class LocalModelEngine(private val context: Context) {
             val faults1 = PageFaults.read()
             android.util.Log.i("UltraLlm", "gen tokens=$n ms=$ms tokPerSec=${"%.1f".format(n * 1000.0 / ms)} " +
                 "majfaults=${if (faults0 >= 0 && faults1 >= 0) faults1 - faults0 else -1} " +
-                "availMB=${availableRam() / 1_048_576} model=${modelFile.name} cpu=${LlmNative.variant}")
+                "availMB=${availableRam() / 1_048_576} model=${modelFile.name} cpu=${LlmNative.variant} threads=$nThreads")
             thinkBudget?.let {
                 android.util.Log.d("UltraRoute", "thinkTokens=${it.thinkTokens} forced=${it.forced} budget=${it.budgetTokens}")
             }
@@ -298,6 +302,9 @@ class LocalModelEngine(private val context: Context) {
         // Measured on the A15 5G (llama-bench, Gemma 3 1B Q4_K_M):
         // 4 threads = 10.1 tok/s generation, 16.6 tok/s prompt eval.
         const val THREADS = 4
+
+        /** Full-speed generate thread count; the thermal policy scales down from it. */
+        fun baseThreads(): Int = THREADS
         const val CTX_SIZE = 4096
         const val MIN_AVAIL_BYTES = 500L * 1024 * 1024
         const val FAST_PATH_MAX_BYTES = 2_500L * 1024 * 1024

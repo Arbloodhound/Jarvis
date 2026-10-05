@@ -11,11 +11,13 @@ object ThermalPolicy {
 
     enum class AmbientMode { NORMAL, SLOWED, WAKE_ONLY }
 
-    enum class Level(val threads: Int, val budgetScale: Float, val ambient: AmbientMode) {
-        NORMAL(4, 1.0f, AmbientMode.NORMAL),
-        WARM(3, 0.6f, AmbientMode.SLOWED),
-        HOT(2, 0.3f, AmbientMode.WAKE_ONLY),
-        CRITICAL(2, 0.0f, AmbientMode.WAKE_ONLY),   // device commands only
+    // LLM threads per level come from threadsFor(level, base), not a fixed column here:
+    // the full-speed count is the device's, not the policy's.
+    enum class Level(val budgetScale: Float, val ambient: AmbientMode) {
+        NORMAL(1.0f, AmbientMode.NORMAL),
+        WARM(0.6f, AmbientMode.SLOWED),
+        HOT(0.3f, AmbientMode.WAKE_ONLY),
+        CRITICAL(0.0f, AmbientMode.WAKE_ONLY),   // device commands only
     }
 
     // upward thresholds; coming back down needs HYST lower, so it doesn't oscillate
@@ -47,6 +49,33 @@ object ThermalPolicy {
             else -> Level.NORMAL
         }
         return maxOf(fromHeadroom, fromStatus)
+    }
+
+    private const val HOT_THREADS = 2
+
+    /**
+     * LLM threads at [level] when [base] is the full-speed count: NORMAL = base, WARM = two
+     * thirds of it rounded (at least 2), HOT and CRITICAL = 2. Never above base, never below 1.
+     * Base 4 gives 4/3/2/2, the table this replaced.
+     */
+    fun threadsFor(level: Level, base: Int): Int {
+        val b = base.coerceAtLeast(1)
+        val n = when (level) {
+            Level.NORMAL -> b
+            Level.WARM -> maxOf(HOT_THREADS, (2 * b + 1) / 3)
+            Level.HOT, Level.CRITICAL -> HOT_THREADS
+        }
+        return n.coerceIn(1, b)
+    }
+
+    /**
+     * The count one native generate call gets: the policy's for [level], or [requested] if the
+     * caller chose fewer. Never 0 — the native shim reads 0 as "keep the last count", so one
+     * HOT reply used to leave every later default call on 2 threads until a thinking call came.
+     */
+    fun resolveThreads(requested: Int, level: Level, base: Int): Int {
+        val policy = threadsFor(level, base)
+        return if (requested > 0) minOf(requested, policy) else policy
     }
 
     /** Scale a routed think budget. At CRITICAL only device-command-sized thinking remains. */
