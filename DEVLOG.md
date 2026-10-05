@@ -33,6 +33,36 @@ BUILD_GUIDE, both native build scripts, the LoRA notebook, the brief) are in
 `assembleDebug`, `llvm-readelf` 0x4000 check); then Step 4 on the Pixel; the LoRA training run;
 the G2 connection.
 
+### 2026-10-05 (later) — brief Step 2 build proof, cloud session with Google hosts allowed
+
+**Subsystem:** H only (build proof). No source changed; this was a proof run of the commit above.
+
+**Environment:** JDK 17.0.20 (apt), cmdline-tools → `platforms;android-35`, `build-tools;35.0.0`,
+`platform-tools`, `ndk;27.2.12479018` (r27c). `cmake;3.28.3` does **not exist** in Google's SDK
+repository (it lists 3.22.1, 3.30.x, 3.31.x, 4.x); `build.gradle.kts` pins no CMake version, and
+Gradle used the system `/usr/bin/cmake` 3.28.3 from PATH. Gradle also auto-installed and built
+with `ndk;27.0.12077973` (AGP's default), while the llama/whisper static libs were built with
+r27c (27.2.12479018). Sources: llama.cpp `8345f33`, whisper.cpp `60c0be6` (HEAD on 2026-10-05).
+
+- `build-llama-android.sh`, `build-whisper-android.sh`: **PROVEN**, both exit 0; whisper's
+  include dir has `ggml-cpu.h` + `ggml-backend.h`.
+- `:app:compileDebugKotlin`: **PROVEN**, BUILD SUCCESSFUL (the first attempt failed on a Maven
+  Central HTTP 429 rate limit; the re-run passed with no change).
+- `:app:testDebugUnitTest`: **PROVEN**, 482 tests, 0 failures, 0 errors, 0 skipped (counted from
+  the JUnit XML results).
+- `:app:assembleDebug`: **PROVEN**, `app-debug.apk` 55,167,157 bytes.
+- 16 KB alignment: **PROVEN**. All 6 libs in `lib/arm64-v8a` (`libultra_llm`, `libultra_whisper`,
+  `libonnxruntime`, `libonnxruntime4j_jni`, `libandroidx.graphics.path`,
+  `libdatastore_shared_counter`): every LOAD segment is `0x4000` (NDK `llvm-readelf -lW`).
+  `libultra_whisper.so` exports only its 3 `WhisperNative` JNI symbols.
+- On-device rows (brief Step 4) and the WakeGate Kotlin port: unchanged, **CANNOT VERIFY FROM
+  CURRENT ARTIFACTS** / **SOURCE-FIXED BUT RUNTIME-UNPROVEN**. No phone. A build passing is not
+  behavioural proof.
+
+**Open / next:** brief Step 4 on the Pixel (`installDebug` + logcat table); the docs' "install
+`cmake;3.28.3` via sdkmanager" line is wrong (that package doesn't exist; a CMake 3.28.3 on PATH
+is what's used). Not fixed here because this was a proof run.
+
 ## 2026-09-20 (day) — the gate asks on top of the app; routes are played by the engine
 
 **Released as 2.4.0** (versionCode 15): signed with the release key (`0d04510d…ca241f`, v2),
