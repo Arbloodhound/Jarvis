@@ -265,6 +265,18 @@ class LocalModelEngine(private val context: Context) {
          */
         val PRESETS = listOf(
             ModelChoice(
+                "Qwen3-30B-A3B Thinking (IQ3_XXS) — specialized MoE, tight",
+                "https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/resolve/main/Qwen3-30B-A3B-Thinking-2507-UD-IQ3_XXS.gguf",
+                "qwen3moe-thinking-iq3xxs.gguf", 12900,
+                "30B total / 3B active MoE, best reasoning that fits. ~12.9GB — at the 16GB ceiling with the mic service running. If it thrashes, use the IQ2_M entry. Emits a <think> trace; simple device commands still route to the fast on-device path.",
+            ),
+            ModelChoice(
+                "Qwen3-30B-A3B Thinking (IQ2_M) — MoE, safe fit",
+                "https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/resolve/main/Qwen3-30B-A3B-Thinking-2507-UD-IQ2_M.gguf",
+                "qwen3moe-thinking-iq2m.gguf", 10800,
+                "Same MoE, heavier quant. ~10.8GB leaves headroom for whisper + wake + OS. Use this if IQ3 pages to storage.",
+            ),
+            ModelChoice(
                 "Gemma 3 1B (Q4_K_M) — default",
                 "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf",
                 "gemma3-1b-q4km.gguf", 768,
@@ -345,9 +357,14 @@ class LocalModelEngine(private val context: Context) {
         fun fitFor(model: ModelChoice, totalRamBytes: Long): Fit {
             if (totalRamBytes <= 0 || model.approxMb <= 0) return Fit.COMFORTABLE
             val fraction = (model.approxMb * 1_048_576.0) / totalRamBytes
+            // MoE weights (filename marks them) are mmap'd and only ~3B active, so they
+            // run at high RAM fraction where a dense model would not — allow up to ~0.85
+            // on a flagship, flagged TIGHT. Dense models keep the stricter bands.
+            val isMoe = model.fileName.contains("moe")
             return when {
                 fraction <= 0.25 -> Fit.COMFORTABLE
                 fraction <= 0.45 -> Fit.TIGHT
+                isMoe && fraction <= 0.85 -> Fit.TIGHT
                 else -> Fit.TOO_BIG
             }
         }
@@ -357,7 +374,9 @@ class LocalModelEngine(private val context: Context) {
             android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.totalMem
         } catch (_: Exception) { 0L }
 
-        val DEFAULT = PRESETS[0]
+        /** Safe default stays the small Gemma, not the 12.9GB MoE now at index 0.
+         *  The MoE is an opt-in choice the user picks knowing the RAM cost. */
+        val DEFAULT = PRESETS.first { it.fileName == "gemma3-1b-q4km.gguf" }
     }
 }
 
