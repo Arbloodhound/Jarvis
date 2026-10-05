@@ -43,6 +43,8 @@ class AmbientListenService : Service() {
     private lateinit var mem: AmbientMemory
     private lateinit var wake: WakeFilter
     private var whisper = 0L
+    private var gate: WakeGate? = null
+    private var cmdWindowUntil = 0L
     private var wakeLock: PowerManager.WakeLock? = null
 
     @Volatile var mutedUntil = 0L          // echo guard: set by the TTS layer while speaking
@@ -74,6 +76,8 @@ class AmbientListenService : Service() {
             }
         )
         if (whisper == 0L) { stopSelf(); return@launch }
+        gate = WakeGate(this@AmbientListenService,
+            threshold = 0.5f).takeIf { it.ready }   // null => fall back to text-match wake
 
         val minBuf = AudioRecord.getMinBufferSize(
             AmbientConfig.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
@@ -92,8 +96,14 @@ class AmbientListenService : Service() {
             while (isActive) {
                 val n = rec.read(frame, 0, frame.size)
                 if (n <= 0) continue
-                if (System.currentTimeMillis() < mutedUntil) { seg.reset(); continue }
-                seg.push(if (n == frame.size) frame else frame.copyOf(n))
+                if (System.currentTimeMillis() < mutedUntil) { seg.reset(); gate?.reset(); continue }
+                val fr = if (n == frame.size) frame else frame.copyOf(n)
+                // Acoustic gate: when present, it decides when we're addressed.
+                // whisper then runs only for the command window + throttled memory.
+                if (gate?.accept(fr) == true) {
+                    cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS
+                }
+                seg.push(fr)
 
                 val now = System.currentTimeMillis()
                 if (now - lastPrune > 3_600_000L) {
@@ -119,6 +129,15 @@ class AmbientListenService : Service() {
 
         val now = System.currentTimeMillis()
         mem.record(r.text, now, r.confidence)          // EVERYTHING kept as memory
+
+        // Acoustic gate fired within the window -> this utterance is the command,
+        // no need for the spoken name in the text. Falls through to text-match
+        // when no gate is loaded.
+        if (gate != null && now < cmdWindowUntil) {
+            cmdWindowUntil = 0L
+            AmbientBridge.onCommand?.invoke(buildContextualRequest(r.text, now))
+            return
+        }
 
         when (val v = wake.classify(r.text, now)) {
             is WakeFilter.Verdict.Ambient -> Unit        // store only; stay silent
@@ -163,6 +182,7 @@ class AmbientListenService : Service() {
     override fun onDestroy() {
         captureJob?.cancel(); scope.cancel()
         if (whisper != 0L) { WhisperNative.nativeFree(whisper); whisper = 0L }
+        gate?.close(); gate = null
         wakeLock?.let { if (it.isHeld) it.release() }
         instance = null
         super.onDestroy()

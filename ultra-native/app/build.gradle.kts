@@ -147,6 +147,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+    // openWakeWord acoustic gate (ONNX Runtime). Verify latest version on Maven.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
