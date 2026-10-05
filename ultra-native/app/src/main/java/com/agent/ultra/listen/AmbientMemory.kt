@@ -36,7 +36,9 @@ class AmbientMemory private constructor(ctx: Context) :
     fun since(sinceTs: Long, budgetChars: Int): String {
         val sb = StringBuilder()
         readableDatabase.rawQuery(
-            "SELECT ts,text FROM heard WHERE ts>=? ORDER BY ts ASC", arrayOf(sinceTs.toString())
+            // ts is stored as INTEGER in an FTS4 column (no affinity); a bound TEXT arg
+            // sorts above every integer, so ts>=? without the CAST never matched.
+            "SELECT ts,text FROM heard WHERE ts>=CAST(? AS INTEGER) ORDER BY ts ASC", arrayOf(sinceTs.toString())
         ).use { c ->
             while (c.moveToNext()) {
                 val line = c.getString(1)

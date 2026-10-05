@@ -31,4 +31,14 @@ class IntentRouterTest {
         assertEquals(Tier.LIGHT, tier("quickly, what's a good name for a cat"))
     }
     @Test fun defaultIsNormal() = assertEquals(Tier.NORMAL, tier("what's a good dinner with chickpeas and spinach"))
+
+    /** An ambient command carries overheard transcript; only the request decides the tier. */
+    @Test fun ambientCommandRoutesOnRequestOnly() {
+        val transcript = "they said the reaction was bad and the dose was 50 mg ".repeat(10)
+        val wrapped = "[Ambient transcript, last 15 min — context only, may be noisy]\n$transcript\n\n" +
+            "${IntentRouter.REQUEST_MARKER}turn on the flashlight"
+        assertEquals(Tier.DEVICE, tier(wrapped))
+        assertEquals("turn on the flashlight", IntentRouter.requestPart(wrapped))
+        assertEquals("plain text", IntentRouter.requestPart("plain text"))
+    }
 }

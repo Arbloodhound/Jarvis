@@ -24,6 +24,83 @@ JavaVM *gVm = nullptr;
 jobject gCallback = nullptr;
 jmethodID gOnToken = nullptr;
 
+// Text crosses JNI as UTF-16, never through the *StringUTF* calls: those speak
+// Modified UTF-8, which has no 4-byte sequences (emoji, rarer CJK) and rejects a
+// character split across two token pieces. A byte-level BPE (Qwen) emits exactly
+// those splits; CheckJNI aborts a debug build on them.
+std::string gUtf8Pending;   // bytes of a character split across token pieces
+
+void appendUtf16(std::u16string &out, uint32_t cp) {
+    if (cp >= 0x10000) {
+        cp -= 0x10000;
+        out.push_back(static_cast<char16_t>(0xD800 + (cp >> 10)));
+        out.push_back(static_cast<char16_t>(0xDC00 + (cp & 0x3FF)));
+    } else {
+        out.push_back(static_cast<char16_t>(cp));
+    }
+}
+
+// Complete characters of pending+piece as UTF-16; an incomplete tail stays pending.
+// Invalid bytes become U+FFFD.
+std::u16string takeCompleteUtf16(const std::string &piece) {
+    gUtf8Pending += piece;
+    const std::string &s = gUtf8Pending;
+    const size_t n = s.size();
+    std::u16string out;
+    size_t i = 0;
+    while (i < n) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        const int len = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : (c >> 3) == 0x1E ? 4 : 0;
+        if (len == 0) { out.push_back(0xFFFD); i++; continue; }
+        if (i + len > n) {
+            bool cont = true;
+            for (size_t k = i + 1; k < n; k++) if ((static_cast<unsigned char>(s[k]) & 0xC0) != 0x80) cont = false;
+            if (cont) break;                  // wait for the rest of this character
+            out.push_back(0xFFFD); i++; continue;
+        }
+        uint32_t cp = len == 1 ? c : len == 2 ? (c & 0x1F) : len == 3 ? (c & 0x0F) : (c & 0x07);
+        bool bad = false;
+        for (int k = 1; k < len; k++) {
+            const auto cc = static_cast<unsigned char>(s[i + k]);
+            if ((cc & 0xC0) != 0x80) { bad = true; break; }
+            cp = (cp << 6) | (cc & 0x3F);
+        }
+        if (bad) { out.push_back(0xFFFD); i++; continue; }
+        appendUtf16(out, cp);
+        i += len;
+    }
+    gUtf8Pending.erase(0, i);
+    return out;
+}
+
+std::string jstringToUtf8(JNIEnv *env, jstring js) {
+    std::string out;
+    if (!js) return out;
+    const jsize n = env->GetStringLength(js);
+    const jchar *u = env->GetStringChars(js, nullptr);
+    if (!u) return out;
+    for (jsize i = 0; i < n; i++) {
+        uint32_t cp = u[i];
+        if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < n && u[i + 1] >= 0xDC00 && u[i + 1] <= 0xDFFF) {
+            cp = 0x10000 + ((cp - 0xD800) << 10) + (u[i + 1] - 0xDC00);
+            i++;
+        } else if (cp >= 0xD800 && cp <= 0xDFFF) {
+            cp = 0xFFFD;                      // lone surrogate
+        }
+        if (cp < 0x80) out += static_cast<char>(cp);
+        else if (cp < 0x800) { out += static_cast<char>(0xC0 | (cp >> 6)); out += static_cast<char>(0x80 | (cp & 0x3F)); }
+        else if (cp < 0x10000) {
+            out += static_cast<char>(0xE0 | (cp >> 12)); out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+            out += static_cast<char>(0x80 | (cp & 0x3F));
+        } else {
+            out += static_cast<char>(0xF0 | (cp >> 18)); out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+            out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F)); out += static_cast<char>(0x80 | (cp & 0x3F));
+        }
+    }
+    env->ReleaseStringChars(js, u);
+    return out;
+}
+
 // Delivers one piece to Kotlin. Kotlin may return text to force-feed into the
 // context without sampling (ThinkBudget's "</think>" at the budget); empty = none.
 std::string deliverToken(const std::string &piece) {
@@ -36,13 +113,15 @@ std::string deliverToken(const std::string &piece) {
         attached = true;
     }
     if (env) {
-        jstring s = env->NewStringUTF(piece.c_str());
+        // One callback per token even when the piece is only part of a character
+        // (then ""): ThinkBudget counts tokens by callbacks.
+        const std::u16string u = takeCompleteUtf16(piece);
+        jstring s = env->NewString(reinterpret_cast<const jchar *>(u.data()), static_cast<jsize>(u.size()));
         auto r = static_cast<jstring>(env->CallObjectMethod(gCallback, gOnToken, s));
         env->DeleteLocalRef(s);
         if (env->ExceptionCheck()) env->ExceptionClear();
         else if (r) {
-            const char *c = env->GetStringUTFChars(r, nullptr);
-            if (c) { inject = c; env->ReleaseStringUTFChars(r, c); }
+            inject = jstringToUtf8(env, r);
             env->DeleteLocalRef(r);
         }
     }
@@ -70,6 +149,10 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
 
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = ctxSize;
+    // The prompt goes to llama_decode as ONE batch, and llama.cpp aborts the
+    // process (GGML_ASSERT) when a batch exceeds n_batch (default 2048). The
+    // length guard in generate() allows up to ~ctxSize, so n_batch must match.
+    cparams.n_batch = ctxSize;
     cparams.n_threads = threads;
     cparams.n_threads_batch = threads;
 
@@ -100,9 +183,8 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
     // ThermalGuard: fewer threads when hot. Applies to this and later calls.
     if (threads > 0) llama_set_n_threads(engine->ctx, threads, threads);
 
-    const char *promptC = env->GetStringUTFChars(jprompt, nullptr);
-    std::string prompt(promptC);
-    env->ReleaseStringUTFChars(jprompt, promptC);
+    const std::string prompt = jstringToUtf8(env, jprompt);
+    gUtf8Pending.clear();
 
     // Tokenize
     std::vector<llama_token> tokens(prompt.size() + 32);

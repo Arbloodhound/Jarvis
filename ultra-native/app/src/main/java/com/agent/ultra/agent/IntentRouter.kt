@@ -60,8 +60,18 @@ object IntentRouter {
     // device verb + a follow-on action ("open X and send/find/create ...") — rule 12, multi-step
     private val compound = rx("and (then )?(send|find|create|add|delete|search|write|reply|book|order)")
 
+    /** Marker AmbientListenService puts between overheard context and the command. */
+    const val REQUEST_MARKER = "[Request]\n"
+
+    /** An ambient command arrives wrapped in overheard transcript; route on the command
+     * alone, or the transcript's length and words decide the tier. */
+    fun requestPart(text: String): String {
+        val i = text.lastIndexOf(REQUEST_MARKER)
+        return if (i < 0) text else text.substring(i + REQUEST_MARKER.length)
+    }
+
     fun route(text: String): Route {
-        val t = text.trim()
+        val t = requestPart(text).trim()
         val words = t.split(Regex("\\s+")).count { it.isNotBlank() }
 
         if (forceDeep.containsMatchIn(t)) return Route(Tier.DEEP, "user asked for depth")

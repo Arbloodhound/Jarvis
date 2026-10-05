@@ -39,6 +39,32 @@ class WakeFilter(private val cfg: AmbientConfig) {
         }
     }
 
+    companion object {
+        /** Words that may precede the name in a wake phrase ("hey jarvis"). */
+        val WAKE_PREFIXES = setOf("hey", "hi", "ok", "okay", "hello", "yo")
+
+        /**
+         * Removes a leading wake phrase ("Hey Jarvis," / "Ultra:") from a transcript and
+         * returns what is left — the command, or "" if the utterance was only the wake
+         * phrase. A lone "Hey <word>" is also treated as wake-only: whisper often
+         * mishears the name ("Hey, Jervis."), and the acoustic gate already said it fired.
+         */
+        fun stripWakePhrase(text: String, names: List<String>): String {
+            val t = text.trim()
+            val alts = names.map { it.trim() }.filter { it.isNotEmpty() }
+            if (alts.isEmpty()) return t
+            val prefixes = WAKE_PREFIXES.joinToString("|")
+            val head = Regex(
+                "^\\W*(?:(?:$prefixes)\\W+)?(?:" + alts.joinToString("|") { Regex.escape(it) } +
+                    ")(?![\\p{L}\\p{N}])[\\s,.:;!?-]*",
+                RegexOption.IGNORE_CASE,
+            )
+            val rest = head.replaceFirst(t, "").trim()
+            val loneGreeting = Regex("^(?:$prefixes)\\W+[\\p{L}']+\\W*$", RegexOption.IGNORE_CASE)
+            return if (loneGreeting.matches(rest)) "" else rest
+        }
+    }
+
     /** Word-boundary match so "ultraviolet" / "illustrator" don't trigger. */
     private fun findName(haystack: String, name: String): Int {
         var from = 0

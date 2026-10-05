@@ -20,6 +20,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -42,9 +48,9 @@ class AmbientListenService : Service() {
     private lateinit var cfg: AmbientConfig
     private lateinit var mem: AmbientMemory
     private lateinit var wake: WakeFilter
-    private var whisper = 0L
-    private var gate: WakeGate? = null
-    private var cmdWindowUntil = 0L
+    @Volatile private var whisper = 0L
+    @Volatile private var gate: WakeGate? = null
+    @Volatile private var cmdWindowUntil = 0L   // written by the capture loop and the whisper worker
     private var lastMemoryAt = 0L          // thermal throttle: last memory-only transcription
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -61,20 +67,66 @@ class AmbientListenService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIF_ID, notification())
+        // A microphone FGS throws without RECORD_AUDIO, and Android 15 refuses one
+        // started from BOOT_COMPLETED. Either way: stop quietly, never crash.
+        val micOk = androidx.core.content.ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        try {
+            if (!micOk) throw SecurityException("RECORD_AUDIO not granted")
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(NOTIF_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else {
+                startForeground(NOTIF_ID, notification())
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("UltraAmbient", "cannot start listening: ${e.message}")
+            stopSelf()
+            return START_NOT_STICKY
+        }
         acquireWake()
-        if (captureJob == null) captureJob = scope.launch { captureLoop() }
+        if (captureJob == null) captureJob = scope.launch { runPipeline() }
         return START_STICKY
     }
 
-    private fun captureLoop() = scope.launch(Dispatchers.Default) {
-        if (!WhisperNative.available) { stopSelf(); return@launch }
+    /** Owns the native handles: they are created here and freed in this coroutine's
+     * finally, after capture and transcription have both stopped. Freeing them from
+     * onDestroy raced an in-flight whisper_full / OrtSession.run. */
+    private suspend fun runPipeline() {
+        try {
+            if (!initModels()) { stopSelf(); return }
+            val utterances = Channel<Utterance>(4, BufferOverflow.DROP_OLDEST)
+            coroutineScope {
+                // whisper runs off the capture thread, so reading the mic (and feeding
+                // the wake gate) never stalls for the length of a transcription.
+                launch { for (u in utterances) onUtterance(u.pcm, u.endedAt) }
+                try { capture(utterances) } finally { utterances.close() }
+            }
+            // Capture ended on its own (mic error), not by onDestroy: don't stay "listening".
+            if (currentCoroutineContext().isActive) stopSelf()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("UltraAmbient", "pipeline failed: ${e.message}")
+            stopSelf()
+        } finally {
+            gate?.close(); gate = null
+            if (whisper != 0L) { WhisperNative.nativeFree(whisper); whisper = 0L }
+        }
+    }
+
+    private class Utterance(val pcm: ShortArray, val endedAt: Long)
+
+    /** Returns false if listening can't start. Checks for cancellation between the
+     * slow steps, so a stop during the first-run download doesn't init and leak. */
+    private suspend fun initModels(): Boolean {
+        if (!WhisperNative.available) return false
         val modelDir = filesDir
         // First run: fetch models (~60 MB, once). ASR is required; VAD and the
         // wake-word trio are optional and fail soft (text-match wake still works).
         if (!ModelFetcher.ensure(modelDir, AmbientConfig.ASR_MODEL, AmbientConfig.ASR_URL, 10_000_000L)) {
             android.util.Log.w("UltraAmbient", "no ASR model and download failed; stopping")
-            stopSelf(); return@launch
+            return false
         }
         ModelFetcher.ensure(modelDir, AmbientConfig.VAD_MODEL, AmbientConfig.VAD_URL, 100_000L)
         ModelFetcher.ensure(modelDir, WakeGate.MEL, WakeGate.MEL_URL, 500_000L)
@@ -82,33 +134,59 @@ class AmbientListenService : Service() {
         if (WakeGate.cfgName(this@AmbientListenService) == WakeGate.DEFAULT_CLASSIFIER) {
             ModelFetcher.ensure(modelDir, WakeGate.DEFAULT_CLASSIFIER, WakeGate.JARVIS_URL, 500_000L)
         }
+        currentCoroutineContext().ensureActive()
         whisper = WhisperNative.nativeInit(
             java.io.File(modelDir, AmbientConfig.ASR_MODEL).absolutePath,
             java.io.File(modelDir, AmbientConfig.VAD_MODEL).absolutePath.let {
                 if (java.io.File(it).exists()) it else ""
             }
         )
-        if (whisper == 0L) { stopSelf(); return@launch }
+        if (whisper == 0L) return false
+        currentCoroutineContext().ensureActive()
         gate = WakeGate(this@AmbientListenService,
             threshold = 0.5f).takeIf { it.ready }   // null => fall back to text-match wake
+        return true
+    }
 
+    /** Reads the mic until cancelled. A dead or failing AudioRecord (audioserver
+     * restart) is rebuilt a few times; it never spins on an error code. */
+    private suspend fun capture(out: Channel<Utterance>) {
+        val seg = Segmenter { pcm, _ -> out.trySend(Utterance(pcm, System.currentTimeMillis())) }
+        var failures = 0
+        while (currentCoroutineContext().isActive && failures < MAX_MIC_FAILURES) {
+            if (captureOnce(seg)) return
+            failures++
+            seg.reset()
+            android.util.Log.w("UltraAmbient", "mic failed ($failures/$MAX_MIC_FAILURES); retrying")
+            delay(1_000L * failures)
+        }
+        if (failures >= MAX_MIC_FAILURES) android.util.Log.w("UltraAmbient", "mic keeps failing; stopping")
+    }
+
+    /** One AudioRecord's life. True when stopped by cancellation, false on a mic error. */
+    private suspend fun captureOnce(seg: Segmenter): Boolean {
         val minBuf = AudioRecord.getMinBufferSize(
             AmbientConfig.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
         )
         val rec = AudioRecord(
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
             AmbientConfig.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuf, AmbientConfig.FRAME * 8)
+            // Size is in BYTES: 16 frames of 16-bit audio (~0.5 s) of slack.
+            AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuf, AmbientConfig.FRAME * 2 * 16)
         )
+        if (rec.state != AudioRecord.STATE_INITIALIZED) { rec.release(); return false }
 
-        val seg = Segmenter { pcm, speechMs -> onUtterance(pcm, speechMs) }
         val frame = ShortArray(AmbientConfig.FRAME)
         var lastPrune = 0L
         try {
             rec.startRecording()
-            while (isActive) {
+            while (currentCoroutineContext().isActive) {
                 val n = rec.read(frame, 0, frame.size)
-                if (n <= 0) continue
+                if (n < 0) {                        // ERROR_DEAD_OBJECT etc. never recover in place
+                    android.util.Log.w("UltraAmbient", "AudioRecord.read error $n")
+                    return false
+                }
+                if (n == 0) continue
                 if (System.currentTimeMillis() < mutedUntil) { seg.reset(); gate?.reset(); continue }
                 val fr = if (n == frame.size) frame else frame.copyOf(n)
                 // Acoustic gate: when present, it decides when we're addressed.
@@ -124,15 +202,21 @@ class AmbientListenService : Service() {
                     mem.prune(cfg.retentionDays, cfg.maxRows)
                 }
             }
-        } catch (_: Exception) {
+            return true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("UltraAmbient", "capture failed: ${e.message}")
+            return false
         } finally {
             try { rec.stop() } catch (_: Exception) {}
             rec.release()
         }
     }
 
-    private fun onUtterance(pcm: ShortArray, speechMs: Int) {
-        val t = System.currentTimeMillis()
+    /** [t] is when the utterance ended — the command window is judged then, not
+     * when the (queued) transcription gets to it. */
+    private fun onUtterance(pcm: ShortArray, t: Long) {
         val windowOpen = gate != null && t < cmdWindowUntil
         val plan = AmbientThrottle.decide(
             com.agent.ultra.agent.ThermalGuard.level.ambient, windowOpen, gate != null, t, lastMemoryAt,
@@ -152,10 +236,17 @@ class AmbientListenService : Service() {
 
         // Acoustic gate fired within the window -> this utterance is the command,
         // no need for the spoken name in the text. Falls through to text-match
-        // when no gate is loaded.
-        if (gate != null && now < cmdWindowUntil) {
+        // when no gate is loaded. The utterance the gate fired in usually holds the
+        // wake phrase itself: strip it, and if nothing is left ("Hey Jarvis." then a
+        // pause), keep the window open for the next utterance instead of spending it.
+        if (windowOpen) {
+            val command = WakeFilter.stripWakePhrase(r.text, wakeWords())
+            if (command.length < 2) {
+                cmdWindowUntil = now + AmbientConfig.FOLLOWUP_MS
+                return
+            }
             cmdWindowUntil = 0L
-            AmbientBridge.onCommand?.invoke(buildContextualRequest(r.text, now))
+            dispatch(buildContextualRequest(command, now))
             return
         }
 
@@ -163,8 +254,48 @@ class AmbientListenService : Service() {
             is WakeFilter.Verdict.Ambient -> Unit        // store only; stay silent
             is WakeFilter.Verdict.Addressed -> {
                 if (v.command.isBlank()) return          // bare name; follow-up will carry the command
-                AmbientBridge.onCommand?.invoke(buildContextualRequest(v.command, now))
+                dispatch(buildContextualRequest(v.command, now))
             }
+        }
+    }
+
+    /** Words the acoustic gate's phrase is made of: the configured name, plus the
+     * classifier's own name ("hey_jarvis.onnx" -> "jarvis"). */
+    private fun wakeWords(): List<String> {
+        val fromModel = WakeGate.cfgName(this).substringBeforeLast('.')
+            .replace(Regex("_v\\d.*$"), "").split('_', '-', ' ')
+            .filter { it.length > 2 && it.lowercase() !in WakeFilter.WAKE_PREFIXES }
+        return (listOf(cfg.wakeName) + fromModel).filter { it.isNotBlank() }
+    }
+
+    /** The voice screen's brain answers when it is open; otherwise a brain owned by
+     * this service does, so a command is never dropped because no Activity is alive. */
+    private fun dispatch(request: String) {
+        AmbientBridge.onCommand?.let { it(request); return }
+        // Main, as VoiceActivity's lifecycleScope runs it.
+        scope.launch(Dispatchers.Main) {
+            try { fallbackBrain().run(request) }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { android.util.Log.w("UltraAmbient", "command failed: ${e.message}") }
+        }
+    }
+
+    private var brainRef: com.agent.ultra.agent.Brain? = null
+    private var speakerRef: com.agent.ultra.ui.Speaker? = null
+
+    @Synchronized private fun fallbackBrain(): com.agent.ultra.agent.Brain = brainRef ?: run {
+        val speaker = speakerRef ?: com.agent.ultra.ui.Speaker(this).also { speakerRef = it }
+        com.agent.ultra.agent.Brain(
+            applicationContext, com.agent.ultra.local.LocalModelEngine.shared(applicationContext)
+        ).also { b ->
+            b.onAnswer = { text ->
+                // Same echo guard as VoiceActivity: mute while speaking, bounded.
+                mutedUntil = System.currentTimeMillis() + EchoGuard.muteMsFor(text)
+                speaker.speak(text) {
+                    mutedUntil = System.currentTimeMillis() + AmbientConfig.ECHO_GUARD_MS
+                }
+            }
+            brainRef = b
         }
     }
 
@@ -172,7 +303,8 @@ class AmbientListenService : Service() {
     private fun buildContextualRequest(command: String, now: Long): String {
         val recent = mem.since(now - AmbientConfig.RECENT_WINDOW_MS, AmbientConfig.CONTEXT_BUDGET_CHARS)
         return if (recent.isBlank()) command
-        else "[Ambient transcript, last 15 min — context only, may be noisy]\n$recent\n\n[Request]\n$command"
+        else "[Ambient transcript, last 15 min — context only, may be noisy]\n$recent\n\n" +
+            "${com.agent.ultra.agent.IntentRouter.REQUEST_MARKER}$command"
     }
 
     private fun acquireWake() {
@@ -200,9 +332,9 @@ class AmbientListenService : Service() {
     }
 
     override fun onDestroy() {
+        // Native handles are freed by runPipeline's finally once in-flight calls return.
         captureJob?.cancel(); scope.cancel()
-        if (whisper != 0L) { WhisperNative.nativeFree(whisper); whisper = 0L }
-        gate?.close(); gate = null
+        try { speakerRef?.shutdown() } catch (_: Exception) {}
         wakeLock?.let { if (it.isHeld) it.release() }
         instance = null
         super.onDestroy()
@@ -211,6 +343,7 @@ class AmbientListenService : Service() {
     companion object {
         private const val CHANNEL = "ambient_listen"
         private const val NOTIF_ID = 7101
+        private const val MAX_MIC_FAILURES = 3
         @Volatile var instance: AmbientListenService? = null
 
         fun start(ctx: Context) {

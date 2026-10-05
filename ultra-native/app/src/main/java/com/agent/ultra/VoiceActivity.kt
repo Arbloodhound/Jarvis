@@ -61,6 +61,8 @@ class VoiceActivity : ComponentActivity() {
      * runs again — without this the mic would only ever open once. */
     private var sessionTick by mutableIntStateOf(0)
 
+    private var ambientHandler: ((String) -> Unit)? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         showOverLockScreen()
@@ -102,9 +104,11 @@ class VoiceActivity : ComponentActivity() {
                         }
                     }.also { b ->
                         // Ambient "Ultra, ..." commands run on this same brain instance.
-                        com.agent.ultra.listen.AmbientBridge.onCommand = { request ->
+                        val handler: (String) -> Unit = { request ->
                             lifecycleScope.launch { try { b.run(request) } catch (_: Exception) {} }
                         }
+                        ambientHandler = handler
+                        com.agent.ultra.listen.AmbientBridge.onCommand = handler
                     }
                 }
 
@@ -220,6 +224,11 @@ class VoiceActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        // Hand ambient commands back to the listening service's own brain; leaving
+        // ours set would launch on a dead lifecycle (dropped) and keep this Activity alive.
+        if (com.agent.ultra.listen.AmbientBridge.onCommand === ambientHandler) {
+            com.agent.ultra.listen.AmbientBridge.onCommand = null
+        }
         speaker.shutdown()
         super.onDestroy()
     }

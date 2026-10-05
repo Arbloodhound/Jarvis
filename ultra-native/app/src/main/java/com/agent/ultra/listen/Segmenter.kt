@@ -17,7 +17,8 @@ import kotlin.math.sqrt
  *
  * The noise floor adapts: it falls fast when the room gets quieter and rises
  * slowly, so a TV left on raises the bar instead of triggering forever.
- * Not thread-safe; feed it from one capture thread.
+ * Not thread-safe; feed it from one capture thread. Frames are copied on
+ * push, so the caller may reuse its buffer.
  */
 class Segmenter(private val onUtterance: (ShortArray, Int) -> Unit) {
     private var floorDb = -60f
@@ -32,7 +33,11 @@ class Segmenter(private val onUtterance: (ShortArray, Int) -> Unit) {
         loudRun = 0; quietMs = 0; inSpeech = false
     }
 
-    fun push(frame: ShortArray) {
+    fun push(input: ShortArray) {
+        // Own copy: the capture loop reuses one read buffer, and preRoll/current
+        // keep frames across calls. Storing the caller's array made every
+        // utterance N copies of the last 32 ms read.
+        val frame = input.copyOf()
         val db = dbfs(frame)
         val loud = db > maxOf(floorDb + GATE_ABOVE_FLOOR_DB, GATE_ABS_MIN_DB)
 

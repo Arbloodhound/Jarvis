@@ -63,6 +63,61 @@ r27c (27.2.12479018). Sources: llama.cpp `8345f33`, whisper.cpp `60c0be6` (HEAD 
 `cmake;3.28.3` via sdkmanager" line is wrong (that package doesn't exist; a CMake 3.28.3 on PATH
 is what's used). Fixed in the follow-up docs commit (BUILD_GUIDE.md, CLAUDE_CODE_BRIEF.md: text only).
 
+### 2026-10-05 (evening) — fixes from a read-only review of patches 0001–0009
+
+**Subsystems:** D (`listen/`), B (`cpp/ultra_llm.cpp`), A (`IntentRouter` only), plus one
+VoiceActivity line (crossing: it owns the ambient command handler). Dafarus asked for every
+finding to be fixed off-device, so the build is ready before the Pixel is available.
+
+**Proven in source, now fixed:**
+1. `Segmenter.push` stored the capture loop's reused read buffer, so every utterance was N copies
+   of the last 32 ms. Fix: copy on push. New `SegmenterTest` fails on the old code and passes now:
+   **PROVEN** (JVM).
+2. `ultra_llm.cpp`: `n_batch` stayed at llama.cpp's default 2048 while the guard allowed prompts up
+   to ~ctxSize; llama.cpp's `GGML_ASSERT(n_tokens_all <= n_batch)` (llama-context.cpp:1787 at
+   `8345f33`) aborts the process. Fix: `n_batch = ctxSize`. **SOURCE-FIXED BUT RUNTIME-UNPROVEN**.
+3. `AmbientMemory.since` bound `ts` as TEXT against INTEGER values in an FTS4 column, so it never
+   matched (reproduced in SQLite 3.45). Fix: `CAST(? AS INTEGER)`, which returns the rows in the
+   same reproduction. **PROVEN** in SQLite; on-device **RUNTIME-UNPROVEN**.
+4. Exposed by 3: ambient commands were routed on transcript + request. Fix:
+   `IntentRouter.requestPart` routes on the `[Request]` part only. New test: **PROVEN** (JVM).
+
+**Likely bugs, fixed (all SOURCE-FIXED BUT RUNTIME-UNPROVEN):**
+5. If the acoustic gate fired on "Hey Jarvis." on its own, the window was spent on the wake phrase.
+   Now `WakeFilter.stripWakePhrase` strips it, and if nothing is left the window is re-armed
+   (`WakeFilterTest`, JVM-proven for the string logic).
+6. Native use-after-free on stop. Whisper and the gate are now freed in the pipeline coroutine's
+   `finally` after capture and transcription stop. A stop during the first-run download no longer
+   inits and leaks. `captureJob` is the real job.
+7. Whisper ran on the capture thread. Utterances now go through a 4-slot channel to a worker. The
+   AudioRecord buffer is sized in bytes (~0.5 s).
+8. Ambient commands were dropped with VoiceActivity closed and leaked it after. The handler is
+   cleared in `onDestroy`, and when none is set the service runs its own Brain + Speaker with the
+   same echo guard.
+9. `startForeground` could crash without RECORD_AUDIO or at boot on Android 15. It now checks the
+   permission, passes the microphone type, and on failure logs + `stopSelf()`.
+10. A negative `AudioRecord.read` busy-spun with the wakelock held. Now the AudioRecord is rebuilt
+    up to 3 times with backoff, then the service stops.
+11. `ultra_llm.cpp` passed split UTF-8 pieces to `NewStringUTF` (CheckJNI abort). Text now crosses
+    JNI as UTF-16 and a split character is held until complete, still one callback per token
+    (ThinkBudget counts callbacks). The same conversion is used for the prompt and inject strings.
+    A host harness (8 cases: split emoji, split CJK, invalid bytes) passes.
+
+**Build after fixes:** `testDebugUnitTest` **PROVEN** 488 tests (482 + 6 new), 0 failures;
+`assembleDebug` **PROVEN**; all 6 arm64 libs still `0x4000`; `ultra_llm.cpp` clean under
+`-Wall -Wextra`. The debug APK grew from 55.2 MB to 61.4 MB; the libs are not the cause, and the
+reason is **not established** (not investigated).
+
+**Not fixed (design calls for Dafarus):** IntentRouter checks device before deep cues ("time
+complexity of quicksort" → DEVICE); WakeFilter matches the name anywhere in a sentence;
+`ThermalPolicy.COOLING_MESSAGE` and CRITICAL's `budgetScale` are unused; the Brain cloud-failover
+history can duplicate the user turn; `gate.reset()` while muted. The Settings toggle still shows "on"
+when the service stops itself for lack of mic permission.
+
+**Next on the Pixel:** brief Step 4 table, plus logcat `UltraAmbient`. Check: real transcripts in
+`ambient.db`, overheard context in a wake command, "Hey Jarvis" + pause + command, turning
+ambient off mid-sentence, and an emoji reply on the debug build.
+
 ## 2026-09-20 (day) — the gate asks on top of the app; routes are played by the engine
 
 **Released as 2.4.0** (versionCode 15): signed with the release key (`0d04510d…ca241f`, v2),
