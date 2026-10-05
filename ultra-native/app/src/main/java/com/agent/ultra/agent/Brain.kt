@@ -41,6 +41,17 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
      * speaks it; the chat screen speaks it when speak-back is enabled. */
     var onAnswer: ((String) -> Unit)? = null
 
+    /** A scam warning raised this run. It is spoken ahead of the answer, so a voice user
+     * hears it too (on screen it is already its own message). */
+    private var spokenWarning: String? = null
+
+    /** Every spoken/answered ending goes through here: the run's warning first, once. */
+    private fun speakOut(text: String) {
+        val w = spokenWarning
+        spokenWarning = null
+        onAnswer?.invoke(if (w != null) "$w\n\n$text" else text)
+    }
+
     init {
         val cfg = ProviderConfig.load(appContext)
         client = if (cfg.isUsable) OpenAiClient(cfg) else null
@@ -147,11 +158,14 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         // Play cards, help me buy them". Nothing is refused here — it is their request — but
         // they hear the warning before anything happens. Measured: llama-3.3-70b (the
         // default brain) opened Google Play for exactly that request, 3 of 3 times.
+        spokenWarning = null
         ScamSignals.assess("", userInput).takeIf { it.scam }?.let { a ->
             android.util.Log.i("UltraBrain", "SCAM IN REQUEST: ${a.reasons}")
-            emit("Careful — this sounds like a common scam (${a.reasons}). Real family, banks and " +
+            val warning = "Careful — this sounds like a common scam (${a.reasons}). Real family, banks and " +
                 "government offices don't ask for gift cards, codes, or money moved to a \"safe\" " +
-                "account. If it's someone you know, call them on a number you already have.")
+                "account. If it's someone you know, call them on a number you already have."
+            emit(warning)
+            spokenWarning = warning
         }
         // A recipe is a name the user chose. Matching it is a lookup, not a
         // judgment call — measured: llama-3.3-70b read "run my morning
@@ -484,7 +498,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
      * whoever is listening (the voice session, or chat speak-back). */
     private fun answer(text: String) {
         emit(text)
-        onAnswer?.invoke(text)
+        speakOut(text)
     }
 
     /** Direct local answer for the offline path. Thinking MoE presets get ChatML,
@@ -518,7 +532,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             ) { piece -> ChatStore.appendTo(msg.id, piece) }
         } else {
             val prompt = "You are Jarvis, a concise assistant on an offline Android phone. " +
-                "Answer briefly and honestly.\n\nUser: $userInput\nUltra:"
+                "Answer briefly and honestly.\n\nUser: $userInput\nJarvis:"
             local.generate(prompt, 400) { piece -> ChatStore.appendTo(msg.id, piece) }
         }
         result.onFailure {
@@ -526,7 +540,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         }
         val finalMsg = ChatStore.messageById(msg.id) ?: msg
         ChatStore.persist(finalMsg)
-        onAnswer?.invoke(finalMsg.text)
+        speakOut(finalMsg.text)
     }
 
     /** The on-device tool loop: compact catalog, max 2 turns, gate enforced. */
@@ -821,7 +835,7 @@ JSON:"""
             if (streamId != null) {
                 ChatStore.setText(streamId, finalText)
                 ChatStore.persist(ChatMessage(fromUser = false, text = finalText, id = streamId))
-                onAnswer?.invoke(finalText)
+                speakOut(finalText)
             } else {
                 answer(finalText)
             }

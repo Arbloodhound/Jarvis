@@ -37,9 +37,9 @@ interface TaskMemoryDao {
     @Query("SELECT * FROM task_shortcuts WHERE requestKey = :key")
     suspend fun shortcutFor(key: String): TaskShortcutEntity?
 
-    /** The whole table — small by nature, and fuzzy matching happens in Kotlin
-     * where a token-set score is expressible. */
-    @Query("SELECT * FROM task_shortcuts ORDER BY successCount DESC, lastUsed DESC LIMIT 200")
+    /** The whole table, no cap — fuzzy matching happens in Kotlin where a token-set score is
+     * expressible. Most successful first, most recently used breaking ties. */
+    @Query("SELECT * FROM task_shortcuts ORDER BY successCount DESC, lastUsed DESC")
     suspend fun allShortcuts(): List<TaskShortcutEntity>
 
     @Query("DELETE FROM task_shortcuts WHERE requestKey = :key")
