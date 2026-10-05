@@ -27,6 +27,8 @@ target_link_libraries(ultra_llm
         log
         atomic
         )
+# 16KB-page devices (Android 15+); harmless on 4KB kernels
+target_link_options(ultra_llm PRIVATE "-Wl,-z,max-page-size=16384")
 
 # --- whisper.cpp (ambient listening) ---------------------------------------
 # Built into its OWN shared lib with ggml symbols hidden, so whisper's ggml and
@@ -44,6 +46,7 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
         # Hide ggml/whisper symbols so they don't collide with ultra_llm's ggml.
         target_link_options(ultra_whisper PRIVATE
                 "-Wl,--exclude-libs,ALL"
+                "-Wl,-z,max-page-size=16384"   # 16KB-page devices (Android 15+); harmless on 4KB
                 "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/whisper_exports.map")
     else()
         message(STATUS "ultra_whisper: WHISPER_HOME not found; ambient listening disabled")
