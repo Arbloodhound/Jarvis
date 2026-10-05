@@ -15,7 +15,7 @@ class AmbientConfig(context: Context) {
 
     /** Pick something distinctive, 2–3 syllables, rarely said in normal speech. */
     var wakeName: String
-        get() = p.getString("wake_name", "Ultra") ?: "Ultra"
+        get() = p.getString("wake_name", "Jarvis") ?: "Jarvis"   // matches the acoustic gate's "hey jarvis"
         set(v) = p.edit().putString("wake_name", v.trim()).apply()
 
     var retentionDays: Int

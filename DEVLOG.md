@@ -108,8 +108,13 @@ finding to be fixed off-device, so the build is ready before the Pixel is availa
 `-Wall -Wextra`. The debug APK grew from 55.2 MB to 61.4 MB; the libs are not the cause, and the
 reason is **not established** (not investigated).
 
+**Wake word (Dafarus's call, same day):** text-match wake now needs the name at the START of
+the utterance, optionally after "hey"/"ok"/"okay" ("Hey Jarvis, …", "Jarvis, …"); a name inside a
+sentence is conversation. Default name changed "Ultra" → "Jarvis" (an already-saved name is kept).
+`WakeFilterTest`: **PROVEN** (JVM), 490 tests pass.
+
 **Not fixed (design calls for Dafarus):** IntentRouter checks device before deep cues ("time
-complexity of quicksort" → DEVICE); WakeFilter matches the name anywhere in a sentence;
+complexity of quicksort" → DEVICE);
 `ThermalPolicy.COOLING_MESSAGE` and CRITICAL's `budgetScale` are unused; the Brain cloud-failover
 history can duplicate the user turn; `gate.reset()` while muted. The Settings toggle still shows "on"
 when the service stops itself for lack of mic permission.
