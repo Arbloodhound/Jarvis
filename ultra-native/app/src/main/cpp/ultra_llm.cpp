@@ -22,6 +22,10 @@ struct Engine {
     ggml_threadpool *pool = nullptr;
     int poolThreads = 0;   // its worker count (ggml_threadpool_get_n_threads is declared, not defined)
     std::vector<int> cpus;
+    // Exactly the tokens in the KV cache (sequence 0), in position order: token i
+    // sits at position i. Prompt tokens, then every sampled token that was decoded,
+    // then every injected token decoded. Empty = the memory is (to be) cleared.
+    std::vector<llama_token> cached;
 };
 
 // Runs the pinned pool for one generation. The caller is ggml's worker 0, but ggml pins it
@@ -40,6 +44,15 @@ struct PoolScope {
     PoolScope(const PoolScope &) = delete;
     PoolScope &operator=(const PoolScope &) = delete;
 };
+
+// Drops the KV cache and its token record together, so the next call prefills
+// from position 0. Used on every decode failure: after a failed decode the memory
+// may hold a partial batch, and a record that disagrees with the memory would
+// make the next call reuse KV it does not describe.
+void resetCache(Engine *engine) {
+    llama_memory_clear(llama_get_memory(engine->ctx), true);
+    engine->cached.clear();
+}
 
 bool backendReady = false;
 
@@ -185,6 +198,10 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
     // process (GGML_ASSERT) when a batch exceeds n_batch (default 2048). The
     // length guard in generate() allows up to ~ctxSize, so n_batch must match.
     cparams.n_batch = ctxSize;
+    // Full-size cache for sliding-window layers (Gemma): a window-sized cache drops early
+    // positions, and then generate() can never reuse the shared prompt prefix (it falls
+    // back to a full prefill). No effect on models without SWA (the Qwen3 MoE).
+    cparams.swa_full = true;
     cparams.n_threads = threads;
     cparams.n_threads_batch = threads;
 
@@ -246,11 +263,6 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
     auto *engine = reinterpret_cast<Engine *>(handle);
     if (!engine || !engine->ctx) return -1;
 
-    // Every call is a fresh, self-contained prompt. Without this the KV cache kept
-    // every earlier prompt + reply: positions grew call over call until decode
-    // failed at ctxSize, and the model saw old turns as part of the new prompt.
-    llama_memory_clear(llama_get_memory(engine->ctx), true);
-
     // ThermalGuard: fewer threads when hot. Applies to this and later calls. A pinned pool
     // has exactly its load-time workers; ggml would clamp a larger count with a warning on
     // every decode, so clamp here once.
@@ -266,11 +278,54 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
     std::vector<llama_token> tokens(prompt.size() + 32);
     int nTokens = llama_tokenize(engine->vocab, prompt.c_str(), prompt.size(),
                                  tokens.data(), tokens.size(), true, true);
+    // -2 and -3 leave the KV memory and its record untouched (both still agree), so
+    // a retry with a trimmed prompt can still reuse the shared prefix.
     if (nTokens < 0) { LOGE("tokenize overflow"); return -2; }
     tokens.resize(nTokens);
     if ((int) tokens.size() >= engine->ctxSize - maxTokens - 8) {
         LOGE("prompt too long for ctx"); return -3;
     }
+
+    // Every call is still a fresh, self-contained prompt; only the KV of its
+    // longest common token prefix with the previous call is kept. Clearing the
+    // whole cache each call (the fix for positions growing call over call until
+    // decode failed at ctxSize, and old turns leaking into the new prompt) threw
+    // away a system prompt + history that consecutive turns share, and re-prefilled
+    // it every turn.
+    //
+    // Neither old failure can come back: everything from position p on is removed
+    // before decoding, and positions 0..p-1 hold the KV of tokens[0..p-1] — the
+    // same tokens at the same positions this prompt has, and a token's KV depends
+    // only on the tokens before it. So the memory ends up holding this prompt and
+    // nothing else, and positions top out at n_prompt + generated as before. The
+    // only difference from a fresh prefill is float summation order: the prefix was
+    // computed in a different batch split, and the CPU flash-attention kernel is not
+    // batch-invariant (host test at 8345f33: last-token logits differ by ~1e-3,
+    // bitwise equal with flash attention off; the removed tail leaves no trace —
+    // prefix + junk + seq_rm + suffix is bitwise equal to prefix + suffix). Near a
+    // tie that can pick a different token than a cold run of the same prompt.
+    //
+    // At least one prompt token is always decoded: sampling needs the logits of
+    // the last prompt token. Any state that does not check out — the record and the
+    // memory disagree, an SWA cache already dropped early positions, seq_rm refuses
+    // a partial removal, positions would not continue at p — falls back to a full
+    // clear, i.e. exactly the old behaviour.
+    llama_memory_t mem = llama_get_memory(engine->ctx);
+    const int nPrompt = (int) tokens.size();
+    int reuse = 0;
+    if (llama_memory_seq_pos_max(mem, 0) + 1 == (llama_pos) engine->cached.size() &&
+        llama_memory_seq_pos_min(mem, 0) <= 0) {
+        const int lim = std::min((int) engine->cached.size(), nPrompt - 1);
+        while (reuse < lim && engine->cached[reuse] == tokens[reuse]) reuse++;
+    }
+    if (reuse > 0 && !(llama_memory_seq_rm(mem, 0, reuse, -1) &&
+                       llama_memory_seq_pos_min(mem, 0) == 0 &&
+                       llama_memory_seq_pos_max(mem, 0) == reuse - 1)) {
+        reuse = 0;
+    }
+    if (reuse == 0) resetCache(engine);
+    else engine->cached.resize(reuse);
+    LOGI("reused=%d of %d prompt tokens", reuse, nPrompt);
 
     // Register streaming callback
     if (callback) {
@@ -303,18 +358,28 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
     // From here on, every exit puts the pool to sleep and unpins the caller.
     PoolScope poolScope(engine->pool, engine->cpus);
 
-    // Evaluate prompt
-    llama_batch batch = llama_batch_get_one(tokens.data(), tokens.size());
-    if (llama_decode(engine->ctx, batch) != 0) { LOGE("prompt decode failed"); return -4; }
+    // Evaluate the prompt past the reused prefix. llama_batch_get_one carries no
+    // positions; llama.cpp continues from the memory's last position (reuse - 1).
+    llama_batch batch = llama_batch_get_one(tokens.data() + reuse, nPrompt - reuse);
+    if (llama_decode(engine->ctx, batch) != 0) { LOGE("prompt decode failed"); resetCache(engine); return -4; }
+    engine->cached = tokens;
 
-    // Sampler: low-temp deterministic-ish for agent work
+    // Sampler: low-temp deterministic-ish for agent work. top_k(40) first: on its
+    // own, top_p softmaxes the whole vocabulary (~151k for Qwen) every token and
+    // falls back to a full sort whenever its top 256 hold < 90% of the (untempered)
+    // mass. Host bench on a 151,936-entry vocab: ~2-10 ms/token -> ~0.2-0.3 ms.
+    // top_k and top_p see untempered logits, so the candidate set can shrink when the
+    // top 40 hold < 90%; the draw itself is at temperature 0.2, which raises
+    // probability ratios to the 5th power, so tokens past rank 40 had next to no
+    // chance of being drawn anyway.
     llama_sampler *chain = llama_sampler_chain_init(llama_sampler_chain_default_params());
+    llama_sampler_chain_add(chain, llama_sampler_init_top_k(40));
     llama_sampler_chain_add(chain, llama_sampler_init_top_p(0.9f, 1));
     llama_sampler_chain_add(chain, llama_sampler_init_temp(temperature));
     llama_sampler_chain_add(chain, llama_sampler_init_dist(42));
 
     int generated = 0;
-    int nPast = (int) tokens.size();
+    int nPast = nPrompt;
     for (; generated < maxTokens; generated++) {
         if (nPast >= engine->ctxSize - 1) { LOGE("ctx full at %d", nPast); break; }
         llama_token tok = llama_sampler_sample(chain, engine->ctx, -1);
@@ -327,7 +392,8 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
 
         llama_sampler_accept(chain, tok);
         llama_batch next = llama_batch_get_one(&tok, 1);
-        if (llama_decode(engine->ctx, next) != 0) { LOGE("decode failed mid-gen"); break; }
+        if (llama_decode(engine->ctx, next) != 0) { LOGE("decode failed mid-gen"); resetCache(engine); break; }
+        engine->cached.push_back(tok);
         nPast++;
 
         if (!inject.empty()) {
@@ -339,7 +405,8 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
             if (n > 0 && nPast + n < engine->ctxSize - 1) {
                 inj.resize(n);
                 llama_batch ib = llama_batch_get_one(inj.data(), n);
-                if (llama_decode(engine->ctx, ib) != 0) { LOGE("inject decode failed"); break; }
+                if (llama_decode(engine->ctx, ib) != 0) { LOGE("inject decode failed"); resetCache(engine); break; }
+                engine->cached.insert(engine->cached.end(), inj.begin(), inj.end());
                 nPast += n;
             } else {
                 LOGE("inject skipped (n=%d, nPast=%d)", n, nPast);
