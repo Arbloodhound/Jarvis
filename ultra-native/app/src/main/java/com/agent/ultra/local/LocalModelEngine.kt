@@ -265,16 +265,28 @@ class LocalModelEngine(private val context: Context) {
          */
         val PRESETS = listOf(
             ModelChoice(
-                "Qwen3-30B-A3B Thinking (IQ3_XXS) — specialized MoE, tight",
-                "https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/resolve/main/Qwen3-30B-A3B-Thinking-2507-UD-IQ3_XXS.gguf",
-                "qwen3moe-thinking-iq3xxs.gguf", 12900,
-                "30B total / 3B active MoE, best reasoning that fits. ~12.9GB — at the 16GB ceiling with the mic service running. If it thrashes, use the IQ2_M entry. Emits a <think> trace; simple device commands still route to the fast on-device path.",
+                "Qwen3-30B-A3B Thinking ABLITERATED (IQ2_M) — on-device MoE",
+                "https://huggingface.co/mradermacher/Huihui-Qwen3-30B-A3B-Thinking-2507-abliterated-i1-GGUF/resolve/main/Huihui-Qwen3-30B-A3B-Thinking-2507-abliterated.i1-IQ2_M.gguf",
+                "qwen3moe-abliterated-iq2m.gguf", 10240,
+                "RECOMMENDED MoE. 30B total / 3B active, best reasoning that fits 16GB. Abliterated (uncensored) for research. ~10.2GB → ~1.6GB free in an assistant-only setup. Cap context at 4k. Replace this URL with YOUR fine-tuned+abliterated build (notebook path 2b).",
             ),
             ModelChoice(
-                "Qwen3-30B-A3B Thinking (IQ2_M) — MoE, safe fit",
+                "Qwen3-30B-A3B Thinking ABLITERATED (IQ2_S) — roomier fallback",
+                "https://huggingface.co/mradermacher/Huihui-Qwen3-30B-A3B-Thinking-2507-abliterated-i1-GGUF/resolve/main/Huihui-Qwen3-30B-A3B-Thinking-2507-abliterated.i1-IQ2_S.gguf",
+                "qwen3moe-abliterated-iq2s.gguf", 9300,
+                "Same abliterated MoE, lighter. ~9.3GB — more headroom if IQ2_M pages under a long context.",
+            ),
+            ModelChoice(
+                "Qwen3-30B-A3B Thinking (IQ2_M) — stock, comparison",
                 "https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/resolve/main/Qwen3-30B-A3B-Thinking-2507-UD-IQ2_M.gguf",
                 "qwen3moe-thinking-iq2m.gguf", 10800,
-                "Same MoE, heavier quant. ~10.8GB leaves headroom for whisper + wake + OS. Use this if IQ3 pages to storage.",
+                "Non-abliterated (safety-tuned) build of the same MoE, for comparison. ~10.8GB — ~0.1GB free, knife-edge. Prefer the abliterated IQ2_M.",
+            ),
+            ModelChoice(
+                "Qwen3-30B-A3B Thinking (IQ3) — DESKTOP ONLY, exceeds 16GB",
+                "https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/resolve/main/Qwen3-30B-A3B-Thinking-2507-UD-IQ3_XXS.gguf",
+                "qwen3moe-thinking-iq3xxs.gguf", 12900,
+                "DO NOT run on the phone — ~12.9GB weights put total demand ~2GB over 16GB. Listed for desktop reference / quality ceiling only.",
             ),
             ModelChoice(
                 "Gemma 3 1B (Q4_K_M) — default",
