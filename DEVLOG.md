@@ -61,7 +61,7 @@ r27c (27.2.12479018). Sources: llama.cpp `8345f33`, whisper.cpp `60c0be6` (HEAD 
 
 **Open / next:** brief Step 4 on the Pixel (`installDebug` + logcat table); the docs' "install
 `cmake;3.28.3` via sdkmanager" line is wrong (that package doesn't exist; a CMake 3.28.3 on PATH
-is what's used). Not fixed here because this was a proof run.
+is what's used). Fixed in the follow-up docs commit (BUILD_GUIDE.md, CLAUDE_CODE_BRIEF.md: text only).
 
 ## 2026-09-20 (day) — the gate asks on top of the app; routes are played by the engine
 
