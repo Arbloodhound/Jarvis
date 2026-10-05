@@ -50,6 +50,8 @@ class LocalModelEngine(private val context: Context) {
         get() = modelFileSizeBytes in 1..FAST_PATH_MAX_BYTES
     val loaded: Boolean get() = handle != 0L
     val modelFileSizeBytes: Long get() = if (modelFile.exists()) modelFile.length() else 0L
+    /** Qwen3 Thinking MoE presets: ChatML prompts, template-opened <think> trace. */
+    val isThinkingModel: Boolean get() = modelFile.name.startsWith("qwen3moe")
     val modelFilePath: String get() = modelFile.absolutePath
 
     /**
@@ -184,9 +186,16 @@ class LocalModelEngine(private val context: Context) {
      */
     private val genMutex = kotlinx.coroutines.sync.Mutex()
 
+    /**
+     * [thinkBudget] non-null: the reasoning trace is capped, hidden from [onToken] and
+     * from the returned text (only the answer comes back). [threads] <= 0 keeps the
+     * current thread count.
+     */
     suspend fun generate(
         prompt: String,
         maxTokens: Int,
+        thinkBudget: com.agent.ultra.agent.ThinkBudget? = null,
+        threads: Int = 0,
         onToken: (String) -> Unit = {},
     ): Result<String> = withContext(Dispatchers.IO) {
         genMutex.withLock {
@@ -201,9 +210,18 @@ class LocalModelEngine(private val context: Context) {
                 IllegalStateException("on-device model was unloaded")
             )
             val sb = StringBuilder()
-            val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f) { piece ->
-                sb.append(piece)
-                onToken(piece)
+            val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, threads) { piece ->
+                if (thinkBudget == null) {
+                    sb.append(piece); onToken(piece); null
+                } else {
+                    val step = thinkBudget.onToken(piece)
+                    if (step.visible.isNotEmpty()) { sb.append(step.visible); onToken(step.visible) }
+                    step.inject
+                }
+            }
+            thinkBudget?.flush()?.takeIf { it.isNotEmpty() }?.let { sb.append(it); onToken(it) }
+            thinkBudget?.let {
+                android.util.Log.d("UltraRoute", "thinkTokens=${it.thinkTokens} forced=${it.forced} budget=${it.budgetTokens}")
             }
             if (n < 0) Result.failure(IllegalStateException("native generate failed ($n)"))
             else Result.success(sb.toString())

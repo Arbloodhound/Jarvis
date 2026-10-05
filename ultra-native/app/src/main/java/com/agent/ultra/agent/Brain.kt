@@ -454,15 +454,38 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         onAnswer?.invoke(text)
     }
 
-    /** Direct local answer for the offline path — no tool loop at 1B scale. */
+    /** Direct local answer for the offline path. Thinking MoE presets get ChatML,
+     * a routed + thermal-scaled think budget and a hidden trace; small models keep
+     * the original plain prompt. */
     private suspend fun emitLocal(userInput: String) {
         val msg = ChatMessage(false, "")
         ChatStore.addToState(msg)
-        val prompt = "You are Ultra, a concise assistant on an offline Android phone. " +
-            "Answer briefly and honestly.\n\nUser: $userInput\nUltra:"
-        local.generate(prompt, 400) { piece ->
-            ChatStore.appendTo(msg.id, piece)
-        }.onFailure {
+        val result = if (local.isThinkingModel) {
+            val level = ThermalGuard.level
+            val route = IntentRouter.route(userInput)
+            val history = ChatStore.messages.takeLast(8)
+                .filter { it.id != msg.id }
+                .map { LocalPrompt.Turn(it.fromUser, it.text) }
+                .dropLastWhile { it.fromUser && it.text.trim() == userInput.trim() }
+            val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput)
+            val reserve = LocalPrompt.answerReserve(level)
+            val clipped = ThinkBudget.clipToContext(
+                route.thinkBudget, com.agent.ultra.local.LocalModelEngine.CTX_SIZE,
+                LocalPrompt.estimateTokens(prompt), reserve,
+            )
+            val budget = ThermalPolicy.scaleBudget(clipped, level)
+            android.util.Log.d("UltraRoute", "tier=${route.tier} reason=${route.reason} level=$level budget=$budget")
+            local.generate(
+                prompt, maxTokens = budget + reserve + 32,
+                thinkBudget = ThinkBudget(budget, startsInThink = true),
+                threads = level.threads,
+            ) { piece -> ChatStore.appendTo(msg.id, piece) }
+        } else {
+            val prompt = "You are Ultra, a concise assistant on an offline Android phone. " +
+                "Answer briefly and honestly.\n\nUser: $userInput\nUltra:"
+            local.generate(prompt, 400) { piece -> ChatStore.appendTo(msg.id, piece) }
+        }
+        result.onFailure {
             ChatStore.setText(msg.id, "Error: on-device model failed — ${it.message}")
         }
         val finalMsg = ChatStore.messageById(msg.id) ?: msg

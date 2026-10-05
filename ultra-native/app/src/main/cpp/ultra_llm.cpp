@@ -24,20 +24,30 @@ JavaVM *gVm = nullptr;
 jobject gCallback = nullptr;
 jmethodID gOnToken = nullptr;
 
-void deliverToken(const std::string &piece) {
-    if (!gVm || !gCallback || !gOnToken) return;
+// Delivers one piece to Kotlin. Kotlin may return text to force-feed into the
+// context without sampling (ThinkBudget's "</think>" at the budget); empty = none.
+std::string deliverToken(const std::string &piece) {
+    std::string inject;
+    if (!gVm || !gCallback || !gOnToken) return inject;
     JNIEnv *env = nullptr;
     bool attached = false;
     if (gVm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_EDETACHED) {
-        if (gVm->AttachCurrentThread(&env, nullptr) != JNI_OK) return;
+        if (gVm->AttachCurrentThread(&env, nullptr) != JNI_OK) return inject;
         attached = true;
     }
     if (env) {
         jstring s = env->NewStringUTF(piece.c_str());
-        env->CallVoidMethod(gCallback, gOnToken, s);
+        auto r = static_cast<jstring>(env->CallObjectMethod(gCallback, gOnToken, s));
         env->DeleteLocalRef(s);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        else if (r) {
+            const char *c = env->GetStringUTFChars(r, nullptr);
+            if (c) { inject = c; env->ReleaseStringUTFChars(r, c); }
+            env->DeleteLocalRef(r);
+        }
     }
     if (attached) gVm->DetachCurrentThread();
+    return inject;
 }
 
 } // namespace
@@ -78,9 +88,17 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
 JNIEXPORT jint JNICALL
 Java_com_agent_ultra_local_LlmNative_nativeGenerate(
         JNIEnv *env, jobject, jlong handle, jstring jprompt, jint maxTokens,
-        jfloat temperature, jobject callback) {
+        jfloat temperature, jint threads, jobject callback) {
     auto *engine = reinterpret_cast<Engine *>(handle);
     if (!engine || !engine->ctx) return -1;
+
+    // Every call is a fresh, self-contained prompt. Without this the KV cache kept
+    // every earlier prompt + reply: positions grew call over call until decode
+    // failed at ctxSize, and the model saw old turns as part of the new prompt.
+    llama_memory_clear(llama_get_memory(engine->ctx), true);
+
+    // ThermalGuard: fewer threads when hot. Applies to this and later calls.
+    if (threads > 0) llama_set_n_threads(engine->ctx, threads, threads);
 
     const char *promptC = env->GetStringUTFChars(jprompt, nullptr);
     std::string prompt(promptC);
@@ -100,7 +118,7 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
     if (callback) {
         env->GetJavaVM(&gVm);
         gCallback = env->NewGlobalRef(callback);
-        gOnToken = env->GetMethodID(env->GetObjectClass(callback), "onToken", "(Ljava/lang/String;)V");
+        gOnToken = env->GetMethodID(env->GetObjectClass(callback), "onToken", "(Ljava/lang/String;)Ljava/lang/String;");
     } else {
         gCallback = nullptr;
     }
@@ -135,17 +153,37 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
     llama_sampler_chain_add(chain, llama_sampler_init_dist(42));
 
     int generated = 0;
+    int nPast = (int) tokens.size();
     for (; generated < maxTokens; generated++) {
+        if (nPast >= engine->ctxSize - 1) { LOGE("ctx full at %d", nPast); break; }
         llama_token tok = llama_sampler_sample(chain, engine->ctx, -1);
         if (llama_vocab_is_eog(engine->vocab, tok)) break;
 
         char buf[256];
         int len = llama_token_to_piece(engine->vocab, tok, buf, sizeof(buf), 0, true);
-        if (len > 0) deliverToken(std::string(buf, len));
+        std::string inject;
+        if (len > 0) inject = deliverToken(std::string(buf, len));
 
         llama_sampler_accept(chain, tok);
         llama_batch next = llama_batch_get_one(&tok, 1);
         if (llama_decode(engine->ctx, next) != 0) { LOGE("decode failed mid-gen"); break; }
+        nPast++;
+
+        if (!inject.empty()) {
+            // Decode the forced text in one batch, no sampling; its last logits
+            // seed the next sample. parse_special=true so "</think>" is one token.
+            std::vector<llama_token> inj(inject.size() + 8);
+            int n = llama_tokenize(engine->vocab, inject.c_str(), inject.size(),
+                                   inj.data(), inj.size(), false, true);
+            if (n > 0 && nPast + n < engine->ctxSize - 1) {
+                inj.resize(n);
+                llama_batch ib = llama_batch_get_one(inj.data(), n);
+                if (llama_decode(engine->ctx, ib) != 0) { LOGE("inject decode failed"); break; }
+                nPast += n;
+            } else {
+                LOGE("inject skipped (n=%d, nPast=%d)", n, nPast);
+            }
+        }
     }
 
     llama_sampler_free(chain);

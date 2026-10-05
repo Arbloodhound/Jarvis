@@ -18,7 +18,9 @@ object LlmNative {
     }
 
     fun interface TokenCallback {
-        fun onToken(piece: String)
+        /** Return text to force-feed into the context without sampling (e.g. ThinkBudget's
+         *  "</think>"), or null to continue normally. */
+        fun onToken(piece: String): String?
     }
 
     /** Returns a handle, or 0 on failure. */
@@ -34,6 +36,7 @@ object LlmNative {
         prompt: String,
         maxTokens: Int,
         temperature: Float,
+        threads: Int,          // <= 0 keeps the current count
         callback: TokenCallback?,
     ): Int
 

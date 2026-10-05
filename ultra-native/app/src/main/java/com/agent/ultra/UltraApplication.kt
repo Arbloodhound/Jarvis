@@ -8,6 +8,8 @@ class UltraApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Thermal headroom polling (API 30+; no-op below). Read via ThermalGuard.level.
+        try { com.agent.ultra.agent.ThermalGuard.start(this) } catch (_: Exception) {}
         // Pre-tick apps that look like they hold money or credentials, once,
         // before the agent has a chance to read anything.
         try { com.agent.ultra.ui.ProtectedApps.seedIfUnset(this) } catch (_: Exception) {}

@@ -1,0 +1,31 @@
+package com.agent.ultra.agent
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class LocalPromptTest {
+    @Test fun matchesQwenGenerationPrompt() {
+        val p = LocalPrompt.build("SYS", emptyList(), "hi")
+        assertEquals("<|im_start|>system\nSYS<|im_end|>\n<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n<think>\n", p)
+    }
+    @Test fun historyIsStrippedOfTraces() {
+        val p = LocalPrompt.build("S", listOf(LocalPrompt.Turn(true, "q1"),
+            LocalPrompt.Turn(false, "<think>secret</think>\n\nA1")), "q2")
+        assertTrue(p.contains("<|im_start|>assistant\nA1<|im_end|>")); assertFalse(p.contains("secret"))
+    }
+    @Test fun oldestHistoryDroppedFirst() {
+        val h = (1..10).map { LocalPrompt.Turn(it % 2 == 1, "m$it" + "x".repeat(500)) }
+        val p = LocalPrompt.build("S", h, "now", historyChars = 1200)
+        assertTrue(p.contains("m10")); assertFalse(p.contains("m1x"))
+    }
+    @Test fun offlineRulesNameNoTools() {
+        for (t in listOf("web_search", "app_launch", "system_info")) assertFalse(LocalPrompt.OFFLINE_RULES.contains(t))
+    }
+    @Test fun systemPromptFitsWithBudget() {
+        val p = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, emptyList(), "explain how MoE routing works")
+        val b = ThinkBudget.clipToContext(IntentRouter.Tier.DEEP.thinkBudget, 4096, LocalPrompt.estimateTokens(p))
+        assertEquals(1200, b)   // full DEEP budget survives with an empty history
+    }
+}
