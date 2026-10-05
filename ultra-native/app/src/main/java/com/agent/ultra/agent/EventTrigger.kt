@@ -54,7 +54,17 @@ object EventTrigger {
         Log.i(TAG, "registered system: ${trigger.name}")
     }
 
-    fun evaluate(context: Context, pkg: String, title: String, text: String): List<Action> {
+    /**
+     * @param key the notification's own key (StatusBarNotification.key) when the caller has it;
+     *   otherwise the package stands in for it.
+     * @param groupSummary true for a group's summary notification, which repeats its children.
+     */
+    fun evaluate(
+        context: Context, pkg: String, title: String, text: String,
+        key: String? = null, groupSummary: Boolean = false,
+    ): List<Action> {
+        if (groupSummary) return emptyList()
+        if (seenRecently(key ?: pkg, title, text)) return emptyList()
         val actions = mutableListOf<Action>()
         for (t in triggers) {
             try {
@@ -68,6 +78,29 @@ object EventTrigger {
         return actions
     }
 
+    /**
+     * Apps re-post the same notification (an update, a re-sort, a reconnect of the listener).
+     * Without this the same scam warning was spoken and the same code copied on every repost.
+     * Bounded and time-limited: identical text after [REPOST_WINDOW_MS] is a new message.
+     */
+    private val recent = LinkedHashMap<String, Long>()
+    private const val REPOST_WINDOW_MS = 10 * 60_000L
+    private const val RECENT_MAX = 64
+
+    @Synchronized
+    internal fun seenRecently(key: String, title: String, text: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        if (title.isBlank() && text.isBlank()) return false
+        val id = key + "\u0000" + (title + "\u0000" + text).hashCode()
+        val last = recent[id]
+        recent.remove(id)
+        recent[id] = nowMs
+        while (recent.size > RECENT_MAX) recent.remove(recent.keys.first())
+        return last != null && nowMs - last in 0 until REPOST_WINDOW_MS
+    }
+
+    @Synchronized
+    internal fun forgetRecent() = recent.clear()
+
     fun interface ActionExecutor {
         fun execute(action: Action)
     }
@@ -78,6 +111,10 @@ object EventTrigger {
         for (st in systemTriggers) {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(ctx: Context, intent: Intent) {
+                    // Registering for a sticky broadcast (ACTION_HEADSET_PLUG) delivers its last
+                    // value at once. That is the current state, not an event: without this every
+                    // service start toasted "Headphones disconnected".
+                    if (isInitialStickyBroadcast) return
                     try {
                         val a = st.evaluate(ctx, intent) ?: return
                         Log.i(TAG, "${st.name} fired: ${a.type} ${a.label}")
@@ -224,6 +261,8 @@ object EventTrigger {
         override fun evaluate(context: Context, intent: Intent): Action? {
             if (!com.agent.ultra.ui.UltraPrefs.systemTriggers(context)) return null
             val pkg = intent.data?.schemeSpecificPart ?: return null
+            // An update arrives as REMOVED then ADDED, both with EXTRA_REPLACING. It is neither.
+            if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return null
             val removed = intent.action == Intent.ACTION_PACKAGE_REMOVED
             val label = if (removed) "App removed: $pkg" else "App installed: $pkg"
             return Action(Action.Type.TOAST, label, pkg)

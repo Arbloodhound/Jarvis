@@ -682,8 +682,9 @@ JSON:"""
             if (toolCall != null) ChatStore.removeById(streamMsg.id)
 
             // A call cut off inside a value is not run half-written (an SMS sent
-            // unfinished) and is not an answer either: ask for it again.
-            if (toolCall == null && ModelOutput.cutShortCall(raw)) {
+            // unfinished) and is not an answer either: ask for it again. The provider saying it
+            // stopped at max_tokens counts too, even when the cut JSON happens to parse.
+            if ((toolCall == null && ModelOutput.cutShortCall(raw)) || (toolCall != null && ai.lastReplyTruncated)) {
                 ChatStore.removeById(streamMsg.id)
                 android.util.Log.i("UltraBrain", "CUT-SHORT CALL, asking again: ${raw.take(200)}")
                 messages += OpenAiClient.ChatMessage("assistant", raw)

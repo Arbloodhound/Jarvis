@@ -717,7 +717,7 @@ object ScreenStructure {
     /** "4.5 out of 5 stars", "4.5/5", "Rated 4.5 stars". The bound to 0-5
      * keeps it off prices and quantities. */
     private val RATING = Regex(
-        """\b([0-5](?:[.,]\d)?)\s*(?:out of\s*5|/\s*5|star)""",
+        """\b([0-5](?:[.,]\d)?)\s*(?:out of\s*5|/\s*5|stars?\b)""",
         RegexOption.IGNORE_CASE,
     )
 

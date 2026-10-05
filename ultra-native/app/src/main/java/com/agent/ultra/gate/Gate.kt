@@ -189,13 +189,17 @@ class Gate(private val manifest: Manifest) {
             }
         }
 
-        // Low-confidence egress: if the agent gathered information but all of
-        // it came from screen reads (accessibility tree), egress requires
-        // operator confirmation. System API results or a prior operator
-        // confirmation clear this gate.
-        if (Effect.EGRESS in spec.effects && ep.observations.hasLowToolOnly()) {
+        // Low-confidence egress: if anything the agent gathered came from an
+        // attacker-writable source (screen, SMS, clipboard, web, another app),
+        // egress requires operator confirmation. A system API read alongside it
+        // does not clear this; only an operator confirmation newer than the
+        // LOW observation does.
+        // A search query is exempt: research is search after search, and a confirm card on each
+        // follow-up would make it unusable. Sending, posting and opening a link still ask.
+        if (Effect.EGRESS in spec.effects && function !in LOW_EGRESS_FREE &&
+            ep.observations.hasUnconfirmedLowToolObservation()) {
             violations += Violation("low_confidence_egress", null,
-                "outbound action backed only by screen reads (low confidence)")
+                "outbound action follows low-confidence reads (screen, messages, web)")
         }
 
         // Scam follow-up: a number, link, email or cashtag that arrived in a message the
@@ -256,6 +260,7 @@ class Gate(private val manifest: Manifest) {
     companion object {
         /** Tools that may carry a flagged target without a confirm: looking it up is safe. */
         private val SCAM_FREE = setOf("web_search")
+        private val LOW_EGRESS_FREE = setOf("web_search")
 
         fun renderBlock(verdict: Verdict): String {
             if (verdict.rule == "scam_followup") {

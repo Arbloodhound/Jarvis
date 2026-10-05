@@ -96,7 +96,11 @@ abstract class UltraDatabase : RoomDatabase() {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, UltraDatabase::class.java, "ultra.db"
             ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
-            .fallbackToDestructiveMigration()  // last resort for older dev schemas
+            // Only the pre-migration dev schema (v1) may be wiped. A future version
+            // bump without its migration now fails loudly instead of silently
+            // deleting every lesson, task and screen the user built up.
+            .fallbackToDestructiveMigrationFrom(1)
+            .fallbackToDestructiveMigrationOnDowngrade()  // adb install -d of an older build
             .build().also { instance = it }
         }
     }

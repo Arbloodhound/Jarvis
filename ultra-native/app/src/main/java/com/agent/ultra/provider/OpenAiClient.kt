@@ -27,11 +27,23 @@ class OpenAiClient(private val config: ProviderConfig) {
 
     data class ChatMessage(val role: String, val content: String)
 
+    /**
+     * finish_reason of the most recent reply ("stop", "length", ...), or null when
+     * the server sent none. "length" means the reply was cut at max_tokens: a tool
+     * call in it is unfinished and must not be executed as if it were whole.
+     */
+    @Volatile var lastFinishReason: String? = null
+        private set
+
+    /** True when the most recent reply was cut off at the token limit. */
+    val lastReplyTruncated: Boolean get() = lastFinishReason == "length"
+
     suspend fun complete(
         messages: List<ChatMessage>,
         maxTokens: Int,
         temperature: Double,
     ): Result<String> = withContext(Dispatchers.IO) {
+        lastFinishReason = null
         try {
             val msgs = JSONArray()
             for (m in messages) {
@@ -59,9 +71,11 @@ class OpenAiClient(private val config: ProviderConfig) {
                         Exception("HTTP ${resp.code}: ${body.take(300)}")
                     )
                 }
-                val text = JSONObject(body)
+                val choice = JSONObject(body)
                     .getJSONArray("choices")
                     .getJSONObject(0)
+                lastFinishReason = finishReasonOf(choice)
+                val text = choice
                     .getJSONObject("message")
                     .optString("content", "")
                 if (text.isBlank()) Result.failure(Exception("empty model response"))
@@ -82,6 +96,7 @@ class OpenAiClient(private val config: ProviderConfig) {
         temperature: Double,
         onToken: (String) -> Unit,
     ): Result<String> = withContext(Dispatchers.IO) {
+        lastFinishReason = null
         try {
             val msgs = JSONArray()
             for (m in messages) {
@@ -108,30 +123,51 @@ class OpenAiClient(private val config: ProviderConfig) {
                     return@withContext Result.failure(Exception("HTTP ${resp.code}: ${body.take(300)}"))
                 }
                 val full = StringBuilder()
+                var finish: String? = null
                 resp.body!!.source().use { source ->
                     while (!source.exhausted()) {
                         val line = source.readUtf8Line() ?: break
                         if (!line.startsWith("data:")) continue
                         val data = line.removePrefix("data:").trim()
                         if (data == "[DONE]") break
-                        try {
-                            val delta = JSONObject(data)
-                                .getJSONArray("choices")
-                                .getJSONObject(0)
-                                .optJSONObject("delta")
-                                ?.optString("content", "") ?: ""
-                            if (delta.isNotEmpty()) {
-                                full.append(delta)
-                                onToken(delta)
-                            }
-                        } catch (_: Exception) { /* non-JSON SSE line skipped */ }
+                        val frame = try { JSONObject(data) } catch (_: Exception) { continue /* non-JSON SSE line skipped */ }
+                        // A provider that fails mid-stream sends an error frame with HTTP 200
+                        // already on the wire. Swallowing it returned the partial text as a
+                        // complete reply.
+                        streamError(frame)?.let { msg ->
+                            return@withContext Result.failure(Exception("stream error: $msg"))
+                        }
+                        val choice = frame.optJSONArray("choices")?.optJSONObject(0) ?: continue
+                        finishReasonOf(choice)?.let { finish = it }
+                        val delta = choice.optJSONObject("delta")?.optString("content", "") ?: ""
+                        if (delta.isNotEmpty()) {
+                            full.append(delta)
+                            onToken(delta)
+                        }
                     }
+                }
+                lastFinishReason = finish
+                if (finish == "length") {
+                    android.util.Log.w("UltraProvider", "reply cut off at max_tokens=$maxTokens (finish_reason=length)")
                 }
                 if (full.isBlank()) Result.failure(Exception("empty stream"))
                 else Result.success(full.toString())
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    private fun finishReasonOf(choice: JSONObject): String? =
+        if (choice.isNull("finish_reason")) null else choice.optString("finish_reason").ifBlank { null }
+
+    /** The message of an SSE error frame ({"error":{...}} or {"error":"..."}), or null. */
+    private fun streamError(frame: JSONObject): String? {
+        if (!frame.has("error") || frame.isNull("error")) return null
+        val e = frame.opt("error")
+        return when (e) {
+            is JSONObject -> e.optString("message").ifBlank { e.toString() }.take(300)
+            else -> e.toString().take(300)
         }
     }
 

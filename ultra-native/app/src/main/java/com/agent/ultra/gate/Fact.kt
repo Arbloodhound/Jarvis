@@ -30,6 +30,10 @@ data class Fact(
         ACCESSIBILITY_TREE,
         OPERATOR_CONFIRMATION,
         USER_REQUEST,
+        /** Delivered by a system API, but written by whoever sent it: an SMS, the
+         * clipboard, a web page or search result. The channel is trustworthy; the
+         * content is not. */
+        THIRD_PARTY_CONTENT,
     }
 
     enum class Confidence { HIGH, LOW }
@@ -45,13 +49,16 @@ data class Fact(
 
         fun sourceOf(tool: String): Source? = when (tool) {
             "battery_status", "device_info", "system_info" -> Source.SYSTEM_API
-            "clipboard_read", "clipboard_write" -> Source.SYSTEM_API
             "device_location" -> Source.SYSTEM_API
-            "sms_read", "contacts_read" -> Source.SYSTEM_API
-            "flashlight_toggle", "wifi_toggle", "bluetooth_toggle",
-            "do_not_disturb", "volume_set" -> Source.SYSTEM_API
+            "contacts_read" -> Source.SYSTEM_API
+            // Attacker-writable content arriving through a system channel.
+            "sms_read", "clipboard_read" -> Source.THIRD_PARTY_CONTENT
+            // Results of driving another app or the web: what came back was
+            // written by that app or page.
+            "react_navigate", "web_search", "open_url" -> Source.THIRD_PARTY_CONTENT
             "read_text_on_screen", "read_screen_deep", "describe_screen" -> Source.ACCESSIBILITY_TREE
             "screenshot", "notification_read" -> Source.ACCESSIBILITY_TREE
+            // Pure actions (toggles, volume, clipboard_write) observe nothing.
             else -> null
         }
 
@@ -60,6 +67,7 @@ data class Fact(
             Source.OPERATOR_CONFIRMATION -> Confidence.HIGH
             Source.USER_REQUEST -> Confidence.HIGH
             Source.ACCESSIBILITY_TREE -> Confidence.LOW
+            Source.THIRD_PARTY_CONTENT -> Confidence.LOW
         }
     }
 }

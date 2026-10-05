@@ -37,7 +37,11 @@ object TaskMatch {
         if (overlap == 0.0) return 0.0
         val containment = overlap / minOf(mine.size, theirs.size)
         val coverage = overlap / mine.size
-        return if (coverage < MIN_COVERAGE) 0.0 else containment
+        // And the other way: a long remembered task must not claim a short request just
+        // because the request's few words all appear in it ("open" inside "open history
+        // page from the three dot menu in chrome").
+        val theirCoverage = overlap / theirs.size
+        return if (coverage < MIN_COVERAGE || theirCoverage < MIN_COVERAGE) 0.0 else containment
     }
 
     /**

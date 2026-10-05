@@ -24,14 +24,14 @@ class ObservationLog {
             summary = summary.take(120),
         )
         facts += f
-        android.util.Log.i(TAG, "OBSERVE ${f.confidence} ${f.source} via ${f.tool}" +
-            if (f.summary.isNotBlank()) ": ${f.summary}" else "")
+        // The summary is a tool result (an SMS, a screen with a one-time code):
+        // it stays in memory and never reaches logcat.
+        log("OBSERVE ${f.confidence} ${f.source} via ${f.tool}")
     }
 
     fun record(fact: Fact) {
         facts += fact
-        android.util.Log.i(TAG, "OBSERVE ${fact.confidence} ${fact.source} via ${fact.tool}" +
-            if (fact.summary.isNotBlank()) ": ${fact.summary}" else "")
+        log("OBSERVE ${fact.confidence} ${fact.source} via ${fact.tool}")
     }
 
     fun all(): List<Fact> = facts.toList()
@@ -68,6 +68,22 @@ class ObservationLog {
         }
     }
 
+    /**
+     * Is there a LOW tool observation the operator has not confirmed past?
+     *
+     * The old rule (hasLowToolOnly) fired only when EVERY tool observation was
+     * LOW, so one battery read laundered any number of screen, SMS or web reads.
+     * One attacker-writable input is enough to steer an egress. An operator
+     * confirmation clears the LOW observations recorded before it; anything
+     * read after it re-arms the rule. Intrinsic confidence is used: a battery
+     * read going stale does not make it attacker-written.
+     */
+    fun hasUnconfirmedLowToolObservation(): Boolean {
+        val tools = toolObservations()
+        val lastConfirm = tools.indexOfLast { it.source == Fact.Source.OPERATOR_CONFIRMATION }
+        return tools.drop(lastConfirm + 1).any { it.confidence == Fact.Confidence.LOW }
+    }
+
     /** Summary line for the end-of-request log. */
     fun summary(): String {
         if (facts.isEmpty()) return "no observations"
@@ -78,5 +94,7 @@ class ObservationLog {
 
     companion object {
         private const val TAG = "UltraObserve"
+
+        private fun log(msg: String) { android.util.Log.i(TAG, msg) }
     }
 }

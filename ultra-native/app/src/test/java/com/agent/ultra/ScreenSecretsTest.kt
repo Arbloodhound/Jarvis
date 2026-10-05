@@ -117,6 +117,62 @@ class ScreenSecretsTest {
         assertNull(ScreenSecrets.refuseTyping("481920", CHAT, emptyList()))
     }
 
+    // ── Spacing does not launder a secret ───────────────────────────
+
+    @Test
+    fun `a grouped card number on screen is caught typed ungrouped`() {
+        val seen = ScreenSecrets.find("Card 4539 5787 6362 1486", BANK)
+        assertNotNull(ScreenSecrets.refuseTyping("4539578763621486", CHAT, seen))
+        assertNotNull(ScreenSecrets.refuseTyping("4539-5787-6362-1486", CHAT, seen))
+    }
+
+    @Test
+    fun `a code on screen is caught typed with a space in it`() {
+        val seen = ScreenSecrets.find("Your verification code is 481920", BANK)
+        assertNotNull(ScreenSecrets.refuseTyping("481 920", CHAT, seen))
+        assertNotNull(ScreenSecrets.refuseTyping("code: 481-920", CHAT, seen))
+        assertTrue(ScreenSecrets.carries("481 920", "481920"))
+    }
+
+    @Test
+    fun `digits from separate numbers in a sentence are not glued together`() {
+        // Only spaces, dashes and dots BETWEEN digits are removed; a comma or a
+        // colon still separates two numbers.
+        assertNull(ScreenSecrets.refuseTyping("room 48, 1920 is fine", CHAT,
+            ScreenSecrets.find("Your verification code is 481920", BANK)))
+    }
+
+    // ── Narrower context: ordinary numbers stay ordinary ────────────
+
+    @Test
+    fun `broad words no longer turn a number into a code`() {
+        for (screen in listOf(
+            "Confirm your 2024 booking",
+            "Access 1200 items in your library",
+            "Login streak: 2024 days",
+            "Security update 20240501 installed",
+            "Postal code 90210",
+            "Use promo code 2024 at checkout",
+        )) {
+            assertTrue("must not fire on: $screen", ScreenSecrets.find(screen, BANK).isEmpty())
+        }
+    }
+
+    @Test
+    fun `an IMEI is not a card number`() {
+        // 490154203237518 passes Luhn (it is the textbook IMEI example).
+        assertTrue(ScreenSecrets.passesLuhn("490154203237518"))
+        assertTrue(ScreenSecrets.find("490154203237518", BANK).isEmpty())
+        assertTrue(ScreenSecrets.find("IMEI: 490154203237518", BANK).isEmpty())
+        // A device id labelled as one is not a card, whatever its length.
+        assertTrue(ScreenSecrets.find("MEID 4539578763621486", BANK).isEmpty())
+    }
+
+    @Test
+    fun `a fifteen digit Amex number is still a card`() {
+        assertTrue(ScreenSecrets.find("378282246310005", BANK).isNotEmpty())
+    }
+
     @Test
     fun `the source travels with the value`() {
         val seen = ScreenSecrets.find("Your verification code is 481920", BANK)

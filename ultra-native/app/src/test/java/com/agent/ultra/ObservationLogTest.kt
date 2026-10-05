@@ -213,4 +213,19 @@ class ObservationLogTest {
         assertTrue(log.hasLowToolOnly())
         assertFalse(log.hasHighToolObservation())
     }
+
+    @Test
+    fun `any unconfirmed LOW tool observation counts, a stale HIGH one does not`() {
+        val log = ObservationLog()
+        val old = System.currentTimeMillis() - 200_000
+        log.record(Fact("battery_status", Source.SYSTEM_API, HIGH, timestamp = old))
+        assertFalse("a battery read going stale is not attacker-written", log.hasUnconfirmedLowToolObservation())
+        log.record("read_text_on_screen", Source.ACCESSIBILITY_TREE)
+        log.record("battery_status", Source.SYSTEM_API)
+        assertTrue(log.hasUnconfirmedLowToolObservation())
+        log.record(Fact("send_email", Source.OPERATOR_CONFIRMATION, HIGH))
+        assertFalse(log.hasUnconfirmedLowToolObservation())
+        log.record("sms_read", Source.THIRD_PARTY_CONTENT)
+        assertTrue(log.hasUnconfirmedLowToolObservation())
+    }
 }

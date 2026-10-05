@@ -22,6 +22,16 @@ object GateAuditLog {
 
     enum class Outcome { ALLOWED, BLOCKED, OVERRIDDEN, AUTO_APPROVED }
 
+    /** File I/O off the caller's thread (Brain records from Main.immediate). One
+     * thread, so lines land in the order they were recorded. */
+    private val writer = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "UltraAuditWriter").apply { isDaemon = true }
+    }
+
+    /** Line count, read from disk once and kept current afterwards, so the
+     * settings screen does not re-read the file on every composition. */
+    @Volatile private var cachedCount: Int? = null
+
     fun record(
         context: Context,
         tool: String,
@@ -42,17 +52,29 @@ object GateAuditLog {
                 put("obs_tool_low_only", if (observations.hasLowToolOnly()) 1 else 0)
                 if (riskScore != null) put("risk", riskScore.toJson())
             }
+            // The entry is built here, on the caller's thread: ObservationLog is
+            // not thread-safe. Only the disk write moves.
+            val line = entry.toString() + "\n"
             val f = file(context)
-            f.appendText(entry.toString() + "\n")
-            if (f.length() > MAX_BYTES) trim(f)
+            writer.execute {
+                try {
+                    f.appendText(line)
+                    cachedCount?.let { cachedCount = it + 1 }
+                    if (f.length() > MAX_BYTES) { trim(f); cachedCount = null }
+                } catch (e: Exception) {
+                    Log.w(TAG, "audit write failed: ${e.message}")
+                }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "audit write failed: ${e.message}")
         }
     }
 
-    fun entryCount(context: Context): Int = try {
+    fun entryCount(context: Context): Int = cachedCount ?: try {
         val f = file(context)
-        if (f.exists()) f.readLines().count { it.isNotBlank() } else 0
+        val n = if (f.exists()) f.bufferedReader().useLines { lines -> lines.count { it.isNotBlank() } } else 0
+        cachedCount = n
+        n
     } catch (_: Exception) { 0 }
 
     fun fileSizeBytes(context: Context): Long = try {
@@ -61,6 +83,7 @@ object GateAuditLog {
 
     fun delete(context: Context) {
         file(context).delete()
+        cachedCount = 0
     }
 
     fun deviceFingerprint(context: Context): JSONObject = JSONObject().apply {
@@ -75,17 +98,19 @@ object GateAuditLog {
      */
     fun exportFile(context: Context): File {
         val export = File(context.cacheDir, "ultra_gate_audit_export.jsonl")
-        export.writeText("")
         val header = JSONObject().apply {
             put("type", "device")
             put("ts", System.currentTimeMillis())
             put("fingerprint", deviceFingerprint(context))
         }
-        export.appendText(header.toString() + "\n")
-        val source = file(context)
-        if (source.exists()) {
-            source.forEachLine { line ->
-                if (line.isNotBlank()) export.appendText(line + "\n")
+        // One buffered writer, not a file open/close per line.
+        export.bufferedWriter().use { out ->
+            out.write(header.toString() + "\n")
+            val source = file(context)
+            if (source.exists()) {
+                source.forEachLine { line ->
+                    if (line.isNotBlank()) out.write(line + "\n")
+                }
             }
         }
         return export

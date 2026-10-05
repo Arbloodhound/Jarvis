@@ -98,9 +98,16 @@ object ActionGate {
      * false positive costs one tap of yours; a false negative costs money.
      */
     fun commitmentIn(rawLabel: String): String? {
-        val label = rawLabel.trim().lowercase().replace(Regex("[^a-z0-9 &]"), " ")
+        // Accents are folded first so "Löschen" reads as "loschen", not "l schen".
+        val folded = java.text.Normalizer.normalize(rawLabel.trim().lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "").replace("ß", "ss")
+        val label = folded.replace(Regex("[^a-z0-9 &]"), " ")
             .replace(Regex("\\s+"), " ").trim()
-        if (label.isBlank()) return null
+        // A label in a script this list cannot read ("Оплатить", "支付") is not evidence that
+        // the button is harmless. Asking costs one tap; guessing could cost money. Icon glyphs
+        // and arrows ("⋮", "→") carry no letters and still pass.
+        val unreadable = folded.any { it.isLetter() && it !in 'a'..'z' }
+        if (label.isBlank()) return if (unreadable) UNREADABLE else null
         if (NAVIGATION.any { label == it }) return null
         for (word in COMMIT_WORDS) {
             if (label == word) return word
@@ -108,7 +115,8 @@ object ActionGate {
             if (label.contains(" $word ") && label.split(" ").size <= 5) return word
             if (label.endsWith(" $word") && label.split(" ").size <= 4) return word
         }
-        return null
+        // "Оплатить 500 ₽" keeps its digits through the filter; the words are still unread.
+        return if (unreadable) UNREADABLE else null
     }
 
     private fun bringUltraForward() {
@@ -127,6 +135,8 @@ object ActionGate {
     }
 
     private const val TAG = "UltraActionGate"
+    /** The reason given when the label is in a script the word list cannot read. */
+    const val UNREADABLE = "a label in a language I can't read"
     private const val TIMEOUT_MS = 120_000L
 
     /** Words that mean something happens that is hard to take back. */
@@ -142,6 +152,14 @@ object ActionGate {
         // phone" for "open the weather app" and "open samsung notes" (learnrun, 2026-09-19).
         "restart", "reboot", "power off", "shut down", "reset", "factory reset",
         "erase", "sign out", "log out",
+        // Confirm-dialog wording for deletion and wiping. "Trash"/"Bin" alone stay navigation
+        // (see NAVIGATION); moving something INTO them is the commitment.
+        "move to trash", "move to bin", "empty trash", "empty bin", "discard",
+        "clear data", "clear storage", "clear all data", "wipe", "format",
+        // A few of the same words in the languages most often met on a phone. Not exhaustive.
+        "bezahlen", "zahlen", "kaufen", "senden", "loschen", "bestellen",
+        "payer", "acheter", "envoyer", "supprimer", "commander",
+        "pagar", "comprar", "enviar", "eliminar", "borrar",
         // Deliberately NOT here: "allow". Permission dialogs say Allow and Don't allow on
         // ordinary screens; gating both stopped a run dead on a contacts permission prompt
         // (AndroidWorld, 2026-09-19) and would train tap-through on a real phone.

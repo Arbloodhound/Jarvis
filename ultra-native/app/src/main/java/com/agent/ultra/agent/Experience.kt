@@ -123,11 +123,28 @@ object Experience {
         return out
     }
 
-    private val CUE = Regex("""^\s*(no\b|nope\b|wrong\b|not that\b|that'?s not\b|that is not\b|i meant\b|i said\b|actually\b|instead\b)""", RegexOption.IGNORE_CASE)
+    // A real correction, not any message that happens to open with "no" or "actually":
+    // "No worries, thanks — now open Spotify" is a new request, and treating it as a
+    // correction would teach that the approach which just worked was wrong.
+    private val CUE = Regex(
+        """^\s*(""" +
+            """(no|nope)\s*[,.!:;\u2014-]+\s*\w+""" +                       // "no, <what they meant>"
+            """|(no|nope)\s+(i|it'?s|its|it is|that'?s|that|not|the other|wrong)\b""" +
+            """|wrong\b|not that\b|that'?s (not|wrong)\b|that is (not|wrong)\b|i meant\b|i said\b""" +
+            """|not what i (asked|said|meant|wanted)\b""" +
+            """|(actually|instead)\s*,?\s*i (meant|said|asked|wanted)\b""" +
+            """)""",
+        RegexOption.IGNORE_CASE,
+    )
+    /** Openings that start like a correction but are thanks or reassurance. */
+    private val NOT_A_CUE = Regex(
+        """^\s*(no|nope)\s*[,.!]?\s*(worries|worry|problem|problems|prob|probs|thanks|thank you|thank|need|rush|biggie|bother|stress|that'?s (fine|ok|okay|good|great|perfect)|it'?s (fine|ok|okay|good|great|perfect))\b""",
+        RegexOption.IGNORE_CASE,
+    )
 
     /** The user correcting the last run. Null unless the message opens like a correction. */
     fun correction(previousRequest: String, message: String, now: Long = System.currentTimeMillis()): Lesson? {
-        if (previousRequest.isBlank() || !CUE.containsMatchIn(message)) return null
+        if (previousRequest.isBlank() || !CUE.containsMatchIn(message) || NOT_A_CUE.containsMatchIn(message)) return null
         val text = "When asked \"${previousRequest.take(120)}\", the user corrected: \"${message.take(160)}\"."
         return Lesson(uid("correction", keyOf(previousRequest) + "|" + keyOf(message)),
             previousRequest, text, "correction", now)

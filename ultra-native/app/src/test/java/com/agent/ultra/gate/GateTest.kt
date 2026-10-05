@@ -230,8 +230,17 @@ class GateTest {
     @Test
     fun observeToolSkipsActions() {
         val ep = episode()
-        ep.observeTool("react_navigate", "navigating")
+        ep.observeTool("app_launch", "launched")
+        ep.observeTool("flashlight_toggle", "on")
         assertEquals(1, ep.observations.size)
+    }
+
+    @Test
+    fun observeToolRecordsNavigationAsLow() {
+        val ep = episode()
+        ep.observeTool("react_navigate", "navigating")
+        assertEquals(2, ep.observations.size)
+        assertEquals(Fact.Confidence.LOW, ep.observations.all()[1].confidence)
     }
 
     @Test
@@ -282,13 +291,65 @@ class GateTest {
     }
 
     @Test
-    fun lowConfidenceEgressPassesWithMixedSources() {
+    fun lowConfidenceEgressBlocksMixedSources() {
+        // One HIGH read used to clear any number of LOW ones. It no longer does.
         val m = egressManifest()
         val ep = episode("send alice@example.com the price on screen and battery")
         ep.observeTool("read_text_on_screen", "$49.99")
         ep.observeTool("battery_status", "Battery: 80%")
         val v = gateCheck(m, ep, "send_email", """{"to":"alice@example.com"}""")
-        assertTrue(v.allowed)
+        assertFalse(v.allowed)
+        assertEquals("low_confidence_egress", v.rule)
+        assertTrue(v.confirmable)
+    }
+
+    @Test
+    fun lowConfidenceEgressBlocksAfterSmsOrClipboardRead() {
+        val m = egressManifest()
+        for (tool in listOf("sms_read", "clipboard_read", "web_search", "notification_read")) {
+            val ep = episode("email alice@example.com hello")
+            ep.observeTool(tool, "attacker text")
+            ep.observeTool("battery_status", "Battery: 80%")
+            val v = gateCheck(m, ep, "send_email", """{"to":"alice@example.com"}""")
+            assertEquals("after $tool", "low_confidence_egress", v.rule)
+        }
+    }
+
+    /** Research is search after search: a follow-up query is not held for a confirm card,
+     * while sending after the same read still is. */
+    @Test
+    fun followUpSearchIsNotHeldByLowConfidenceEgress() {
+        val m = manifestOf(
+            "web_search" to spec("web_search", listOf("egress"), emptyList()),
+            "send_email" to spec("send_email", listOf("egress"),
+                listOf(mapOf("kind" to "recipient_traceable", "arg" to "to"))),
+        )
+        val ep = episode("email alice@example.com about tides")
+        ep.observeTool("web_search", "results page text")
+        assertTrue(gateCheck(m, ep, "web_search", """{"query":"tide tables"}""").allowed)
+        assertEquals("low_confidence_egress",
+            gateCheck(m, ep, "send_email", """{"to":"alice@example.com"}""").rule)
+    }
+
+    @Test
+    fun lowConfidenceEgressRearmedByReadAfterConfirmation() {
+        val m = egressManifest()
+        val ep = episode("send the number on screen to alice@example.com")
+        ep.observeTool("read_text_on_screen", "+1-555-1234")
+        ep.observeOperatorConfirmation("send_email")
+        assertTrue(gateCheck(m, ep, "send_email", """{"to":"alice@example.com"}""").allowed)
+        ep.observeTool("sms_read", "new text")
+        assertEquals("low_confidence_egress",
+            gateCheck(m, ep, "send_email", """{"to":"alice@example.com"}""").rule)
+    }
+
+    @Test
+    fun lowConfidenceEgressIgnoresPureActions() {
+        val m = egressManifest()
+        val ep = episode("email alice@example.com hello")
+        ep.observeTool("flashlight_toggle", "on")
+        ep.observeTool("clipboard_write", "ok")
+        assertTrue(gateCheck(m, ep, "send_email", """{"to":"alice@example.com"}""").allowed)
     }
 
     @Test

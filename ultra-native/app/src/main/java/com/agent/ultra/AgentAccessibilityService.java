@@ -50,7 +50,12 @@ public class AgentAccessibilityService extends AccessibilityService {
     public boolean showGateOverlay(String headline, String detail, Runnable onYes, Runnable onNo) {
         final AtomicBoolean shown = new AtomicBoolean(false);
         final CountDownLatch latch = new CountDownLatch(1);
+        // 0 = waiting for the main thread, 1 = drawing, 2 = caller gave up. A draw that
+        // starts after the caller timed out (and asked the old way) must not add a
+        // second prompt on top.
+        final java.util.concurrent.atomic.AtomicInteger state = new java.util.concurrent.atomic.AtomicInteger(0);
         Runnable draw = () -> {
+            if (!state.compareAndSet(0, 1)) { latch.countDown(); return; }
             try {
                 removeGateOverlay();
                 float dp = getResources().getDisplayMetrics().density;
@@ -125,7 +130,13 @@ public class AgentAccessibilityService extends AccessibilityService {
         if (Looper.myLooper() == Looper.getMainLooper()) draw.run();
         else {
             new Handler(Looper.getMainLooper()).post(draw);
-            try { latch.await(3, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+            boolean done = false;
+            try { done = latch.await(3, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+            if (!done) {
+                if (state.compareAndSet(0, 2)) return false;   // never started: it never will
+                // Already drawing on the main thread: let it finish and report what it did.
+                try { latch.await(3, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+            }
         }
         return shown.get();
     }
@@ -235,6 +246,13 @@ public class AgentAccessibilityService extends AccessibilityService {
      * considerably worse; this grants no capability that was not already theirs.
      */
     public static void applySetupFile(Context ctx) {
+        // "Writable by adb and by no other app" holds from API 29 (scoped storage).
+        // On 26-28 any app with WRITE_EXTERNAL_STORAGE can write Android/data/<pkg>,
+        // and this file widens which apps the agent may enter. Release builds there
+        // ignore it; debuggable builds keep the test hook.
+        boolean debuggable = (ctx.getApplicationInfo().flags
+                & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        if (android.os.Build.VERSION.SDK_INT < 29 && !debuggable) return;
         try {
             java.io.File dir = ctx.getExternalFilesDir(null);
             if (dir == null) return;
@@ -317,6 +335,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         // first event rather than from the next restart.
         applySetupFile(this);
         loadBlockedPackages(this);
+        refreshImePackages();
         AccessibilityServiceInfo info = getServiceInfo();
         if (info == null) info = new AccessibilityServiceInfo();
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -341,6 +360,10 @@ public class AgentAccessibilityService extends AccessibilityService {
         } catch (Exception e) {}
         android.util.Log.i("AgentA11y", "SERVICE_CONNECTED");
         // === UltraDevLog v4: Crash survival ===
+        // Once per process: each reconnect used to wrap the previous wrapper, chaining
+        // every old service instance into the handler.
+        if (!crashHandlerInstalled.compareAndSet(false, true)) return;
+        final java.io.File crashFile = new java.io.File(getApplicationContext().getFilesDir(), "ultra_crash.log");
         final Thread.UncaughtExceptionHandler prevHandler = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             @Override
@@ -354,8 +377,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                         sb.append("Caused by: ").append(cause.toString()).append("\n");
                         for (StackTraceElement el : cause.getStackTrace()) { sb.append("  ").append(el.toString()).append("\n"); }
                     }
-                    java.io.File f = new java.io.File(getFilesDir(), "ultra_crash.log");
-                    java.io.FileWriter fw = new java.io.FileWriter(f, true);
+                    java.io.FileWriter fw = new java.io.FileWriter(crashFile, true);
                     fw.write("\n=== CRASH " + new java.util.Date().toString() + " thread=" + t.getName() + " ===\n");
                     fw.write(sb.toString());
                     fw.close();
@@ -367,16 +389,29 @@ public class AgentAccessibilityService extends AccessibilityService {
         });
     }
 
+    private static final java.util.concurrent.atomic.AtomicBoolean crashHandlerInstalled =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /** last_event is a liveness breadcrumb nothing in the app reads; writing it on
+     * every event queued a prefs commit per event. Once every few seconds is plenty. */
+    private long lastEventPersistedAt = 0;
+    private static final long LAST_EVENT_PERSIST_MS = 5000;
+
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
-        try {
-            getSharedPreferences("ultra_a11y", MODE_PRIVATE)
-                .edit()
-                .putLong("last_event", System.currentTimeMillis())
-                .putString("last_event_pkg", event.getPackageName() != null ? event.getPackageName().toString() : "")
-                .apply();
-        } catch (Exception e) {}
+        long evtNow = System.currentTimeMillis();
+        if (evtNow - lastEventPersistedAt >= LAST_EVENT_PERSIST_MS) {
+            lastEventPersistedAt = evtNow;
+            try {
+                getSharedPreferences("ultra_a11y", MODE_PRIVATE)
+                    .edit()
+                    .putLong("last_event", evtNow)
+                    .putString("last_event_pkg", event.getPackageName() != null ? event.getPackageName().toString() : "")
+                    .apply();
+            } catch (Exception e) {}
+        }
+        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) refreshImePackages();
         if (event.getPackageName() != null) {
             String evtPkg = event.getPackageName().toString();
             // The keyboard, the status bar and the notification shade all emit
@@ -540,6 +575,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 .apply();
         } catch (Exception e) {}
         android.util.Log.w("AgentA11y", "SERVICE_DESTROYED");
+        journeySampler.shutdownNow();
         super.onDestroy();
     }
 
@@ -780,6 +816,10 @@ public class AgentAccessibilityService extends AccessibilityService {
                 if (root == null) { result.set("gone"); return; }
                 java.util.List<AccessibilityNodeInfo> order = new java.util.ArrayList<>();
                 collectInFlatOrder(root, order);
+                // The root itself is collected when it has content or is clickable; it is
+                // then recycled through the list. Recycling it again in finally threw on
+                // API < 33 and skipped latch.countDown().
+                if (!order.isEmpty() && order.get(0) == root) root = null;
                 int found = -1;
                 for (int i = 0; i < order.size(); i++) {
                     if (vid.equals(shortName(idOf(order.get(i))))) { found = i; break; }
@@ -837,6 +877,10 @@ public class AgentAccessibilityService extends AccessibilityService {
                 if (root == null) { result.set("gone"); return; }
                 java.util.List<AccessibilityNodeInfo> order = new java.util.ArrayList<>();
                 collectInFlatOrder(root, order);
+                // The root itself is collected when it has content or is clickable; it is
+                // then recycled through the list. Recycling it again in finally threw on
+                // API < 33 and skipped latch.countDown().
+                if (!order.isEmpty() && order.get(0) == root) root = null;
                 if (index < 0 || index >= order.size()) {
                     Log.i(TAG, "CLICK_INDEX: index " + index + " out of range, collected " + order.size());
                     result.set("gone");
@@ -968,9 +1012,38 @@ public class AgentAccessibilityService extends AccessibilityService {
     private static boolean isDeviceFurniture(String pkg) {
         if (pkg.equals("com.android.systemui")) return true;
         // Keyboards name themselves in many ways; what they have in common is
-        // being an input method, and none of them is ever the task.
+        // being an input method, and none of them is ever the task. Asked of the
+        // system's list of input methods: the old substring test ("latin",
+        // "inputmethod", "honeyboard") also matched real apps, which then never
+        // counted as the app in front. The substring test is kept only for when
+        // that list could not be read.
+        java.util.Set<String> imes = imePackages;
+        if (!imes.isEmpty()) return imes.contains(pkg);
         return pkg.contains("inputmethod") || pkg.contains("honeyboard")
                 || pkg.contains("latin") || pkg.endsWith(".ime");
+    }
+
+    private static volatile java.util.Set<String> imePackages = java.util.Collections.emptySet();
+    private long imePackagesReadAt = 0;
+    private static final long IME_REFRESH_MS = 30_000;
+
+    /** Re-read the input methods the user has (a keyboard can be added any time). */
+    private void refreshImePackages() {
+        long now = System.currentTimeMillis();
+        if (now - imePackagesReadAt < IME_REFRESH_MS) return;
+        imePackagesReadAt = now;
+        try {
+            android.view.inputmethod.InputMethodManager imm =
+                    (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm == null) return;
+            java.util.Set<String> out = new java.util.HashSet<>();
+            for (android.view.inputmethod.InputMethodInfo info : imm.getInputMethodList()) {
+                out.add(info.getPackageName());
+            }
+            if (!out.isEmpty()) imePackages = java.util.Collections.unmodifiableSet(out);
+        } catch (Exception e) {
+            Log.w(TAG, "input method list unavailable: " + e.getMessage());
+        }
     }
 
     /** The same order flattenNode writes, so an index means the same node. */
@@ -1206,6 +1279,7 @@ public class AgentAccessibilityService extends AccessibilityService {
      * records one app's screen under another's name.
      */
     private synchronized void scheduleJourneySample() {
+        if (journeySampler.isShutdown()) return;
         if (pendingJourneySample != null) pendingJourneySample.cancel(false);
         pendingJourneySample = journeySampler.schedule(() -> {
             try {
@@ -1332,6 +1406,20 @@ public class AgentAccessibilityService extends AccessibilityService {
         } finally {
             if (root != null) root.recycle();
         }
+    }
+
+    /**
+     * May an action land in this window? checkPackageAllowed() gates the topmost
+     * window; the multi-window scans below then picked their own window, which in
+     * split screen could be a protected app, or Ultra itself. Each window is asked
+     * the same question before anything is done in it.
+     */
+    private static boolean mayActIn(AccessibilityNodeInfo windowRoot) {
+        if (windowRoot == null) return false;
+        CharSequence p = windowRoot.getPackageName();
+        if (p == null) return false;
+        String pkg = p.toString();
+        return !"com.agent.ultra".equals(pkg) && agentMayUse(pkg);
     }
 
     private boolean checkPackageAllowed() {
@@ -1491,8 +1579,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 if (w.getType() == AccessibilityWindowInfo.TYPE_APPLICATION) {
                     AccessibilityNodeInfo wRoot = w.getRoot();
                     if (wRoot != null) {
-                        CharSequence wPkg = wRoot.getPackageName();
-                        if (wPkg != null && "com.agent.ultra".contentEquals(wPkg)) { wRoot.recycle(); continue; }
+                        if (!mayActIn(wRoot)) { wRoot.recycle(); continue; }
                         target = selector.isEmpty() ? findFocusedEditable(wRoot) : findNode(wRoot, selector);
                         if (target == null && selector.isEmpty()) target = findAnyEditable(wRoot);
                         wRoot.recycle();
@@ -1505,6 +1592,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         }
         if (target == null) {
             root = getRootInActiveWindow();
+            if (root != null && !mayActIn(root)) { root.recycle(); root = null; }
             if (root != null) {
                 target = selector.isEmpty() ? findFocusedEditable(root) : findNode(root, selector);
                 if (target == null && selector.isEmpty()) target = findAnyEditable(root);
@@ -1558,8 +1646,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 if (w.getType() == AccessibilityWindowInfo.TYPE_APPLICATION) {
                     AccessibilityNodeInfo wRoot = w.getRoot();
                     if (wRoot != null) {
-                        CharSequence pkg = wRoot.getPackageName();
-                        if (pkg == null || !"com.agent.ultra".contentEquals(pkg)) { root = wRoot; break; }
+                        if (mayActIn(wRoot)) { root = wRoot; break; }
                         wRoot.recycle();
                     }
                 }
@@ -1567,7 +1654,10 @@ public class AgentAccessibilityService extends AccessibilityService {
         } catch (Exception e) {
             Log.e(TAG, "SCROLL_DEEP: window scan failed: " + e.getMessage());
         }
-        if (root == null) root = getRootInActiveWindow();
+        if (root == null) {
+            root = getRootInActiveWindow();
+            if (root != null && !mayActIn(root)) { root.recycle(); root = null; }
+        }
         if (root == null) { Log.i(TAG, "SCROLL_DEEP: no root"); return false; }
 
         AccessibilityNodeInfo best = findLargestScrollable(root, null);
@@ -1636,8 +1726,16 @@ public class AgentAccessibilityService extends AccessibilityService {
                 if (w.getType() == AccessibilityWindowInfo.TYPE_APPLICATION) {
                     AccessibilityNodeInfo wRoot = w.getRoot();
                     if (wRoot != null) {
+                        boolean mayAct = mayActIn(wRoot);
                         target = findFocusedEditable(wRoot);
                         wRoot.recycle();
+                        if (target != null && !mayAct) {
+                            // The input focus is in a window the agent may not act in: the
+                            // keyboard's Enter (strategy 2) would land there too. Refuse.
+                            Log.i(TAG, "IME_ENTER: BLOCKED — focused field is in " + target.getPackageName());
+                            target.recycle();
+                            return false;
+                        }
                         if (target != null) {
                             Log.i(TAG, "IME_ENTER: found focused editable in window pkg=" + (target.getPackageName() != null ? target.getPackageName() : "null"));
                             break;
@@ -1650,6 +1748,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 for (AccessibilityWindowInfo w : windows) {
                     if (w.getType() == AccessibilityWindowInfo.TYPE_APPLICATION) {
                         AccessibilityNodeInfo wRoot = w.getRoot();
+                        if (wRoot != null && !mayActIn(wRoot)) { wRoot.recycle(); continue; }
                         if (wRoot != null) {
                             target = findAnyEditable(wRoot);
                             wRoot.recycle();
@@ -1667,6 +1766,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         // Pass 3: fallback to getRootInActiveWindow
         if (target == null) {
             AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root != null && !mayActIn(root)) { root.recycle(); root = null; }
             if (root != null) {
                 target = findFocusedEditable(root);
                 if (target == null) target = findAnyEditable(root);

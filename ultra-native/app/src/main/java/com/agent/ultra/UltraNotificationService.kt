@@ -23,12 +23,17 @@ class UltraNotificationService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         Log.i(TAG, "notification listener connected")
+        // The app policy used to be loaded only when the accessibility service
+        // connected; with that service off, every protected app's notifications
+        // were processed and logged.
+        AgentAccessibilityService.loadBlockedPackages(this)
         EventTrigger.registerDefaults()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         try {
-            if (AgentAccessibilityService.isPackageBlocked(sbn.packageName)) {
+            // The same rule every read and action asks (blocklist, or allowlist mode).
+            if (!AgentAccessibilityService.agentMayUse(sbn.packageName)) {
                 Log.i(TAG, "skipped protected app: ${sbn.packageName}")
                 return
             }
@@ -146,6 +151,8 @@ class UltraNotificationService : NotificationListenerService() {
     companion object {
         private const val TAG = "UltraNotif"
         private const val SCAM_CHANNEL = "ultra_scam_warnings"
-        private const val SCAM_ID_BASE = 7000
+        // 7001 is AgentBackgroundService's foreground notification and 7101
+        // AmbientListenService's; 7000 + (ms % 1000) replaced them.
+        private const val SCAM_ID_BASE = 20000
     }
 }

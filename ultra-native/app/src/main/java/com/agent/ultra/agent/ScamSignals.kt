@@ -76,18 +76,20 @@ object ScamSignals {
     private val NEGATION = rx("""\b(not|never|don'?t|do not|no one|nobody|won'?t)\b""")
 
     private val ODD_PAY = rx("""\b(wire (transfer|the money|money|funds)|western union|moneygram|bitcoin|btc|crypto(currency)?|usdt|tether|bitcoin atm|zelle|cash ?app|venmo|paypal friends|(safe|secure|protected) (account|wallet))\b""")
-    private val MONEY_ASK = rx("""\b(pay|transfer|send|wire|lend|move)\b(\s+\w+){0,3}?\s+(money|cash|funds|bill|rent|fee|fine|something|it|[£$€]\s?\d[\d,.]*)""")
+    // A money noun or an amount is required: "send it over" and "move it to Friday" are not
+    // asks for money. Only "pay" keeps "it"/"something" ("I have to pay something urgently").
+    private val MONEY_ASK = rx("""\b(pay|transfer|send|wire|lend|move)\b(\s+\w+){0,3}?\s+((money|cash|funds|bills?|rent|fees?|fines?|payments?|deposit)\b|[£$€]\s?\d[\d,.]*|\d[\d,.]*\s?(dollars|pounds|euros|bucks|quid)\b)|\bpay\b(\s+\w+){0,2}?\s+(something|it)\b""")
     private val PERSONAL = rx("""\b(confirm(ing)?|verify(ing)?|updat(e|ing)|validat(e|ing)|re-?enter(ing)?|unlock(ing)?|restor(e|ing))\b(\s+\w+){0,3}?\s+(account|card|bank|banking|password|login|log-in|details|information|identity|ssn|social security|medicare number)\b""")
     private val CALL = rx("""\bcall\b(\s+\w+){0,3}?\s+(\+?\d[\d\s().-]{6,}\d)""")
 
     private val URGENT = rx("""\b(urgent(ly)?|immediately|right away|right now|asap|as soon as possible|within \d+ ?(hours?|hrs?|minutes?|mins?)|final (notice|warning|reminder)|act now|last chance|expires? today)\b""")
-    private val THREAT = rx("""\b((account|card|profile|number|service)\b(\s+\w+){0,3}?\s+(locked|suspended|closed|frozen|restricted|limited|disabled|deactivated|terminated|disconnected|cut off|shut off)|arrest(ed)?|warrant|legal action|lawsuit|court (date|order|summons|case)|summons|penalt(y|ies)|deport(ed|ation)?|police|sheriff)\b""")
+    private val THREAT = rx("""\b((account|card|profile|number|service)\b(\s+\w+){0,3}?\s+(locked|suspended|closed|frozen|restricted|limited|disabled|deactivated|terminated|disconnected|cut off|shut off)|arrest(ed)?|warrant|legal action|lawsuit|court (date|order|summons|case)|summons|penalt(y|ies)|deport(ed|ation)?|police (will|are coming|have been|case|report)|(report(ed)?|refer(red)?) (you )?to (the )?police|sheriff)\b""")
     private val AUTHORITY = rx("""\b(social security|medicare|tax (refund|office|rebate)|customs (fee|charge|duty)|(fraud|security) (department|dept|team)|royal mail|fedex|evri|toll (service|road|charges?)|ez-?pass)\b""")
     /** Acronyms only in capitals: "ups" is also the end of "check-ups". */
     private val AUTHORITY_CAPS = Regex("""\b(IRS|HMRC|SSA|USPS|UPS|DHL|DVLA|HMRC)\b""")
     // Not "hi mum" alone — real children text that every day. The new-number story is the tell.
     private val FAMILY = rx("""(\bnew number\b|\b(old |my )?phone (broke|is broken|died|got stolen)\b|\b(lost|broke|dropped|cracked) my phone\b|\bin jail\b|\bbail (money|out)\b|\bpost(ing)? bail\b)""")
-    private val PRIZE = rx("""\b(you('ve| have)? won|you are a winner|winner|(been |are )?awarded (a|with|£|\$)|selected (2|to) receive|(cash|bonus|caller) prize|prize (reward|jackpot|draw)|guaranteed (a )?(£|\$|cash|prize)|claim (your )?(prize|reward|refund|gift|payment|money|funds|cash)|lottery|sweepstakes?|unclaimed|you('re| are) owed|owed a refund)\b""")
+    private val PRIZE = rx("""\b(you('ve| have)? won|you are a winner|(you('re| are)|lucky|selected|declared|prize|lottery|jackpot|cash) winner|(been |are )?awarded (a|with|£|\$)|selected (2|to) receive|(cash|bonus|caller) prize|prize (reward|jackpot|draw)|guaranteed (a )?(£|\$|cash|prize)|claim (your )?(prize|reward|refund|gift|payment|money|funds|cash)|lottery|sweepstakes?|unclaimed|you('re| are) owed|owed a refund)\b""")
     private val SECRET = rx("""\b((don'?t|do not) (tell|say anything to|mention (this|it) to) (anyone|anybody|mum|mom|dad|your family|the bank)|keep (this|it) (between us|secret|quiet|to yourself)|(don'?t|do not) hang up)\b""")
 
     private val URL = rx("""\b((https?://)?((\d{1,3}\.){3}\d{1,3}|[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,24})(/\S*)?)""")
@@ -166,11 +168,40 @@ object ScamSignals {
         "amzn.to", "apple.com", "icloud.com", "paypal.com", "venmo.com", "zellepay.com", "cash.app", "chase.com",
         "wellsfargo.com", "bankofamerica.com", "citi.com", "netflix.com", "microsoft.com", "google.com",
         "coinbase.com", "irs.gov", "ssa.gov", "medicare.gov", "gov.uk", "e-zpassny.com", "walmart.com",
+        // The brands' own short-link domains.
+        "paypal.me", "apple.co", "a.co", "amzn.eu", "g.co",
     )
 
-    fun official(host: String) = OFFICIAL.any { host == it || host.endsWith(".$it") }
+    /**
+     * Global brands whose country sites (amazon.ca, dhl.de, google.co.uk, amazon.com.au) are
+     * their own. Government and US-only names (irs, ssa, usps, chase…) are deliberately not
+     * here: "irs.de" is not the IRS.
+     */
+    private val GLOBAL_BRANDS = setOf(
+        "amazon", "apple", "dhl", "fedex", "ups", "paypal", "google", "microsoft", "netflix", "walmart",
+    )
+    /** Country codes anyone can register any name under; brand.<these> proves nothing. */
+    private val OPEN_CCTLDS = setOf(
+        "co", "io", "me", "ly", "cc", "tv", "ws", "to", "tk", "ml", "ga", "cf", "gq", "ai", "pw", "cx", "su",
+    )
 
-    fun lookalike(host: String) = !official(host) && host.split('.', '-').any { it in BRANDS }
+    /** brand.<cc>, brand.co.<cc> or brand.com.<cc>, and any subdomain of those. */
+    private fun brandCountrySite(host: String): Boolean {
+        val l = host.split('.')
+        if (l.size < 2) return false
+        val cc = l.last()
+        if (cc.length != 2 || !cc.all { it in 'a'..'z' } || cc in OPEN_CCTLDS) return false
+        val name = if (l.size >= 3 && l[l.size - 2] in setOf("co", "com")) l[l.size - 3] else l[l.size - 2]
+        return name in GLOBAL_BRANDS
+    }
+
+    fun official(host: String) = OFFICIAL.any { host == it || host.endsWith(".$it") } || brandCountrySite(host)
+
+    fun lookalike(host: String) = !official(host) && host.split('.', '-').any { it in BRANDS || unDigit(it) in BRANDS }
+
+    /** "paypa1" → "paypal", "amaz0n" → "amazon": digits standing in for the letters they resemble. */
+    private fun unDigit(label: String): String = if (label.none { it.isDigit() } || label.all { it.isDigit() }) label
+        else label.map { when (it) { '1' -> 'l'; '0' -> 'o'; '3' -> 'e'; '5' -> 's'; '4' -> 'a'; else -> it } }.joinToString("")
 
     private val DATE = Regex("""\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}""")
 

@@ -68,7 +68,7 @@ class AgentController(private val context: Context) {
      */
     fun outboundSecret(text: String): String? {
         if (text.isBlank()) return null
-        return seenSecrets.firstOrNull { text.contains(it.value) }
+        return seenSecrets.firstOrNull { com.agent.ultra.gate.ScreenSecrets.carries(text, it.value) }
             ?.let { "${it.why} read from ${it.pkg}" }
     }
 
@@ -251,26 +251,45 @@ class AgentController(private val context: Context) {
         Settings.Global.putString(context.contentResolver, key, value)
     } catch (_: Exception) { false }
 
-    fun setBluetooth(on: Boolean): Boolean = try {
-        val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter() ?: return false
-        @Suppress("DEPRECATION")
-        if (on) adapter.enable() else adapter.disable()
+    /**
+     * True only when the radio was actually told to change. On API 33+ enable()/disable()
+     * return false for ordinary apps, and that used to be reported as success. When the
+     * direct call is refused the Bluetooth settings page is opened for the person, and this
+     * still returns false: the toggle did not happen.
+     */
+    fun setBluetooth(on: Boolean): Boolean {
+        val done = try {
+            val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter() ?: return false
+            @Suppress("DEPRECATION")
+            if (on) adapter.enable() else adapter.disable()
+        } catch (_: Exception) { false }
+        if (!done) openSettingsPage(Settings.ACTION_BLUETOOTH_SETTINGS)
+        return done
+    }
+
+    /**
+     * True only when Wi-Fi was actually told to change. On API 29+ setWifiEnabled returns
+     * false for ordinary apps (and does nothing); that used to be reported as success. When
+     * refused, the Wi-Fi panel is opened for the person and this still returns false.
+     */
+    fun setWifi(on: Boolean): Boolean {
+        val done = try {
+            val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            @Suppress("DEPRECATION")
+            wm.setWifiEnabled(on)
+        } catch (_: Exception) { false }
+        if (!done) {
+            openSettingsPage(
+                if (android.os.Build.VERSION.SDK_INT >= 29) Settings.Panel.ACTION_WIFI else Settings.ACTION_WIFI_SETTINGS
+            )
+        }
+        return done
+    }
+
+    private fun openSettingsPage(action: String): Boolean = try {
+        context.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         true
     } catch (_: Exception) { false }
-
-    fun setWifi(on: Boolean): Boolean = try {
-        // WifiManager.setWifiEnabled is deprecated but functional via shell-granted perms;
-        // panel intent is the user-facing fallback.
-        val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        @Suppress("DEPRECATION")
-        wm.isWifiEnabled = on
-        true
-    } catch (_: Exception) {
-        try {
-            context.startActivity(Intent(Settings.Panel.ACTION_WIFI).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            true
-        } catch (_: Exception) { false }
-    }
 
     fun setDoNotDisturb(on: Boolean): Boolean {
         // Path 1: notification policy access (user-granted in settings)

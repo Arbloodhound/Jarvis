@@ -40,9 +40,18 @@ object ScreenSecrets {
      * a page that happens to mention security somewhere and shows a house
      * number elsewhere does not.
      */
+    // Narrowed: "access", "security", "confirm", "login", "sign in", "auth" on
+    // their own fired on ordinary screens ("Confirm your 2024 booking", "Access
+    // 1200 items"), and every such number then refused later tool calls that
+    // happened to contain it. A code is now named as a code: "security code",
+    // "login PIN", "verification code" still qualify through the noun. A "code"
+    // that is a postcode, area code or promo code does not.
     private val CODE_CONTEXT = Regex(
-        """(?i)\b(one[- ]?time|verification|verify|security|auth(?:entication)?|access|confirm(?:ation)?|login|sign[- ]?in|otp|pin|passcode|2fa|mfa)\b""",
+        """(?i)\b(one[- ]?time|verification|otp|pin|passcode|2fa|mfa|(?<!(?:postal|zip|post|area|country|dialling|dialing|promo|discount|coupon|voucher|gift|sort|swift|bank|product|error|status|qr|bar) )codes?)\b""",
     )
+
+    /** A 15-digit Luhn run is an IMEI far more often than a card; Amex (34/37) is the 15-digit card. */
+    private val DEVICE_ID_CONTEXT = Regex("""(?i)\b(imei|meid|serial)""")
 
     private val SHORT_CODE = Regex("""\b\d{4,8}\b""")
     private val LONG_DIGITS = Regex("""\b(?:\d[ -]?){13,19}\b""")
@@ -63,6 +72,9 @@ object ScreenSecrets {
         for (m in LONG_DIGITS.findAll(text)) {
             val digits = m.value.filter { it.isDigit() }
             if (digits.length in 13..19 && passesLuhn(digits)) {
+                if (digits.length == 15 && !(digits.startsWith("34") || digits.startsWith("37"))) continue
+                val from = (m.range.first - CONTEXT_WINDOW).coerceAtLeast(0)
+                if (DEVICE_ID_CONTEXT.containsMatchIn(text.substring(from, m.range.first))) continue
                 out += Seen(m.value.trim(), pkg, "a card number")
             }
         }
@@ -104,6 +116,26 @@ object ScreenSecrets {
         return sum % 10 == 0
     }
 
+    private val DIGIT_GROUPING = Regex("""(?<=\d)[ \u00a0.\-](?=\d)""")
+    private val DIGITS_AND_SEPARATORS = Regex("""[\d \u00a0.\-]+""")
+
+    /**
+     * Does [text] carry the secret [value]?
+     *
+     * Literal containment let "4111 1111 1111 1111" on screen leave as
+     * "4111111111111111", and "481920" leave as "481 920". A numeric value is
+     * compared with the grouping between digits removed on both sides. Other
+     * values (keys, passwords) keep literal containment.
+     */
+    fun carries(text: String, value: String): Boolean {
+        if (value.isEmpty()) return false
+        if (text.contains(value)) return true
+        if (!DIGITS_AND_SEPARATORS.matches(value)) return false
+        val want = value.filter { it.isDigit() }
+        if (want.length < 4) return false
+        return DIGIT_GROUPING.replace(text, "").contains(want)
+    }
+
     /**
      * May this text be typed into this app?
      *
@@ -119,7 +151,7 @@ object ScreenSecrets {
         if (text.isBlank()) return null
         for (s in seen) {
             if (s.pkg == intoPkg) continue          // home again is not a leak
-            if (!text.contains(s.value)) continue
+            if (!carries(text, s.value)) continue
             return "that text contains ${s.why} read from ${s.pkg}, and this is $intoPkg. " +
                 "A code from one app does not get typed into another."
         }

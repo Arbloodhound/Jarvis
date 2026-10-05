@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31+). allowBackup="false" in the manifest stops cloud backup,
+  but not device-to-device transfer, for apps targeting 31+. These rules keep the
+  provider API key (plain SharedPreferences) and the agent's memory database out
+  of both.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="ultra_provider.xml"/>
+        <exclude domain="database" path="ultra.db"/>
+        <exclude domain="database" path="ultra.db-wal"/>
+        <exclude domain="database" path="ultra.db-shm"/>
+        <exclude domain="database" path="ultra.db-journal"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="ultra_provider.xml"/>
+        <exclude domain="database" path="ultra.db"/>
+        <exclude domain="database" path="ultra.db-wal"/>
+        <exclude domain="database" path="ultra.db-shm"/>
+        <exclude domain="database" path="ultra.db-journal"/>
+    </device-transfer>
+</data-extraction-rules>

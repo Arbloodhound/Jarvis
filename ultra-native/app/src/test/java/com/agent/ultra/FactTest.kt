@@ -72,9 +72,11 @@ class FactTest {
     }
 
     @Test
-    fun `sourceOf maps clipboard to SYSTEM_API`() {
-        assertEquals(Source.SYSTEM_API, Fact.sourceOf("clipboard_read"))
-        assertEquals(Source.SYSTEM_API, Fact.sourceOf("clipboard_write"))
+    fun `clipboard read is third-party content, clipboard write observes nothing`() {
+        // Anyone can put text on the clipboard; the system API only delivers it.
+        assertEquals(Source.THIRD_PARTY_CONTENT, Fact.sourceOf("clipboard_read"))
+        assertEquals(Fact.Confidence.LOW, Fact.confidenceOf(Source.THIRD_PARTY_CONTENT))
+        assertNull(Fact.sourceOf("clipboard_write"))
     }
 
     @Test
@@ -85,17 +87,24 @@ class FactTest {
     }
 
     @Test
-    fun `sourceOf maps toggles to SYSTEM_API`() {
-        assertEquals(Source.SYSTEM_API, Fact.sourceOf("flashlight_toggle"))
-        assertEquals(Source.SYSTEM_API, Fact.sourceOf("wifi_toggle"))
+    fun `toggles are actions, not observations`() {
+        // A HIGH fact from a flashlight toggle laundered every screen read before it.
+        assertNull(Fact.sourceOf("flashlight_toggle"))
+        assertNull(Fact.sourceOf("wifi_toggle"))
+        assertNull(Fact.sourceOf("volume_set"))
     }
 
     @Test
     fun `sourceOf returns null for actions`() {
-        assertNull(Fact.sourceOf("react_navigate"))
         assertNull(Fact.sourceOf("app_launch"))
-        assertNull(Fact.sourceOf("open_url"))
         assertNull(Fact.sourceOf("sms_send"))
+    }
+
+    @Test
+    fun `navigation and web results are third-party content`() {
+        assertEquals(Source.THIRD_PARTY_CONTENT, Fact.sourceOf("react_navigate"))
+        assertEquals(Source.THIRD_PARTY_CONTENT, Fact.sourceOf("web_search"))
+        assertEquals(Source.THIRD_PARTY_CONTENT, Fact.sourceOf("open_url"))
     }
 
     @Test
@@ -110,8 +119,9 @@ class FactTest {
     }
 
     @Test
-    fun `sourceOf maps sms_read to SYSTEM_API`() {
-        assertEquals(Source.SYSTEM_API, Fact.sourceOf("sms_read"))
+    fun `sms_read is third-party content`() {
+        // The SMS API is trustworthy; the message text was written by its sender.
+        assertEquals(Source.THIRD_PARTY_CONTENT, Fact.sourceOf("sms_read"))
     }
 
     @Test

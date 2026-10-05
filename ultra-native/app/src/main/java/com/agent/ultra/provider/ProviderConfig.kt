@@ -10,7 +10,11 @@ import java.io.File
  * Source of truth: SharedPreferences. Dev seed: if no key is stored, we read
  * /sdcard/Android/data/com.agent.ultra/files/ultra_provider.json once at first
  * need — that path is adb-pushable, which keeps key entry automatable with no
- * UI taps. The file is never required at runtime afterwards.
+ * UI taps. The file is never required at runtime afterwards, and is deleted
+ * once imported. It is only read when no key was ever stored (a key the user
+ * cleared stays cleared), and only on API 29+ or a debuggable build: on API
+ * 26-28 any app holding WRITE_EXTERNAL_STORAGE can write that directory and
+ * would choose the endpoint every prompt is sent to.
  */
 data class ProviderConfig(
     val baseUrl: String,
@@ -35,9 +39,12 @@ data class ProviderConfig(
                 apiKey = prefs.getString(K_KEY, "") ?: "",
                 model = prefs.getString(K_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL,
             )
-            if (cfg.apiKey.isBlank()) {
-                cfg = trySeedFromFile(context) ?: cfg
-                if (cfg.apiKey.isNotBlank()) save(context, cfg)
+            if (!prefs.contains(K_KEY)) {
+                val seeded = trySeedFromFile(context)
+                if (seeded != null) {
+                    cfg = seeded
+                    save(context, cfg)
+                }
             }
             return cfg
         }
@@ -51,6 +58,9 @@ data class ProviderConfig(
         }
 
         private fun trySeedFromFile(context: Context): ProviderConfig? {
+            val debuggable = (context.applicationInfo.flags and
+                android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+            if (android.os.Build.VERSION.SDK_INT < 29 && !debuggable) return null
             return try {
                 val dir = context.getExternalFilesDir(null) ?: return null
                 val f = File(dir, "ultra_provider.json")
@@ -58,11 +68,14 @@ data class ProviderConfig(
                 val j = JSONObject(f.readText())
                 val key = j.optString("apiKey", "")
                 if (key.isBlank()) return null
-                ProviderConfig(
+                val cfg = ProviderConfig(
                     baseUrl = j.optString("baseUrl", DEFAULT_BASE),
                     apiKey = key,
                     model = j.optString("model", DEFAULT_MODEL),
                 )
+                // Imported: a plaintext key does not stay on shared storage.
+                if (!f.delete()) android.util.Log.w("UltraProvider", "could not delete ultra_provider.json after import")
+                cfg
             } catch (_: Exception) {
                 null
             }
