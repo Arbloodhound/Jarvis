@@ -45,6 +45,7 @@ class AmbientListenService : Service() {
     private var whisper = 0L
     private var gate: WakeGate? = null
     private var cmdWindowUntil = 0L
+    private var lastMemoryAt = 0L          // thermal throttle: last memory-only transcription
     private var wakeLock: PowerManager.WakeLock? = null
 
     @Volatile var mutedUntil = 0L          // echo guard: set by the TTS layer while speaking
@@ -119,7 +120,14 @@ class AmbientListenService : Service() {
     }
 
     private fun onUtterance(pcm: ShortArray, speechMs: Int) {
-        val r = WhisperNative.transcribe(whisper, pcm, AmbientConfig.WHISPER_THREADS, cfg.wakeName)
+        val t = System.currentTimeMillis()
+        val windowOpen = gate != null && t < cmdWindowUntil
+        val plan = AmbientThrottle.decide(
+            com.agent.ultra.agent.ThermalGuard.level.ambient, windowOpen, gate != null, t, lastMemoryAt,
+        )
+        if (!plan.transcribe) return                       // hot: memory-only capture dropped
+        if (!windowOpen) lastMemoryAt = t
+        val r = WhisperNative.transcribe(whisper, pcm, plan.threads, cfg.wakeName)
             ?: return
         // Text filters: drop low-confidence (hallucinated) and trivially short lines.
         if (r.confidence < AmbientConfig.MIN_TOKEN_P) return
