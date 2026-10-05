@@ -43,8 +43,9 @@ PHASE 2 — Native libraries (BOTH required or the app won't link)
     ./build-llama-android.sh          # from this bundle (three CPU variants, several minutes each)
     # lib = armv8-a fallback, lib-dotprod = +dotprod+fp16, lib-i8mm = +dotprod+i8mm+fp16 (Pixel 10).
     # The app ships one shim per variant and loads the best the phone supports (logcat: "cpu variant=").
-2b. whisper.cpp (new, for ambient listening):
-    ./build-whisper-android.sh        # from this bundle; writes ~/whisper-android/{lib,include}
+2b. whisper.cpp (new, for ambient listening) -> ~/whisper-android/{lib,lib-dotprod,lib-i8mm,include}
+    ./build-whisper-android.sh        # from this bundle; the same three CPU variants as llama
+    # The app ships one ultra_whisper shim per variant and loads the best (logcat: "whisper cpu variant=").
 
 SUCCESS: all lib dirs contain libllama.a / libwhisper.a and matching libggml*.a, and
     ~/whisper-android/include has ggml-cpu.h + ggml-backend.h (verified build: NDK r27c, Oct 2026).

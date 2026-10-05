@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Proves each libultra_llm variant contains the CPU instructions it is named for, and the
-# armv8-a fallback contains none of them (a variant that silently lost its -march would
-# still link and run, just slowly). Usage: check-cpu-variants.sh <dir with the .so files>
+# Proves each libultra_llm and libultra_whisper variant contains the CPU instructions it is
+# named for, and each armv8-a fallback contains none of them (a variant that silently lost its
+# -march would still link and run, just slowly). Usage: check-cpu-variants.sh <dir with the .so files>
 # Needs ANDROID_NDK (for llvm-objdump).
 set -euo pipefail
-DIR="${1:?dir with libultra_llm*.so}"
+DIR="${1:?dir with libultra_llm*.so and libultra_whisper*.so}"
 : "${ANDROID_NDK:?set ANDROID_NDK}"
 OBJDUMP="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump"
 
@@ -21,17 +21,21 @@ expect() {  # <lib> <mnemonic> <present|absent>
   if [ "$3" = absent ] && [ "$n" -ne 0 ]; then bad=1; fi
 }
 
-for lib in libultra_llm.so libultra_llm_dotprod.so libultra_llm_i8mm.so; do
-  [ -f "$DIR/$lib" ] || { echo "missing $DIR/$lib"; bad=1; }
+for base in libultra_llm libultra_whisper; do
+  for lib in "$base.so" "${base}_dotprod.so" "${base}_i8mm.so"; do
+    [ -f "$DIR/$lib" ] || { echo "missing $DIR/$lib"; bad=1; }
+  done
 done
 [ $bad -eq 0 ] || exit 1
 
-expect libultra_llm.so         sdot  absent
-expect libultra_llm.so         smmla absent
-expect libultra_llm_dotprod.so sdot  present
-expect libultra_llm_dotprod.so smmla absent
-expect libultra_llm_i8mm.so    sdot  present
-expect libultra_llm_i8mm.so    smmla present
+for base in libultra_llm libultra_whisper; do
+  expect "$base.so"           sdot  absent
+  expect "$base.so"           smmla absent
+  expect "${base}_dotprod.so" sdot  present
+  expect "${base}_dotprod.so" smmla absent
+  expect "${base}_i8mm.so"    sdot  present
+  expect "${base}_i8mm.so"    smmla present
+done
 
 [ $bad -eq 0 ] || { echo "a CPU variant is missing its instructions"; exit 1; }
 echo "CPU variants OK"

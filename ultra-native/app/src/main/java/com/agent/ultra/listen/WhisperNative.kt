@@ -1,14 +1,36 @@
 package com.agent.ultra.listen
 
+import com.agent.ultra.local.CpuVariant
+
 /**
  * whisper.cpp through JNI (libultra_whisper.so). Built separately from the
  * llama library with its ggml symbols hidden, so the two ggml copies never
  * collide at runtime. One context, one caller at a time.
  */
 object WhisperNative {
-    val available: Boolean = try {
-        System.loadLibrary("ultra_whisper"); true
-    } catch (_: UnsatisfiedLinkError) { false }
+
+    /** The build that loaded (see [CpuVariant]), or null; logged as "whisper cpu variant=".
+     *  Declared before [available]: initialisers run in order, and load() sets it. */
+    var variant: String? = null
+        private set
+
+    val available: Boolean = load()
+
+    /** Best CPU variant first (ultra_whisper_i8mm, _dotprod), falling back to armv8-a ultra_whisper. */
+    private fun load(): Boolean {
+        for (name in CpuVariant.read("ultra_whisper")) {
+            try {
+                System.loadLibrary(name)
+                variant = name
+                android.util.Log.i("UltraAmbient", "whisper cpu variant=$name")
+                return true
+            } catch (e: Throwable) {
+                android.util.Log.w("UltraAmbient", "$name not loadable: ${e.message}")
+            }
+        }
+        android.util.Log.w("UltraAmbient", "whisper library not in this build")
+        return false
+    }
 
     /** Returns 0 on failure. vadPath may be empty to disable whisper's VAD. */
     external fun nativeInit(modelPath: String, vadPath: String): Long
