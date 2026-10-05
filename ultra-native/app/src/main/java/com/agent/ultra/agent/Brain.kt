@@ -475,6 +475,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             )
             val budget = ThermalPolicy.scaleBudget(clipped, level)
             android.util.Log.d("UltraRoute", "tier=${route.tier} reason=${route.reason} level=$level budget=$budget")
+            ThermalPolicy.coolingNote(level, route.tier)?.let { ChatStore.appendTo(msg.id, it + "\n\n") }
             local.generate(
                 prompt, maxTokens = budget + reserve + 32,
                 thinkBudget = ThinkBudget(budget, startsInThink = true),

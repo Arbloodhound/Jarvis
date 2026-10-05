@@ -54,6 +54,10 @@ object ThermalPolicy {
         if (level == Level.CRITICAL) minOf(budget, IntentRouter.Tier.DEVICE.thinkBudget)
         else (budget * level.budgetScale).toInt()
 
-    /** Non-device requests at CRITICAL get this instead of a long generation. */
+    /** Said before a non-device answer at CRITICAL, so a short reply has a reason the person can act on. */
     const val COOLING_MESSAGE = "I'm running hot, so I'll keep this short until the phone cools down."
+
+    /** The line to put before the answer, or null. Device commands stay silent: they are short anyway. */
+    fun coolingNote(level: Level, tier: IntentRouter.Tier): String? =
+        if (level == Level.CRITICAL && tier != IntentRouter.Tier.DEVICE) COOLING_MESSAGE else null
 }

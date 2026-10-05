@@ -2,6 +2,7 @@ package com.agent.ultra.agent
 
 import com.agent.ultra.agent.IntentRouter.Tier
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class IntentRouterTest {
@@ -40,5 +41,15 @@ class IntentRouterTest {
         assertEquals(Tier.DEVICE, tier(wrapped))
         assertEquals("turn on the flashlight", IntentRouter.requestPart(wrapped))
         assertEquals("plain text", IntentRouter.requestPart("plain text"))
+    }
+
+    /** A question that merely mentions a device word is not a phone command. */
+    @Test fun deviceWordInARealQuestionIsNotADeviceCommand() {
+        assertEquals(Tier.DEEP, tier("What is the time complexity of quicksort and why?"))
+        assertEquals(Tier.DEEP, tier("Is it true bluetooth causes cancer, and why?"))
+        for (s in listOf("what is the time complexity of quicksort", "is it true bluetooth causes cancer"))
+            assertTrue(s, tier(s) != Tier.DEVICE)
+        for (s in listOf("what's the time", "is wifi connected", "what's the battery level", "how much storage left"))
+            assertEquals(s, Tier.DEVICE, tier(s))
     }
 }

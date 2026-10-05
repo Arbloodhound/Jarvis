@@ -33,8 +33,11 @@ object IntentRouter {
         "wi-?fi", "bluetooth", "flashlight", "torch", "alarm", "timer", "volume", "brightness", "airplane mode",
         "do not disturb", "dnd", "hotspot", "location", "music", "song", "playlist", "app", "camera", "screen",
     )
+    // A status question ABOUT the phone: the device word ends it or is followed by a status
+    // word. "what is the time complexity of…" / "is it true bluetooth causes…" are not.
     private val deviceQuestion = Regex(
-        "^(is|are|what'?s|what is|how much)\\b.*\\b(bluetooth|wi-?fi|battery|storage|volume|brightness|time|date)\\b",
+        "^(is|are|what'?s|what is|how much)\\b.*\\b(bluetooth|wi-?fi|battery|storage|volume|brightness|time|date)" +
+            "(\\s*[?.!]*\\s*$|\\s+(on|off|at|left|level|now|today|connected|is it)\\b)",
         RegexOption.IGNORE_CASE,
     )
     // noun-first short commands: "volume up", "wifi off", "brightness max"
@@ -80,8 +83,10 @@ object IntentRouter {
         if (riskDomain.containsMatchIn(t)) return Route(Tier.DEEP, "risk domain: verify premises")
         if (codeCue.containsMatchIn(t)) return Route(Tier.DEEP, "code")
 
+        // A reasoning cue ("why", "explain") outranks a device-shaped question; a device verb
+        // ("turn on…") is still a command.
         val isDevice = (deviceVerb.containsMatchIn(t) && (deviceNoun.containsMatchIn(t) || words <= 6)) ||
-            deviceQuestion.containsMatchIn(t) || deviceShort.containsMatchIn(t)
+            (deviceQuestion.containsMatchIn(t) && !deepCue.containsMatchIn(t)) || deviceShort.containsMatchIn(t)
         if (isDevice && words <= 16) {
             return if (compound.containsMatchIn(t)) Route(Tier.NORMAL, "multi-step device task")
             else Route(Tier.DEVICE, "device command")

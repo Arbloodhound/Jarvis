@@ -113,8 +113,13 @@ the utterance, optionally after "hey"/"ok"/"okay" ("Hey Jarvis, …", "Jarvis, �
 sentence is conversation. Default name changed "Ultra" → "Jarvis" (an already-saved name is kept).
 `WakeFilterTest`: **PROVEN** (JVM), 490 tests pass.
 
-**Not fixed (design calls for Dafarus):** IntentRouter checks device before deep cues ("time
-complexity of quicksort" → DEVICE);
+**Router + cooling (Dafarus's call):** a device-shaped *question* now needs the device word at
+its end or before a status word ("is wifi connected"), and a reasoning cue outranks it; "what is
+the time complexity of quicksort and why?" → DEEP, "is it true bluetooth causes cancer" no longer
+DEVICE. At CRITICAL, non-device offline answers start with `ThermalPolicy.COOLING_MESSAGE`.
+**PROVEN** (JVM), 492 tests pass; on-device unproven.
+
+**Not fixed (design calls for Dafarus):**
 `ThermalPolicy.COOLING_MESSAGE` and CRITICAL's `budgetScale` are unused; the Brain cloud-failover
 history can duplicate the user turn; `gate.reset()` while muted. The Settings toggle still shows "on"
 when the service stops itself for lack of mic permission.

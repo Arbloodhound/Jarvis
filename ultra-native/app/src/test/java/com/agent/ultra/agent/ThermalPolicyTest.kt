@@ -31,4 +31,10 @@ class ThermalPolicyTest {
     }
     @Test fun threadsStepDown() =
         assertEquals(listOf(4, 3, 2, 2), Level.values().map { it.threads })
+
+    @Test fun coolingNoteOnlyForNonDeviceAtCritical() {
+        assertEquals(ThermalPolicy.COOLING_MESSAGE, ThermalPolicy.coolingNote(Level.CRITICAL, IntentRouter.Tier.NORMAL))
+        assertEquals(null, ThermalPolicy.coolingNote(Level.CRITICAL, IntentRouter.Tier.DEVICE))
+        assertEquals(null, ThermalPolicy.coolingNote(Level.HOT, IntentRouter.Tier.DEEP))
+    }
 }
