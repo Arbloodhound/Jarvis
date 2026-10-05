@@ -70,6 +70,18 @@ class AmbientListenService : Service() {
     private fun captureLoop() = scope.launch(Dispatchers.Default) {
         if (!WhisperNative.available) { stopSelf(); return@launch }
         val modelDir = filesDir
+        // First run: fetch models (~60 MB, once). ASR is required; VAD and the
+        // wake-word trio are optional and fail soft (text-match wake still works).
+        if (!ModelFetcher.ensure(modelDir, AmbientConfig.ASR_MODEL, AmbientConfig.ASR_URL, 10_000_000L)) {
+            android.util.Log.w("UltraAmbient", "no ASR model and download failed; stopping")
+            stopSelf(); return@launch
+        }
+        ModelFetcher.ensure(modelDir, AmbientConfig.VAD_MODEL, AmbientConfig.VAD_URL, 100_000L)
+        ModelFetcher.ensure(modelDir, WakeGate.MEL, WakeGate.MEL_URL, 500_000L)
+        ModelFetcher.ensure(modelDir, WakeGate.EMB, WakeGate.EMB_URL, 500_000L)
+        if (WakeGate.cfgName(this@AmbientListenService) == WakeGate.DEFAULT_CLASSIFIER) {
+            ModelFetcher.ensure(modelDir, WakeGate.DEFAULT_CLASSIFIER, WakeGate.JARVIS_URL, 500_000L)
+        }
         whisper = WhisperNative.nativeInit(
             java.io.File(modelDir, AmbientConfig.ASR_MODEL).absolutePath,
             java.io.File(modelDir, AmbientConfig.VAD_MODEL).absolutePath.let {
