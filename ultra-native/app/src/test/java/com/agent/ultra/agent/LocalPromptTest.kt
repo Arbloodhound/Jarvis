@@ -28,4 +28,16 @@ class LocalPromptTest {
         val b = ThinkBudget.clipToContext(IntentRouter.Tier.DEEP.thinkBudget, 4096, LocalPrompt.estimateTokens(p))
         assertEquals(1200, b)   // full DEEP budget survives with an empty history
     }
+
+    /** After a cloud failure the current question is followed by a note; it must still appear once. */
+    @Test fun currentTurnRemovedEvenWhenNotLast() {
+        val h = listOf(
+            LocalPrompt.Turn(true, "earlier question"), LocalPrompt.Turn(false, "earlier answer"),
+            LocalPrompt.Turn(true, "what is a MoE"), LocalPrompt.Turn(false, "(cloud unreachable — answering on-device)"),
+        )
+        val out = LocalPrompt.withoutCurrentTurn(h, "what is a MoE")
+        assertEquals(3, out.size)
+        assertEquals(0, out.count { it.fromUser && it.text == "what is a MoE" })
+        assertEquals(h, LocalPrompt.withoutCurrentTurn(h, "something new"))
+    }
 }

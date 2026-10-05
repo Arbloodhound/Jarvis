@@ -51,7 +51,8 @@ class LocalModelEngine(private val context: Context) {
     val loaded: Boolean get() = handle != 0L
     val modelFileSizeBytes: Long get() = if (modelFile.exists()) modelFile.length() else 0L
     /** Qwen3 Thinking MoE presets: ChatML prompts, template-opened <think> trace. */
-    val isThinkingModel: Boolean get() = modelFile.name.startsWith("qwen3moe")
+    /** Qwen3 thinking models: the MoE, and the small Qwen3 that stands in for it on a small phone. */
+    val isThinkingModel: Boolean get() = modelFile.name.let { it.startsWith("qwen3moe") || it.startsWith("qwen3-") }
     val modelFilePath: String get() = modelFile.absolutePath
 
     /**
@@ -210,6 +211,8 @@ class LocalModelEngine(private val context: Context) {
                 IllegalStateException("on-device model was unloaded")
             )
             val sb = StringBuilder()
+            val t0 = System.currentTimeMillis()
+            val faults0 = PageFaults.read()
             val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, threads) { piece ->
                 if (thinkBudget == null) {
                     sb.append(piece); onToken(piece); null
@@ -220,6 +223,12 @@ class LocalModelEngine(private val context: Context) {
                 }
             }
             thinkBudget?.flush()?.takeIf { it.isNotEmpty() }?.let { sb.append(it); onToken(it) }
+            // Thrash check: after the first answer, majfaults should stay near 0 and tok/s steady.
+            val ms = (System.currentTimeMillis() - t0).coerceAtLeast(1)
+            val faults1 = PageFaults.read()
+            android.util.Log.i("UltraLlm", "gen tokens=$n ms=$ms tokPerSec=${"%.1f".format(n * 1000.0 / ms)} " +
+                "majfaults=${if (faults0 >= 0 && faults1 >= 0) faults1 - faults0 else -1} " +
+                "availMB=${availableRam() / 1_048_576} model=${modelFile.name}")
             thinkBudget?.let {
                 android.util.Log.d("UltraRoute", "thinkTokens=${it.thinkTokens} forced=${it.forced} budget=${it.budgetTokens}")
             }
@@ -305,6 +314,14 @@ class LocalModelEngine(private val context: Context) {
                 "https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/resolve/main/Qwen3-30B-A3B-Thinking-2507-UD-IQ3_XXS.gguf",
                 "qwen3moe-thinking-iq3xxs.gguf", 12900,
                 "DO NOT run on the phone — ~12.9GB weights put total demand ~2GB over 16GB. Listed for desktop reference / quality ceiling only.",
+            ),
+            // URL not checked from the build machine (Hugging Face is blocked there): a failed
+            // download on the phone means the file moved, not that the app is broken.
+            ModelChoice(
+                "Qwen3 1.7B (Q4_K_M) — MoE stand-in for small phones",
+                "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf",
+                "qwen3-1.7b-q4km.gguf", 1110,
+                "Same Qwen3 prompt format and <think> handling as the MoE, small enough for a 4GB phone. Tests the offline brain path (think budget, hidden trace, routing) before the MoE is on a phone that fits it.",
             ),
             ModelChoice(
                 "Gemma 3 1B (Q4_K_M) — default",

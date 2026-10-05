@@ -51,4 +51,11 @@ You are Ultra, a private assistant running entirely on this phone, offline. You 
     /** Answer room after the trace; smaller when the phone is hot. */
     fun answerReserve(level: ThermalPolicy.Level): Int =
         if (level >= ThermalPolicy.Level.HOT) 256 else 512
+
+    /** History without the turn being answered now — LocalPrompt.build adds it once.
+     * It is not always last: after a cloud failure a "(cloud unreachable…)" note follows it. */
+    fun withoutCurrentTurn(history: List<Turn>, userInput: String): List<Turn> {
+        val i = history.indexOfLast { it.fromUser && it.text.trim() == userInput.trim() }
+        return if (i < 0) history else history.filterIndexed { j, _ -> j != i }
+    }
 }

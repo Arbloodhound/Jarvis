@@ -590,7 +590,25 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                 }
+                // The listening service can't run without the mic: ask first, and only
+                // show "on" once Android has said yes.
+                val askMic = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) {
+                        ambient = true
+                        ambientCfg.enabled = true
+                        com.agent.ultra.listen.AmbientListenService.start(context)
+                    }
+                }
                 Switch(checked = ambient, onCheckedChange = { on ->
+                    if (on && androidx.core.content.ContextCompat.checkSelfPermission(
+                            context, android.Manifest.permission.RECORD_AUDIO
+                        ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) {
+                        askMic.launch(android.Manifest.permission.RECORD_AUDIO)
+                        return@Switch
+                    }
                     ambient = on
                     ambientCfg.enabled = on
                     if (on) com.agent.ultra.listen.AmbientListenService.start(context)

@@ -27,8 +27,9 @@ If `git am` complains, use: git apply --reject 0001-ambient-listen.patch  then r
 PHASE 1 — Toolchain (one-time)
 ====================================================================
 Install: Android Studio + SDK 35, NDK r26+, JDK 17 (a full JDK; a JRE can't compile).
-    CMake: verified build used CMake 3.28.3 found on PATH (e.g. apt `cmake`).
-    `cmake;3.28.3` is NOT an SDK package (sdkmanager has 3.22.1, 3.30.x, ...).
+    CMake: app/build.gradle.kts pins CMake 3.28.3 exactly (CXX1300 without it).
+    `cmake;3.28.3` is NOT an SDK package (sdkmanager has 3.22.1, 3.30.x, ...), so put
+    3.28.3 on PATH: Ubuntu 24.04 `apt install cmake`, or `pip install cmake==3.28.3 ninja`.
     NDK: Gradle builds the JNI libs with its default NDK 27.0.12077973; the static
     libs were built with r27c (27.2.12479018). Both linked fine.
     export ANDROID_NDK=~/Android/Sdk/ndk/<version>

@@ -9,10 +9,11 @@
 -keep class com.agent.ultra.local.LlmNative { *; }
 
 # The native side resolves this callback reflectively:
-#   GetMethodID(GetObjectClass(callback), "onToken", "(Ljava/lang/String;)V")
+#   GetMethodID(GetObjectClass(callback), "onToken", "(Ljava/lang/String;)Ljava/lang/String;")
+# (It returns text to inject since patch 0007; the old `void` rule matched nothing.)
 -keep interface com.agent.ultra.local.LlmNative$TokenCallback { *; }
 -keepclassmembers class * implements com.agent.ultra.local.LlmNative$TokenCallback {
-    void onToken(java.lang.String);
+    java.lang.String onToken(java.lang.String);
 }
 -keepclasseswithmembernames class * { native <methods>; }
 

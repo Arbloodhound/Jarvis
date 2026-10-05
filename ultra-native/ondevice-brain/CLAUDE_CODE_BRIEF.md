@@ -51,7 +51,7 @@ commit them as one "docs/training" commit.
 ```bash
 ./build-llama-android.sh          # skip if ~/llama-android/lib already has libllama.a
 ./build-whisper-android.sh        # fixed: now ships ggml-cpu.h etc., which whisper.h needs
-# Verified with CMake 3.28.3 on PATH (system pkg); "cmake;3.28.3" is NOT an SDK package
+# Gradle pins CMake 3.28.3 (CXX1300 otherwise); not an SDK package: put it on PATH (apt / pip cmake==3.28.3)
 # Gradle uses its default NDK 27.0.12077973 for JNI libs; static libs used r27c; both linked
 cd ultra-native
 ./gradlew :app:testDebugUnitTest  # expect 482 passed, 0 failed

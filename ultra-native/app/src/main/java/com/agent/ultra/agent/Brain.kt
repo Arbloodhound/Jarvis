@@ -463,10 +463,12 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         val result = if (local.isThinkingModel) {
             val level = ThermalGuard.level
             val route = IntentRouter.route(userInput)
-            val history = ChatStore.messages.takeLast(8)
-                .filter { it.id != msg.id }
-                .map { LocalPrompt.Turn(it.fromUser, it.text) }
-                .dropLastWhile { it.fromUser && it.text.trim() == userInput.trim() }
+            val history = LocalPrompt.withoutCurrentTurn(
+                ChatStore.messages.takeLast(8)
+                    .filter { it.id != msg.id }
+                    .map { LocalPrompt.Turn(it.fromUser, it.text) },
+                userInput,
+            )
             val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput)
             val reserve = LocalPrompt.answerReserve(level)
             val clipped = ThinkBudget.clipToContext(

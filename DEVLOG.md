@@ -39,8 +39,9 @@ the G2 connection.
 
 **Environment:** JDK 17.0.20 (apt), cmdline-tools → `platforms;android-35`, `build-tools;35.0.0`,
 `platform-tools`, `ndk;27.2.12479018` (r27c). `cmake;3.28.3` does **not exist** in Google's SDK
-repository (it lists 3.22.1, 3.30.x, 3.31.x, 4.x); `build.gradle.kts` pins no CMake version, and
-Gradle used the system `/usr/bin/cmake` 3.28.3 from PATH. Gradle also auto-installed and built
+repository (it lists 3.22.1, 3.30.x, 3.31.x, 4.x). `build.gradle.kts:129` DOES pin `version =
+"3.28.3"` (an earlier version of this entry said it didn't — wrong, corrected); Gradle used the
+system `/usr/bin/cmake` 3.28.3 from PATH. Gradle also auto-installed and built
 with `ndk;27.0.12077973` (AGP's default), while the llama/whisper static libs were built with
 r27c (27.2.12479018). Sources: llama.cpp `8345f33`, whisper.cpp `60c0be6` (HEAD on 2026-10-05).
 
@@ -127,6 +128,26 @@ when the service stops itself for lack of mic permission.
 **Next on the Pixel:** brief Step 4 table, plus logcat `UltraAmbient`. Check: real transcripts in
 `ambient.db`, overheard context in a wake command, "Hey Jarvis" + pause + command, turning
 ambient off mid-sentence, and an emoji reply on the debug build.
+
+**Deployment prep (same evening):**
+- APK size: a clean `assembleDebug` is 55.18 MB, the same as before the fixes. The 61.4 MB was
+  incremental-build output. **PROVEN** (resolved).
+- The Settings ambient switch asks for the mic and only shows on once granted. Offline prompt no
+  longer repeats the user turn after a cloud failure (`LocalPrompt.withoutCurrentTurn` + test).
+- `proguard-rules.pro`: the `onToken` keep rule still said `void`; since 0007 it returns `String`.
+  A release build with a throwaway key was checked with dexdump: `nativeLoad/Generate/Free`,
+  `nativeInit/Transcribe/Free` and `onToken` all keep their names, it's signed, and all 6 libs are
+  `0x4000`. **PROVEN** (build); release runtime **UNPROVEN**.
+- Thrash meter: each local generation logs `UltraLlm gen tokens= ms= tokPerSec= majfaults= availMB=`
+  (`PageFaults`, /proc/self/stat field 12, tested). Steady `majfaults` near 0 after the first answer
+  means the model is resident; a stream of them means thrashing.
+- New preset "Qwen3 1.7B (Q4_K_M)" (`qwen3-` prefix counts as a thinking model): it runs the
+  MoE's prompt/think path on small phones. URL **NOT verified** (Hugging Face is blocked from the
+  cloud container).
+- `.github/workflows/release-apk.yml`: signed release on GitHub from 4 repo secrets; CMake 3.28.3 via
+  pip. YAML parses and each step was run by hand here; **never run on GitHub**.
+- Guides: `ondevice-brain/G15_TEST_GUIDE.md`, `ondevice-brain/RELEASE_SIGNING.md`.
+- Tests: 496, 0 failures.
 
 ## 2026-09-20 (day) — the gate asks on top of the app; routes are played by the engine
 
