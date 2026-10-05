@@ -56,9 +56,9 @@ I cannot push for you — no GitHub access from this chat. These 5 commands do i
 ## 2. Native libs (both required for the app to build)
 ```bash
 export ANDROID_NDK=~/Android/Sdk/ndk/<ver>
-# llama.cpp (already required by the base repo) -> ~/llama-android/{lib,include}
+./build-llama-android.sh   # llama.cpp -> ~/llama-android/{lib,lib-dotprod,lib-i8mm,include}
 # whisper.cpp (new, for ambient listening):
-./build-whisper-android.sh
+./build-whisper-android.sh # whisper.cpp -> ~/whisper-android/{lib,lib-dotprod,lib-i8mm,include}
 ```
 
 ## 3. Train the model (Colab, 80GB-class GPU)

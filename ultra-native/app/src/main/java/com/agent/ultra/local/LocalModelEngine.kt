@@ -1,6 +1,8 @@
 package com.agent.ultra.local
 
 import android.content.Context
+import com.agent.ultra.agent.ThermalGuard
+import com.agent.ultra.agent.ThermalPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -183,7 +185,9 @@ class LocalModelEngine(private val context: Context) {
                 return false
             }
             val t0 = System.currentTimeMillis()
-            handle = LlmNative.nativeLoad(modelFile.absolutePath, THREADS, CTX_SIZE)
+            val topo = CpuTopology.current
+            android.util.Log.i("UltraLlm", "cpus llm=${topo.llmCpus} whisper=${topo.whisperCpus} threads=${topo.llmThreads}")
+            handle = LlmNative.nativeLoad(modelFile.absolutePath, topo.llmThreads, CTX_SIZE, topo.llmCpus.toIntArray())
             android.util.Log.i("UltraLlm", "nativeLoad -> handle=$handle in ${System.currentTimeMillis() - t0}ms")
             return handle != 0L
         }
@@ -210,8 +214,9 @@ class LocalModelEngine(private val context: Context) {
 
     /**
      * [thinkBudget] non-null: the reasoning trace is capped, hidden from [onToken] and
-     * from the returned text (only the answer comes back). [threads] <= 0 keeps the
-     * current thread count.
+     * from the returned text (only the answer comes back). Threads: the thermal policy's
+     * count for the level read once the lock is held ([threads] > 0 can only lower it); native
+     * always gets an explicit count, and it stays fixed for the whole call.
      */
     suspend fun generate(
         prompt: String,
@@ -234,7 +239,8 @@ class LocalModelEngine(private val context: Context) {
             val sb = StringBuilder()
             val t0 = System.currentTimeMillis()
             val faults0 = PageFaults.read()
-            val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, threads) { piece ->
+            val nThreads = ThermalPolicy.resolveThreads(threads, ThermalGuard.level, baseThreads())
+            val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, nThreads) { piece ->
                 if (thinkBudget == null) {
                     sb.append(piece); onToken(piece); null
                 } else {
@@ -249,7 +255,7 @@ class LocalModelEngine(private val context: Context) {
             val faults1 = PageFaults.read()
             android.util.Log.i("UltraLlm", "gen tokens=$n ms=$ms tokPerSec=${"%.1f".format(n * 1000.0 / ms)} " +
                 "majfaults=${if (faults0 >= 0 && faults1 >= 0) faults1 - faults0 else -1} " +
-                "availMB=${availableRam() / 1_048_576} model=${modelFile.name}")
+                "availMB=${availableRam() / 1_048_576} model=${modelFile.name} cpu=${LlmNative.variant} threads=$nThreads")
             thinkBudget?.let {
                 android.util.Log.d("UltraRoute", "thinkTokens=${it.thinkTokens} forced=${it.forced} budget=${it.budgetTokens}")
             }
@@ -298,6 +304,11 @@ class LocalModelEngine(private val context: Context) {
         // Measured on the A15 5G (llama-bench, Gemma 3 1B Q4_K_M):
         // 4 threads = 10.1 tok/s generation, 16.6 tok/s prompt eval.
         const val THREADS = 4
+
+        /** Full-speed generate thread count; the thermal policy scales down from it. One per
+         *  big core (see [CpuTopology]); [THREADS] when the core layout can't be read. The
+         *  model loads with exactly this many pinned workers; more per call is clamped. */
+        fun baseThreads(): Int = CpuTopology.current.llmThreads
         const val CTX_SIZE = 4096
         const val MIN_AVAIL_BYTES = 500L * 1024 * 1024
         const val FAST_PATH_MAX_BYTES = 2_500L * 1024 * 1024
@@ -437,11 +448,14 @@ class LocalModelEngine(private val context: Context) {
          * a usable speed, and it shares the phone with everything else. The
          * bands below are fractions of total RAM: generous enough to use a
          * flagship properly, honest about where it starts to hurt.
+         *
+         * The weights are not the whole bill: the KV cache and compute buffer
+         * at CTX_SIZE come on top, so they are added before the fraction is taken.
          */
         fun fitFor(model: ModelChoice, totalRamBytes: Long): Fit {
             if (model.desktopOnly) return Fit.TOO_BIG
             if (totalRamBytes <= 0 || model.approxMb <= 0) return Fit.COMFORTABLE
-            val fraction = (model.approxMb * 1_048_576.0) / totalRamBytes
+            val fraction = ((model.approxMb + runtimeOverheadMb(model)) * 1_048_576.0) / totalRamBytes
             // MoE weights (filename marks them) are mmap'd and only ~3B active, so they
             // run at high RAM fraction where a dense model would not — allow up to ~0.85
             // on a flagship, flagged TIGHT. Dense models keep the stricter bands.
@@ -453,6 +467,37 @@ class LocalModelEngine(private val context: Context) {
                 else -> Fit.TOO_BIG
             }
         }
+
+        /**
+         * KV cache + compute buffer at CTX_SIZE, on top of the weights. A per-size-class
+         * figure, not per-model arithmetic — deliberately rounded up.
+         *
+         * KV is q8_0 (ultra_llm.cpp nativeLoad), about 1.06 bytes per element:
+         * layers x kv_heads x head_dim x 2 (K,V) x 4096 cells. Qwen3-30B-A3B
+         * (48 x 4 x 128) is ~204 MiB; dense 7B-14B ~120-410 MiB; 1B-3B Gemma / Llama /
+         * Qwen2.5 ~55-77 MiB, Qwen3 1.7B ~240 MiB. llama.cpp zeroes the KV buffer at
+         * load, so all of it is resident. The compute buffer reserves room for
+         * 512 x vocab logits (~300 MiB for Qwen), but the shim asks for one output per
+         * decode, so most of that reservation is never touched; the resident working
+         * set is an estimate (tens of MB to ~100 MB), not a measurement.
+         *
+         * Large (MoE, or > 4 GB weights, i.e. dense 7B and up): 512 MiB covers the MoE
+         * with margin and dense models up to 14B. Small: 256 MiB covers the 1B-3B
+         * presets. Known undercounts: Phi-3.5 mini (no GQA, ~816 MiB KV) and Gemma 2 9B
+         * (~714 MiB KV). Gemma 4 E2B's KV layout was not checked. Assumes the q8_0 load
+         * succeeds; nativeLoad's f16 fallback (head dim not a multiple of 32) roughly
+         * doubles the KV part, and no preset here has such a head dim.
+         */
+        fun runtimeOverheadMb(model: ModelChoice): Int =
+            if (model.fileName.contains("moe") || model.approxMb > SMALL_MODEL_MAX_MB) {
+                LARGE_MODEL_OVERHEAD_MB
+            } else {
+                SMALL_MODEL_OVERHEAD_MB
+            }
+
+        const val SMALL_MODEL_MAX_MB = 4_000
+        const val SMALL_MODEL_OVERHEAD_MB = 256
+        const val LARGE_MODEL_OVERHEAD_MB = 512
 
         fun totalRamBytes(context: Context): Long = try {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager

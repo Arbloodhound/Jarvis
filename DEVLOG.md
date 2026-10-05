@@ -3,6 +3,46 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-05 (late night) — Pixel 10 Pro optimization batch merged (units 1-6 + llama.cpp CPU variants)
+
+**Subsystems:** B (model/engine: `cpp/ultra_llm.cpp`, `cpp/ultra_whisper.cpp`, `local/`), D (ambient:
+`listen/WhisperNative`), H (CMake, build scripts, workflows, host harness). Branch
+`ccr-3726b695-6kt0de` (PR #2 → `claude/new-session-t3cy17`); see `HANDOFF.md` for the per-unit detail.
+
+**What's in it:** llama.cpp and whisper.cpp each built as 3 CPU variants (armv8-a / dotprod / i8mm,
+`CpuVariant` picks one at runtime, `check-cpu-variants.sh` checks the instructions); unit 1 LLM pinned
+to the fastest cores and whisper to the rest; unit 2 explicit thread count per generate; unit 4 KV
+prompt-prefix reuse + `top_k(40)` before `top_p`; unit 5 q8_0 KV with flash attention (f16 fallback)
+and KV-aware model fit; unit 6 debug-only on-device bench + CPU topology dump.
+
+**This session (handoff finish):**
+- Merged unit 4 (#7): conflict in `nativeGenerate` resolved keeping both unit 1's pinned pool
+  (`PoolScope`, clamped thread count) and unit 4's token record / `seq_rm` reuse / `resetCache` on every
+  decode failure. Added `cparams.swa_full = true` in nativeLoad (unit 4's follow-up: pins the default
+  Gemma's prefix reuse relies on).
+- Merged unit 3 (#8): clean; `WhisperNative` keeps unit 1's per-call CPU list and gains the variant
+  load loop.
+- The host harness's `stub/android/log.h` was never committed: the root `.gitignore` rule `android/`
+  (Expo project folder) swallowed it, so `run.sh` failed to compile on a fresh clone. Recreated it and
+  added a `.gitignore` exception.
+
+**Status:**
+- Host JNI harness on the fully merged shim, `HARNESS_CPUS=2,3`: **PROVEN** — `HARNESS PASS`, seq[0..5]
+  carried == fresh, worker threads on CPUs 2-3, caller restored (0 not-restored events), `reused=` up to
+  77 of 114 prompt tokens, q8_0→f16 KV fallback taken on the tiny host model.
+- Native builds (llama.cpp 8345f33, whisper.cpp 60c0be6, 3 variants each, NDK r27c): **PROVEN**.
+- `testDebugUnitTest`: **PROVEN** 585 tests, 0 failures (582 + 3 unit-3 CpuVariant tests).
+  `assembleDebug`: **PROVEN**, 75.8 MB.
+- APK `lib/arm64-v8a`: 10 libs, all 29 LOAD segments `0x4000`; `check-cpu-variants.sh`: **CPU variants
+  OK** (llm i8mm: 995 sdot / 260 smmla; llm dotprod: 1139 sdot / 0 smmla; whisper i8mm 995 / 260;
+  baselines 0); all three `libultra_llm*.so` carry both the pinning and the `reused=` code.
+- Everything on the Pixel (speedup, core placement, prefill savings, q8_0 KV quality, Gemma SWA reuse):
+  **SOURCE-FIXED BUT RUNTIME-UNPROVEN** until `tools/bench.sh` runs on the client's Pixel 10 Pro.
+- Not on this branch yet: `claude/new-session-t3cy17`'s 9a4ab1b (unlimited lesson/shortcut memory,
+  spoken scam warning) — PR #2's merge brings the two together.
+
+**Next:** CI debug APK from the `debug-pixel-opt` tag; `tools/bench.sh` on the Pixel; merge PR #2.
+
 ## 2026-10-05 — on-device brain bundle applied (patches 0001–0009)
 
 **Subsystems:** B (model/engine: `local/`, `cpp/ultra_llm.cpp`) → A (Brain offline path only:
