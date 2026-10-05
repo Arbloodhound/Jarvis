@@ -1,8 +1,11 @@
 #include <jni.h>
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <android/log.h>
 #include "llama.h"
+#include "ggml-cpu.h"
+#include "affinity_scope.h"
 
 #define TAG "UltraLlm"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -15,6 +18,27 @@ struct Engine {
     llama_context *ctx = nullptr;
     const llama_vocab *vocab = nullptr;
     int32_t ctxSize = 0;
+    // Pinned engines only (null/empty = ggml's per-decode threads, unpinned).
+    ggml_threadpool *pool = nullptr;
+    int poolThreads = 0;   // its worker count (ggml_threadpool_get_n_threads is declared, not defined)
+    std::vector<int> cpus;
+};
+
+// Runs the pinned pool for one generation. The caller is ggml's worker 0, but ggml pins it
+// only when it kicks off a PAUSED pool and then never unpins it, which would leave a shared
+// Kotlin dispatcher thread stuck on the LLM cores. So the caller is pinned here, the pool is
+// woken here, and on every exit the pool sleeps (no polling between replies) and the caller
+// is unpinned.
+struct PoolScope {
+    ggml_threadpool *pool;
+    AffinityScope pin;
+    PoolScope(ggml_threadpool *p, const std::vector<int> &cpus)
+            : pool(p), pin(p ? cpus : std::vector<int>()) {
+        if (pool) ggml_threadpool_resume(pool);
+    }
+    ~PoolScope() { if (pool) ggml_threadpool_pause(pool); }   // then `pin` unpins the caller
+    PoolScope(const PoolScope &) = delete;
+    PoolScope &operator=(const PoolScope &) = delete;
 };
 
 bool backendReady = false;
@@ -135,7 +159,7 @@ extern "C" {
 
 JNIEXPORT jlong JNICALL
 Java_com_agent_ultra_local_LlmNative_nativeLoad(
-        JNIEnv *env, jobject, jstring jpath, jint threads, jint ctxSize) {
+        JNIEnv *env, jobject, jstring jpath, jint threads, jint ctxSize, jintArray jcpus) {
     if (!backendReady) { llama_backend_init(); backendReady = true; }
 
     const char *path = env->GetStringUTFChars(jpath, nullptr);
@@ -159,12 +183,38 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
     llama_context *ctx = llama_init_from_model(model, cparams);
     if (!ctx) { LOGE("ctx init failed"); llama_model_free(model); return 0; }
 
+    // CPU list (the fastest cores, from CpuTopology): ONE persistent pool of `threads`
+    // workers on those cores. Without it ggml creates and joins `threads` new workers on
+    // every llama_decode, each inheriting whatever cores the calling dispatcher thread may
+    // use, little ones included. Empty list = exactly that old behaviour.
+    std::vector<int> cpus;
+    if (jcpus) {
+        const jsize n = env->GetArrayLength(jcpus);
+        std::vector<jint> raw(n);
+        env->GetIntArrayRegion(jcpus, 0, n, raw.data());
+        for (jint c : raw) if (c >= 0 && c < GGML_MAX_N_THREADS && c < CPU_SETSIZE) cpus.push_back(c);
+    }
+    ggml_threadpool *pool = nullptr;
+    if (!cpus.empty() && threads > 0) {
+        ggml_threadpool_params tpp = ggml_threadpool_params_default(threads);
+        for (int c : cpus) tpp.cpumask[c] = true;
+        tpp.strict_cpu = false;   // each worker may run on any listed core; the kernel balances
+        tpp.paused = true;        // asleep until nativeGenerate; workers pin themselves on start
+        tpp.poll = 10;            // brief spin between tokens, then sleep (default 50 spins longer)
+        pool = ggml_threadpool_new(&tpp);
+        // Larger n_threads (llama_set_n_threads) is clamped by ggml; smaller leaves workers idle.
+        llama_attach_threadpool(ctx, pool, nullptr);
+    }
+
     auto *engine = new Engine();
     engine->model = model;
     engine->ctx = ctx;
     engine->vocab = llama_model_get_vocab(model);
     engine->ctxSize = ctxSize;
-    LOGI("loaded: ctx=%d threads=%d", ctxSize, threads);
+    engine->pool = pool;
+    engine->poolThreads = pool ? threads : 0;
+    engine->cpus = cpus;
+    LOGI("loaded: ctx=%d threads=%d pinnedCpus=%zu", ctxSize, threads, cpus.size());
     return reinterpret_cast<jlong>(engine);
 }
 
@@ -180,8 +230,13 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
     // failed at ctxSize, and the model saw old turns as part of the new prompt.
     llama_memory_clear(llama_get_memory(engine->ctx), true);
 
-    // ThermalGuard: fewer threads when hot. Applies to this and later calls.
-    if (threads > 0) llama_set_n_threads(engine->ctx, threads, threads);
+    // ThermalGuard: fewer threads when hot. Applies to this and later calls. A pinned pool
+    // has exactly its load-time workers; ggml would clamp a larger count with a warning on
+    // every decode, so clamp here once.
+    if (threads > 0) {
+        if (engine->pool) threads = std::min<int>(threads, engine->poolThreads);
+        llama_set_n_threads(engine->ctx, threads, threads);
+    }
 
     const std::string prompt = jstringToUtf8(env, jprompt);
     gUtf8Pending.clear();
@@ -223,6 +278,9 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
         CallbackScope(const CallbackScope &) = delete;
         CallbackScope &operator=(const CallbackScope &) = delete;
     } cbScope(env);
+
+    // From here on, every exit puts the pool to sleep and unpins the caller.
+    PoolScope poolScope(engine->pool, engine->cpus);
 
     // Evaluate prompt
     llama_batch batch = llama_batch_get_one(tokens.data(), tokens.size());
@@ -277,6 +335,8 @@ Java_com_agent_ultra_local_LlmNative_nativeFree(JNIEnv *, jobject, jlong handle)
     auto *engine = reinterpret_cast<Engine *>(handle);
     if (!engine) return;
     if (engine->ctx) llama_free(engine->ctx);
+    // After the context (the pool was only attached to it; llama does not own or free it).
+    if (engine->pool) ggml_threadpool_free(engine->pool);
     if (engine->model) llama_model_free(engine->model);
     delete engine;
 }
