@@ -5,8 +5,11 @@
 set -euo pipefail
 : "${ANDROID_NDK:?set ANDROID_NDK to your r26+ NDK path}"
 OUT="$HOME/whisper-android"; mkdir -p "$OUT/lib" "$OUT/include"
-rm -rf /tmp/whisper.cpp && git clone --depth 1 https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp
+# Pinned to the commit the app was built and tested against (DEVLOG 2026-10-05). Bump it on purpose.
+WHISPER_SHA="${WHISPER_SHA:-60c0be6ac8fa71b1a2ae2dd938a31a34a508e774}"
+rm -rf /tmp/whisper.cpp && git init -q /tmp/whisper.cpp
 cd /tmp/whisper.cpp
+git fetch -q --depth 1 https://github.com/ggml-org/whisper.cpp "$WHISPER_SHA" && git checkout -q FETCH_HEAD
 cmake -B build-android \
   -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \

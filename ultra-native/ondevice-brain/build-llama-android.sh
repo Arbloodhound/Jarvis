@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # Builds llama.cpp static libs for arm64 -> ~/llama-android/{lib,include}
 # (what app/src/main/cpp/CMakeLists.txt links as ultra_llm).
-# Verified Oct 2026: NDK r27c, llama.cpp HEAD; the full APK links against this output.
+# Verified Oct 2026: NDK r27c, llama.cpp 8345f33; the full APK links against this output.
 set -euo pipefail
 : "${ANDROID_NDK:?set ANDROID_NDK to your NDK path, e.g. ~/Android/Sdk/ndk/27.0.12077973}"
 OUT="$HOME/llama-android"; SRC="${TMPDIR:-/tmp}/llama.cpp"
-[ -d "$SRC" ] || git clone --depth 1 https://github.com/ggml-org/llama.cpp "$SRC"
+# Pinned to the commit the app was built and tested against (DEVLOG 2026-10-05). Bump it on purpose.
+LLAMA_SHA="${LLAMA_SHA:-8345f333951c661d166b00e6f9362e553768f292}"
+if [ ! -d "$SRC/.git" ]; then git init -q "$SRC"; git -C "$SRC" remote add origin https://github.com/ggml-org/llama.cpp; fi
 cd "$SRC"
+if [ "$(git rev-parse HEAD 2>/dev/null)" != "$LLAMA_SHA" ]; then
+  git fetch -q --depth 1 origin "$LLAMA_SHA" && git checkout -q --force FETCH_HEAD
+  rm -rf build-android
+fi
 cmake -B build-android \
   -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release \

@@ -32,21 +32,23 @@ class AmbientMemory private constructor(ctx: Context) :
         })
     }
 
-    /** Verbatim lines in a time window, oldest first, char-budgeted. */
+    /** Verbatim lines in a time window, oldest first, char-budgeted from the NEWEST end:
+     * what was said just before the wake word matters most. */
     fun since(sinceTs: Long, budgetChars: Int): String {
-        val sb = StringBuilder()
+        val lines = ArrayList<String>()
+        var used = 0
         readableDatabase.rawQuery(
             // ts is stored as INTEGER in an FTS4 column (no affinity); a bound TEXT arg
             // sorts above every integer, so ts>=? without the CAST never matched.
-            "SELECT ts,text FROM heard WHERE ts>=CAST(? AS INTEGER) ORDER BY ts ASC", arrayOf(sinceTs.toString())
+            "SELECT ts,text FROM heard WHERE ts>=CAST(? AS INTEGER) ORDER BY ts DESC", arrayOf(sinceTs.toString())
         ).use { c ->
             while (c.moveToNext()) {
                 val line = c.getString(1)
-                if (sb.length + line.length + 1 > budgetChars) break
-                sb.append(line).append('\n')
+                if (used + line.length + 1 > budgetChars) break
+                lines += line; used += line.length + 1
             }
         }
-        return sb.toString().trim()
+        return lines.asReversed().joinToString("\n").trim()
     }
 
     /** FTS search, newest first — backs the ambient_recall agent tool. */

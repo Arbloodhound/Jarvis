@@ -62,7 +62,10 @@ PHASE 4 — Put the real brain on the phone (no training yet)
 Model is already wired. Two ways to load the abliterated IQ2_M (10.2GB):
   A) In-app: Settings -> model list -> "Qwen3-30B-A3B Thinking ABLITERATED (IQ2_M)" -> Download.
   B) Sideload: download the GGUF on a PC, then
-     adb push Huihui-...i1-IQ2_M.gguf /sdcard/Android/data/com.agent.ultra/files/qwen3moe-abliterated-iq2m.gguf
+     (debug build only; the app reads only its private files/models/ folder, not /sdcard)
+     adb push qwen3moe-abliterated-iq2m.gguf /data/local/tmp/ && adb shell run-as com.agent.ultra sh -c 'mkdir -p files/models && cp /data/local/tmp/qwen3moe-abliterated-iq2m.gguf files/models/' && adb shell rm /data/local/tmp/qwen3moe-abliterated-iq2m.gguf
+     (rename the downloaded Huihui-...i1-IQ2_M.gguf to qwen3moe-abliterated-iq2m.gguf first),
+     then Settings -> model list -> that entry -> Use this.
 Set context 4k. Close all other apps (assistant-only). 
 
 SUCCESS: it answers from the MoE with the phone offline. Watch `adb shell dumpsys meminfo com.agent.ultra`
@@ -100,7 +103,7 @@ On Colab with an 80GB-class GPU (>=64GB VRAM; a 40GB A100 will OOM), open Qwen3_
      a disconnect resumes (re-run sections 0-6), and section 6b restores a finished adapter.
   4. Section 15 uploads both GGUFs to huggingface.co/arbloodhound/jarvis-qwen3moe-abliterated-gguf (public).
   5. On the phone: Settings -> model list -> "Jarvis fine-tune (IQ2_M)" or "(IQ2_S)", whichever size the
-     Pixel test chose -> Download (or adb push the file). No code change or rebuild, unless you changed REPO.
+     Pixel test chose -> Download (or adb push it as in Phase 4B, debug build). No code change or rebuild, unless you changed REPO.
 
 SUCCESS: on-device answers reflect your domains; offline; uncensored; ~1.6GB RAM free.
 

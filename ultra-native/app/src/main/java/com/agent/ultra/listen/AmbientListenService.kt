@@ -51,6 +51,11 @@ class AmbientListenService : Service() {
     @Volatile private var whisper = 0L
     @Volatile private var gate: WakeGate? = null
     @Volatile private var cmdWindowUntil = 0L   // written by the capture loop and the whisper worker
+    // Each acoustic wake opens a numbered window. An utterance is stamped, on the capture thread
+    // as it ends, with the window open at that moment (0 = none). Judging it later, when the
+    // queued transcription runs, let speech that ended BEFORE the wake word count as the command.
+    @Volatile private var windowId = 0L
+    private var consumedWindowId = 0L            // whisper worker only
     private var lastMemoryAt = 0L          // thermal throttle: last memory-only transcription
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -99,7 +104,7 @@ class AmbientListenService : Service() {
             coroutineScope {
                 // whisper runs off the capture thread, so reading the mic (and feeding
                 // the wake gate) never stalls for the length of a transcription.
-                launch { for (u in utterances) onUtterance(u.pcm, u.endedAt) }
+                launch { for (u in utterances) onUtterance(u.pcm, u.endedAt, u.windowId) }
                 try { capture(utterances) } finally { utterances.close() }
             }
             // Capture ended on its own (mic error), not by onDestroy: don't stay "listening".
@@ -115,7 +120,7 @@ class AmbientListenService : Service() {
         }
     }
 
-    private class Utterance(val pcm: ShortArray, val endedAt: Long)
+    private class Utterance(val pcm: ShortArray, val endedAt: Long, val windowId: Long)
 
     /** Returns false if listening can't start. Checks for cancellation between the
      * slow steps, so a stop during the first-run download doesn't init and leak. */
@@ -151,7 +156,11 @@ class AmbientListenService : Service() {
     /** Reads the mic until cancelled. A dead or failing AudioRecord (audioserver
      * restart) is rebuilt a few times; it never spins on an error code. */
     private suspend fun capture(out: Channel<Utterance>) {
-        val seg = Segmenter { pcm, _ -> out.trySend(Utterance(pcm, System.currentTimeMillis())) }
+        val seg = Segmenter { pcm, _ ->
+            val now = System.currentTimeMillis()
+            val open = gate != null && now < cmdWindowUntil
+            out.trySend(Utterance(pcm, now, if (open) windowId else 0L))
+        }
         var failures = 0
         while (currentCoroutineContext().isActive && failures < MAX_MIC_FAILURES) {
             if (captureOnce(seg)) return
@@ -192,6 +201,7 @@ class AmbientListenService : Service() {
                 // Acoustic gate: when present, it decides when we're addressed.
                 // whisper then runs only for the command window + throttled memory.
                 if (gate?.accept(fr) == true) {
+                    windowId++
                     cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS
                 }
                 seg.push(fr)
@@ -214,10 +224,11 @@ class AmbientListenService : Service() {
         }
     }
 
-    /** [t] is when the utterance ended — the command window is judged then, not
-     * when the (queued) transcription gets to it. */
-    private fun onUtterance(pcm: ShortArray, t: Long) {
-        val windowOpen = gate != null && t < cmdWindowUntil
+    /** [t] is when the utterance ended and [wid] the wake window open then (0 = none): the
+     * command window is judged when the speech ended, not when the queued transcription runs.
+     * A window is spent by one command, even if more of its speech is still queued. */
+    private fun onUtterance(pcm: ShortArray, t: Long, wid: Long) {
+        val windowOpen = gate != null && wid != 0L && wid != consumedWindowId
         val plan = AmbientThrottle.decide(
             com.agent.ultra.agent.ThermalGuard.level.ambient, windowOpen, gate != null, t, lastMemoryAt,
         )
@@ -242,10 +253,12 @@ class AmbientListenService : Service() {
         if (windowOpen) {
             val command = WakeFilter.stripWakePhrase(r.text, wakeWords())
             if (command.length < 2) {
-                cmdWindowUntil = now + AmbientConfig.FOLLOWUP_MS
+                if (windowId == wid) cmdWindowUntil = now + AmbientConfig.FOLLOWUP_MS
                 return
             }
-            cmdWindowUntil = 0L
+            consumedWindowId = wid
+            // Close it, unless the gate has already opened a newer window meanwhile.
+            if (windowId == wid) cmdWindowUntil = 0L
             dispatch(buildContextualRequest(command, now))
             return
         }
@@ -346,9 +359,25 @@ class AmbientListenService : Service() {
         private const val MAX_MIC_FAILURES = 3
         @Volatile var instance: AmbientListenService? = null
 
-        fun start(ctx: Context) {
+        /** Starts listening if it can. A service started with startForegroundService must call
+         * startForeground, and without the mic permission it can't (microphone type): Android
+         * then crashes the app when the service stops. So don't start it at all. */
+        fun start(ctx: Context): Boolean {
+            val micOk = androidx.core.content.ContextCompat.checkSelfPermission(
+                ctx, android.Manifest.permission.RECORD_AUDIO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!micOk) {
+                android.util.Log.w("UltraAmbient", "not starting: RECORD_AUDIO not granted")
+                return false
+            }
             val i = Intent(ctx, AmbientListenService::class.java)
-            if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
+            return try {
+                if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
+                true
+            } catch (e: Exception) {
+                android.util.Log.w("UltraAmbient", "not starting: ${e.message}")
+                false
+            }
         }
         fun stop(ctx: Context) { ctx.stopService(Intent(ctx, AmbientListenService::class.java)) }
 

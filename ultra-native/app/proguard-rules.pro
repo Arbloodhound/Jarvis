@@ -17,6 +17,13 @@
 }
 -keepclasseswithmembernames class * { native <methods>; }
 
+# ONNX Runtime (the wake-word gate). Its JNI library looks up its own Java classes and
+# constructors by name (ai/onnxruntime/TensorInfo, OrtException, OnnxTensor(JJLTensorInfo;)…);
+# the AAR's consumer rules keep only its telemetry classes, so R8 renamed the rest and the
+# first OrtSession.run in a release build failed. Debug builds aren't minified, so only
+# release showed it.
+-keep class ai.onnxruntime.** { *; }
+
 # ── Components named as strings outside the code ─────────────────────────
 # The accessibility service is written into Settings.Secure by its fully
 # qualified name and matched by the system on every bind.

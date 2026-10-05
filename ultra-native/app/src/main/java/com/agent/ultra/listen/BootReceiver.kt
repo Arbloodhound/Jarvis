@@ -6,16 +6,16 @@ import android.content.Intent
 
 /**
  * Restart ambient listening after reboot — only if the user had it on.
- * On Android 15+ a microphone FGS started from BOOT_COMPLETED may be blocked
- * until the user opens the app once; the service then logs and stops itself
- * (AmbientListenService.onStartCommand) rather than crashing.
+ * Android 15+ refuses a microphone foreground service started from BOOT_COMPLETED,
+ * so there it waits for the app to be opened (MainActivity starts it then).
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED &&
-            AmbientConfig(context).enabled
+            AmbientConfig(context).enabled &&
+            android.os.Build.VERSION.SDK_INT < 35
         ) {
-            try { AmbientListenService.start(context) } catch (_: Exception) {}
+            AmbientListenService.start(context)
         }
     }
 }
