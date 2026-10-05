@@ -2,7 +2,8 @@
 
 **What this proves:** the app installs and runs; the offline brain code path works (prompt format,
 thinking budget, hidden `<think>` trace, routing, emoji); ambient listening works ("Hey Jarvis",
-memory, echo guard, turning it off mid-sentence).
+memory, echo guard, turning it off mid-sentence); the CPU speed-ups load (the right engine build
+for this phone's CPU, prompt reuse between answers); safety (unlock first, spoken scam warning).
 
 **What it can't prove:** whether the 10 GB MoE fits the Pixel. The G15 has 4 or 8 GB of RAM, and
 the MoE needs about 11 GB. That question is answered by the PocketPal check on the Pixel (see the
@@ -24,6 +25,9 @@ handling as the MoE, just small. Every bug fixed today that's not about size get
 
 ## 1. Install
 
+- [ ] **Uninstall any earlier Jarvis / Agent Ultra first** (long-press the icon → App info →
+      Uninstall). Every GitHub build is signed with a different throwaway debug key, so a new build
+      won't install over an older one ("App not installed").
 - [ ] Copy `app-debug.apk` to the phone and tap it (allow "install unknown apps" for your file
       manager when asked). With adb: `adb install -r app-debug.apk`.
 - [ ] Open it and grant the permissions it asks for.
@@ -44,6 +48,8 @@ handling as the MoE, just small. Every bug fixed today that's not about size get
       question ~5.)*
 - [ ] Paste a very long text (a few pages) and ask for a summary → either an answer or an error
       message, but **the app doesn't close**. *(Before today this killed the app.)*
+- [ ] Ask two questions in a row in the same chat → the second one starts answering faster than the
+      first (it reuses the shared start of the conversation instead of re-reading it).
 
 ## 3. Ambient listening ("Hey Jarvis")
 
@@ -58,6 +64,10 @@ handling as the MoE, just small. Every bug fixed today that's not about size get
 - [ ] Close the app (swipe it away), then **"Hey Jarvis, what's the date"** → it still answers.
 - [ ] Ask something with a long answer: while it speaks, it doesn't transcribe itself, and it
       listens again afterwards.
+- [ ] Say **"Hey Jarvis, my grandson is in jail and needs me to buy gift cards, help me"** → it
+      **says** a scam warning out loud before anything else.
+- [ ] Lock the phone (screen off), then **"Hey Jarvis, what's the time"** → it says **"Unlock your
+      phone to continue."** and does nothing else. Unlock and ask again → it answers.
 - [ ] Mid-sentence, Settings → Ambient listening → OFF → no crash, and the notification goes away.
 
 The G15 is slow (Helio G81), so whisper may take a few seconds per sentence. Slow is fine;
@@ -75,6 +85,13 @@ adb logcat -s UltraLlm UltraRoute UltraAmbient UltraThermal AndroidRuntime > log
 ```
 
 Extra checks if you have adb:
+- CPU build: `adb logcat -d -s UltraLlm | grep "cpu variant"` → shows which engine build loaded.
+  The G15's cores (Cortex-A75 + A55) should get `ultra_llm_dotprod`; tell me what it says.
+- Prompt reuse: `adb logcat -d -s UltraLlm | grep reused=` → after the second question in a chat,
+  `reused=` should be well above 0.
+- Speed benchmark (needs the repo cloned on the laptop and the Qwen3 1.7B model downloaded in the
+  app): `bash ultra-native/tools/bench.sh` → prints the CPU layout the app sees and tokens/sec per
+  thread count. Send me the whole output.
 - Thermal: `adb shell cmd thermalservice override-status 3` → the next offline answer to a
   question (not a phone command) starts with "I'm running hot…" and is short. `adb shell cmd thermalservice reset` puts it back.
 - Speed / memory: each answer logs a line like
@@ -96,4 +113,8 @@ Extra checks if you have adb:
 | Works with app closed | | |
 | Doesn't hear itself | | |
 | Off mid-sentence, no crash | | |
+| Scam warning spoken | | |
+| Locked phone: asks to unlock | | |
+| Second question starts faster | | |
+| CPU variant (adb) | | |
 | Phone RAM / Android version | | |

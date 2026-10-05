@@ -289,6 +289,16 @@ class AmbientListenService : Service() {
         AmbientBridge.onCommand?.let { it(request); return }
         // Main, as VoiceActivity's lifecycleScope runs it.
         scope.launch(Dispatchers.Main) {
+            // Same rule as the voice screen: never act for whoever is talking to a locked
+            // phone. A service can't ask for the unlock itself, so it says so and stops.
+            val km = getSystemService(android.app.KeyguardManager::class.java)
+            if (km != null && km.isKeyguardLocked) {
+                val speaker = speakerRef ?: com.agent.ultra.ui.Speaker(this@AmbientListenService).also { speakerRef = it }
+                val msg = "Unlock your phone to continue."
+                mutedUntil = System.currentTimeMillis() + EchoGuard.muteMsFor(msg)
+                speaker.speak(msg) { mutedUntil = System.currentTimeMillis() + AmbientConfig.ECHO_GUARD_MS }
+                return@launch
+            }
             try { fallbackBrain().run(request) }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { android.util.Log.w("UltraAmbient", "command failed: ${e.message}") }
