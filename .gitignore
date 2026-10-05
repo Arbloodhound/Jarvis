@@ -51,3 +51,4 @@ screen_test.png
 
 # The host harness stub is not the Expo android/ project folder.
 !ultra-native/tools/host-harness/stub/android/
+ultra-native/tools/host-harness/tiny-qwen3.gguf
