@@ -87,8 +87,10 @@ class VoiceActivity : ComponentActivity() {
                             reply = text
                             state = "speaking"
                             // Mute the ambient mic while we speak, so TTS isn't re-heard.
+                            // Bounded: if TTS never calls back (error/interrupt) the mic still returns.
                             com.agent.ultra.listen.AmbientListenService.instance?.let {
-                                it.mutedUntil = Long.MAX_VALUE
+                                it.mutedUntil = System.currentTimeMillis() +
+                                    com.agent.ultra.listen.EchoGuard.muteMsFor(text)
                             }
                             speaker.speak(text) {
                                 state = "done"
