@@ -162,6 +162,41 @@ ambient off mid-sentence, and an emoji reply on the debug build.
   App presets "Ultra fine-tune (IQ2_M/IQ2_S)" point at the notebook's repo, so no code change after
   training. The notebook as a whole: **CANNOT VERIFY** here (no GPU; 80 GB fit and run time unknown).
 
+## 2026-10-05 (night) — renamed to Jarvis; whole-app review with 7 parallel reviewers + 5 fixers
+
+**Subsystems:** all of ultra-native (A, B, C, D, E, F, G, H). Dafarus asked for the rename and a
+line-by-line review of everything; this is the explicit request CLAUDE.md requires for app-wide work.
+
+**Rename:** launcher label, notifications, UI text, gate prompt, alarm label, system prompts ("You are
+Jarvis"), the notebook's prompt copy, fine-tune file/repo names. Kept: applicationId `com.agent.ultra`,
+class names, log tags, the `X-Ultra-Token` header. Version 2.5.0-native (16).
+
+**Method:** 7 read-only reviewers (one per slice, each told to trace and try to disprove every finding);
+findings cross-checked (two reviewers independently found the voice "Working…" hang and the ungated
+IME Enter); 5 fixers with disjoint file ownership, each told to verify before fixing; I reviewed the
+merged result, reconciled overlaps (double-spoken pause, API key kept out of saved state, follow-up web
+searches exempt from low_confidence_egress), and ran everything. About 75 findings; 1 skipped (lesson
+and shortcut table caps need a ranking decision), bare "OK"/"Yes" dialog gating skipped (no dialog
+context), the scam warning is still not spoken in voice sessions (sequencing decision).
+
+**Highest-impact fixes:** main-thread gesture self-deadlock (5 s freeze + late stale tap); ONNX Runtime
+renamed by R8 (wake gate would fail in release only; dexdump now shows ai.onnxruntime names kept);
+overheard speech from before "Hey Jarvis" could run as the command (regression from my own
+earlier fix); voice sessions hung on gate pauses and several run endings; agent ran over the lock screen;
+wordless buttons and Enter-to-send bypassed the action gate; recipes ran on substring matches ("do it");
+truncated tool calls were "repaired" and executed; API key went to Auto Backup; dataSync service would
+be killed at Android 15's 6 h cap; crash at start on API 26-28; scam false alarms on real brand
+domains; wrong SMS codes copied; "No thanks" blacklisted correct approaches; European decimal commas
+misread.
+
+**Status:** `testDebugUnitTest` **PROVEN** 550 tests, 0 failures (482 → 550 today). `assembleDebug`
+and a throwaway-key `assembleRelease` **PROVEN**; 17/17 LOAD segments 0x4000 in both; release dex
+keeps all JNI names, `onToken`, and ai.onnxruntime classes. Every behavioural fix is **SOURCE-FIXED BUT
+RUNTIME-UNPROVEN**: nothing has run on a phone. The G15 run is the first runtime evidence.
+
+**Next:** G15 test (G15_TEST_GUIDE.md) with the CI debug APK from this commit; client PocketPal check;
+training data; then the Pixel.
+
 ## 2026-09-20 (day) — the gate asks on top of the app; routes are played by the engine
 
 **Released as 2.4.0** (versionCode 15): signed with the release key (`0d04510d…ca241f`, v2),

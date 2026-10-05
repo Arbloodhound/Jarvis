@@ -235,12 +235,12 @@ class Tools(
                 "wifi_toggle" -> {
                     val on = params.optBoolean("on", true)
                     if (controller.setWifi(on)) "Wi-Fi ${if (on) "on" else "off"}"
-                    else "Error: wifi toggle failed"
+                    else "Error: couldn't switch Wi-Fi directly (Android doesn't allow apps to); opened the Wi-Fi panel for the user"
                 }
                 "bluetooth_toggle" -> {
                     val on = params.optBoolean("on", true)
                     if (controller.setBluetooth(on)) "Bluetooth ${if (on) "on" else "off"}"
-                    else "Error: bluetooth toggle failed"
+                    else "Error: couldn't switch Bluetooth directly (Android doesn't allow apps to); opened Bluetooth settings for the user"
                 }
                 "do_not_disturb" -> {
                     val on = params.optBoolean("on", true)

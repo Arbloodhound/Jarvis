@@ -155,7 +155,9 @@ object ActionGate {
         // Confirm-dialog wording for deletion and wiping. "Trash"/"Bin" alone stay navigation
         // (see NAVIGATION); moving something INTO them is the commitment.
         "move to trash", "move to bin", "empty trash", "empty bin", "discard",
-        "clear data", "clear storage", "clear all data", "wipe", "format",
+        "clear data", "clear storage", "clear all data", "wipe",
+        // Formatting storage only: a bare "format" is every text editor's formatting menu.
+        "format storage", "format sd card", "format card", "format phone", "format device", "format drive",
         // A few of the same words in the languages most often met on a phone. Not exhaustive.
         "bezahlen", "zahlen", "kaufen", "senden", "loschen", "bestellen",
         "payer", "acheter", "envoyer", "supprimer", "commander",

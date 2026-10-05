@@ -41,7 +41,8 @@ class UltraNotificationService : NotificationListenerService() {
             val title = extras.getCharSequence("android.title")?.toString() ?: ""
             val text = extras.getCharSequence("android.text")?.toString() ?: ""
 
-            val warned = runTriggers(sbn.packageName, title, text)
+            val warned = runTriggers(sbn.packageName, title, text, sbn.key,
+                (sbn.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) != 0)
 
             // Capture is standing collection, not a per-task read: without
             // this check every banking alert, message preview and two-factor
@@ -67,8 +68,9 @@ class UltraNotificationService : NotificationListenerService() {
     }
 
     /** Runs the triggers; returns the scam reasons when the scam shield fired. */
-    private fun runTriggers(pkg: String, title: String, text: String): String? {
-        val actions = EventTrigger.evaluate(this, pkg, title, text)
+    private fun runTriggers(pkg: String, title: String, text: String, key: String?, groupSummary: Boolean): String? {
+        // key + summary flag: an updated or re-posted notification doesn't warn or copy a code twice.
+        val actions = EventTrigger.evaluate(this, pkg, title, text, key, groupSummary)
         var warned: String? = null
         for (a in actions) {
             when (a.type) {

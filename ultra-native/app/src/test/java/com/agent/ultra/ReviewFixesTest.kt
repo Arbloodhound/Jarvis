@@ -70,10 +70,13 @@ class ScamSignalsBrandTest {
 class ActionGateDialogTest {
     @Test fun destructiveConfirmLabelsAsk() {
         for (l in listOf("Move to trash", "Move to bin", "Discard", "Clear data", "Clear storage", "Wipe",
-                "Format", "Erase", "Delete", "Empty trash")) {
+                "Format SD card", "Erase", "Delete", "Empty trash")) {
             assertNotNull(l, ActionGate.commitmentIn(l))
         }
     }
+
+    /** A text editor's Format menu is not a commitment; formatting storage is. */
+    @Test fun bareFormatIsAMenuNotAWipe() = assertNull(ActionGate.commitmentIn("Format"))
 
     @Test fun labelsInOtherScriptsAndLanguagesAsk() {
         assertEquals(ActionGate.UNREADABLE, ActionGate.commitmentIn("Оплатить"))
