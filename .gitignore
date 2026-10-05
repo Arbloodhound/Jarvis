@@ -48,3 +48,6 @@ screen_test.png
 
 # Replit build config, kept locally, out of the repo
 .replit
+
+# The host harness stub is not the Expo android/ project folder.
+!ultra-native/tools/host-harness/stub/android/
