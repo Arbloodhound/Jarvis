@@ -47,4 +47,26 @@ class CpuVariantTest {
         listOf(CpuVariant.BASE),
         CpuVariant.candidates(cpuinfo("fp asimd asimddp i8mm")),
     )
+
+    @Test fun suffixesBestFirst() {
+        assertEquals(listOf("_i8mm", "_dotprod", ""), CpuVariant.suffixes(cpuinfo(v9, v9)))
+        assertEquals(listOf("_dotprod", ""), CpuVariant.suffixes(cpuinfo(v9, a76)))
+        assertEquals(listOf(""), CpuVariant.suffixes(cpuinfo(a53)))
+    }
+
+    /** whisper shares the tier decision; its names come from the same suffixes. */
+    @Test fun whisperGetsTheSameTiers() {
+        assertEquals(
+            listOf("ultra_whisper_i8mm", "ultra_whisper_dotprod", "ultra_whisper"),
+            CpuVariant.candidates(cpuinfo(v9, v9, v9), "ultra_whisper"),
+        )
+        assertEquals(listOf("ultra_whisper"), CpuVariant.candidates(cpuinfo(v9, a53), "ultra_whisper"))
+        assertEquals(listOf("ultra_whisper"), CpuVariant.candidates("", "ultra_whisper"))
+    }
+
+    /** The one-argument form is the llama base, so LlmNative's names are unchanged. */
+    @Test fun defaultBaseIsLlama() = assertEquals(
+        CpuVariant.candidates(cpuinfo(v9, v9), CpuVariant.BASE),
+        CpuVariant.candidates(cpuinfo(v9, v9)),
+    )
 }
