@@ -650,7 +650,7 @@ fun SettingsScreen(
             })
         }
         Text(
-            "Hands-free: set Ultra as your digital assistant, then hold the power button " +
+            "Hands-free: set Jarvis as your digital assistant, then hold the power button " +
                 "(or use your phone's assist gesture) to talk without opening the app.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -716,7 +716,7 @@ fun SettingsScreen(
         // anyone to come back and edit this line.
         val toolCount = remember { com.agent.ultra.gate.Manifest.fromAssets(context).size }
         Text(
-            "Agent Ultra $version\n" +
+            "Jarvis $version\n" +
                 "Policy gate: " + (if (toolCount > 0) "active (gatellml manifest, $toolCount tools declared)"
                     else "MANIFEST UNREADABLE - every tool will be refused") + "\n" +
                 "Accessibility: " + if (com.agent.ultra.AgentAccessibilityService.isRunning()) "connected" else "not connected",

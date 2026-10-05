@@ -1,7 +1,7 @@
 # MINT-TRINITY — Build & Deploy Follow-Along
 
 Ordered, do-this-then-that. Each step says what success looks like before moving on.
-Target: Pixel 10 Pro (GrapheneOS), Agent Ultra fork, abliterated Qwen3-30B-A3B-Thinking MoE,
+Target: Pixel 10 Pro (GrapheneOS), Jarvis fork, abliterated Qwen3-30B-A3B-Thinking MoE,
 always-listening ambient layer. Assistant-only environment (search + screen control).
 
 ====================================================================
@@ -80,7 +80,7 @@ PHASE 5 — Ambient listening (always-on, local, wake-gated)
     Shapes/names VERIFIED against the real models + upstream reference (patch 0002).
     Tuning: WakeGate.lastScore exposes the live score; raise threshold (0.5 -> 0.6-0.7) if it false-fires.
 5b. Settings -> "Ambient listening" ON; set a distinctive wake name (NOT "Ultra" — too common).
-5c. GrapheneOS: Settings -> Apps -> Agent Ultra -> Battery -> Unrestricted.
+5c. GrapheneOS: Settings -> Apps -> Jarvis -> Battery -> Unrestricted.
 
 SUCCESS: mic indicator stays on; speaking stores transcript (searchable via the `ambient_recall`
 tool); saying "<wake name>, <request>" triggers an answer; ordinary talk does NOT.
@@ -98,8 +98,8 @@ On Colab with an 80GB-class GPU (>=64GB VRAM; a 40GB A100 will OOM), open Qwen3_
      imatrix on your formatted chats -> quantize to IQ2_M (+ IQ2_S). Most answers need <think> traces; no refusals.
      Watch the ETA printed after 13 steps; interrupt if it's over budget. Training checkpoints go to Drive:
      a disconnect resumes (re-run sections 0-6), and section 6b restores a finished adapter.
-  4. Section 15 uploads both GGUFs to huggingface.co/arbloodhound/ultra-qwen3moe-abliterated-gguf (public).
-  5. On the phone: Settings -> model list -> "Ultra fine-tune (IQ2_M)" or "(IQ2_S)", whichever size the
+  4. Section 15 uploads both GGUFs to huggingface.co/arbloodhound/jarvis-qwen3moe-abliterated-gguf (public).
+  5. On the phone: Settings -> model list -> "Jarvis fine-tune (IQ2_M)" or "(IQ2_S)", whichever size the
      Pixel test chose -> Download (or adb push the file). No code change or rebuild, unless you changed REPO.
 
 SUCCESS: on-device answers reflect your domains; offline; uncensored; ~1.6GB RAM free.

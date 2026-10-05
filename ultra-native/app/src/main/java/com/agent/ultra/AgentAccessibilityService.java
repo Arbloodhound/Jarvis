@@ -663,7 +663,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         CountDownLatch latch = new CountDownLatch(1);
         new Handler(Looper.getMainLooper()).post(() -> {
             try {
-                // Find the target app window, not Agent Ultra's own window
+                // Find the target app window, not Jarvis's own window
                 // Topmost, not first: an open menu is a window above the page,
                 // and reading the page behind it is why a successful tap on
                 // the menu button looked like a failure.
@@ -672,7 +672,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 if (root == null) {
                     root = getRootInActiveWindow();
                     Log.i(TAG, "SCREEN_FLAT: fallback to getRootInActiveWindow");
-                    // GATE: if fallback returns Agent Ultra's own window, reject it
+                    // GATE: if fallback returns Jarvis's own window, reject it
                     if (root != null) {
                         CharSequence fbPkg = root.getPackageName();
                         if (fbPkg != null && "com.agent.ultra".contentEquals(fbPkg)) {
@@ -994,7 +994,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         return n.getContentDescription() != null ? n.getContentDescription().toString().trim() : "";
     }
 
-    /** The foreground app's window, never Agent Ultra's own. */
+    /** The foreground app's window, never Jarvis's own. */
     private AccessibilityNodeInfo targetWindowRoot() {
         return topmostWindowRoot("CLICK_INDEX");
     }
@@ -1340,7 +1340,7 @@ public class AgentAccessibilityService extends AccessibilityService {
             Log.i(TAG, "GATE: deciding on the live target " + target
                 + " (event tracker still says " + currentPackage + ")");
         }
-        // Never allow actions on Agent Ultra's own UI — prevents self-interaction
+        // Never allow actions on Jarvis's own UI — prevents self-interaction
         if ("com.agent.ultra".equals(target)) {
             emitA11yLog("A11Y_GATE", "{\"action\":\"BLOCKED_SELF\",\"pkg\":\"" + target + "\"}");
             Log.i(TAG, "GATE: BLOCKED_SELF pkg=" + target);

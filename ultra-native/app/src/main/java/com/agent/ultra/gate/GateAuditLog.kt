@@ -101,7 +101,7 @@ object GateAuditLog {
         return Intent(Intent.ACTION_SEND).apply {
             type = "application/jsonl"
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "Agent Ultra gate audit log")
+            putExtra(Intent.EXTRA_SUBJECT, "Jarvis gate audit log")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
     }

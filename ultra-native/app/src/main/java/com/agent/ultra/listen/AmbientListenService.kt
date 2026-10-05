@@ -324,7 +324,7 @@ class AmbientListenService : Service() {
             android.app.PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, CHANNEL)
-            .setContentTitle("Ultra is listening")
+            .setContentTitle("Jarvis is listening")
             .setContentText("Transcribing locally. Say \"${cfg.wakeName}\" to talk.")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true).setContentIntent(tap)

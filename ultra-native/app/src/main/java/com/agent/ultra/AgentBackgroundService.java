@@ -25,7 +25,7 @@ public class AgentBackgroundService extends Service {
         super.onCreate();
         createNotificationChannel();
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Agent Ultra")
+            .setContentTitle("Jarvis")
             .setContentText("Running in background")
             .setSmallIcon(android.R.drawable.ic_menu_manage)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -85,7 +85,7 @@ public class AgentBackgroundService extends Service {
             PendingIntent pi = PendingIntent.getActivity(this, 0,
                 getPackageManager().getLaunchIntentForPackage(getPackageName()),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            Notification n = b.setContentTitle("Agent Ultra")
+            Notification n = b.setContentTitle("Jarvis")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setContentIntent(pi)
@@ -102,10 +102,10 @@ public class AgentBackgroundService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
-                "Agent Ultra Background",
+                "Jarvis Background",
                 NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Keeps Agent Ultra running in the background");
+            channel.setDescription("Keeps Jarvis running in the background");
             channel.setShowBadge(false);
             channel.setSound(null, null);
             NotificationManager manager = getSystemService(NotificationManager.class);

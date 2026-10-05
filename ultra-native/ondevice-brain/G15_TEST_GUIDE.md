@@ -49,7 +49,7 @@ handling as the MoE, just small. Every bug fixed today that's not about size get
 
 - [ ] Airplane mode **off** for the first start (it downloads the listening models once).
 - [ ] Settings → Ambient listening → ON. It asks for the mic first; the switch only stays on once
-      you allow it. The "Ultra is listening" notification appears.
+      you allow it. The "Jarvis is listening" notification appears.
 - [ ] Say **"Hey Jarvis"**, pause 2 s, then **"what time is it"** → it answers.
 - [ ] Say **"Hey Jarvis, what's two plus two"** in one breath → it answers.
 - [ ] Say **"I told my friend Jarvis is a cool name"** → **no** answer (the name has to come first).

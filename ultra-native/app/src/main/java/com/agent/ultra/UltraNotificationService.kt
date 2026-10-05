@@ -74,7 +74,7 @@ class UltraNotificationService : NotificationListenerService() {
                     // not show at all over a full-screen app (seen on the A15 over YouTube).
                     val posted = postWarning(title, a.label)
                     android.os.Handler(mainLooper).post {
-                        if (!posted) Toast.makeText(this, "Ultra: " + a.label, Toast.LENGTH_LONG).show()
+                        if (!posted) Toast.makeText(this, "Jarvis: " + a.label, Toast.LENGTH_LONG).show()
                         // Said out loud too: the person most likely to fall for it may not read a toast.
                         if (com.agent.ultra.ui.UltraPrefs.speakAnswers(this)) {
                             speaker().speak("Careful. " + a.label + " Don't send money, codes or cards to it.")

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Not typeAllMask: Ultra reads the screen on demand, and a flood of events at 50 ms starved
+<!-- Not typeAllMask: Jarvis reads the screen on demand, and a flood of events at 50 ms starved
      the other accessibility service on the machine (AndroidWorld's forwarder looped on "Could
      not get a11y tree"). These are the events it actually uses: which app is in front, and what
      a demonstration touched. -->

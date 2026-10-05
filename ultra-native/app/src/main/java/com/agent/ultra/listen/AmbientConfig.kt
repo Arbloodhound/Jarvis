@@ -47,7 +47,7 @@ class AmbientConfig(context: Context) {
         const val MIN_WORDS = 2
 
         // Wake / response
-        const val FOLLOWUP_MS = 8_000L        // after a bare "Ultra", the next utterance is the command
+        const val FOLLOWUP_MS = 8_000L        // after a bare "Jarvis", the next utterance is the command
         const val ECHO_GUARD_MS = 600L        // ignore mic until TTS ends + this
 
         // Compute

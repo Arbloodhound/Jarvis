@@ -189,8 +189,8 @@ object Demonstration {
         // The step recorder has always known this; the screen recorder did
         // not, and nobody noticed because the two are different code paths
         // that were written months apart. Every route was therefore recorded
-        // starting from Agent Ultra, because the user necessarily opens Agent
-        // Ultra to say "stop watching". Replaying one then tried to launch the
+        // starting from Jarvis, because the user necessarily opens
+        // Jarvis to say "stop watching". Replaying one then tried to launch the
         // agent from inside the agent, matched its own screen as the first
         // waypoint before doing anything at all, and reported reaching a step
         // it had not taken.

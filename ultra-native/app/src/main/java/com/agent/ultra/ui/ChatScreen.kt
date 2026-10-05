@@ -92,7 +92,7 @@ fun ChatScreen(
     }
 
     val currentTitle = ChatStore.conversations
-        .find { it.id == ChatStore.conversationId.value }?.title ?: "Agent Ultra"
+        .find { it.id == ChatStore.conversationId.value }?.title ?: "Jarvis"
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -361,7 +361,7 @@ fun ChatScreen(
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
-                placeholder = { Text("Ask Agent Ultra…") },
+                placeholder = { Text("Ask Jarvis…") },
                 modifier = Modifier.weight(1f),
                 maxLines = 4,
             )

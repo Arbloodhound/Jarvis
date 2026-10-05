@@ -61,7 +61,7 @@ object ActionGate {
         val svc = com.agent.ultra.AgentAccessibilityService.getInstance()
         val drawn = try {
             svc?.showGateOverlay(
-                "Agent Ultra is about to press \u201C$label\u201D",
+                "Jarvis is about to press \u201C$label\u201D",
                 "in $app. This commits something (matched \u201C$reason\u201D). Nothing happens unless you say so.",
                 { resolve(true) }, { resolve(false) },
             ) ?: false

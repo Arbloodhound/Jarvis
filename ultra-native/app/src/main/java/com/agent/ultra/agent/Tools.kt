@@ -290,7 +290,7 @@ class Tools(
                     val hour = params.optInt("hour", -1)
                     val minute = params.optInt("minute", 0)
                     if (hour !in 0..23) "Error: alarm_set needs hour (0-23) and optional minute"
-                    else if (controller.setAlarm(hour, minute, params.optString("label", "Ultra alarm"))) "Alarm set for %02d:%02d".format(hour, minute)
+                    else if (controller.setAlarm(hour, minute, params.optString("label", "Jarvis alarm"))) "Alarm set for %02d:%02d".format(hour, minute)
                     else "Error: alarm failed"
                 }
                 "note_create" -> {

@@ -484,7 +484,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 threads = level.threads,
             ) { piece -> ChatStore.appendTo(msg.id, piece) }
         } else {
-            val prompt = "You are Ultra, a concise assistant on an offline Android phone. " +
+            val prompt = "You are Jarvis, a concise assistant on an offline Android phone. " +
                 "Answer briefly and honestly.\n\nUser: $userInput\nUltra:"
             local.generate(prompt, 400) { piece -> ChatStore.appendTo(msg.id, piece) }
         }
@@ -526,7 +526,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         // Few-shot examples — 1B models map intents reliably with them, not
         // without (measured: zero-shot picked flashlight_toggle for 'open
         // chrome'). Trimmed catalog for the local route.
-        var prompt = """You are Ultra, an on-device Android agent. Reply with EXACTLY one JSON tool call and nothing else.
+        var prompt = """You are Jarvis, an on-device Android agent. Reply with EXACTLY one JSON tool call and nothing else.
 
 TOOLS:
 flashlight_toggle {"on":true|false}
@@ -549,7 +549,7 @@ User: open chrome
 JSON: {"tool":"app_launch","params":{"target":"chrome"}}
 
 User: set an alarm for 7 30 am
-JSON: {"tool":"alarm_set","params":{"hour":7,"minute":30,"label":"Ultra alarm"}}
+JSON: {"tool":"alarm_set","params":{"hour":7,"minute":30,"label":"Jarvis alarm"}}
 
 User: what's my battery level
 JSON: {"tool":"battery_status","params":{}}
@@ -1043,7 +1043,7 @@ JSON:"""
                 if (m.groupValues[4] == "am" && hour == 12) hour = 0
                 params.put("hour", hour)
                 params.put("minute", m.groupValues[3].toIntOrNull() ?: 0)
-                params.put("label", "Ultra alarm")
+                params.put("label", "Jarvis alarm")
             }
             found == "app_launch" -> {
                 val m = Regex("(?:open|launch|start)\\s+(.+)$").find(u) ?: return null
@@ -1169,7 +1169,7 @@ JSON:"""
             controller.currentWifiSsid()?.let { add("WiFi: $it") }
         }.joinToString(" | ")
 
-        return """You are Ultra — a capable, concise AI agent controlling this Android phone.
+        return """You are Jarvis — a capable, concise AI agent controlling this Android phone.
 PHONE STATE: $env
 TODAY: $date at $time
 

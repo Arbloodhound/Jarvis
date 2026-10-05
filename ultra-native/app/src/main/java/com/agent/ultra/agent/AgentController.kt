@@ -89,7 +89,7 @@ class AgentController(private val context: Context) {
         AgentAccessibilityService.listedButNotBound(context) ->
             "the accessibility service is switched on in Android's settings but is not " +
                 "actually running — this happens after an update. Turn it OFF and back ON " +
-                "under Settings > Accessibility > Installed apps > Agent Ultra."
+                "under Settings > Accessibility > Installed apps > Jarvis."
         else ->
             "the accessibility service is off. Tap the red text at the top of the chat " +
                 "screen to switch it on; nothing can be read or tapped until then."
