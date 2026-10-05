@@ -33,7 +33,15 @@ public class AgentBackgroundService extends Service {
             .setNumber(0)
             .setBadgeIconType(android.app.Notification.BADGE_ICON_NONE)
             .build();
-        startForeground(NOTIFICATION_ID, notification);
+        try {
+            startForeground(NOTIFICATION_ID, notification);
+        } catch (Exception e) {
+            // Android 12+ refuses a foreground start from the background (e.g. a sticky restart).
+            // The accessibility service lives in this process too: stop, never crash it.
+            Log.w(TAG, "cannot start in the foreground: " + e.getMessage());
+            stopSelf();
+            return;
+        }
         Log.i(TAG, "Background service started");
 
         EventTrigger.INSTANCE.registerDefaults();
@@ -63,15 +71,17 @@ public class AgentBackgroundService extends Service {
         super.onDestroy();
     }
 
+    // No restart in onTaskRemoved: stopWithTask="false" already keeps this service running when the
+    // task is swiped away, and a foreground start from the background can throw on Android 12+.
+
+    /**
+     * Android 15 caps dataSync foreground services at ~6 h a day and calls this when the time is up.
+     * Not stopping here gets the whole process killed, the accessibility service with it.
+     */
     @Override
-    public void onTaskRemoved(Intent rootIntent) {
-        Intent restartIntent = new Intent(getApplicationContext(), AgentBackgroundService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            getApplicationContext().startForegroundService(restartIntent);
-        } else {
-            getApplicationContext().startService(restartIntent);
-        }
-        super.onTaskRemoved(rootIntent);
+    public void onTimeout(int startId, int fgsType) {
+        Log.w(TAG, "foreground time limit reached; stopping");
+        stopSelf();
     }
 
     public void updateNotification(String text) {

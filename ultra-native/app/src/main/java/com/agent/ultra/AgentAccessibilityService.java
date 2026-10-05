@@ -878,10 +878,12 @@ public class AgentAccessibilityService extends AccessibilityService {
                     Rect b = new Rect();
                     target.getBoundsInScreen(b);
                     if (b.width() > 0 && b.height() > 0) {
-                        if (longPress) performSwipe(b.centerX(), b.centerY(), b.centerX(), b.centerY(), 900);
-                        else performTap(b.centerX(), b.centerY());
-                        Log.i(TAG, "CLICK_INDEX: fell back to a gesture at " + b.centerX() + "," + b.centerY());
-                        ok = true;
+                        // On the main thread these dispatch without waiting (see performTap).
+                        ok = longPress
+                            ? performSwipe(b.centerX(), b.centerY(), b.centerX(), b.centerY(), 900)
+                            : performTap(b.centerX(), b.centerY());
+                        Log.i(TAG, "CLICK_INDEX: fell back to a gesture at " + b.centerX() + "," + b.centerY()
+                            + " accepted=" + ok);
                     }
                 }
                 result.set(ok ? "ok" : "failed");
@@ -1369,6 +1371,11 @@ public class AgentAccessibilityService extends AccessibilityService {
         }
         emitA11yLog("A11Y_TAP", "{\"action\":\"DISPATCH\",\"x\":" + x + ",\"y\":" + y + ",\"pkg\":\"" + currentPackage + "\"}");
         Log.i(TAG, "TAP: DISPATCH x=" + x + " y=" + y + " pkg=" + currentPackage);
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            // Already on the main thread (actByIndex's fallback runs there). Posting to it and
+            // waiting would wait on ourselves for 5 s, then fire the tap late on a stale screen.
+            return dispatchNow(singleStroke(x, y, x, y, 50));
+        }
         CountDownLatch latch = new CountDownLatch(1);
         AtomicBoolean success = new AtomicBoolean(false);
         new Handler(Looper.getMainLooper()).post(() -> {
@@ -1406,6 +1413,10 @@ public class AgentAccessibilityService extends AccessibilityService {
     public boolean performSwipe(int x1, int y1, int x2, int y2, int durationMs) {
         if (!checkPackageAllowed()) return false;
         Log.i(TAG, "SWIPE: " + x1 + "," + y1 + " -> " + x2 + "," + y2 + " pkg=" + currentPackage);
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            // See performTap: never post-and-wait from the main thread.
+            return dispatchNow(singleStroke(x1, y1, x2, y2, Math.max(durationMs, 100)));
+        }
         CountDownLatch latch = new CountDownLatch(1);
         AtomicBoolean success = new AtomicBoolean(false);
         new Handler(Looper.getMainLooper()).post(() -> {
@@ -1426,6 +1437,27 @@ public class AgentAccessibilityService extends AccessibilityService {
         });
         try { latch.await(6, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
         return success.get();
+    }
+
+    private static GestureDescription singleStroke(int x1, int y1, int x2, int y2, int durationMs) {
+        Path path = new Path();
+        path.moveTo(x1, y1);
+        if (x1 != x2 || y1 != y2) path.lineTo(x2, y2);
+        return new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path, 0, durationMs))
+            .build();
+    }
+
+    /** Main-thread dispatch without waiting: true when the system accepted the gesture. */
+    private boolean dispatchNow(GestureDescription gesture) {
+        try {
+            boolean accepted = dispatchGesture(gesture, null, null);
+            Log.i(TAG, "GESTURE: dispatched from main thread, accepted=" + accepted);
+            return accepted;
+        } catch (Exception e) {
+            Log.e(TAG, "dispatchNow error", e);
+            return false;
+        }
     }
 
     public boolean performClick(String selector) {
