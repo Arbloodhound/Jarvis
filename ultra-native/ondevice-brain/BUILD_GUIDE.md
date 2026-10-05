@@ -39,12 +39,14 @@ SUCCESS: `echo $ANDROID_NDK` prints a real path; `sdkmanager --list` shows platf
 ====================================================================
 PHASE 2 — Native libraries (BOTH required or the app won't link)
 ====================================================================
-2a. llama.cpp -> ~/llama-android/{lib,include}
-    ./build-llama-android.sh          # from this bundle (several minutes)
+2a. llama.cpp -> ~/llama-android/{lib,lib-dotprod,lib-i8mm,include}
+    ./build-llama-android.sh          # from this bundle (three CPU variants, several minutes each)
+    # lib = armv8-a fallback, lib-dotprod = +dotprod+fp16, lib-i8mm = +dotprod+i8mm+fp16 (Pixel 10).
+    # The app ships one shim per variant and loads the best the phone supports (logcat: "cpu variant=").
 2b. whisper.cpp (new, for ambient listening):
     ./build-whisper-android.sh        # from this bundle; writes ~/whisper-android/{lib,include}
 
-SUCCESS: both lib dirs contain libllama.a / libwhisper.a and matching libggml*.a, and
+SUCCESS: all lib dirs contain libllama.a / libwhisper.a and matching libggml*.a, and
     ~/whisper-android/include has ggml-cpu.h + ggml-backend.h (verified build: NDK r27c, Oct 2026).
 
 ====================================================================

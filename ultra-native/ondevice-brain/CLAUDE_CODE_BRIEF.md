@@ -49,7 +49,7 @@ commit them as one "docs/training" commit.
 ## Step 2 — prove the build on this machine
 
 ```bash
-./build-llama-android.sh          # skip if ~/llama-android/lib already has libllama.a
+./build-llama-android.sh          # skip if ~/llama-android/lib-i8mm already has libllama.a
 ./build-whisper-android.sh        # fixed: now ships ggml-cpu.h etc., which whisper.h needs
 # Gradle pins CMake 3.28.3 (CXX1300 otherwise); not an SDK package: put it on PATH (apt / pip cmake==3.28.3)
 # Gradle uses its default NDK 27.0.12077973 for JNI libs; static libs used r27c; both linked

@@ -3,18 +3,32 @@ package com.agent.ultra.local
 /** JNI declarations for the llama.cpp shim (libultra_llm.so). */
 object LlmNative {
 
+    /** The build that loaded (see [CpuVariant]), or null. Logged so speed reports say which.
+     *  Declared before [available]: initialisers run in order, and load() sets it. */
+    var variant: String? = null
+        private set
+
     /**
      * False when libultra_llm.so isn't in this build — the x86_64 emulator build (-Pbench)
      * has no llama.cpp. Every caller goes through [LocalModelEngine.ensureLoaded], which
      * checks this, so an agent without an on-device model degrades to the cloud brain
      * instead of throwing UnsatisfiedLinkError on first touch.
      */
-    @JvmField val available: Boolean = try {
-        System.loadLibrary("ultra_llm")
-        true
-    } catch (e: Throwable) {
-        android.util.Log.w("UltraLlm", "native model library not in this build: ${e.message}")
-        false
+    @JvmField val available: Boolean = load()
+
+    private fun load(): Boolean {
+        for (name in CpuVariant.read()) {
+            try {
+                System.loadLibrary(name)
+                variant = name
+                android.util.Log.i("UltraLlm", "cpu variant=$name")
+                return true
+            } catch (e: Throwable) {
+                android.util.Log.w("UltraLlm", "$name not loadable: ${e.message}")
+            }
+        }
+        android.util.Log.w("UltraLlm", "native model library not in this build")
+        return false
     }
 
     fun interface TokenCallback {

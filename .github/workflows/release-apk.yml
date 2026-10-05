@@ -82,6 +82,9 @@ jobs:
           done
           [ $bad -eq 0 ] || { echo "::error::a native lib is not 16 KB-aligned"; exit 1; }
 
+      - name: Check the CPU variants carry their instructions
+        run: ANDROID_NDK="$ANDROID_HOME/ndk/27.2.12479018" bash ultra-native/ondevice-brain/check-cpu-variants.sh "$RUNNER_TEMP/apk/lib/arm64-v8a"
+
       - name: Remove the key from the runner
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks" ultra-native/keystore.properties

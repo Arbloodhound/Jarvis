@@ -249,7 +249,7 @@ class LocalModelEngine(private val context: Context) {
             val faults1 = PageFaults.read()
             android.util.Log.i("UltraLlm", "gen tokens=$n ms=$ms tokPerSec=${"%.1f".format(n * 1000.0 / ms)} " +
                 "majfaults=${if (faults0 >= 0 && faults1 >= 0) faults1 - faults0 else -1} " +
-                "availMB=${availableRam() / 1_048_576} model=${modelFile.name}")
+                "availMB=${availableRam() / 1_048_576} model=${modelFile.name} cpu=${LlmNative.variant}")
             thinkBudget?.let {
                 android.util.Log.d("UltraRoute", "thinkTokens=${it.thinkTokens} forced=${it.forced} budget=${it.budgetTokens}")
             }

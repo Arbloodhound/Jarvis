@@ -13,22 +13,34 @@ endif()
 
 set(LLAMA_HOME "$ENV{HOME}/llama-android")
 
-add_library(ultra_llm SHARED ultra_llm.cpp)
+# One shim per CPU variant from build-llama-android.sh, all with the same JNI symbols.
+# LlmNative loads exactly one: the best the phone's /proc/cpuinfo supports.
+function(add_ultra_llm target libdir)
+    add_library(${target} SHARED ultra_llm.cpp)
+    target_include_directories(${target} PRIVATE ${LLAMA_HOME}/include)
+    target_link_directories(${target} PRIVATE ${LLAMA_HOME}/${libdir})
+    target_link_libraries(${target}
+            llama
+            ggml-cpu
+            ggml-base
+            ggml
+            log
+            atomic
+            )
+    # 16KB-page devices (Android 15+); harmless on 4KB kernels
+    target_link_options(${target} PRIVATE "-Wl,-z,max-page-size=16384")
+endfunction()
 
-target_include_directories(ultra_llm PRIVATE ${LLAMA_HOME}/include)
-
-target_link_directories(ultra_llm PRIVATE ${LLAMA_HOME}/lib)
-
-target_link_libraries(ultra_llm
-        llama
-        ggml-cpu
-        ggml-base
-        ggml
-        log
-        atomic
-        )
-# 16KB-page devices (Android 15+); harmless on 4KB kernels
-target_link_options(ultra_llm PRIVATE "-Wl,-z,max-page-size=16384")
+add_ultra_llm(ultra_llm lib)    # armv8-a: runs on any arm64 phone
+foreach(variant dotprod i8mm)
+    if(EXISTS "${LLAMA_HOME}/lib-${variant}/libggml-cpu.a")
+        add_ultra_llm(ultra_llm_${variant} lib-${variant})
+    else()
+        message(WARNING "ultra_llm_${variant}: ${LLAMA_HOME}/lib-${variant} missing; "
+                "phones that support it fall back to the slower armv8-a build. "
+                "Re-run ondevice-brain/build-llama-android.sh")
+    endif()
+endforeach()
 
 # --- whisper.cpp (ambient listening) ---------------------------------------
 # Built into its OWN shared lib with ggml symbols hidden, so whisper's ggml and
