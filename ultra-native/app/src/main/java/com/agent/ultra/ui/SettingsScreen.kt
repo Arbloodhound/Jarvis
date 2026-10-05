@@ -572,6 +572,47 @@ fun SettingsScreen(
 
         // ── Voice ─────────────────────────────────────────────────────
         SectionTitle("VOICE")
+        run {
+            val ambientCfg = remember { com.agent.ultra.listen.AmbientConfig(context) }
+            var ambient by remember { mutableStateOf(ambientCfg.enabled) }
+            var wakeName by remember { mutableStateOf(ambientCfg.wakeName) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Ambient listening", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Transcribes what it hears, entirely on the phone, and keeps it as searchable " +
+                            "memory. It only answers when you say \"$wakeName\". The mic indicator stays on " +
+                            "while this runs. Silence and noise are dropped before anything is saved.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = ambient, onCheckedChange = { on ->
+                    ambient = on
+                    ambientCfg.enabled = on
+                    if (on) com.agent.ultra.listen.AmbientListenService.start(context)
+                    else com.agent.ultra.listen.AmbientListenService.stop(context)
+                })
+            }
+            OutlinedTextField(
+                value = wakeName,
+                onValueChange = { wakeName = it; ambientCfg.wakeName = it },
+                label = { Text("Wake name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            OutlinedButton(
+                onClick = {
+                    com.agent.ultra.listen.AmbientMemory.get(context).wipe()
+                },
+                modifier = Modifier.padding(top = 8.dp),
+            ) { Text("Erase ambient memory") }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         var speak by remember { mutableStateOf(UltraPrefs.speakAnswers(context)) }
         Row(
             modifier = Modifier.fillMaxWidth(),

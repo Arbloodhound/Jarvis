@@ -1246,6 +1246,7 @@ APPS & NAVIGATION (use app_launch to just open, react_navigate to open AND inter
 
 INFORMATION (fast, no UI needed):
   web_search — search internet, returns text results directly. params: {query}
+  ambient_recall — search everything the phone has overheard (your long-term ambient memory). Use when the user refers to past conversations, things said earlier, "what did I/they say about…". params: {query, limit?}
   system_info — model, Android version, battery, AND whether Wi-Fi / Bluetooth / DND / dark mode /
     location are on, volume, free storage. Use it to ANSWER questions about the phone.
   device_info, battery_status, device_location

@@ -199,6 +199,16 @@ class Tools(
 
                 // ── Information ──────────────────────────────────────
                 "web_search" -> webSearch(params.optString("query"))
+                "ambient_recall" -> {
+                    val hits = com.agent.ultra.listen.AmbientMemory.get(context)
+                        .search(params.optString("query"), params.optInt("limit", 8))
+                    if (hits.isEmpty()) "Nothing overheard matching that."
+                    else hits.joinToString("\n") { (ts, line) ->
+                        val t = java.text.SimpleDateFormat("MMM d h:mm a", java.util.Locale.US)
+                            .format(java.util.Date(ts))
+                        "[$t] $line"
+                    }
+                }
                 "device_info" -> controller.deviceInfo()
                 "battery_status" -> controller.batteryStatus()
                 "system_info" -> controller.deviceInfo() + " | " + controller.batteryStatus() +

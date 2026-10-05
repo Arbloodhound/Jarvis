@@ -27,3 +27,25 @@ target_link_libraries(ultra_llm
         log
         atomic
         )
+
+# --- whisper.cpp (ambient listening) ---------------------------------------
+# Built into its OWN shared lib with ggml symbols hidden, so whisper's ggml and
+# llama's ggml (ultra_llm) never resolve into each other. Build whisper.cpp for
+# arm64 the same way as llama.cpp and drop its static libs beside llama's:
+#   $HOME/whisper-android/{lib,include}
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    set(WHISPER_HOME "$ENV{HOME}/whisper-android")
+    if(EXISTS "${WHISPER_HOME}/include/whisper.h")
+        add_library(ultra_whisper SHARED ultra_whisper.cpp)
+        target_include_directories(ultra_whisper PRIVATE ${WHISPER_HOME}/include)
+        target_link_directories(ultra_whisper PRIVATE ${WHISPER_HOME}/lib)
+        target_link_libraries(ultra_whisper
+                whisper ggml-cpu ggml-base ggml log atomic)
+        # Hide ggml/whisper symbols so they don't collide with ultra_llm's ggml.
+        target_link_options(ultra_whisper PRIVATE
+                "-Wl,--exclude-libs,ALL"
+                "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/whisper_exports.map")
+    else()
+        message(STATUS "ultra_whisper: WHISPER_HOME not found; ambient listening disabled")
+    endif()
+endif()

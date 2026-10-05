@@ -86,7 +86,22 @@ class VoiceActivity : ComponentActivity() {
                         b.onAnswer = { text ->
                             reply = text
                             state = "speaking"
-                            speaker.speak(text) { state = "done" }
+                            // Mute the ambient mic while we speak, so TTS isn't re-heard.
+                            com.agent.ultra.listen.AmbientListenService.instance?.let {
+                                it.mutedUntil = Long.MAX_VALUE
+                            }
+                            speaker.speak(text) {
+                                state = "done"
+                                com.agent.ultra.listen.AmbientListenService.instance?.let {
+                                    it.mutedUntil = System.currentTimeMillis() +
+                                        com.agent.ultra.listen.AmbientConfig.ECHO_GUARD_MS
+                                }
+                            }
+                        }
+                    }.also { b ->
+                        // Ambient "Ultra, ..." commands run on this same brain instance.
+                        com.agent.ultra.listen.AmbientBridge.onCommand = { request ->
+                            lifecycleScope.launch { try { b.run(request) } catch (_: Exception) {} }
                         }
                     }
                 }
