@@ -514,7 +514,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             local.generate(
                 prompt, maxTokens = budget + reserve + 32,
                 thinkBudget = ThinkBudget(budget, startsInThink = true),
-                threads = level.threads,
+                // threads: the engine picks them from the level once it holds the generate lock
             ) { piece -> ChatStore.appendTo(msg.id, piece) }
         } else {
             val prompt = "You are Jarvis, a concise assistant on an offline Android phone. " +
