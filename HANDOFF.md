@@ -11,7 +11,7 @@ Read `CLAUDE.md` (honesty statuses, no drift) and the top of `DEVLOG.md` first. 
   - Merged locally on top of that and pushed with this handoff: **unit 2** (#3), **unit 1** (#6), **unit 5** (#4), **unit 6** (#5).
     - Conflicts resolved: `LocalModelEngine.baseThreads()` uses unit 1's version (`CpuTopology.current.llmThreads`); the nativeLoad log line combines unit 1's and unit 5's.
     - The host harness on the merged shim passes, pinned to CPUs 2-3 (workers stay on 2-3, and the caller is restored afterwards).
-    - **Gradle on this 4-unit merge: PROVEN.** `testDebugUnitTest` 583 tests, 0 failures; `assembleDebug` OK.
+    - **Gradle on this 4-unit merge: PROVEN.** `testDebugUnitTest` 582 tests (556 + 4 + 10 + 5 + 7), 0 failures; `assembleDebug` OK.
 - **Not merged yet:**
   - **Unit 4**, PR **#7**, branch `ccr-3726b695-6kt0de-u4-kv-prefix-reuse` (4a32d22): KV prompt-prefix reuse plus `top_k(40)`. It edits `nativeGenerate` in `ultra_llm.cpp`, the same function as unit 1's pin/resume/pause, so **expect a conflict**. Keep both:
     - unit 1's per-call affinity pin and pool resume/pause;
