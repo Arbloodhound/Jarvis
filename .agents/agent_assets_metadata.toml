@@ -1,0 +1,44 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "DNW0xVohHT1UCg_7rlG5N"
+uri = "file://AGENT-ULTRA-BUG-REPORT.md"
+type = "text"
+title = "Agent Ultra — Comprehensive Bug Report"
+
+[[outputs]]
+id = "nqmYpsrzWipWTu4pIfmDR"
+uri = "file://.local/DETAILED_CHANGES_REPORT.md"
+type = "text"
+title = "Detailed Report: All Code Changes Made"
+
+[[outputs]]
+id = "wzNfZEf843SlVCt44Ap28"
+uri = "file://.local/RAW_SOURCE_EXPORTS.md"
+type = "text"
+title = "Raw Source Code Exports — All Code in One File"
+
+[[outputs]]
+id = "1SIhr7R1kx_0PhUyMK3Fx"
+uri = "file://.local/CLAUDE_IMPLEMENTATION_REFERENCE.md"
+type = "text"
+title = "Implementation Reference — Raw Source Code for Claude"
+
+[[outputs]]
+id = "XZ1SyTRTCoUzA-bedVzlb"
+uri = "file://ultra-full-source.txt"
+type = "text"
+title = "ultra-full-source.txt"
+
+[[outputs]]
+id = "r5n-RII6NZ3bHJPw5bbX-"
+uri = "file://ultra-full-source-dump.txt"
+type = "text"
+title = "Agent Ultra — Full Source Dump"
+
+[[outputs]]
+id = "wSaV-MxwVQahf_RBCZBmB"
+uri = "file://REPLIT_VERIFICATION_PROOF.md"
+type = "text"
+title = "REPLIT_VERIFICATION_PROOF.md"

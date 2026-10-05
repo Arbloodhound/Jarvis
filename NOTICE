@@ -1,0 +1,70 @@
+Agent Ultra — Android agent with an on-device language model and a policy gate
+Copyright (c) 2026 Dafarus (dafarusd). All rights reserved.
+
+============================================================
+LICENSE
+============================================================
+
+This project is licensed under the GNU Affero General Public License v3.0
+(AGPL-3.0-only). See the LICENSE file for the full text.
+
+The AGPL requires that anyone who runs a modified version of this software
+to provide a network service must make their complete corresponding source
+available to the users of that service.
+
+============================================================
+DUAL LICENSING / COMMERCIAL USE
+============================================================
+
+Dafarus is the sole copyright holder of the original code in this
+repository and reserves all rights not granted by the AGPL-3.0.
+
+If the AGPL-3.0's copyleft terms do not suit your use — for example, you
+want to incorporate this code into a proprietary or closed-source product,
+or offer it as a hosted service without releasing your own source — a
+separate commercial license is available. Contact the copyright holder to
+arrange one.
+
+Contributions: by submitting a contribution you agree that the copyright
+holder may license your contribution under both the AGPL-3.0 and any
+commercial license offered above (i.e. you grant a relicensing right).
+This keeps the dual-licensing model intact.
+
+============================================================
+THIRD-PARTY COMPONENTS
+============================================================
+
+llama.cpp — https://github.com/ggml-org/llama.cpp — MIT License.
+llama.cpp's source is not included in this repository. The native library
+(ultra-native/app/src/main/cpp) links against llama.cpp static libraries
+built separately (see README), so published APKs contain compiled llama.cpp
+code. Its license:
+
+MIT License
+
+Copyright (c) 2023-2026 The ggml authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Gemma 3 1B model weights are not included in this repository or in the APK.
+The app downloads them at runtime; they are governed by Google's Gemma Terms
+of Use, not by this project's license.
+
+AndroidX, Jetpack Compose, Kotlin and the other Gradle dependencies are
+resolved at build time and are governed by their own licenses.

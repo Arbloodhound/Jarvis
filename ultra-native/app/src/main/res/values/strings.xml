@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Agent Ultra</string>
+    <string name="accessibility_service_description">Agent Ultra observes screen content and performs taps, swipes, and text entry to carry out tasks you ask for.</string>
+</resources>

@@ -1,0 +1,53 @@
+# Read/open-only tasks for the unattended loop. Nothing here changes a setting, sends,
+# buys, deletes or saves. (Dropped from the first list: "set the volume to 20 percent"
+# — it would unmute the phone — and "turn on dark mode".)
+open the calculator
+open the clock app
+open samsung notes
+open my files
+open the play store
+open the weather app
+open the gallery
+open the camera
+open google maps
+open chrome
+open youtube
+open the calendar
+open settings
+open the wifi settings page
+open the bluetooth settings
+open the display settings
+open the battery settings
+open the storage settings
+open the about phone page
+open the notification settings
+what android version is this phone running
+how much storage do I have left
+is bluetooth on right now
+is wifi on
+is do not disturb on
+is dark mode on
+what is the battery level
+what is the phone's model number
+where am I right now
+what is the weather tomorrow
+what time is sunset today
+who won the last world cup
+what's the capital of australia
+what's 17 times 23
+read what's on my screen
+read my notifications
+in chrome open my bookmarks
+open chrome and go to wikipedia.org
+open google maps and search for coffee near me
+open youtube and search for cat videos
+open the calendar and tell me what is on today
+open the calculator and work out 12 times 34
+open the clock app and show me my alarms
+open the play store and search for a flashlight app
+open the weather app and tell me today's high
+open my files and show me my downloads
+open the gallery and tell me how many albums I have
+open settings and tell me the phone's model number
+what apps do I have that start with the letter c
+ask claude what the agent ultra devlog says is still not proven

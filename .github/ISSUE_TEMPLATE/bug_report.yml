@@ -1,0 +1,51 @@
+name: Bug report
+description: Something Agent Ultra did wrong, or didn't do
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. **Never paste API keys, passwords, or screenshots that show messages, contacts or notifications** — this issue is public.
+  - type: input
+    id: app_version
+    attributes:
+      label: App version
+      description: e.g. 2.3.1. If you're on 2.3.0, uninstall and install 2.3.1 first — 2.3.0 was withdrawn.
+    validations:
+      required: true
+  - type: input
+    id: phone
+    attributes:
+      label: Phone model and Android version
+      placeholder: e.g. Samsung Galaxy A15, Android 16
+    validations:
+      required: true
+  - type: dropdown
+    id: brain
+    attributes:
+      label: Which brain was answering?
+      options:
+        - On-device model
+        - Cloud escalation
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what_you_asked
+    attributes:
+      label: What you asked it to do
+    validations:
+      required: true
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened instead
+      description: Include whether the policy gate blocked or asked about anything.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: "`adb logcat -s UltraGate UltraLlm` output helps. Strip anything personal first."
+      render: text

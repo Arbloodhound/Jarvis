@@ -1,0 +1,1312 @@
+import { ActionPlan } from '../types/ultra';
+import { validatePlan } from './CapabilitySchemas';
+import { resolveIntent } from './IntentResolver';
+import { lookupPackage } from './AppDirectory';
+
+interface ParseRule {
+  pattern: RegExp;
+  capability: string | null;
+  extractParams: (match: RegExpMatchArray) => Record<string, any> | null;
+}
+
+const rules: ParseRule[] = [
+  // ════════════════════════════════════════════════════
+  // RICH INTENT PATTERNS (must come before simple app_launch)
+  // These generate app_launch plans with action/data/extras
+  // so TaskExecutor uses startActivityAsync instead of openApplication
+  // ════════════════════════════════════════════════════
+
+  // ── MUSIC PLAYBACK ─────────────────────────────────
+
+  // "play Bad to the Bone on Spotify"
+  {
+    pattern: /^play\s+(.+?)\s+(?:on|in|with|using)\s+(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => {
+      const query = m[1].trim();
+      const appName = m[2].trim();
+      const pkg = lookupPackage(appName);
+      return {
+        target: appName,
+        action: 'android.media.action.MEDIA_PLAY_FROM_SEARCH',
+        extras: {
+          'android.intent.extra.focus': 'vnd.android.cursor.item/audio',
+          'query': query,
+        },
+        packageName: pkg || undefined,
+      };
+    },
+  },
+  // "play music by George Thorogood"
+  {
+    pattern: /^play\s+(?:some\s+)?(?:music\s+)?by\s+(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => {
+      const artist = m[1].trim();
+      return {
+        target: artist,
+        action: 'android.media.action.MEDIA_PLAY_FROM_SEARCH',
+        extras: {
+          'android.intent.extra.focus': 'vnd.android.cursor.item/artist',
+          'android.intent.extra.artist': artist,
+          'query': artist,
+        },
+      };
+    },
+  },
+  // "play the album Appetite for Destruction"
+  {
+    pattern: /^play\s+(?:the\s+)?album\s+(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => {
+      const album = m[1].trim();
+      return {
+        target: album,
+        action: 'android.media.action.MEDIA_PLAY_FROM_SEARCH',
+        extras: {
+          'android.intent.extra.focus': 'vnd.android.cursor.item/album',
+          'android.intent.extra.album': album,
+          'query': album,
+        },
+      };
+    },
+  },
+  // "play some jazz" / "play Bad to the Bone" (generic music)
+  {
+    pattern: /^play\s+(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => {
+      const query = m[1].trim();
+      // Don't match Google Play Store / Play Games etc — let those fall through to simple launch
+      if (/^(store|games?|services|protect|console|books|movies|newsstand)$/i.test(query)) {
+        return { target: `play ${query}` };
+      }
+      return {
+        target: query,
+        action: 'android.media.action.MEDIA_PLAY_FROM_SEARCH',
+        extras: {
+          'android.intent.extra.focus': 'vnd.android.cursor.item/*',
+          'query': query,
+        },
+      };
+    },
+  },
+
+  // ── PHONE CALLS ────────────────────────────────────
+
+  // "call 555-123-4567" / "call 911" (direct phone number or short code)
+  {
+    pattern: /^call\s+([\d\s\-\+\(\)]{3,})$/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({
+      target: 'phone',
+      action: 'android.intent.action.CALL',
+      data: `tel:${m[1].replace(/\s/g, '')}`,
+    }),
+  },
+  // "call Mom" / "call John Smith" (contact name — executor resolves to tel: URI)
+  {
+    pattern: /^call\s+(?!me\b)(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => {
+      const contact = m[1].trim();
+      // If it looks like a known app name, don't treat as a phone call
+      if (lookupPackage(contact)) return null;
+      return {
+        target: 'phone',
+        action: 'android.intent.action.CALL',
+        extras: { _contactName: contact },
+      };
+    },
+  },
+  // "dial 555-1234"
+  {
+    pattern: /^dial\s+([\d\s\-\+\(\)]+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({
+      target: 'phone',
+      action: 'android.intent.action.CALL',
+      data: `tel:${m[1].replace(/\s/g, '')}`,
+    }),
+  },
+
+  // ── NAVIGATION ─────────────────────────────────────
+
+  // "navigate to Times Square" / "directions to 123 Main St" / "take me to the airport"
+  {
+    pattern: /^(?:navigate|directions?|take\s+me|drive)\s+to\s+(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({
+      target: 'maps',
+      action: 'android.intent.action.VIEW',
+      data: `google.navigation:q=${encodeURIComponent(m[1].trim())}`,
+    }),
+  },
+  // "show Times Square on the map" / "find coffee shops on map"
+  {
+    pattern: /^(?:show|find|locate)\s+(.+?)\s+(?:on\s+)?(?:the\s+)?map(?:s)?$/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({
+      target: 'maps',
+      action: 'android.intent.action.VIEW',
+      data: `geo:0,0?q=${encodeURIComponent(m[1].trim())}`,
+    }),
+  },
+  // "map of downtown Chicago"
+  {
+    pattern: /^map\s+(?:of\s+)?(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({
+      target: 'maps',
+      action: 'android.intent.action.VIEW',
+      data: `geo:0,0?q=${encodeURIComponent(m[1].trim())}`,
+    }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // REACT NAVIGATE (must come before web_search — more specific patterns)
+  // ════════════════════════════════════════════════════
+
+  // ABSOLUTE FIRST: "Search for X on amazon/reddit/youtube" — open app and search within it
+  {
+    pattern: /^(?:search|find|look\s*up)\s+(?:for\s+)?(.+?)\s+(?:on|in|at)\s+(amazon|reddit|youtube|twitter|ebay|etsy|instagram|facebook|netflix|spotify|walmart|target|google\s*maps|tiktok|linkedin|pinterest|yelp)\b/i,
+    capability: 'react_navigate',
+    extractParams: (m: RegExpMatchArray) => ({
+      goal: `Search for "${m[1].trim()}" using the search function`,
+      appHint: m[2].trim().toLowerCase(),
+    }),
+  },
+  // "Search for X on domain.com" — open website and search within it
+  {
+    pattern: /^(?:search|find|look\s*up)\s+(?:for\s+)?(.+?)\s+(?:on|in|at)\s+(\w[\w-]*\.(?:com|org|net|io|co|edu|gov)(?:\.\w{2,})?)\b/i,
+    capability: 'react_navigate',
+    extractParams: (m: RegExpMatchArray) => ({
+      goal: `Navigate to https://${m[2].trim()} and search for "${m[1].trim()}"`,
+      appHint: 'browser',
+    }),
+  },
+
+  // named popular apps — "search/find/buy/order X on amazon/reddit/youtube/etc."
+  {
+    pattern: /^(?:search|find|look\s*up|buy|order|shop\s+for|watch|play|listen|browse|check|post|read|open)\s+(?:for\s+)?(.+?)\s+(?:on|in|at|using|via|with)\s+(amazon|ebay|etsy|walmart|target|reddit|twitter|x\.com|instagram|facebook|tiktok|youtube|netflix|spotify|pandora|soundcloud|pinterest|linkedin|snapchat|whatsapp|telegram|discord|twitch|github|stackoverflow|medium|quora|yelp|doordash|ubereats|grubhub|instacart|airbnb|booking|expedia|maps|google\s+maps|gmail|google\s+photos|google\s+drive|google\s+docs|google\s+sheets|google\s+translate|google\s+calendar|google\s+pay|venmo|paypal|cashapp|zelle|robinhood|coinbase|yahoo|bing|duckduckgo)\b/i,
+    capability: 'react_navigate',
+    extractParams: (m: RegExpMatchArray) => ({
+      goal: `On ${m[2].trim()}: search for or navigate to "${m[1].trim()}"`,
+      appHint: m[2].trim(),
+    }),
+  },
+
+  // "Open X and search/find/browse/etc. Y" with named popular apps
+  {
+    pattern: /^(?:go\s+to|open|launch|navigate\s+to|use)\s+(amazon|ebay|etsy|walmart|target|reddit|twitter|instagram|facebook|tiktok|youtube|netflix|spotify|pandora|soundcloud|pinterest|linkedin|snapchat|github|stackoverflow|medium|quora|yelp|doordash|ubereats|grubhub|instacart|airbnb|booking|expedia)\s+(?:and\s+)?(.+)$/i,
+    capability: 'react_navigate',
+    extractParams: (m: RegExpMatchArray) => ({
+      goal: m[2].trim(),
+      appHint: m[1].trim(),
+    }),
+  },
+
+  // "Search for X on amazon.com/reddit.com/etc." (website URL)
+  {
+    pattern: /^(?:search|find|look\s*up)\s+(?:for\s+)?(.+?)\s+(?:on|in|at)\s+(\w[\w-]*\.(?:com|org|net|io|co|edu|gov)(?:\.\w{2,})?)/i,
+    capability: 'react_navigate',
+    extractParams: (m) => ({
+      goal: `Navigate to https://${m[2].trim()} and search for "${m[1].trim()}"`,
+      appHint: 'browser',
+    }),
+  },
+
+  // "Search for X on Chrome/browser/internet/samsung internet/etc."
+  {
+    pattern: /^(?:search|google|look\s*up|browse|find)\s+(?:for\s+)?(.+?)\s+(?:on|in|using|with|via)\s+(chrome|browser|internet|samsung internet|firefox|brave|edge|opera)/i,
+    capability: 'react_navigate',
+    extractParams: (m) => ({ goal: `Search for "${m[1].trim()}"`, appHint: m[2].trim() }),
+  },
+
+  // "Google X" / "Search the web for X"
+  {
+    pattern: /^(?:google|search\s+the\s+web\s+for|web\s+search)\s+(.+)/i,
+    capability: 'react_navigate',
+    extractParams: (m) => ({ goal: `Search for "${m[1].trim()}"`, appHint: 'browser' }),
+  },
+
+  // "Open X and search/find/browse/etc. Y"
+  {
+    pattern: /^open\s+(\S+)\s+and\s+((?:search|find|look|type|tap|click|scroll|navigate|go\s+to|browse|play|select|choose).+)$/i,
+    capability: 'react_navigate',
+    extractParams: (m) => ({ goal: m[2].trim(), appHint: m[1].trim() }),
+  },
+
+  {
+    pattern: /^(?:navigate|use|go through|interact with)\s+(.+?)\s+(?:to|and)\s+(.+)$/i,
+    capability: 'react_navigate',
+    extractParams: (m) => ({ goal: `${m[2].trim()} in ${m[1].trim()}`, appHint: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:in|inside|within)\s+(.+?),?\s+(?:navigate to|find|tap|click|go to)\s+(.+)$/i,
+    capability: 'react_navigate',
+    extractParams: (m) => ({ goal: m[2].trim(), appHint: m[1].trim() }),
+  },
+
+  // ── WEB SEARCH ─────────────────────────────────────
+  {
+    pattern: /^(?:search|google|look\s+up)\s+(?:for\s+)?(.+)$/i,
+    capability: 'web_search',
+    extractParams: (m) => ({ query: m[1].trim() }),
+  },
+  {
+    pattern: /^web\s+search\s+(.+)$/i,
+    capability: 'web_search',
+    extractParams: (m) => ({ query: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:find|look\s+up)\s+(?:info(?:rmation)?\s+(?:on|about)|info\s+on)\s+(.+)$/i,
+    capability: 'web_search',
+    extractParams: (m) => ({ query: m[1].trim() }),
+  },
+
+  // ── ALARMS ─────────────────────────────────────────
+  {
+    pattern: /^set\s+(?:an?\s+)?alarm\s+(?:for\s+)?(.+)$/i,
+    capability: 'alarm_set',
+    extractParams: (m) => ({ time: m[1].trim() }),
+  },
+  {
+    pattern: /^wake\s+me\s+(?:up\s+)?at\s+(.+)$/i,
+    capability: 'alarm_set',
+    extractParams: (m) => ({ time: m[1].trim() }),
+  },
+  {
+    pattern: /^alarm\s+(?:for\s+|at\s+)?(.+)$/i,
+    capability: 'alarm_set',
+    extractParams: (m) => ({ time: m[1].trim() }),
+  },
+
+  // ── TIMERS ─────────────────────────────────────────
+  {
+    pattern: /^(?:set\s+(?:a\s+)?)?timer\s+(?:for\s+)?(\d+)\s*(seconds?|minutes?|hours?|mins?|hrs?|secs?)$/i,
+    capability: 'timer_set',
+    extractParams: (m) => ({ duration: `${m[1].trim()} ${m[2].trim()}` }),
+  },
+  {
+    pattern: /^(\d+)\s*(second|minute|hour|min|hr|sec)s?\s+timer$/i,
+    capability: 'timer_set',
+    extractParams: (m) => ({ duration: `${m[1].trim()} ${m[2].trim()}` }),
+  },
+  {
+    pattern: /^timer\s+(\d+)\s*(second|minute|hour|min|hr|sec)s?$/i,
+    capability: 'timer_set',
+    extractParams: (m) => ({ duration: `${m[1].trim()} ${m[2].trim()}` }),
+  },
+
+  // ── EMAIL ──────────────────────────────────────────
+
+  // "email john@example.com about the meeting" / "email john@example.com hi"
+  {
+    pattern: /^(?:email|mail|e-mail)\s+(\S+@\S+)\s+(?:about|regarding|re)\s+(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({
+      target: 'email',
+      action: 'android.intent.action.SENDTO',
+      data: `mailto:${m[1].trim()}`,
+      extras: { 'android.intent.extra.SUBJECT': m[2].trim() },
+    }),
+  },
+  // "email john@example.com saying hello" / "email john@example.com hello"
+  {
+    pattern: /^(?:email|mail|e-mail)\s+(\S+@\S+)\s+(?:saying\s+)?(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({
+      target: 'email',
+      action: 'android.intent.action.SENDTO',
+      data: `mailto:${m[1].trim()}`,
+      extras: { 'android.intent.extra.TEXT': m[2].trim() },
+    }),
+  },
+  // "email john@example.com"
+  {
+    pattern: /^(?:email|mail|e-mail)\s+(\S+@\S+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({
+      target: 'email',
+      action: 'android.intent.action.SENDTO',
+      data: `mailto:${m[1].trim()}`,
+    }),
+  },
+
+  // ── CALENDAR / SCHEDULING ─────────────────────────
+  {
+    pattern: /^(?:schedule|add\s+(?:a\s+)?(?:calendar\s+)?event|create\s+(?:a\s+)?(?:calendar\s+)?event|add\s+to\s+calendar)\s+(.+)$/i,
+    capability: 'calendar_create',
+    extractParams: (m) => ({ details: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:set\s+a?\s+)?(?:calendar\s+)?reminder(?:\s+for)?\s+(.+)$/i,
+    capability: 'reminder_create',
+    extractParams: (m) => ({ text: m[1].trim() }),
+  },
+  {
+    pattern: /^remind\s+me\s+(?:to\s+|about\s+)?(.+)$/i,
+    capability: 'reminder_create',
+    extractParams: (m) => ({ text: m[1].trim() }),
+  },
+
+  // ── URL WITH BROWSER TARGET ────────────────────────
+
+  // "open https://google.com in chrome"
+  {
+    pattern: /^(?:open|go\s+to|visit|browse)\s+(https?:\/\/\S+)\s+(?:in|with|using)\s+(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => {
+      const pkg = lookupPackage(m[2].trim());
+      return {
+        target: m[2].trim(),
+        action: 'android.intent.action.VIEW',
+        data: m[1].trim(),
+        packageName: pkg || undefined,
+      };
+    },
+  },
+  // "open https://google.com" (URL without browser specified)
+  {
+    pattern: /^(?:open|go\s+to|visit|browse\s+to?)\s+(https?:\/\/\S+)$/i,
+    capability: 'open_url',
+    extractParams: (m) => ({ url: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:open|go\s+to|visit)\s+(www\.\S+)$/i,
+    capability: 'open_url',
+    extractParams: (m) => ({ url: `https://${m[1].trim()}` }),
+  },
+  // "open google.com" (domain without scheme — add https)
+  {
+    pattern: /^(?:open|go\s+to|visit|browse)\s+(\w[\w-]*\.\w{2,}(?:\.\w{2,})?(?:\/\S*)?)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => {
+      const domain = m[1].trim();
+      // Verify it looks like a domain (has a dot, no spaces)
+      if (!domain.includes('.') || domain.includes(' ')) return null;
+      // Don't match things like "open file.txt" — those go to file_read
+      if (/\.(txt|json|md|csv|log|xml|html|js|ts|java|py)$/i.test(domain)) return null;
+      return {
+        target: 'browser',
+        action: 'android.intent.action.VIEW',
+        data: `https://${domain}`,
+      };
+    },
+  },
+
+  // ════════════════════════════════════════════════════
+  // FLASHLIGHT
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:turn\s+)?(on|off|toggle)\s+(?:the\s+)?flash(?:light)?$/i,
+    capability: 'flashlight_toggle',
+    extractParams: (m) => ({ state: m[1].toLowerCase() }),
+  },
+  {
+    pattern: /^flash(?:light)?\s+(on|off)$/i,
+    capability: 'flashlight_toggle',
+    extractParams: (m) => ({ state: m[1].toLowerCase() }),
+  },
+  {
+    pattern: /^(?:turn\s+)?(?:the\s+)?flash(?:light)?\s+(on|off)$/i,
+    capability: 'flashlight_toggle',
+    extractParams: (m) => ({ state: m[1].toLowerCase() }),
+  },
+  {
+    pattern: /^(?:toggle\s+)?(?:the\s+)?(?:torch|flashlight)$/i,
+    capability: 'flashlight_toggle',
+    extractParams: () => ({ state: 'toggle' }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // VOLUME
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:set\s+)?(?:volume|ringer|media)\s+(?:to\s+)?(\d+)(%)?$/i,
+    capability: 'volume_set',
+    extractParams: (m) => ({ level: parseInt(m[1], 10) }),
+  },
+  {
+    pattern: /^(?:turn\s+)?(?:volume\s+)?(up|down)$/i,
+    capability: 'volume_set',
+    extractParams: (m) => ({ direction: m[1].toLowerCase() }),
+  },
+  {
+    pattern: /^(mute|unmute|silence)(?:\s+phone|\s+ringer)?$/i,
+    capability: 'volume_set',
+    extractParams: (m) => ({ state: m[1].toLowerCase() }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // BRIGHTNESS
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:set\s+)?brightness\s+(?:to\s+)?(\d+)(%)?$/i,
+    capability: 'brightness_set',
+    extractParams: (m) => ({ level: parseInt(m[1], 10) }),
+  },
+  {
+    pattern: /^(dim|brighten)\s+(?:the\s+)?screen$/i,
+    capability: 'brightness_set',
+    extractParams: (m) => ({ direction: m[1].toLowerCase() }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // WIFI / BLUETOOTH / AIRPLANE
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:turn\s+)?(on|off|toggle)\s+(?:the\s+)?(?:wi-?fi|wireless)$/i,
+    capability: 'wifi_toggle',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:wi-?fi)\s+(on|off)$/i,
+    capability: 'wifi_toggle',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:turn\s+)?(on|off|toggle)\s+(?:the\s+)?bluetooth$/i,
+    capability: 'bluetooth_toggle',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^bluetooth\s+(on|off)$/i,
+    capability: 'bluetooth_toggle',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:turn\s+)?(on|off|toggle)\s+(?:the\s+)?(?:airplane|flight)\s*mode$/i,
+    capability: 'airplane_mode',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:airplane|flight)\s*mode\s+(on|off)$/i,
+    capability: 'airplane_mode',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:turn\s+)?(on|off|toggle)\s+(?:the\s+)?(?:do\s+not\s+disturb|dnd)$/i,
+    capability: 'do_not_disturb',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:do\s+not\s+disturb|dnd)\s+(on|off)$/i,
+    capability: 'do_not_disturb',
+    extractParams: () => ({}),
+  },
+
+  // ════════════════════════════════════════════════════
+  // MEDIA CONTROLS
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(play|pause|resume)\s*(?:music|audio|media)?$/i,
+    capability: 'media_play',
+    extractParams: (m) => ({ action: m[1].toLowerCase() }),
+  },
+  {
+    pattern: /^(next|skip)\s*(?:track|song)?$/i,
+    capability: 'media_next',
+    extractParams: () => ({}),
+  },
+
+  // ════════════════════════════════════════════════════
+  // CLIPBOARD
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:copy|clipboard)\s+(.+)$/i,
+    capability: 'clipboard_write',
+    extractParams: (m) => ({ text: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:read|show|get)\s+(?:my\s+)?clipboard$/i,
+    capability: 'clipboard_read',
+    extractParams: () => ({}),
+  },
+
+  // ════════════════════════════════════════════════════
+  // SCREENSHOT
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^take\s+a?\s*screenshot$/i,
+    capability: 'screenshot',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:capture|grab)\s+(?:the\s+)?screen$/i,
+    capability: 'screenshot',
+    extractParams: () => ({}),
+  },
+
+  // ════════════════════════════════════════════════════
+  // NOTIFICATIONS
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:read|show|list)\s+(?:my\s+)?(?:notifications?|alerts?)$/i,
+    capability: 'notification_read',
+    extractParams: () => ({}),
+  },
+
+  // ════════════════════════════════════════════════════
+  // NOTE CREATE
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:create|new|add|write)\s+(?:a\s+)?(?:note|memo)\s*(.*)$/i,
+    capability: 'note_create',
+    extractParams: (m) => ({ content: m[1]?.trim() || '' }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // APP INFO
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:app\s+info|info|settings)\s+(?:for\s+)?(?:the\s+)?(?:foreground|current|active)\s+app(?:lication)?$/i,
+    capability: 'app_info',
+    extractParams: () => ({ target: 'foreground_app' }),
+  },
+  {
+    pattern: /^(?:app\s+info|info)\s+(?:for\s+)?(.+)$/i,
+    capability: 'app_info',
+    extractParams: (m) => ({ target: m[1].trim() }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // DEVICE INFO / STATUS
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:device\s+)?(?:status|info(?:rmation)?|stats|system\s+info)[?.!]?\s*$/i,
+    capability: 'device_info',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:battery|charge)\s*(?:level|status|percent)?[?.!]?\s*$/i,
+    capability: 'device_info',
+    extractParams: () => ({ focus: 'battery' }),
+  },
+  {
+    pattern: /^(?:ram|memory)\s*(?:usage|status)?[?.!]?\s*$/i,
+    capability: 'device_info',
+    extractParams: () => ({ focus: 'memory' }),
+  },
+  {
+    pattern: /^(?:storage|disk|space)\s*(?:usage|status)?[?.!]?\s*$/i,
+    capability: 'device_info',
+    extractParams: () => ({ focus: 'storage' }),
+  },
+  {
+    pattern: /^(?:wifi|network)\s*(?:status|info)?[?.!]?\s*$/i,
+    capability: 'device_info',
+    extractParams: () => ({ focus: 'network' }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // SYSTEM INFO PATTERNS (legacy, kept for backward compat)
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:system\s+info(?:rmation)?|phone\s+info(?:rmation)?)[?.!]?\s*$/i,
+    capability: 'system_info',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^how(?:'s|\s+is)\s+my\s+battery[?.!]?\s*$/i,
+    capability: 'system_info',
+    extractParams: () => ({ focus: 'battery' }),
+  },
+  {
+    pattern: /^how\s+much\s+(?:ram|memory)[?.!]?\s*$/i,
+    capability: 'system_info',
+    extractParams: () => ({ focus: 'memory' }),
+  },
+  {
+    pattern: /^how\s+much\s+space[?.!]?\s*$/i,
+    capability: 'system_info',
+    extractParams: () => ({ focus: 'storage' }),
+  },
+  {
+    pattern: /^(?:cpu\s+temp(?:erature)?|temperature|how\s+hot(?:\s+is\s+(?:my\s+)?(?:phone|device))?)[?.!]?\s*$/i,
+    capability: 'system_info',
+    extractParams: () => ({ focus: 'temperature' }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // DEVICE INFO — NATURAL LANGUAGE
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^what(?:'s|\s+is)\s+(?:my\s+)?battery(?:\s+(?:level|percentage|percent|life))?[?]?$/i,
+    capability: 'device_info',
+    extractParams: () => ({ focus: 'battery' }),
+  },
+  {
+    pattern: /^how(?:'s|\s+is)\s+(?:the\s+)?(?:wifi|network|connection|internet)[?]?$/i,
+    capability: 'device_info',
+    extractParams: () => ({ focus: 'network' }),
+  },
+  {
+    pattern: /^(?:show|tell|give)\s+(?:me\s+)?(?:device|system|phone)\s+(?:status|info(?:rmation)?|stats)[?]?$/i,
+    capability: 'device_info',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^what(?:'s|\s+is)\s+(?:my\s+)?(?:storage|disk\s+space|free\s+space)[?]?$/i,
+    capability: 'device_info',
+    extractParams: () => ({ focus: 'storage' }),
+  },
+  {
+    pattern: /^what(?:'s|\s+is)\s+(?:my\s+)?(?:ram|memory\s+usage)[?]?$/i,
+    capability: 'device_info',
+    extractParams: () => ({ focus: 'memory' }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // FLASHLIGHT — ADDITIONAL
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:open|launch|start)\s+(?:the\s+)?flashlight$/i,
+    capability: 'flashlight_toggle',
+    extractParams: () => ({ state: 'on' }),
+  },
+  {
+    pattern: /^(?:turn\s+on|enable|activate)\s+(?:the\s+)?(?:flashlight|torch|light)$/i,
+    capability: 'flashlight_toggle',
+    extractParams: () => ({ state: 'on' }),
+  },
+  {
+    pattern: /^(?:turn\s+off|disable|deactivate)\s+(?:the\s+)?(?:flashlight|torch|light)$/i,
+    capability: 'flashlight_toggle',
+    extractParams: () => ({ state: 'off' }),
+  },
+  {
+    pattern: /^(?:flashlight|torch|light)\s+(on|off)$/i,
+    capability: 'flashlight_toggle',
+    extractParams: (m) => ({ state: m[1].toLowerCase() }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // DO NOT DISTURB
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:turn\s+on|enable|activate)\s+(?:do\s+not\s+disturb|dnd|silent\s+mode)$/i,
+    capability: 'do_not_disturb',
+    extractParams: () => ({ state: 'on' }),
+  },
+  {
+    pattern: /^(?:turn\s+off|disable)\s+(?:do\s+not\s+disturb|dnd)$/i,
+    capability: 'do_not_disturb',
+    extractParams: () => ({ state: 'off' }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // APP INFO — ADDITIONAL
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:show|open|get)\s+app\s+info(?:rmation)?\s+(?:for\s+)?(.+)$/i,
+    capability: 'app_info',
+    extractParams: (m) => ({ target: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:app\s+settings|settings)\s+for\s+(.+)$/i,
+    capability: 'app_info',
+    extractParams: (m) => ({ target: m[1].trim() }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // NOTE — ADDITIONAL
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:remember|jot(?:\s+down)?|note\s+down?)\s+(?:that\s+)?(.+)$/i,
+    capability: 'note_create',
+    extractParams: (m) => ({ content: m[1].trim() }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // SCREENSHOT — BARE WORD
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^screenshot$/i,
+    capability: 'screenshot',
+    extractParams: () => ({}),
+  },
+
+  // ════════════════════════════════════════════════════
+  // EVENT TRIGGERS
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:when|if|whenever)\s+(.+?)\s*,\s*(.+)$/i,
+    capability: 'event_trigger_set',
+    extractParams: (m) => ({
+      type: 'schedule',
+      condition: m[1].trim(),
+      action: m[2].trim(),
+    }),
+  },
+  {
+    pattern: /^(?:every|each)\s+(.+?)\s*,\s*(.+)$/i,
+    capability: 'event_trigger_set',
+    extractParams: (m) => ({
+      type: 'schedule',
+      condition: `every ${m[1].trim()}`,
+      action: m[2].trim(),
+    }),
+  },
+  {
+    pattern: /^at\s+(.+?)\s*,\s*(.+)$/i,
+    capability: 'event_trigger_set',
+    extractParams: (m) => ({
+      type: 'schedule',
+      condition: `at ${m[1].trim()}`,
+      action: m[2].trim(),
+    }),
+  },
+  {
+    pattern: /^(?:list|show)\s+(?:my\s+)?(?:triggers?|automations?|routines?)$/i,
+    capability: 'event_trigger_list',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:remove|delete|cancel|disable|turn\s+off)\s+(?:the\s+)?(?:trigger|automation|routine)\s+(?:id\s+)?([a-z0-9:_\-]+)$/i,
+    capability: 'event_trigger_remove',
+    extractParams: (m) => ({ id: m[1].trim() }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // MEMORY RECALL
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:recall|what\s+do\s+you\s+know\s+about)\s+(.+)$/i,
+    capability: 'memory_recall',
+    extractParams: (m) => ({ query: m[1].trim() }),
+  },
+
+  {
+    pattern: /^settings$/i,
+    capability: 'app_launch',
+    extractParams: () => ({ target: 'settings' }),
+  },
+  {
+    pattern: /^bluetooth\s+settings?$/i,
+    capability: 'app_launch',
+    extractParams: () => ({ target: 'bluetooth settings' }),
+  },
+  {
+    pattern: /^wifi\s+settings?$/i,
+    capability: 'app_launch',
+    extractParams: () => ({ target: 'wifi settings' }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // SETTINGS NAVIGATION — "go to X settings", "open X settings"
+  // These all route to app_launch with a settings target.
+  // SettingsDirectory handles the actual intent resolution.
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:go\s+to|take\s+me\s+to|show\s+me|navigate\s+to|bring\s+up|open|launch)\s+(.+?)\s+settings?$/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({ target: `${m[1].trim()} settings` }),
+  },
+  {
+    pattern: /^(?:go\s+to|take\s+me\s+to|show\s+me|navigate\s+to|bring\s+up|open|launch)\s+settings?\s+(?:for\s+|page\s+for\s+)?(.+)$/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({ target: `${m[1].trim()} settings` }),
+  },
+  {
+    pattern: /^(?:turn\s+(?:wifi|wi-fi)\s+(?:on|off)|wifi\s+(?:on|off)|wi-fi\s+(?:on|off))$/i,
+    capability: 'wifi_toggle',
+    extractParams: () => ({}),
+  },
+
+  // ════════════════════════════════════════════════════
+  // URL OPENING (must come before generic app_launch)
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:open|go\s+to|visit|browse|launch)\s+((?:https?:\/\/|www\.)\S+|\S+\.(?:com|org|net|io|co|app|dev|ai|edu|gov|me|tv|us|uk|ca|info)(?:\/\S*)?)/i,
+    capability: 'open_url',
+    extractParams: (m) => {
+      let url = m[1].trim();
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      return { url };
+    },
+  },
+
+  // ════════════════════════════════════════════════════
+  // BRAIN / CORTEX COMMANDS
+  // ════════════════════════════════════════════════════
+  { pattern: /^what\s+(?:do\s+you\s+)?know\s+(?:about\s+)?(?:my\s+)?(?:device\s+activity|activity\s+patterns?)\??$/i, capability: 'behavior_patterns', extractParams: () => ({}) },
+  { pattern: /^what\s+(?:do\s+you\s+)?know\s+(?:about\s+)?(.+)$/i, capability: 'knowledge_query', extractParams: (m: RegExpMatchArray) => ({ query: m[1].trim() }) },
+  { pattern: /^(?:show|any|get|what\s+are\s+(?:your|the))?\s*(?:proactive\s+)?suggestions?$/i, capability: 'proactive_suggestions', extractParams: () => ({}) },
+  { pattern: /^resume\s+(?:my\s+)?(?:last\s+)?task\s*(.*)$/i, capability: 'task_resume', extractParams: (m: RegExpMatchArray) => ({ query: m[1].trim() || '' }) },
+  { pattern: /^(?:show|what\s+are|what\s+do\s+you\s+know\s+about|tell\s+me\s+about)\s+(?:my\s+)?(?:patterns?|habits?|routines?|device\s+activity|activity\s+patterns?)\??$/i, capability: 'behavior_patterns', extractParams: () => ({}) },
+  { pattern: /^(?:research|look\s+up|find\s+out\s+about|investigate)\s+(.+)$/i, capability: 'web_research', extractParams: (m: RegExpMatchArray) => ({ query: m[1].trim() }) },
+  { pattern: /^(?:what(?:'s|\s+is)\s+on\s+(?:my\s+)?screen|read\s+(?:the\s+)?screen|what\s+do\s+you\s+see)$/i, capability: 'vision_read', extractParams: () => ({}) },
+
+  // ════════════════════════════════════════════════════
+  // SIMPLE APP LAUNCH (existing patterns, preserved)
+  // These generate app_launch plans with only `target` —
+  // TaskExecutor uses openApplication() for these
+  // ════════════════════════════════════════════════════
+
+  {
+    pattern: /^open\s+(.+)/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({ target: m[1].trim() }),
+  },
+  {
+    pattern: /^launch\s+(.+)/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({ target: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:run|start)\s+(.+)/i,
+    capability: 'app_launch',
+    extractParams: (m) => ({ target: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:read|show|check|get|view)\s+(?:my\s+)?(?:text|sms|texts|messages|inbox)\s*(?:messages?)?$/i,
+    capability: 'sms_read',
+    extractParams: () => ({ limit: 10 }),
+  },
+  {
+    pattern: /^(?:read|show|check|get|view)\s+(?:my\s+)?(?:last|recent)\s+(\d+)\s+(?:text|sms|texts|messages)/i,
+    capability: 'sms_read',
+    extractParams: (m) => ({ limit: parseInt(m[1]) }),
+  },
+  {
+    pattern: /^(?:read|show|check|get|view)\s+(?:my\s+)?(?:texts?|messages?|sms|conversation)\s+(?:with|from)\s+(.+)$/i,
+    capability: 'sms_conversation',
+    extractParams: (m) => ({ contact: m[1].trim() }),
+  },
+  {
+    pattern: /^text\s+(.+?)\s+(?:saying|with)\s+(.+)/i,
+    capability: 'sms_send',
+    extractParams: (m) => ({ to: m[1].trim(), message: m[2].trim() }),
+  },
+  {
+    pattern: /^text\s+(.+?)\s+["'](.+)["']/i,
+    capability: 'sms_send',
+    extractParams: (m) => ({ to: m[1].trim(), message: m[2].trim() }),
+  },
+  {
+    pattern: /^text\s+(\S+)\s+(.+)/i,
+    capability: 'sms_send',
+    extractParams: (m) => ({ to: m[1].trim(), message: m[2].trim() }),
+  },
+  {
+    pattern: /^text\s+(.+)/i,
+    capability: 'sms_send',
+    extractParams: (m) => ({ to: m[1].trim() }),
+  },
+  {
+    pattern: /^send\s+(?:a\s+)?(?:text|sms|message)\s+to\s+(.+?)\s+saying\s+(.+)/i,
+    capability: 'sms_send',
+    extractParams: (m) => ({ to: m[1].trim(), message: m[2].trim() }),
+  },
+  {
+    pattern: /^send\s+(?:a\s+)?(?:text|sms|message)\s+to\s+(.+)/i,
+    capability: 'sms_send',
+    extractParams: (m) => ({ to: m[1].trim() }),
+  },
+  {
+    pattern: /^read\s+(?:my\s+)?contacts/i,
+    capability: 'contacts_read',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:show|list)\s+(?:my\s+)?contacts/i,
+    capability: 'contacts_read',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^take\s+a?\s*(?:photo|picture|selfie)/i,
+    capability: 'camera_capture',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:pick|choose|select)\s+(?:a\s+)?(?:photo|image|picture)/i,
+    capability: 'media_access',
+    extractParams: () => ({ action: 'pick' }),
+  },
+  {
+    pattern: /^(?:count|scan|total)\s+(?:all\s+)?(?:my\s+)?(?:photos|images|pictures|gallery)(?:\s+(?:images|photos|pictures))?$/i,
+    capability: 'media_access',
+    extractParams: () => ({ action: 'count' }),
+  },
+  {
+    pattern: /^(?:how\s+many)\s+(?:photos|images|pictures|gallery\s+items?|gallery\s+images?|pictures\s+do\s+i\s+have)(?:\s+(?:do\s+i\s+have|are\s+there))?\??$/i,
+    capability: 'media_access',
+    extractParams: () => ({ action: 'count' }),
+  },
+  {
+    pattern: /^(?:show|list)\s+(?:my\s+)?(?:photos|images|pictures|gallery)/i,
+    capability: 'media_access',
+    extractParams: () => ({ action: 'list' }),
+  },
+  {
+    pattern: /^(?:open|launch)\s+(?:the\s+)?weather\s+app$/i,
+    capability: 'app_launch',
+    extractParams: () => ({ target: 'weather' }),
+  },
+  {
+    pattern: /^(?:show|check|get)\s+(?:the\s+)?weather(?:\s+(?:in|at|for)\s+(.+))?$/i,
+    capability: 'weather',
+    extractParams: (m) => m[1] ? { location: m[1].trim() } : {},
+  },
+  // Location-specific "what's/what is the weather in X" — must be BEFORE the generic catch-all below
+  {
+    pattern: /^(?:what(?:'s|\s+is)|how(?:'s|\s+is)|tell\s+me\s+what(?:'s|\s+is))\s+(?:the\s+)?(?:weather|temperature|forecast)\s+(?:like\s+)?(?:in|at|for)\s+(.+?)\??$/i,
+    capability: 'weather',
+    extractParams: (m) => ({ location: m[1].trim() }),
+  },
+  // Generic "what's the weather" / "how's the weather" (no specific location)
+  {
+    pattern: /^(?:what(?:'s|\s+is)|how(?:'s|\s+is)|can\s+you\s+tell\s+me\s+what(?:'s|\s+is)|tell\s+me\s+what(?:'s|\s+is)|will\s+it\s+be|is\s+it\s+going\s+to\s+be|gonna\s+be)\s+.*(?:weather|forecast|temperature|rain|snow)\b.*\??$/i,
+    capability: 'weather',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:will\s+it|is\s+it\s+gonna|is\s+it|gonna)\s+(?:rain|snow)(?:\s+today|\s+outside|\s+later)?\??$/i,
+    capability: 'weather',
+    extractParams: () => ({}),
+  },
+  // "weather in London" / "weather in Paris" (bare, no what/show/check prefix)
+  {
+    pattern: /^weather\s+(?:like\s+)?(?:in|at|for)\s+(.+)$/i,
+    capability: 'weather',
+    extractParams: (m) => ({ location: m[1].trim() }),
+  },
+  // "weather" / "weather today" / "current weather"
+  {
+    pattern: /^(?:weather(?:\s+today)?|current\s+weather)$/i,
+    capability: 'weather',
+    extractParams: () => ({}),
+  },
+  // "temperature" / "current temperature" / "temperature in Berlin" / "temperature outside"
+  {
+    pattern: /^(?:current\s+)?temperature(?:\s+(?:outside|right\s+now|today))?(?:\s+(?:in|at)\s+(.+))?$/i,
+    capability: 'weather',
+    extractParams: (m) => m[1] ? { location: m[1].trim() } : {},
+  },
+  // "is it raining in Seattle" / "will it snow today" / "is it sunny"
+  {
+    pattern: /^(?:is|will)\s+it\s+(?:raining|snowing|rain|snow|sunny|hot|cold|warm)(?:\s+(?:today|outside|right\s+now))?(?:\s+(?:in|at)\s+(.+))?$/i,
+    capability: 'weather',
+    extractParams: (m) => m[1] ? { location: m[1].trim() } : {},
+  },
+  // "weather forecast" / "forecast" / "forecast in Berlin"
+  {
+    pattern: /^(?:weather\s+)?forecast(?:\s+(?:for\s+today|today))?(?:\s+(?:in|at|for)\s+(.+))?$/i,
+    capability: 'weather',
+    extractParams: (m) => m[1] ? { location: m[1].trim() } : {},
+  },
+  {
+    pattern: /^share\s+(.+)/i,
+    capability: 'app_share',
+    extractParams: (m) => ({ content: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:where\s+am\s+i|get\s+(?:my\s+)?location|my\s+(?:location|coordinates|gps)|gps)/i,
+    capability: 'device_location',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:find|show)\s+(?:my\s+)?(?:location|position|coordinates)/i,
+    capability: 'device_location',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^(?:show|list)\s+(?:my\s+)?files/i,
+    capability: 'file_read',
+    extractParams: () => ({}),
+  },
+  {
+    pattern: /^delete\s+(?:file\s+)?(.+)/i,
+    capability: 'file_delete',
+    extractParams: (m) => ({ filename: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:read|open)\s+(?:the\s+)?file\s+(?:named\s+|called\s+)?["']?([^\s"']+)["']?$/i,
+    capability: 'file_read',
+    extractParams: (m) => ({ path: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:control|interact\s+with)\s+(.+)/i,
+    capability: 'app_control',
+    extractParams: (m) => ({ targetPackage: m[1].trim(), action: 'read' }),
+  },
+  {
+    pattern: /^(?:test|run\s+tests?\s+(?:on|for))\s+(.+)/i,
+    capability: 'app_test',
+    extractParams: (m) => ({ description: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:resolve\s+dependenc(?:y|ies)|download\s+librar(?:y|ies))\s*(.*)$/i,
+    capability: 'dependency_resolve',
+    extractParams: (m) => {
+      const raw = m[1]?.trim();
+      if (!raw) return null;
+      return { coordinates: raw.split(/[,\s]+/).filter(Boolean) };
+    },
+  },
+  {
+    pattern: /^(?:write|create|save)\s+(?:a\s+)?file\s+(.+)/i,
+    capability: null,
+    extractParams: () => null,
+  },
+  {
+    pattern: /^(?:build|create|make)\s+(?:me\s+)?(?:a\s+)?(?:an?\s+)?app\s+(?:that|which|to)\s+(.+)$/i,
+    capability: 'app_build',
+    extractParams: (m) => ({ description: m[1].trim() }),
+  },
+  {
+    pattern: /^build\s+(?:me\s+)?(?:a\s+)?(?:an?\s+)?(.+?)(?:\s+app)?$/i,
+    capability: 'app_build',
+    extractParams: (m) => ({ description: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:create|make)\s+(?:me\s+)?(?:a\s+)?(?:an?\s+)?(.+\s+app)$/i,
+    capability: 'app_build',
+    extractParams: (m) => ({ description: m[1].trim() }),
+  },
+  {
+    pattern: /^generate\s+(?:a\s+)?(?:an?\s+)?(?:image|picture|photo)\s+(?:of\s+)?(.+)/i,
+    capability: 'image_generate',
+    extractParams: (m) => ({ prompt: m[1].trim() }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // VISION — DESCRIBE SCREEN / READ TEXT ON SCREEN
+  // Placed BEFORE the TTS "read ..." catch-all rule so that
+  // "read the screen", "read what's on screen", etc. are
+  // routed to the correct OCR/describe capability first.
+  // ════════════════════════════════════════════════════
+  // "what's on my screen" / "describe the screen" / "what do you see"
+  {
+    pattern: /^(?:what(?:'s|\s+is)\s+(?:on\s+)?(?:my\s+)?(?:the\s+)?screen(?:\?|$)|describe\s+(?:the\s+)?(?:current\s+)?screen|what\s+do\s+you\s+see|look\s+at\s+(?:the\s+)?screen|what\s+(?:can\s+you\s+see|are\s+you\s+seeing)|what\s+(?:is|are)\s+(?:showing|displayed|visible)\s+(?:on\s+)?(?:my\s+)?screen)/i,
+    capability: 'describe_screen',
+    extractParams: () => ({}),
+  },
+  // "describe what's on screen" / "describe this screen" / "describe the app"
+  {
+    pattern: /^describe\s+(?:what(?:'s|\s+is)\s+(?:on\s+)?(?:the\s+)?screen|this\s+screen|this\s+app|this\s+page|what\s+you\s+see)/i,
+    capability: 'describe_screen',
+    extractParams: () => ({}),
+  },
+  // "read what's on screen" / "read the screen" / "read this page"
+  {
+    pattern: /^read\s+(?:the\s+text\s+(?:on\s+|from\s+)?(?:the\s+)?screen|what(?:'s|\s+is)\s+on\s+(?:the\s+)?screen|the\s+screen|this\s+page|this\s+screen|what\s+you\s+see)$/i,
+    capability: 'read_text_on_screen',
+    extractParams: () => ({}),
+  },
+  // "read the text in this image/photo" / "read text from screen" / "extract text from screen"
+  {
+    pattern: /^(?:read|extract|get|copy)\s+(?:the\s+)?text\s+(?:in|from|on)\s+(?:this\s+)?(?:image|photo|screenshot|screen|page)$/i,
+    capability: 'read_text_on_screen',
+    extractParams: () => ({}),
+  },
+  // "what does the screen say" / "what does it say on screen"
+  {
+    pattern: /^what\s+does\s+(?:the\s+)?(?:screen|it|this)\s+say(?:\?|$)/i,
+    capability: 'read_text_on_screen',
+    extractParams: () => ({}),
+  },
+
+  // TTS — vision rules above are checked first (first-match-wins), so any
+  // screen-reading intents are already routed before this rule runs.
+  // This rule therefore safely handles "say X", "speak X", and "read X" for TTS.
+  {
+    pattern: /^(?:say|speak|read\s+(?:out\s+)?(?:loud)?)\s+(.+)/i,
+    capability: 'tts',
+    extractParams: (m) => ({ text: m[1].trim() }),
+  },
+  {
+    pattern: /^generate\s+(?:a\s+)?(?:an?\s+)?video\s+(?:of\s+)?(.+)/i,
+    capability: 'video_generate',
+    extractParams: (m) => ({ prompt: m[1].trim() }),
+  },
+  {
+    pattern: /^(?:improve\s+yourself|self[\s-]?improve|evolve|mutate|upgrade\s+yourself)(?:\s+(.+))?$/i,
+    capability: 'self_modify',
+    extractParams: (m) => (m[1] ? { goal: m[1].trim() } : {}),
+  },
+  {
+    pattern: /^(?:replicate|self[\s-]?replicate|reproduce|clone\s+yourself|spawn\s+offspring)(?:\s+(.+))?$/i,
+    capability: 'self_replicate',
+    extractParams: (m) => (m[1] ? { goal: m[1].trim() } : {}),
+  },
+
+  // ════════════════════════════════════════════════════
+  // NEWS HEADLINES
+  // ════════════════════════════════════════════════════
+  // "top headlines" / "today's news" / "latest news"
+  {
+    pattern: /^(?:top\s+(?:news\s+)?headlines?|(?:today'?s?|latest|current|breaking)\s+news(?:\s+headlines?)?)$/i,
+    capability: 'news_headlines',
+    extractParams: () => ({}),
+  },
+  // "news about technology" / "latest news on sports" / "headlines about AI"
+  {
+    pattern: /^(?:(?:top\s+)?(?:news|headlines?)\s+(?:about|on|for|regarding)|(?:today'?s?|latest|current)\s+news\s+(?:about|on|for|regarding))\s+(.+)$/i,
+    capability: 'news_headlines',
+    extractParams: (m) => ({ topic: m[1].trim() }),
+  },
+  // "what's in the news" / "what's happening in the news"
+  {
+    pattern: /^what(?:'s|\s+is)\s+(?:happening\s+)?(?:in\s+)?(?:the\s+)?news(?:\s+today)?$/i,
+    capability: 'news_headlines',
+    extractParams: () => ({}),
+  },
+
+  // ════════════════════════════════════════════════════
+  // USER NAME SETTING — deterministic, captured before generic correction
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:call\s+me|my\s+name\s+is|refer\s+to\s+me\s+as)\s+(.+)$/i,
+    capability: 'set_user_name',
+    extractParams: (m) => ({ name: (m[1] || '').trim() }),
+  },
+
+  // ════════════════════════════════════════════════════
+  // USER CORRECTIONS
+  // ════════════════════════════════════════════════════
+  {
+    pattern: /^(?:no,?\s*)?(?:that'?s?\s+(?:wrong|incorrect|not right)|actually|correct(?:ion)?:?\s)/i,
+    capability: 'user_correction',
+    extractParams: (m) => ({ correction: m.input || '' }),
+  },
+  {
+    pattern: /^(?:forget\s+(?:about\s+)?|remove\s+|delete\s+)(.+)$/i,
+    capability: 'user_correction',
+    extractParams: (m) => ({ correction: m.input || '' }),
+  },
+  {
+    pattern: /^(.+)\s+(?:moved|lives?|works?|changed|switched)\s+(?:to|at|in)\s+(.+)$/i,
+    capability: 'user_correction',
+    extractParams: (m) => ({ correction: m.input || '' }),
+  },
+];
+
+const LEADING_POLITE_WRAPPERS: RegExp[] = [
+  /^(?:hey\s+)?ultra[\s,:-]+/i,
+  /^(?:please\s+)+/i,
+  /^(?:can|could|would|will)\s+you\s+(?:please\s+)?/i,
+  /^(?:i\s+need\s+you\s+to|i\s+want\s+you\s+to|i\s+need\s+to|i\s+want\s+to)\s+/i,
+  /^(?:i(?:'d|\s+would)\s+like\s+(?:you\s+to\s+|to\s+)?)/i,
+  /^(?:help\s+me\s+to|help\s+me)\s+/i,
+  /^(?:try\s+to|go\s+ahead\s+and)\s+/i,
+  /^(?:do\s+me\s+a\s+favor\s+and\s+)/i,
+  /^(?:would\s+you\s+(?:mind\s+)?(?:please\s+)?)/i,
+  /^(?:could\s+you\s+(?:please\s+)?)/i,
+];
+
+const TRAILING_FILLER_PATTERNS: RegExp[] = [
+  /\s+(?:for\s+me|please|right\s+now|real\s+quick|really\s+quick)\s*$/i,
+  /\s+(?:a\.?s\.?a\.?p\.?|as\s+soon\s+as\s+possible|immediately|right\s+away|instantly)\s*$/i,
+  /\s+(?:when\s+you\s+can|if\s+you\s+(?:can|could))\s*$/i,
+  /\s+(?:thank\s*s?|thanks?)\s*$/i,
+  /[.!?]+$/,
+];
+
+const SYNONYM_MAP: Array<[RegExp, string]> = [
+  [/\b(?:ping|ring\s+up|give\s+(?:a\s+)?(?:ring|call)|reach\s+out\s+to)\b/i, 'call'],
+  [/\b(?:drop\s+(?:a\s+)?(?:text|message|msg)|shoot\s+(?:a\s+)?(?:text|message|msg))\b/i, 'text'],
+  [/\b(?:fire\s+up|pull\s+up|boot\s+up|spin\s+up|bring\s+up)\b/i, 'open'],
+  [/\b(?:snap\s+(?:a\s+)?(?:pic|photo|picture)|shoot\s+(?:a\s+)?(?:pic|photo))\b/i, 'take a photo'],
+  [/\b(?:jot\s+down|note\s+down|write\s+down)\b/i, 'create a note'],
+];
+
+function normalizeCommandInput(input: string): string {
+  let value = input.trim();
+  if (!value) return value;
+  value = value.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+  value = value.replace(/^ultra[\s,]+/i, '');
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const pattern of LEADING_POLITE_WRAPPERS) {
+      const next = value.replace(pattern, '');
+      if (next !== value) {
+        value = next.trim();
+        changed = true;
+      }
+    }
+  }
+  for (const pattern of TRAILING_FILLER_PATTERNS) {
+    value = value.replace(pattern, '').trim();
+  }
+  value = value.replace(/^please\s+/i, '').trim();
+  for (const [from, to] of SYNONYM_MAP) {
+    value = value.replace(from, to);
+  }
+  value = value.replace(/^open\s+up\s+/i, 'open ');
+  value = value.replace(/^look\s+for\s+/i, 'find ');
+  value = value.replace(/^look\s+up\s+/i, 'look up ');
+  value = value.replace(/\s+/g, ' ').trim();
+  return value;
+}
+
+export class CommandParser {
+  parse(input: string): ActionPlan | null {
+    let trimmed = normalizeCommandInput(input);
+    if (!trimmed) return null;
+    // UltraDevLog imported lazily to avoid adding to top-level (circular risk with rules array)
+    let _log: any = null;
+    try { _log = require('../utils/UltraDevLog').UltraDevLog; } catch { _log = null; }
+
+    const VERB_CORRECTIONS: Record<string, string> = {
+      'opin':'open','ipon':'open','opne':'open','oped':'open','ope':'open','opem':'open','opeen':'open',
+      'lauch':'launch','laucnh':'launch','lunach':'launch',
+      'tect':'text','txet':'text','tex':'text','texxt':'text',
+      'sned':'send','sen':'send','snend':'send',
+      'clal':'call','cal':'call','cll':'call',
+      'turno':'turn','trun':'turn','tun':'turn',
+      'shwo':'show','sho':'show','hsow':'show',
+      'plya':'play','paly':'play','payl':'play','ream':'read',
+      'fnd':'find','fin':'find','fidn':'find',
+      'sett':'set','se':'set',
+      'chekc':'check','chek':'check','hceck':'check',
+      'reaed':'read','rea':'read','raed':'read',
+      'seach':'search','serach':'search','saerch':'search',
+      'alram':'alarm','aalrm':'alarm','alrm':'alarm',
+      'baterry':'battery','batery':'battery','battry':'battery',
+      'notifcation':'notification','notif':'notification',
+      'screenshto':'screenshot','sceenshot':'screenshot',
+      'navigte':'navigate','nvaigate':'navigate',
+      'coppy':'copy','coyp':'copy',
+      'messge':'message','mesage':'message',
+      'calentar':'calendar','calander':'calendar',
+      'remdiner':'reminder','remidner':'reminder',
+    };
+    const words = trimmed.split(/\s+/);
+    if (words[0] && VERB_CORRECTIONS[words[0].toLowerCase()]) {
+      words[0] = VERB_CORRECTIONS[words[0].toLowerCase()];
+      trimmed = words.join(' ');
+    }
+
+    for (const rule of rules) {
+      const match = trimmed.match(rule.pattern);
+      if (!match) continue;
+
+      if (!rule.capability) return null;
+
+      const params = rule.extractParams(match);
+      if (params === null) return null;
+
+      const plan: ActionPlan = {
+        capability: rule.capability,
+        params,
+        reason: 'Matched by deterministic command parser',
+      };
+
+      const validation = validatePlan(plan);
+      if (!validation.valid) {
+        try { _log?.push('SYSTEM', { event: 'command_parse_invalid_plan', capability: rule.capability, validationErrors: validation.errors }); } catch {}
+        return null;
+      }
+
+      try { _log?.push('SYSTEM', { event: 'command_parse_match', capability: plan.capability, inputLen: input.length, matched: true }); } catch {}
+      return plan;
+    }
+
+    try { _log?.push('SYSTEM', { event: 'command_parse_no_match', inputLen: input.length, matched: false }); } catch {}
+    return null;
+  }
+}

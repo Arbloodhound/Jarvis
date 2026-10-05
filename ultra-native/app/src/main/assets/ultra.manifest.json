@@ -1,0 +1,302 @@
+{
+  "tools": [
+    {
+      "name": "read_text_on_screen",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "describe_screen",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "read_screen_deep",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "screenshot",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "app_launch",
+      "effects": [
+        "mutate"
+      ],
+      "requires": [
+        {
+          "kind": "any_arg_traceable",
+          "args": [
+            "target"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "react_navigate",
+      "effects": [
+        "mutate"
+      ],
+      "requires": [
+        {
+          "kind": "any_arg_traceable",
+          "args": [
+            "goal",
+            "appHint"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "open_url",
+      "effects": [
+        "egress"
+      ],
+      "requires": [
+        {
+          "kind": "domain_in_request",
+          "arg": "url"
+        },
+        {
+          "kind": "not_tainted",
+          "arg": "url"
+        }
+      ]
+    },
+    {
+      "name": "web_search",
+      "effects": [
+        "egress"
+      ],
+      "requires": [
+        {
+          "kind": "not_tainted",
+          "arg": "query"
+        },
+        {
+          "kind": "spoof_check"
+        }
+      ]
+    },
+    {
+      "name": "ask_claude",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "device_info",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "system_info",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "settings_open",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "battery_status",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "device_location",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "wifi_toggle",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "bluetooth_toggle",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "do_not_disturb",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "flashlight_toggle",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "volume_set",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "media_play",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "media_next",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "alarm_set",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "note_create",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "sms_send",
+      "effects": [
+        "egress"
+      ],
+      "requires": [
+        {
+          "kind": "recipient_traceable",
+          "arg": "to"
+        },
+        {
+          "kind": "not_tainted",
+          "arg": "message"
+        },
+        {
+          "kind": "spoof_check"
+        }
+      ]
+    },
+    {
+      "name": "sms_read",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "contacts_read",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "clipboard_write",
+      "effects": [
+        "mutate"
+      ],
+      "requires": [
+        {
+          "kind": "not_tainted",
+          "arg": "text"
+        }
+      ]
+    },
+    {
+      "name": "clipboard_read",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "notification_read",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "recipe_run",
+      "effects": [
+        "mutate"
+      ],
+      "requires": [
+        {
+          "kind": "any_arg_traceable",
+          "args": [
+            "name"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "recipe_save",
+      "effects": [
+        "mutate"
+      ],
+      "requires": [
+        {
+          "kind": "any_arg_traceable",
+          "args": [
+            "name"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "recipe_delete",
+      "effects": [
+        "mutate"
+      ],
+      "requires": [
+        {
+          "kind": "any_arg_traceable",
+          "args": [
+            "name"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "recipe_list",
+      "effects": [
+        "read"
+      ]
+    },
+    {
+      "name": "watch_me",
+      "effects": [
+        "read"
+      ],
+      "requires": []
+    },
+    {
+      "name": "stop_watching",
+      "effects": [
+        "mutate"
+      ],
+      "requires": []
+    },
+    {
+      "name": "cancel_watching",
+      "effects": [
+        "mutate"
+      ],
+      "requires": []
+    }
+  ]
+}
