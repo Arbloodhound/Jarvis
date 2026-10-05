@@ -3,6 +3,36 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-05 — on-device brain bundle applied (patches 0001–0009)
+
+**Subsystems:** B (model/engine: `local/`, `cpp/ultra_llm.cpp`) → A (Brain offline path only:
+`Brain.emitLocal`) → D (ambient listening: `listen/`), with H (CMake, Gradle dep) alongside.
+Cloud brain, tool-loop prompts, UI, G2 and prosody were not touched.
+
+**Applied:** all 9 patch files from `ultra-native/ondevice-brain/CLAUDE_CODE_BRIEF.md` with plain
+`git am`, in order, on `f7cbb91`: 13 commits, no conflicts, no edits. The bundle docs (README,
+BUILD_GUIDE, both native build scripts, the LoRA notebook, the brief) are in
+`ultra-native/ondevice-brain/`, one commit. Hosted in `arbloodhound/Jarvis` (upstream history kept).
+
+**Status, per brief row:**
+- Patches apply cleanly on `f7cbb91`: **PROVEN** (this session).
+- The 35 new JVM tests (ThinkBudget, IntentRouter, ThermalPolicy, LocalPrompt, EchoGuard,
+  AmbientThrottle): **PROVEN**, 35/35 pass. Compiled with standalone kotlinc 2.0.21 + JUnit 4.13.2,
+  not Gradle. One test-only shim stood in for `AmbientConfig.WHISPER_THREADS = 2` (the real class
+  needs `android.content.Context`); the shim was not committed.
+- `compileDebugKotlin`, full `testDebugUnitTest` (482), `assembleDebug`, 16 KB alignment of the APK
+  libs, the native builds: **CANNOT VERIFY FROM CURRENT ARTIFACTS** here. The cloud session's network
+  policy blocks `dl.google.com` (Android SDK and Google Maven). The brief reports them proven on the
+  chat side; that is not re-proven.
+- WakeGate Kotlin port: **SOURCE-FIXED BUT RUNTIME-UNPROVEN** (unchanged from the brief).
+- Every on-device row of the brief's Step 4 table (offline answer, 10-in-a-row KV, budget forcing,
+  thermal override, first-start fetch, wake gate, echo guard, meminfo): **CANNOT VERIFY FROM CURRENT
+  ARTIFACTS**. No phone.
+
+**Open / next:** run brief Step 2 on a machine with the SDK (`testDebugUnitTest` should report 482,
+`assembleDebug`, `llvm-readelf` 0x4000 check); then Step 4 on the Pixel; the LoRA training run;
+the G2 connection.
+
 ## 2026-09-20 (day) — the gate asks on top of the app; routes are played by the engine
 
 **Released as 2.4.0** (versionCode 15): signed with the release key (`0d04510d…ca241f`, v2),
