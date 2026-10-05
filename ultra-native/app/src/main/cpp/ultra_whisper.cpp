@@ -6,6 +6,7 @@
 #include <vector>
 #include <cmath>
 #include "whisper.h"
+#include "affinity_scope.h"
 
 struct Ctx {
     whisper_context* w = nullptr;
@@ -36,7 +37,8 @@ Java_com_agent_ultra_listen_WhisperNative_nativeInit(
 extern "C"
 JNIEXPORT jbyteArray JNICALL
 Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
-        JNIEnv* env, jobject, jlong handle, jfloatArray jpcm, jint threads, jstring jPrompt) {
+        JNIEnv* env, jobject, jlong handle, jfloatArray jpcm, jint threads, jstring jPrompt,
+        jintArray jCpus) {
     auto* c = reinterpret_cast<Ctx*>(handle);
     auto empty = [&]{ return env->NewByteArray(0); };
     if (!c || !c->w) return empty();
@@ -63,10 +65,27 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
         p.vad_model_path = c->vadPath.c_str();
     }
 
+    // CPU list (the cores the LLM doesn't use, from CpuTopology): pin this thread for the
+    // transcription. whisper's ggml workers are created per graph and inherit this mask.
+    // The caller is a shared Kotlin dispatcher thread, so the scope unpins it afterwards.
+    // Empty list = unpinned, as before.
+    std::vector<int> cpus;
+    if (jCpus) {
+        jsize nc = env->GetArrayLength(jCpus);
+        std::vector<jint> raw(nc);
+        env->GetIntArrayRegion(jCpus, 0, nc, raw.data());
+        cpus.assign(raw.begin(), raw.end());
+    }
+
     std::string text;
     double logprobSum = 0.0; int tok = 0;
 
-    if (whisper_full(c->w, p, pcm.data(), (int)pcm.size()) == 0) {
+    bool ok;
+    {
+        AffinityScope pin(cpus);
+        ok = whisper_full(c->w, p, pcm.data(), (int)pcm.size()) == 0;
+    }
+    if (ok) {
         int segs = whisper_full_n_segments(c->w);
         for (int i = 0; i < segs; i++) {
             text += whisper_full_get_segment_text(c->w, i);

@@ -37,8 +37,12 @@ object LlmNative {
         fun onToken(piece: String): String?
     }
 
-    /** Returns a handle, or 0 on failure. */
-    external fun nativeLoad(path: String, threads: Int, ctxSize: Int): Long
+    /**
+     * Returns a handle, or 0 on failure. [cpus] non-empty: one persistent pool of [threads]
+     * workers pinned to those cores (see [CpuTopology]), and the generating thread is pinned
+     * to them for the duration of each [nativeGenerate]; empty = unpinned, workers per decode.
+     */
+    external fun nativeLoad(path: String, threads: Int, ctxSize: Int, cpus: IntArray): Long
 
     /**
      * Runs the prompt synchronously on the calling thread, streaming tokens

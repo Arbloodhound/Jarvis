@@ -13,16 +13,17 @@ object WhisperNative {
     /** Returns 0 on failure. vadPath may be empty to disable whisper's VAD. */
     external fun nativeInit(modelPath: String, vadPath: String): Long
 
-    /** UTF-8 bytes of "<meanTokenP>\t<text>"; empty when nothing was said. */
-    external fun nativeTranscribe(handle: Long, pcm: FloatArray, threads: Int, prompt: String): ByteArray
+    /** UTF-8 bytes of "<meanTokenP>\t<text>"; empty when nothing was said. [cpus] non-empty:
+     *  the calling thread (and so whisper's workers) is pinned to them for the call. */
+    external fun nativeTranscribe(handle: Long, pcm: FloatArray, threads: Int, prompt: String, cpus: IntArray): ByteArray
 
     external fun nativeFree(handle: Long)
 
     data class Result(val text: String, val confidence: Float)
 
-    fun transcribe(handle: Long, pcm16: ShortArray, threads: Int, prompt: String): Result? {
+    fun transcribe(handle: Long, pcm16: ShortArray, threads: Int, prompt: String, cpus: IntArray): Result? {
         val f = FloatArray(pcm16.size) { pcm16[it] / 32768f }
-        val raw = String(nativeTranscribe(handle, f, threads, prompt), Charsets.UTF_8)
+        val raw = String(nativeTranscribe(handle, f, threads, prompt, cpus), Charsets.UTF_8)
         val tab = raw.indexOf('\t')
         if (tab < 0) return null
         val text = raw.substring(tab + 1).trim()

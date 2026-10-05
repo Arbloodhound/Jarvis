@@ -185,7 +185,9 @@ class LocalModelEngine(private val context: Context) {
                 return false
             }
             val t0 = System.currentTimeMillis()
-            handle = LlmNative.nativeLoad(modelFile.absolutePath, THREADS, CTX_SIZE)
+            val topo = CpuTopology.current
+            android.util.Log.i("UltraLlm", "cpus llm=${topo.llmCpus} whisper=${topo.whisperCpus} threads=${topo.llmThreads}")
+            handle = LlmNative.nativeLoad(modelFile.absolutePath, topo.llmThreads, CTX_SIZE, topo.llmCpus.toIntArray())
             android.util.Log.i("UltraLlm", "nativeLoad -> handle=$handle in ${System.currentTimeMillis() - t0}ms")
             return handle != 0L
         }
@@ -303,8 +305,10 @@ class LocalModelEngine(private val context: Context) {
         // 4 threads = 10.1 tok/s generation, 16.6 tok/s prompt eval.
         const val THREADS = 4
 
-        /** Full-speed generate thread count; the thermal policy scales down from it. */
-        fun baseThreads(): Int = THREADS
+        /** Full-speed generate thread count; the thermal policy scales down from it. One per
+         *  big core (see [CpuTopology]); [THREADS] when the core layout can't be read. The
+         *  model loads with exactly this many pinned workers; more per call is clamped. */
+        fun baseThreads(): Int = CpuTopology.current.llmThreads
         const val CTX_SIZE = 4096
         const val MIN_AVAIL_BYTES = 500L * 1024 * 1024
         const val FAST_PATH_MAX_BYTES = 2_500L * 1024 * 1024

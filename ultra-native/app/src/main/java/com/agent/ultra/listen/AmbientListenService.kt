@@ -57,6 +57,8 @@ class AmbientListenService : Service() {
     @Volatile private var windowId = 0L
     private var consumedWindowId = 0L            // whisper worker only
     private var lastMemoryAt = 0L          // thermal throttle: last memory-only transcription
+    // The cores the LLM doesn't run on (the little ones on big.LITTLE); empty = unpinned.
+    private val whisperCpus by lazy { com.agent.ultra.local.CpuTopology.current.whisperCpus.toIntArray() }
     private var wakeLock: PowerManager.WakeLock? = null
 
     @Volatile var mutedUntil = 0L          // echo guard: set by the TTS layer while speaking
@@ -234,7 +236,7 @@ class AmbientListenService : Service() {
         )
         if (!plan.transcribe) return                       // hot: memory-only capture dropped
         if (!windowOpen) lastMemoryAt = t
-        val r = WhisperNative.transcribe(whisper, pcm, plan.threads, cfg.wakeName)
+        val r = WhisperNative.transcribe(whisper, pcm, plan.threads, cfg.wakeName, whisperCpus)
             ?: return
         // Text filters: drop low-confidence (hallucinated) and trivially short lines.
         if (r.confidence < AmbientConfig.MIN_TOKEN_P) return
