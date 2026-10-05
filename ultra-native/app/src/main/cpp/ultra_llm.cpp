@@ -173,6 +173,14 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
 
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = ctxSize;
+    // KV cache at q8_0 instead of the f16 default: about half the bytes (Qwen3-30B-A3B
+    // at 4096 ctx: ~384 MB f16 -> ~204 MB q8_0), and on a 16 GB phone holding ~10 GB
+    // of weights it is memory, not compute, that decides whether the model stays
+    // resident. A quantized V cache needs flash attention; llama.cpp would promote
+    // AUTO to ENABLED for it anyway, so ENABLED here only states the requirement.
+    cparams.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
+    cparams.type_k = GGML_TYPE_Q8_0;
+    cparams.type_v = GGML_TYPE_Q8_0;
     // The prompt goes to llama_decode as ONE batch, and llama.cpp aborts the
     // process (GGML_ASSERT) when a batch exceeds n_batch (default 2048). The
     // length guard in generate() allows up to ~ctxSize, so n_batch must match.
@@ -181,6 +189,18 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
     cparams.n_threads_batch = threads;
 
     llama_context *ctx = llama_init_from_model(model, cparams);
+    if (!ctx) {
+        // llama.cpp refuses q8_0 K/V when a head dim is not a multiple of the
+        // 32-wide q8_0 block, or when flash attention cannot be enabled. Fall back
+        // to the old behaviour (f16 K/V, flash attention AUTO) rather than fail.
+        // A null context can also mean an allocation failure; the llama.cpp log
+        // line just above this one says which.
+        LOGE("ctx init failed with q8_0 KV + flash attention (cause in llama.cpp log); retrying with f16 KV");
+        cparams.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
+        cparams.type_k = GGML_TYPE_F16;
+        cparams.type_v = GGML_TYPE_F16;
+        ctx = llama_init_from_model(model, cparams);
+    }
     if (!ctx) { LOGE("ctx init failed"); llama_model_free(model); return 0; }
 
     // CPU list (the fastest cores, from CpuTopology): ONE persistent pool of `threads`
@@ -214,7 +234,8 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
     engine->pool = pool;
     engine->poolThreads = pool ? threads : 0;
     engine->cpus = cpus;
-    LOGI("loaded: ctx=%d threads=%d pinnedCpus=%zu", ctxSize, threads, cpus.size());
+    LOGI("loaded: ctx=%d threads=%d pinnedCpus=%zu kv=%s", ctxSize, threads, cpus.size(),
+         ggml_type_name(cparams.type_k));
     return reinterpret_cast<jlong>(engine);
 }
 
