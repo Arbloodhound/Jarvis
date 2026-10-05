@@ -30,6 +30,103 @@ class ReActNavigator(
             Regex("[a-z0-9-]+\\.(com|org|net|io|gov|edu)", RegexOption.IGNORE_CASE)
 
         /**
+         * The site a goal asks to be taken to, or null when the goal is not ONLY that.
+         *
+         * "Go to google.com in Chrome" is finished when google.com is showing. "Email bob@gmail.com"
+         * and "go to amazon.com and buy socks" are not: the first named an address, not a place,
+         * and the second has work left after arriving. Only a goal that is nothing but going
+         * somewhere may be declared done by seeing the somewhere.
+         */
+        internal fun navigationTarget(goal: String): String? {
+            val m = Regex(
+                """^\s*(?:please\s+)?(?:go\s+to|goto|open|visit|navigate\s+to|load|browse\s+to|head\s+to|take\s+me\s+to|pull\s+up|bring\s+up)\s+""" +
+                    """(?:the\s+)?(?:website\s+|site\s+|page\s+)?(?:https?://)?((?:[a-z0-9-]+\.)*[a-z0-9-]+\.(?:com|org|net|io|gov|edu))(?:/\S*)?""" +
+                    """(?:\s+(?:in|on|using|with)\s+(?:the\s+)?[a-z]+(?:\s+[a-z]+)?)?\s*[.!]?\s*$""",
+                RegexOption.IGNORE_CASE,
+            ).find(goal) ?: return null
+            return m.groupValues[1].lowercase().removePrefix("www.")
+        }
+
+        /** View ids that name an address bar: the one input whose contents ARE where we are. */
+        private val ADDRESS_BAR = Regex("url|address|omnibox|location|toolbar", RegexOption.IGNORE_CASE)
+
+        /**
+         * Is [domain] on the screen as a place, not as words someone typed or an email address?
+         * Text in an input box only counts when the box is an address bar; anything inside an
+         * email address never counts.
+         */
+        internal fun domainShown(flatJson: String, domain: String): Boolean = try {
+            val arr = JSONArray(flatJson)
+            val at = Regex("(?<![@a-z0-9-])" + Regex.escape(domain) + "(?![a-z0-9-])", RegexOption.IGNORE_CASE)
+            (0 until arr.length()).any { i ->
+                val n = arr.getJSONObject(i)
+                if (n.optBoolean("e", false) && !ADDRESS_BAR.containsMatchIn(n.optString("vid"))) return@any false
+                val words = (n.optString("t") + " " + n.optString("d")).replace(Regex("\\S+@\\S+"), " ")
+                at.containsMatchIn(words)
+            }
+        } catch (_: Exception) { false }
+
+        /**
+         * type("text") / type(INDEX, "text") -> (index or null, text). The text runs to the quote
+         * that closes the call, so `type("call me :)")` types all of it.
+         */
+        internal fun parseType(action: String): Pair<Int?, String>? {
+            val m = Regex("""^type\(\s*(\d*)\s*,?\s*(["'])(.*)\2\s*\)\s*$""",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(action.trim()) ?: return null
+            return m.groupValues[1].toIntOrNull() to m.groupValues[3]
+        }
+
+        /**
+         * Two nodes with the same words this close together are one control (a tab's icon and its
+         * text); farther apart they are two (each row's own Delete). 100 px is under a list row's
+         * height and over the gap between a tab's icon and its label.
+         */
+        internal fun sameSpot(ax: Double, ay: Double, bx: Double, by: Double): Boolean =
+            kotlin.math.abs(ax - bx) <= 100.0 && kotlin.math.abs(ay - by) <= 100.0
+
+        /** A view id as words a gate can read: `btn_send` -> "btn send", `sendButton` -> "send button". */
+        internal fun vidAsWords(vid: String): String =
+            vid.replace(Regex("([a-z0-9])([A-Z])"), "$1 $2")
+                .replace(Regex("[^A-Za-z0-9]+"), " ").trim().lowercase()
+
+        /** What pressing Enter after typing could commit. Deletion is not something Enter does. */
+        private val ENTER_COMMITS = setOf(
+            "send", "submit", "post", "publish", "pay", "purchase", "buy", "checkout", "order",
+            "confirm", "transfer", "book", "reserve", "donate",
+        )
+        private val SEARCH_BOX = Regex("search|url|query|omnibox|address|location|find|filter", RegexOption.IGNORE_CASE)
+
+        /**
+         * Would pressing Enter in this box plausibly send or submit something? Returns the word
+         * that says so, or null. Null for a search or address box and for text that is a web
+         * address — Enter there runs a search or opens a page. Otherwise it is the screen's own
+         * evidence: a Send / Post / Submit control beside the box is what Enter usually triggers.
+         *
+         * The box is the one typed into: by flat index when known, else by view id, else the
+         * first editable.
+         */
+        internal fun enterMaySubmit(flatJson: String, boxIndex: Int?, boxVid: String?, text: String): String? {
+            val t = text.trim()
+            if (!t.contains(Regex("\\s")) && (t.contains("://") || DOMAIN.containsMatchIn(t))) return null
+            return try {
+                val arr = JSONArray(flatJson)
+                val nodes = (0 until arr.length()).map { arr.getJSONObject(it) }
+                val box = nodes.firstOrNull { it.optBoolean("e", false) && boxIndex != null && it.optInt("i", -1) == boxIndex }
+                    ?: nodes.firstOrNull { it.optBoolean("e", false) && !boxVid.isNullOrBlank() && it.optString("vid") == boxVid }
+                    ?: nodes.firstOrNull { it.optBoolean("e", false) }
+                if (box != null && SEARCH_BOX.containsMatchIn(box.optString("vid") + " " + box.optString("d"))) return null
+                for (n in nodes) {
+                    if (n.optBoolean("e", false)) continue
+                    if (!(n.optBoolean("c", false) || n.optBoolean("ca", false))) continue
+                    val label = n.optString("t").ifBlank { n.optString("d") }.trim()
+                    val word = ActionGate.commitmentIn(label.ifBlank { vidAsWords(n.optString("vid")) })
+                    if (word != null && word in ENTER_COMMITS) return word
+                }
+                null
+            } catch (_: Exception) { null }
+        }
+
+        /**
          * Internal, not private, so a test can prove the notes actually reach the
          * model. The repeat hint was computed and never interpolated — it existed
          * in the source, was logged as shipped, and was never once sent.
@@ -124,9 +221,12 @@ ACTION:"""
      * showing it, that is the answer - no model turn required.
      */
     private fun goalSatisfied(goal: String, observation: String): Boolean {
-        val target = DOMAIN.find(goal)?.value ?: return false
-        val bare = target.removePrefix("www.")
-        return observation.contains(bare, ignoreCase = true)
+        // Only a goal that is nothing but going somewhere, and only the place shown as a place:
+        // "bob@gmail.com" typed into a To: box once ended a run as "goal visible on screen".
+        // Read from the dump the observation was built from (all of it, inputs marked), not the
+        // observation text, which cannot tell typed words from page words.
+        val target = navigationTarget(goal) ?: return false
+        return domainShown(lastFlat, target)
     }
 
     suspend fun run(goal: String, appHint: String): String {
@@ -136,6 +236,16 @@ ACTION:"""
     }
 
     suspend fun execute(goal: String, appHint: String): NavResult {
+        routeCallTaken = false
+        val result = executeRun(goal, appHint)
+        // This call's share of the route is used up only when the job it covers got done — by
+        // the script or by the model finishing after it. A run that failed is retried with the
+        // same goal, and the retry must start from the same share, not the next one's screen.
+        if (routeCallTaken && result.success) routeCallsPlayed++
+        return result
+    }
+
+    private suspend fun executeRun(goal: String, appHint: String): NavResult {
         if (!controller.serviceRunning) return NavResult(false, controller.serviceProblem, 0)
 
 
@@ -197,7 +307,6 @@ ACTION:"""
                 plan.joinToString(" | ") { "${it.description} => ${it.expect.ifBlank { "(model decides)" }}" })
         }
 
-        var lastTreePrefix = ""
         var stuckCount = 0
         var lastAction = ""
         var repeatedNoOp = 0
@@ -448,18 +557,21 @@ ACTION:"""
             val shown = tappedWords?.let { (if (isLong) "long_press" else "tap") + "(\"$it\")" } ?: action
             history += "step $iter: $shown → $outcome$drift"
 
-            // Stuck detector: same tree twice → scroll down once
-            val prefix = observation.take(80)
-            if (prefix == lastTreePrefix) {
+            // Stuck detector: two actions in a row that changed nothing → scroll down once.
+            // Judged on the screen actually changing, not on its first 80 characters: a toolbar
+            // that never moves made every third step scroll away from progress. The scroll goes
+            // in the history, or the model is shown a different screen with no idea why.
+            if (!changed && refusal == null) {
                 stuckCount++
                 if (stuckCount >= 2) {
-                    controller.scroll("down")
+                    val scrolled = controller.scroll("down")
                     delay(600)
                     stuckCount = 0
                     observation = observe()
+                    history += "step $iter: nothing changed twice, so I scrolled down" +
+                        (if (scrolled) " to show more of the screen" else " (it would not scroll)")
                 }
             } else stuckCount = 0
-            lastTreePrefix = prefix
         }
         // Say how far it got. "Iteration budget exhausted" tells the user only
         // that time ran out, and tells the brain nothing it can act on.
@@ -676,9 +788,11 @@ ACTION:"""
         // Filled in as the walk succeeds, so the next one is a lookup.
         val learned = route.toMutableList()
 
+        // Budgeted per hop, not for the whole route: each hop gets RouteWalker.TRIES_PER_HOP
+        // presses. One run-wide cap of 15 counted even remembered doors, so a long route that
+        // was walked correctly stopped part-way with a message blaming the app.
         var hop = 1
-        var steps = 0
-        while (hop < route.size && steps < MAX_ITER) {
+        while (hop < route.size) {
             val target = route[hop]
             val here = ScreenStructure.parse(controller.screenTree())
             val pkg = controller.activePackage()
@@ -702,10 +816,15 @@ ACTION:"""
             // page. Twelve tries, none of them on the screen in question, and
             // the menu button it needed sat unexamined the whole time.
             val anchor = settledKey()
+            // The app the anchor screen belongs to — where this hop STARTS, not where it leads.
+            // Using the next screen's app relaunched the wrong app on any hop that crosses apps.
+            val anchorPkg = pkg.ifBlank { route[hop - 1].pkg }
+            var tries = 0
+            var whyStopped = ""
             for (attempt in 1..RouteWalker.TRIES_PER_HOP) {
-                if (steps++ >= MAX_ITER) break
-                if (!restoreAnchor(anchor, target.pkg, learned, hop)) {
+                if (!restoreAnchor(anchor, anchorPkg, learned, hop)) {
                     android.util.Log.i("UltraWalk", "hop $hop: lost the screen I was searching from")
+                    whyStopped = "I lost the screen I was searching from"
                     break
                 }
                 // Choose from the same dump the tap indexes into. Choosing from
@@ -734,6 +853,7 @@ ACTION:"""
                 }
                 if (choice == null) break
                 lastFlat = flatNow
+                tries++
                 tried += RouteWalker.keyOf(choice)
                 android.util.Log.i(
                     "UltraWalk",
@@ -784,10 +904,13 @@ ACTION:"""
                 delay(1200)
             }
             if (!moved) {
+                if (whyStopped.isBlank()) whyStopped =
+                    if (tries >= RouteWalker.TRIES_PER_HOP) "the ${RouteWalker.TRIES_PER_HOP} tries for this step ran out"
+                    else "nothing else on this screen is safe to try"
                 return WalkResult(
                     "I got ${hop - 1} of ${route.size - 1} steps into \"$name\" and could " +
-                        "not find the way to the next screen. Either the app has changed, or the " +
-                        "next step is something I will not press on a guess.",
+                        "not find the way to the next screen ($whyStopped; $tries tried). Either the app " +
+                        "has changed, or the next step is something I will not press on a guess.",
                     learned,
                     completed = false,
                 )
@@ -824,8 +947,11 @@ ACTION:"""
         return try {
             val arr = JSONArray(flat)
             if (arr.length() == 0) return "Screen: empty or inaccessible"
-            val screenH = 2400 // conservative; off-screen filter is a heuristic
-            val screenW = 1080.0
+            // The real display, system bars included: a fixed 2400 dropped every node below
+            // y=2400 on a taller phone — bottom tabs and send buttons included.
+            val (screenWpx, screenHpx) = displaySize()
+            val screenH = screenHpx.toDouble()
+            val screenW = screenWpx.toDouble()
             val tappable = mutableListOf<String>()
             val typeable = mutableListOf<String>()
             val scrollable = mutableListOf<String>()
@@ -834,6 +960,9 @@ ACTION:"""
             val listed = mutableSetOf<Int>()
             val boxes = mutableListOf<Int>()
             val vidCount = mutableMapOf<String, Int>()
+            // Where each label listed by its words sits, so a second control with the same words
+            // somewhere else (a row's own Delete, Reply) can still be offered.
+            val labelAt = mutableMapOf<String, MutableList<Pair<Double, Double>>>()
             for (i in 0 until arr.length()) {
                 val n = arr.getJSONObject(i)
                 if (n.optString("t").isNotBlank() || n.optString("d").isNotBlank()) continue
@@ -884,9 +1013,22 @@ ACTION:"""
                     // By its words when it has any, and once: a tab's icon and its text are two
                     // nodes with one label. A number beside a label gets read as a value — asked
                     // to enter 16, the model tapped [16], the Alarm tab (2026-09-20).
-                    clickable && label.isNotBlank() -> if (words.none { it.first == label.lowercase() }) {
-                        words += label.lowercase() to idx
-                        tappable += "  \"$label\"$hint"
+                    clickable && label.isNotBlank() -> {
+                        val x = n.optDouble("x", 0.0)
+                        val seenAt = labelAt[label.lowercase()]
+                        if (seenAt == null) {
+                            words += label.lowercase() to idx
+                            tappable += "  \"$label\"$hint"
+                            labelAt[label.lowercase()] = mutableListOf(x to y)
+                        } else if (seenAt.none { (px, py) -> sameSpot(px, py, x, y) }) {
+                            // Same words, different place: another row's button. Dropping it left
+                            // every Delete/Reply but the first unreachable; it gets an [index].
+                            val side = if (x > screenW * 0.66) "right" else if (x < screenW * 0.33) "left" else "middle"
+                            val band = if (y > screenH * 0.75) "bottom" else if (y < screenH * 0.25) "top" else "middle"
+                            tappable += "  [$idx] $label (another \"$label\", $band $side)$hint"
+                            listed += idx
+                            seenAt += x to y
+                        }
                     }
                     // Its developer name works as its words when it is the only one so named.
                     clickable && vidWords != null && vidCount[vidWords] == 1 && words.none { it.first == vidWords } -> {
@@ -919,6 +1061,26 @@ ACTION:"""
         }
     }
 
+    /**
+     * The display's full size in pixels, system bars included (the a11y bounds are screen
+     * coordinates). Falls back to the old fixed 1080x2400 only when it cannot be read.
+     */
+    private fun displaySize(): Pair<Int, Int> = try {
+        val ctx = com.agent.ultra.UltraApplication.instance
+        val dm = ctx.getSystemService(android.hardware.display.DisplayManager::class.java)
+        val display = dm.getDisplay(android.view.Display.DEFAULT_DISPLAY)
+        val m = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION")
+        display.getRealMetrics(m)
+        if (m.widthPixels > 0 && m.heightPixels > 0) m.widthPixels to m.heightPixels
+        else throw IllegalStateException("no metrics")
+    } catch (_: Throwable) {
+        try {
+            val m = android.content.res.Resources.getSystem().displayMetrics
+            if (m.widthPixels > 0 && m.heightPixels > 0) m.widthPixels to m.heightPixels else 1080 to 2400
+        } catch (_: Throwable) { 1080 to 2400 }
+    }
+
     /** The one action in the reply. See ModelOutput for what changed and why. */
     private fun extractAction(text: String): String? = ModelOutput.action(text)
 
@@ -935,7 +1097,7 @@ ACTION:"""
             // by its words before anything is touched.
             val index = m.groupValues[1].toInt()
             val label = labelForIndex(index).orEmpty()
-            if (!approveTap(label, "long_press($index)")) return false
+            if (!approveTap(label.ifBlank { vidAsWords(vidForIndex(index)) }, "long_press($index)")) return false
             return when (controller.longClickByIndex(index, label)) {
                 "ok" -> true
                 "moved" -> { lastRefusal = "the screen changed before that could be pressed — look at it again"; false }
@@ -952,13 +1114,12 @@ ACTION:"""
             if (!approveTap(labelAtPoint(x, y), "tap($x,$y)")) return false
             return controller.tap(x, y)
         }
-        Regex("type\\(\\s*(\\d*)\\s*,?\\s*[\"']([^)]+)[\"']\\s*\\)", RegexOption.IGNORE_CASE).find(a)?.let { m ->
+        parseType(a)?.let { (said, text) ->
             // An index that is not one of the listed text boxes is a guess, not a choice: given a
             // route that said type("name"), llama wrote type(1, "name"), [1] was not a box, and the
             // same refused keystroke ate the rest of the run (AndroidWorld MarkorCreateNote,
             // 2026-09-20). A guess falls back to what no index means: the focused or first box.
-            val idx = m.groupValues[1].toIntOrNull()?.takeIf { it in typeableIndexes }
-            val text = m.groupValues[2]
+            val idx = said?.takeIf { it in typeableIndexes }
             // Empty selector → the service types into the FOCUSED editable field.
             // If nothing is focused (the proven Chrome failure: TEXT result=false
             // forever), tap the first editable node to focus it first.
@@ -969,6 +1130,9 @@ ACTION:"""
             // chosen by index is tapped to focus it first — focusing a text box commits nothing,
             // and what gets typed is still checked below before a key is pressed.
             val selector = ""
+            // Which box was focused, so the read-back and the Enter check look at THAT box and
+            // not at whichever editable on the screen happens to hold text.
+            var focusedVid: String? = null
             if (idx != null) {
                 controller.clickByIndex(idx, labelForIndex(idx).orEmpty())
                 delay(400)
@@ -977,7 +1141,10 @@ ACTION:"""
             // screen", which is a guess that is wrong on any page with more
             // than one box. When this screen has been here before, the app's
             // own name for its input is known and is used instead.
-            else if (!focusKnownInput()) focusFirstEditable()
+            else {
+                focusedVid = focusKnownInput()
+                if (focusedVid == null) focusFirstEditable()
+            }
             // Before the keystroke, not after. Typing it and then noticing is
             // not a check, it is a log entry about a leak that already happened.
             controller.refuseTyping(text)?.let { why ->
@@ -997,12 +1164,23 @@ ACTION:"""
             // wondering why the site would not open. Pressing enter on text
             // the field did not accept is how an agent searches for, or sends,
             // something nobody asked for.
-            val landed = textInFocusedField(idx)
+            val landed = textInFocusedField(idx, focusedVid)
             if (landed != null && !landed.contains(text, ignoreCase = true)) {
                 lastRefusal = "the field holds \"$landed\", not \"$text\" — " +
                     "it did not accept that text, so try another way in"
                 android.util.Log.i("UltraNav", "type mismatch: wanted \"$text\", field has \"$landed\"")
                 return false
+            }
+            // Enter is the keystroke that sends the message or submits the form, and it went out
+            // with no gate at all while the same thing as a tapped Send button would have asked.
+            // Search and address boxes, and web addresses, go straight through: Enter there runs a
+            // search or opens a page.
+            enterMaySubmit(controller.screenFlat(), idx, focusedVid, text)?.let { word ->
+                val shown = if (text.length > 40) text.take(40) + "…" else text
+                if (!approveTap("Enter, which may $word \"$shown\"", "type_enter", word)) {
+                    if (lastRefusal == null) lastRefusal = "typed \"$shown\" but did not press Enter: it may $word it and that was not approved"
+                    return false
+                }
             }
             controller.imeEnter()
             return true
@@ -1063,7 +1241,7 @@ ACTION:"""
         val (route, values) = routePlay ?: return null
         val navCalls = route.calls.filter { it.tool == "react_navigate" }
         val call = navCalls.getOrNull(routeCallsPlayed) ?: return null
-        routeCallsPlayed++
+        routeCallTaken = true
         val script = RoutePlayer.script(call, values)
         if (script.actions.isEmpty()) return null
         var done = 0
@@ -1107,7 +1285,7 @@ ACTION:"""
                 return Played(false, done, "A route was followed for $done step(s) and the phone is now outside the app. Carry on from here.")
             }
         }
-        val more = routeCallsPlayed < navCalls.size
+        val more = routeCallsPlayed + 1 < navCalls.size
         return if (script.complete)
             Played(true, done, "followed a route that has passed a check: $done steps" + if (more) " (the route has another part)" else "")
         else Played(false, done, "A route that has passed a check was followed for $done step(s); the rest of it could not be played. Finish the job from here.")
@@ -1146,8 +1324,15 @@ ACTION:"""
 
     private suspend fun tapNodeIndex(index: Int): Boolean {
         val label = labelForIndex(index).orEmpty()
-        if (!approveTap(label, "tap_index($index)")) return false
-        return when (val outcome = controller.clickByIndex(index, label)) {
+        // A button with no words is judged by the name the model was shown for it ("send
+        // button"): judged by "" it was never a commitment. The service compares only text and
+        // description, so the id cannot be the expected label; instead a uniquely named control
+        // is pressed by its id, which the screen moving cannot redirect.
+        val vid = if (label.isBlank()) vidForIndex(index) else ""
+        if (!approveTap(label.ifBlank { vidAsWords(vid) }, "tap_index($index)")) return false
+        val outcome = if (vid.isNotBlank() && vidIsUnique(vid)) controller.clickByViewId(vid, index, "")
+            else controller.clickByIndex(index, label)
+        return when (outcome) {
             "ok" -> true
             "moved" -> {
                 lastRefusal = "the screen changed before that could be tapped — look at it again"
@@ -1172,17 +1357,18 @@ ACTION:"""
      * ".txt" a failure when it had worked, and the step was then missing from the route built from
      * that run (AndroidWorld MarkorCreateNote, 2026-09-20).
      */
-    private suspend fun textInFocusedField(index: Int? = null): String? = try {
+    private suspend fun textInFocusedField(index: Int? = null, vid: String? = null): String? = try {
         val arr = JSONArray(controller.screenFlat())
-        var found: String? = null
-        for (i in 0 until arr.length()) {
-            val n = arr.getJSONObject(i)
-            if (!n.optBoolean("e", false)) continue
-            if (index != null && n.optInt("i", i) != index) continue
-            val t = n.optString("t")
-            if (t.isNotBlank()) { found = t; break }
+        // The box that was focused: by index, else by the known control's id, else the first
+        // editable — the one focusFirstEditable() tapped. Not "the first box holding any text",
+        // which checked some other, pre-filled box and passed or failed on its contents.
+        val boxes = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { it.optBoolean("e", false) }
+        val box = when {
+            index != null -> boxes.firstOrNull { it.optInt("i", -1) == index }
+            !vid.isNullOrBlank() -> boxes.firstOrNull { it.optString("vid") == vid }
+            else -> boxes.firstOrNull()
         }
-        found
+        box?.optString("t")?.takeIf { it.isNotBlank() }
     } catch (_: Exception) { null }
 
     /** Why the last action was refused, so the model is told rather than left
@@ -1221,6 +1407,8 @@ ACTION:"""
     var routePlay: Pair<RoutePlayer.Route, Map<String, String>>? = null
         set(value) { field = value; routeCallsPlayed = 0 }
     private var routeCallsPlayed = 0
+    /** This execute() played (or tried to play) the share of the route at routeCallsPlayed. */
+    private var routeCallTaken = false
 
     /**
      * Set when the screen contradicted the request, and the run must end.
@@ -1252,8 +1440,8 @@ ACTION:"""
      * Stop and ask before a tap that commits something. Everything else runs
      * untouched — a gate that fires on every tap gets waved through.
      */
-    private suspend fun approveTap(label: String, action: String): Boolean {
-        val reason = ActionGate.commitmentIn(label) ?: return true
+    private suspend fun approveTap(label: String, action: String, knownReason: String? = null): Boolean {
+        val reason = knownReason ?: ActionGate.commitmentIn(label) ?: return true
         val pkg = controller.activePackage()
 
         // Before asking, check whether this is even the right thing to ask
@@ -1325,10 +1513,10 @@ ACTION:"""
      * cases the caller falls back to looking for an editable field, which is
      * what happened before any of this existed.
      */
-    private suspend fun focusKnownInput(): Boolean {
+    private suspend fun focusKnownInput(): String? {
         val target = ScreenControls.find(known, "search", ScreenControls.Role.INPUT)
             ?: known.firstOrNull { it.role == ScreenControls.Role.INPUT }
-            ?: return false
+            ?: return null
         return try {
             val arr = JSONArray(controller.screenFlat())
             for (i in 0 until arr.length()) {
@@ -1336,14 +1524,14 @@ ACTION:"""
                 if (n.optString("vid") != target.vid) continue
                 val x = n.optInt("x", -1)
                 val y = n.optInt("y", -1)
-                if (x < 0 || y < 0) return false
+                if (x < 0 || y < 0) return null
                 controller.tap(x, y)
                 delay(500)
                 android.util.Log.i("UltraNav", "typed into known control #${target.vid}")
-                return true
+                return target.vid
             }
-            false
-        } catch (_: Exception) { false }
+            null
+        } catch (_: Exception) { null }
     }
 
     /**
@@ -1468,6 +1656,19 @@ ACTION:"""
      * which is exactly the value that cannot be used to detect that the screen
      * moved.
      */
+    /** The view id of [index] in the dump the model was shown, or "". */
+    private fun vidForIndex(index: Int): String = try {
+        val arr = JSONArray(lastFlat.ifBlank { "[]" })
+        (0 until arr.length()).map { arr.getJSONObject(it) }
+            .firstOrNull { it.optInt("i", -1) == index }?.optString("vid").orEmpty()
+    } catch (_: Exception) { "" }
+
+    /** Does exactly one node in that dump carry this id? Only then does the id name one control. */
+    private fun vidIsUnique(vid: String): Boolean = try {
+        val arr = JSONArray(lastFlat.ifBlank { "[]" })
+        (0 until arr.length()).count { arr.getJSONObject(it).optString("vid") == vid } == 1
+    } catch (_: Exception) { false }
+
     private fun labelForIndex(index: Int): String? {
         return try {
             val arr = JSONArray(lastFlat.ifBlank { "[]" })

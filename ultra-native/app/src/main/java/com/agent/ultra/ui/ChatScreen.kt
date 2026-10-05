@@ -49,21 +49,34 @@ fun ChatScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // Rebuilt when the provider config changes (settings save bumps the key).
-    val brain = remember(configVersion) { Brain(context.applicationContext, localEngine) }
+    val thinking by ChatStore.thinking
+    // Process-level brain (see ChatStore.chatBrain): survives leaving this
+    // screen mid-run, and is rebuilt for a new provider config (settings save
+    // bumps the key) only once no run or confirmation is in flight. Speak-back
+    // (off by default, switched on in Settings) is hooked up there.
+    val brain = remember(configVersion, thinking) {
+        ChatStore.chatBrain(context, localEngine, configVersion)
+    }
 
-    // Speak-back: off by default, switched on in Settings. The engine is built
-    // once and torn down with the screen.
-    val speaker = remember { Speaker(context.applicationContext) }
-    DisposableEffect(Unit) { onDispose { speaker.shutdown() } }
-    LaunchedEffect(brain) {
-        brain.onAnswer = { text ->
-            if (UltraPrefs.speakAnswers(context)) speaker.speak(text)
+    /** Every agent run from this screen: one at a time, marked as thinking,
+     * owned by the app scope, and a fault becomes a message instead of a crash. */
+    fun launchRun(block: suspend () -> Unit) {
+        if (ChatStore.thinking.value) return
+        ChatStore.thinking.value = true
+        ChatStore.agentScope.launch {
+            try {
+                block()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ChatStore.add(ChatMessage(false, "Error: brain fault — ${e.message}"))
+            } finally {
+                ChatStore.thinking.value = false
+            }
         }
     }
 
     var input by remember { mutableStateOf("") }
-    val thinking by ChatStore.thinking
     val listState = rememberLazyListState()
     var a11yRunning by remember { mutableStateOf(AgentAccessibilityService.isRunning()) }
     // Enabled in Android's settings, yet not bound. The switch looks on and
@@ -99,7 +112,9 @@ fun ChatScreen(
         drawerContent = {
             ModalDrawerSheet {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    TextButton(onClick = {
+                    // A run writes into whichever conversation is open, so the
+                    // open one stays put until it finishes.
+                    TextButton(enabled = !thinking, onClick = {
                         scope.launch {
                             ChatStore.newChat()
                             drawerState.close()
@@ -111,7 +126,7 @@ fun ChatScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
+                                    .clickable(enabled = !thinking) {
                                         scope.launch {
                                             ChatStore.openConversation(conv.id)
                                             drawerState.close()
@@ -126,7 +141,7 @@ fun ChatScreen(
                                     maxLines = 1,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
-                                TextButton(onClick = {
+                                TextButton(enabled = !thinking, onClick = {
                                     scope.launch { ChatStore.deleteConversation(conv.id) }
                                 }) { Text("✕", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) }
                             }
@@ -205,21 +220,21 @@ fun ChatScreen(
                     maxLines = 1,
                 )
             }
-            TextButton(onClick = {
+            TextButton(enabled = !thinking, onClick = {
                 torchOn = !torchOn
                 val cmd = if (torchOn) "turn on the flashlight" else "turn off the flashlight"
                 ChatStore.add(ChatMessage(true, cmd))
-                ChatStore.agentScope.launch { brain.run(cmd) }
+                launchRun { brain.run(cmd) }
             }) { Text(if (torchOn) "🔦 on" else "🔦") }
-            TextButton(onClick = {
+            TextButton(enabled = !thinking, onClick = {
                 val cmd = "take a screenshot"
                 ChatStore.add(ChatMessage(true, cmd))
-                ChatStore.agentScope.launch { brain.run(cmd) }
+                launchRun { brain.run(cmd) }
             }) { Text("📸") }
-            TextButton(onClick = {
+            TextButton(enabled = !thinking, onClick = {
                 val cmd = "what is my location"
                 ChatStore.add(ChatMessage(true, cmd))
-                ChatStore.agentScope.launch { brain.run(cmd) }
+                launchRun { brain.run(cmd) }
             }) { Text("📍") }
             // Hands-free session. Reachable here too, so it works before the
             // user has made Ultra their assistant app.
@@ -340,10 +355,10 @@ fun ChatScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.padding(top = 10.dp),
                     ) {
-                        Button(onClick = { scope.launch { brain.resolvePending(true) } }) {
+                        Button(enabled = !thinking, onClick = { launchRun { brain.resolvePending(true) } }) {
                             Text("Confirm")
                         }
-                        TextButton(onClick = { scope.launch { brain.resolvePending(false) } }) {
+                        TextButton(enabled = !thinking, onClick = { launchRun { brain.resolvePending(false) } }) {
                             Text("Cancel")
                         }
                     }
@@ -368,12 +383,30 @@ fun ChatScreen(
             // Voice input — on-device speech recognition fills the box
             var listening by remember { mutableStateOf(false) }
             val speechHelper = remember {
-                VoiceInput(context) { spoken -> input = (input + " " + spoken).trim() }
+                VoiceInput(
+                    context,
+                    onError = { msg ->
+                        listening = false
+                        android.widget.Toast.makeText(context, "Voice: $msg", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                ) { spoken ->
+                    listening = false
+                    input = (input + " " + spoken).trim()
+                }
             }
+            DisposableEffect(speechHelper) { onDispose { speechHelper.stop() } }
+            val askMic = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+            ) { granted -> if (granted) listening = speechHelper.start() }
             TextButton(onClick = {
                 if (listening) {
                     speechHelper.stop()
                     listening = false
+                } else if (androidx.core.content.ContextCompat.checkSelfPermission(
+                        context, android.Manifest.permission.RECORD_AUDIO
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    askMic.launch(android.Manifest.permission.RECORD_AUDIO)
                 } else {
                     listening = speechHelper.start()
                 }
@@ -387,9 +420,7 @@ fun ChatScreen(
                     if (text.isEmpty()) return@Button
                     ChatStore.add(ChatMessage(fromUser = true, text = text))
                     input = ""
-                    ChatStore.thinking.value = true
-                    ChatStore.agentScope.launch {
-                        try {
+                    launchRun {
                             if (text.startsWith("/local ")) {
                                 // Dev path: raw on-device generation
                                 val prompt = text.removePrefix("/local ").trim()
@@ -403,13 +434,6 @@ fun ChatScreen(
                             } else {
                                 brain.run(text)
                             }
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            ChatStore.add(ChatMessage(false, "Error: brain fault — ${e.message}"))
-                        } finally {
-                            ChatStore.thinking.value = false
-                        }
                     }
                 },
             ) {

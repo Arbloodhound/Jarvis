@@ -248,7 +248,7 @@ class Tools(
                     else "Error: DND toggle failed (needs notification policy access)"
                 }
                 "volume_set" -> {
-                    val pct = params.optInt("percent", 50)
+                    val pct = params.optInt("percent", 50).coerceIn(0, 100)
                     if (controller.setVolume(android.media.AudioManager.STREAM_MUSIC, pct)) "Media volume set to $pct%"
                     else "Error: volume set failed"
                 }
@@ -289,7 +289,7 @@ class Tools(
                 "alarm_set" -> {
                     val hour = params.optInt("hour", -1)
                     val minute = params.optInt("minute", 0)
-                    if (hour !in 0..23) "Error: alarm_set needs hour (0-23) and optional minute"
+                    if (hour !in 0..23 || minute !in 0..59) "Error: alarm_set needs hour (0-23) and optional minute (0-59)"
                     else if (controller.setAlarm(hour, minute, params.optString("label", "Jarvis alarm"))) "Alarm set for %02d:%02d".format(hour, minute)
                     else "Error: alarm failed"
                 }
@@ -391,8 +391,9 @@ class Tools(
     ): String {
         val store = recipes ?: return "Error: routines are unavailable"
         return try {
-            store.saveJourney(name, ScreenJourney.toJson(route), Demonstration.toJson(steps))
-            "Saved as \"$name\" — " + ScreenJourney.describe(route) + ".\n\n" +
+            val saved = store.saveJourney(name, ScreenJourney.toJson(route), Demonstration.toJson(steps))
+            if (saved.startsWith("Error:")) return saved
+            "Saved as \"$saved\" — " + ScreenJourney.describe(route) + ".\n\n" +
                 "I remember the screens you passed through, not what was on them, and " +
                 "nothing you typed."
         } catch (e: Exception) {

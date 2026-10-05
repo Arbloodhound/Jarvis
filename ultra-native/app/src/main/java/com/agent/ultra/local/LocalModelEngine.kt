@@ -15,6 +15,11 @@ class LocalModelEngine(private val context: Context) {
 
     private val prefs = context.getSharedPreferences("ultra_local_model", Context.MODE_PRIVATE)
     private val downloadInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Progress 0..1 of the download in flight, or null when none is running.
+     * Lives on the engine, not the screen: a download outlives the Settings
+     * screen that started it, and the screen has to find it again on return. */
+    val downloadProgress = kotlinx.coroutines.flow.MutableStateFlow<Float?>(null)
     private var handle: Long = 0
     private val lock = Any()
 
@@ -47,7 +52,9 @@ class LocalModelEngine(private val context: Context) {
      * and for an explicit /local.
      */
     val suitableForFastPath: Boolean
-        get() = modelFileSizeBytes in 1..FAST_PATH_MAX_BYTES
+        // Thinking models are excluded: the fast path's JSON prompt has no think
+        // budget, and a <think> trace in front of the tool call breaks the parse.
+        get() = !isThinkingModel && modelFileSizeBytes in 1..FAST_PATH_MAX_BYTES
     val loaded: Boolean get() = handle != 0L
     val modelFileSizeBytes: Long get() = if (modelFile.exists()) modelFile.length() else 0L
     /** Qwen3 Thinking MoE presets: ChatML prompts, template-opened <think> trace. */
@@ -93,20 +100,28 @@ class LocalModelEngine(private val context: Context) {
             android.util.Log.w("UltraLlm", "download already running — ignoring second request")
             return@withContext Result.failure(IllegalStateException("a download is already running"))
         }
-        android.util.Log.i("UltraLlm", "download start: $modelUrl -> ${modelFile.name}")
+        // Snapshot the target now. modelFile follows the current selection, and
+        // choosing another model while this runs must not land these bytes
+        // under that model's name.
+        val target = modelFile
+        val url = modelUrl
+        // Per-model partial file: a leftover from one model can never be
+        // renamed into another model's name.
+        val tmp = File(target.parentFile, target.name + ".part")
+        downloadProgress.value = 0f
+        android.util.Log.i("UltraLlm", "download start: $url -> ${target.name}")
         try {
             val client = okhttp3.OkHttpClient.Builder()
                 .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
                 .followRedirects(true)
                 .build()
-            val req = okhttp3.Request.Builder().url(modelUrl).build()
+            val req = okhttp3.Request.Builder().url(url).build()
             client.newCall(req).execute().use { resp ->
                 android.util.Log.i("UltraLlm", "download HTTP ${resp.code}, length=${resp.body?.contentLength()}")
                 if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
                 val total = resp.body?.contentLength() ?: -1
-                val tmp = File(modelFile.parentFile, "model.part")
-                modelFile.parentFile?.mkdirs()
+                target.parentFile?.mkdirs()
                 var written = 0L
                 var lastReport = 0L
                 resp.body!!.byteStream().use { input ->
@@ -120,6 +135,7 @@ class LocalModelEngine(private val context: Context) {
                             val now = System.currentTimeMillis()
                             if (total > 0 && now - lastReport > 1000) {
                                 lastReport = now
+                                downloadProgress.value = written.toFloat() / total
                                 onProgress(written.toFloat() / total)
                             }
                         }
@@ -129,14 +145,19 @@ class LocalModelEngine(private val context: Context) {
                     tmp.delete()
                     return@withContext Result.failure(Exception("short read: $written/$total"))
                 }
-                tmp.renameTo(modelFile)
+                if (!tmp.renameTo(target)) {
+                    tmp.delete()
+                    return@withContext Result.failure(Exception("could not move the download into place"))
+                }
                 android.util.Log.i("UltraLlm", "download complete: ${written / 1_048_576} MB")
                 Result.success(written)
             }
         } catch (e: Exception) {
             android.util.Log.w("UltraLlm", "download failed", e)
+            tmp.delete()
             Result.failure(e)
         } finally {
+            downloadProgress.value = null
             downloadInFlight.set(false)
         }
     }
@@ -329,6 +350,7 @@ class LocalModelEngine(private val context: Context) {
                 "https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/resolve/main/Qwen3-30B-A3B-Thinking-2507-UD-IQ3_XXS.gguf",
                 "qwen3moe-thinking-iq3xxs.gguf", 12900,
                 "DO NOT run on the phone — ~12.9GB weights put total demand ~2GB over 16GB. Listed for desktop reference / quality ceiling only.",
+                desktopOnly = true,
             ),
             // URL not checked from the build machine (Hugging Face is blocked there): a failed
             // download on the phone means the file moved, not that the app is broken.
@@ -417,6 +439,7 @@ class LocalModelEngine(private val context: Context) {
          * flagship properly, honest about where it starts to hurt.
          */
         fun fitFor(model: ModelChoice, totalRamBytes: Long): Fit {
+            if (model.desktopOnly) return Fit.TOO_BIG
             if (totalRamBytes <= 0 || model.approxMb <= 0) return Fit.COMFORTABLE
             val fraction = (model.approxMb * 1_048_576.0) / totalRamBytes
             // MoE weights (filename marks them) are mmap'd and only ~3B active, so they
@@ -449,6 +472,8 @@ data class ModelChoice(
     val fileName: String,
     val approxMb: Int,
     val note: String,
+    /** Listed for reference only; never offered as runnable on a phone. */
+    val desktopOnly: Boolean = false,
 )
 
 /** How a model sits on a given phone. */

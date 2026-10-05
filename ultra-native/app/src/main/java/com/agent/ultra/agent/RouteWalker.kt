@@ -149,6 +149,7 @@ object RouteWalker {
         flatJson: String,
         alreadyTried: Set<String> = emptySet(),
         goal: String = "",
+        limit: Int = MAX_CANDIDATES,
     ): List<Candidate> {
         val out = mutableListOf<Candidate>()
         try {
@@ -173,7 +174,7 @@ object RouteWalker {
                 out += Candidate(idx, vid, label.take(40))
             }
         } catch (_: Exception) { return emptyList() }
-        return rank(out, goal)
+        return rank(out, goal, limit)
     }
 
     /**
@@ -183,13 +184,13 @@ object RouteWalker {
      * anonymous clickable View is as likely to be a layout wrapper. And among
      * those, anything a back press can undo comes before anything that cannot.
      */
-    private fun rank(out: List<Candidate>, goal: String = ""): List<Candidate> {
+    private fun rank(out: List<Candidate>, goal: String = "", limit: Int = MAX_CANDIDATES): List<Candidate> {
         val wanted = meaningfulWords(goal)
         return out.sortedWith(
             compareByDescending<Candidate> { overlap(it, wanted) }
                 .thenByDescending { it.vid.isNotBlank() }
                 .thenBy { hardToUndo(it.label, it.vid) },
-        ).take(MAX_CANDIDATES)
+        ).take(limit)
     }
 
     /**
@@ -243,7 +244,9 @@ object RouteWalker {
         alreadyTried: Set<String> = emptySet(),
     ): Candidate? {
         if (via.isBlank() || "#$via" in alreadyTried) return null
-        return candidatesFromFlat(flatJson, alreadyTried).firstOrNull { it.vid == via }
+        // Searched untruncated: the remembered door is looked up by name, so it must not be lost
+        // because a busy screen ranked twelve other controls ahead of it.
+        return candidatesFromFlat(flatJson, alreadyTried, limit = Int.MAX_VALUE).firstOrNull { it.vid == via }
     }
 
     /** Ranking that also knows what the user called the thing they taught. */

@@ -50,6 +50,9 @@ class Speaker(context: Context) {
                 } else {
                     failed = true
                     Log.w(TAG, "engine init failed status=$status")
+                    // Anything held for the engine will never be spoken; release
+                    // whoever is waiting on it (the voice session sits on 🔊).
+                    if (pending != null) { pending = null; onDone?.invoke() }
                 }
             }
         } catch (e: Exception) {

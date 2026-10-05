@@ -2,6 +2,7 @@ package com.agent.ultra
 
 import com.agent.ultra.agent.ModelOutput
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -139,10 +140,26 @@ class ModelOutputTest {
 
     // llama-3.3-70b stopped mid-call (AndroidWorld MarkorCreateNote, 2026-09-20).
     @Test
-    fun aCallCutShortIsClosedAndStillACall() {
-        val got = ModelOutput.toolCall("{\"tool\":\"react_navigate\",\"params\":{\"goal\":\"Create a note with the text 'Cleanliness is next to godliness.'")
-        assertEquals("react_navigate", got?.first)
-        assertTrue(got!!.second.optString("goal").contains("Cleanliness"))
+    // Closing the open string ran a value the model never finished (a half-written text message),
+    // so a call cut inside a value is not run: it is flagged for the model to send again.
+    fun aCallCutInsideAValueIsNotRunButFlaggedForResend() {
+        val cut = "{\"tool\":\"react_navigate\",\"params\":{\"goal\":\"Create a note with the text 'Cleanliness is next to godliness.'"
+        assertNull(ModelOutput.toolCall(cut))
+        assertTrue(ModelOutput.cutShortCall(cut))
+        val sms = "{\"tool\":\"sms_send\",\"params\":{\"to\":\"555\",\"message\":\"I'll be there at"
+        assertNull(ModelOutput.toolCall(sms))
+        assertTrue(ModelOutput.cutShortCall(sms))
         assertNull(ModelOutput.toolCall("The tool {\"tool\" is what I would call"))
+        assertFalse(ModelOutput.cutShortCall("The tool {\"tool\" is what I would call"))
+    }
+
+    // Only the closing brackets were missing: every value is whole, so closing them is safe.
+    @Test
+    fun aCallMissingOnlyItsClosingBracketsIsStillACall() {
+        val got = ModelOutput.toolCall("{\"tool\":\"react_navigate\",\"params\":{\"goal\":\"Create a note\"")
+        assertEquals("react_navigate", got?.first)
+        assertEquals("Create a note", got?.second?.optString("goal"))
+        assertFalse(ModelOutput.cutShortCall("{\"tool\":\"react_navigate\",\"params\":{\"goal\":\"Create a note\""))
+        assertFalse(ModelOutput.cutShortCall("{\"tool\":\"app_launch\",\"params\":{\"target\":\"clock\"}}"))
     }
 }

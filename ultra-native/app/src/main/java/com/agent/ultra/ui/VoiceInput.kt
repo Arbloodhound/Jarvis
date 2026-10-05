@@ -40,11 +40,15 @@ class VoiceInput(
                     val texts = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val best = texts?.firstOrNull()?.trim().orEmpty()
                     Log.i(TAG, "HEARD: \"$best\"")
+                    // One-shot: release the recognizer before handing on, so a
+                    // callback that starts listening again gets a fresh one.
+                    releaseIf(sr)
                     if (best.isNotEmpty()) onResult(best)
                     else onError?.invoke("I didn't catch that")
                 }
                 override fun onError(error: Int) {
                     Log.w(TAG, "error $error (${errorName(error)})")
+                    releaseIf(sr)
                     onError?.invoke(errorName(error))
                 }
                 override fun onReadyForSpeech(params: Bundle?) {
@@ -73,6 +77,12 @@ class VoiceInput(
     }
 
     fun stop() = stopInternal()
+
+    private fun releaseIf(sr: SpeechRecognizer) {
+        if (recognizer !== sr) return
+        try { sr.destroy() } catch (_: Exception) {}
+        recognizer = null
+    }
 
     private fun stopInternal() {
         try {

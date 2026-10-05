@@ -30,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import com.agent.ultra.agent.Brain
 import com.agent.ultra.local.LocalModelEngine
 import com.agent.ultra.ui.ChatMessage
@@ -102,14 +101,47 @@ class VoiceActivity : ComponentActivity() {
                                 }
                             }
                         }
-                    }.also { b ->
-                        // Ambient "Ultra, ..." commands run on this same brain instance.
-                        val handler: (String) -> Unit = { request ->
-                            lifecycleScope.launch { try { b.run(request) } catch (_: Exception) {} }
-                        }
-                        ambientHandler = handler
-                        com.agent.ultra.listen.AmbientBridge.onCommand = handler
                     }
+                }
+                /** True while a run is in flight; "Speak again" waits for it. */
+                var running by remember { mutableStateOf(false) }
+
+                fun say(msg: String) {
+                    reply = msg
+                    state = "speaking"
+                    speaker.speak(msg) { state = "done" }
+                }
+
+                /**
+                 * Every brain call from this session. Never while the phone is
+                 * locked: the session shows over the lock screen, and the agent
+                 * can act on anything, so unlock first. The run lives on the app
+                 * scope — rotation or "Done" must not cut a task off mid-action.
+                 */
+                fun runBrain(block: suspend () -> Unit) {
+                    whenUnlocked(onLocked = { say("Unlock your phone to continue.") }) {
+                        running = true
+                        state = "working"
+                        ChatStore.agentScope.launch {
+                            try {
+                                block()
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                say("Something went wrong: ${e.message}")
+                            } finally {
+                                running = false
+                            }
+                        }
+                    }
+                }
+
+                // Ambient "Ultra, ..." commands run on this same brain instance.
+                remember(brain) {
+                    val handler: (String) -> Unit = { request -> runBrain { brain.run(request) } }
+                    ambientHandler = handler
+                    com.agent.ultra.listen.AmbientBridge.onCommand = handler
+                    handler
                 }
 
                 val listener = remember {
@@ -125,17 +157,15 @@ class VoiceActivity : ComponentActivity() {
                         heard = spoken
                         state = "working"
                         ChatStore.add(ChatMessage(fromUser = true, text = spoken))
-                        lifecycleScope.launch {
-                            try {
-                                brain.run(spoken)
-                            } catch (e: Exception) {
-                                val m = "Something went wrong: ${e.message}"
-                                reply = m
-                                speaker.speak(m) { state = "done" }
-                            }
-                        }
+                        runBrain { brain.run(spoken) }
                     }
                 }
+                // The recognizer is a system service binding; let it go with the session.
+                androidx.compose.runtime.DisposableEffect(listener) { onDispose { listener.stop() } }
+
+                // A policy-gate pause waits on the user: Brain answers (and so speaks) what is
+                // waiting; Confirm / Cancel below, or the session sits on "Working…".
+                val pending = brain.pendingConfirm
 
                 fun listen() {
                     heard = ""; reply = ""
@@ -189,11 +219,26 @@ class VoiceActivity : ComponentActivity() {
                                 Text(reply, style = MaterialTheme.typography.bodyLarge)
                             }
                         }
+                        if (pending != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                            ) {
+                                Button(enabled = !running, onClick = {
+                                    speaker.stop()
+                                    runBrain { brain.resolvePending(true) }
+                                }) { Text("Confirm") }
+                                TextButton(enabled = !running, onClick = {
+                                    speaker.stop()
+                                    runBrain { brain.resolvePending(false) }
+                                }) { Text("Cancel") }
+                            }
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                         ) {
-                            Button(onClick = { listen() }) { Text("Speak again") }
+                            Button(enabled = !running, onClick = { listen() }) { Text("Speak again") }
                             TextButton(onClick = { finish() }) { Text("Done") }
                         }
                     }
@@ -207,6 +252,22 @@ class VoiceActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         sessionTick++
+    }
+
+    /**
+     * Run [block] only on an unlocked phone. Showing over the lock screen is
+     * fine; acting for whoever is holding a locked phone is not. When locked,
+     * ask Android to dismiss the keyguard (the user unlocks) and continue only
+     * on success.
+     */
+    private fun whenUnlocked(onLocked: () -> Unit, block: () -> Unit) {
+        val km = getSystemService(android.app.KeyguardManager::class.java)
+        if (km == null || !km.isKeyguardLocked) { block(); return }
+        km.requestDismissKeyguard(this, object : android.app.KeyguardManager.KeyguardDismissCallback() {
+            override fun onDismissSucceeded() { block() }
+            override fun onDismissCancelled() { onLocked() }
+            override fun onDismissError() { onLocked() }
+        })
     }
 
     /** The assist gesture fires with the phone locked — meet it there. */

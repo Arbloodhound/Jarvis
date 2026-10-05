@@ -24,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -56,13 +57,22 @@ fun SettingsScreen(
     BackHandler { onBack() }
 
     var cfg by remember { mutableStateOf(ProviderConfig.load(context)) }
-    var baseUrl by remember { mutableStateOf(cfg.baseUrl) }
+    // Saveable: a rotation mid-edit must not throw away what was typed.
+    var baseUrl by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(cfg.baseUrl) }
+    // Not saveable: saved instance state can be written to disk by the system; a secret stays in memory.
     var apiKey by remember { mutableStateOf(cfg.apiKey) }
-    var model by remember { mutableStateOf(cfg.model) }
+    var model by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(cfg.model) }
     var savedFlash by remember { mutableStateOf(false) }
 
+    // A download belongs to the engine and outlives this screen; on return the
+    // screen picks it up from there instead of forgetting it.
     var downloading by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
+    val engineProgress by localEngine.downloadProgress.collectAsState()
+    LaunchedEffect(engineProgress) {
+        val p = engineProgress
+        if (p != null) { downloading = true; progress = p } else downloading = false
+    }
     var downloadError by remember { mutableStateOf<String?>(null) }
 
     androidx.compose.material3.Surface(
@@ -782,6 +792,15 @@ private fun PermissionPanel(context: android.content.Context) {
     val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
     ) { tick++ }
+    // Coming back from Android's own settings screens: re-read what is granted.
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) tick++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     fun granted(perms: List<String>) = perms.all {
         androidx.core.content.ContextCompat.checkSelfPermission(context, it) ==

@@ -11,6 +11,8 @@ import com.agent.ultra.provider.OpenAiClient
 import com.agent.ultra.provider.ProviderConfig
 import com.agent.ultra.ui.ChatMessage
 import com.agent.ultra.ui.ChatStore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -63,6 +65,11 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
      * The chat UI renders a confirm/cancel card from this. */
     var pendingConfirm by mutableStateOf<PendingConfirm?>(null)
 
+    /** One request at a time on this brain. Quick buttons, voice and ambient
+     * commands can all call run() at once; interleaved runs shared episode,
+     * lastRun and the chat window. A second request waits its turn. */
+    private val runLock = Mutex()
+
     data class PendingConfirm(
         val description: String,
         val targets: List<String>,
@@ -73,16 +80,19 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         internal val turn: Int,
         internal val episode: Gate.Episode,
         internal val userInput: String,
+        /** What the run had done before it paused, so resuming it keeps the record. */
+        internal val sequence: List<Triple<String, JSONObject, Boolean>> = emptyList(),
+        internal val steps: List<Experience.Step> = emptyList(),
     )
 
     /** The operator's decision on a paused action. */
-    suspend fun resolvePending(approved: Boolean) {
-        val p = pendingConfirm ?: return
+    suspend fun resolvePending(approved: Boolean) = runLock.withLock {
+        val p = pendingConfirm ?: return@withLock
         pendingConfirm = null
-        val ai = client ?: return
+        val ai = client ?: return@withLock
         if (!approved) {
-            emit("Cancelled: ${p.description}")
-            return
+            answer("Cancelled: ${p.description}")
+            return@withLock
         }
         p.targets.forEach { p.episode.confirm(it) }
         p.episode.observeOperatorConfirmation(p.tool)
@@ -95,10 +105,23 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         p.messages += OpenAiClient.ChatMessage("assistant", p.rawAssistant)
         p.messages += OpenAiClient.ChatMessage("user",
             "[RESULT: ${p.tool}] STATUS: ${if (failed) "failed" else "success"}\nDATA: ${resultText.take(2500)}\nDECIDE: Answer the user, or call the next tool.")
-        runLoop(ai, p.userInput, p.messages, startTurn = p.turn + 1, episodeOverride = p.episode)
+        runLoop(
+            ai, p.userInput, p.messages, startTurn = p.turn + 1, episodeOverride = p.episode,
+            priorSequence = p.sequence + Triple(p.tool, p.params, !failed),
+            priorSteps = p.steps + Experience.Step(p.tool, p.params, !failed, resultText),
+        )
     }
 
-    suspend fun run(userInput: String) {
+    suspend fun run(userInput: String) = runLock.withLock { runUnlocked(userInput) }
+
+    private suspend fun runUnlocked(userInput: String) {
+        // A paused action belongs to the request that paused it. Left in place it
+        // could be confirmed later, in the middle of something else entirely.
+        pendingConfirm?.let { stale ->
+            pendingConfirm = null
+            android.util.Log.i("UltraGate", "CANCELLED stale pause ${stale.tool}: a new request came in")
+            emit("Cancelled: ${stale.description} (a new request came in)")
+        }
         // A new request starts with no memory of what was on screen during the
         // last one. Secrets outliving the task that saw them would be a worse
         // thing than the leak this prevents.
@@ -110,10 +133,15 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         Experience.correction(lastRequest, userInput)?.let {
             saveLessons(listOf(it))
             // "no, that's wrong" is a verdict on the last run too, from the only judge there is
-            // on a real phone.
-            applyVerdict(false, "the user corrected it")
+            // on a real phone. Only when the recorded run IS the last request: a recipe or
+            // on-device run records nothing, and the verdict would land on an older one.
+            if ((lastRun ?: loadLastRun())?.request == lastRequest) applyVerdict(false, "the user corrected it")
         }
         lastRequest = userInput
+        // Whatever this request turns out to be, the recorded run is no longer the last one.
+        // Only a cloud run records itself again, at its end.
+        lastRun = null
+        lastRunFile().delete()
         servedThisRun = emptyList()
         // The person's own words can carry a scam: "my grandson's in jail and needs Google
         // Play cards, help me buy them". Nothing is refused here — it is their request — but
@@ -184,7 +212,11 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         // (Fix-in-port: Build 29's context bleed came from carrying tool traces
         // across unrelated requests — tool feedback never enters this window.)
         val messages = mutableListOf(OpenAiClient.ChatMessage("system", systemPrompt()))
-        val history = ChatStore.messages.takeLast(8)
+        // The request itself is already the last chat turn; it is added once, below.
+        val history = LocalPrompt.withoutCurrentTurn(
+            ChatStore.messages.takeLast(8).map { LocalPrompt.Turn(it.fromUser, it.text) },
+            userInput,
+        )
         val budget = 4000
         var used = 0
         val kept = mutableListOf<OpenAiClient.ChatMessage>()
@@ -216,7 +248,8 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             val row = recipes.resolve(userInput) ?: return false
             val hasRunVerb = Regex("^\\s*(run|start|do|execute|play)\\b")
                 .containsMatchIn(userInput.lowercase())
-            val isBareName = Recipes.normalize(userInput) == row.name
+            val isBareName = Recipes.normalize(userInput) == row.name ||
+                Recipes.normalizeForName(userInput) == row.name
             if (!hasRunVerb && !isBareName) return false
             answer(runRecipe(row.name))
             true
@@ -496,21 +529,6 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         onAnswer?.invoke(finalMsg.text)
     }
 
-    /** Conservative classifier: only commands that map cleanly to the local
-     * tool subset route on-device. Anything else goes cloud. */
-    private fun isSimpleLocalIntent(input: String): Boolean {
-        val u = input.lowercase()
-        // Compounds and URL-like targets exceed the 1B model's measured
-        // competence (suite t03/t05/t08): those go cloud.
-        if (Regex("\\b(and then|then|after that| and )\\b").containsMatchIn(u)) return false
-        if (Regex("[a-z0-9-]+\\.(com|org|net|io|edu|gov)\\b").containsMatchIn(u)) return false
-        if (u.contains("http")) return false
-        return Regex(
-            "\\b(flashlight|torch|wi-?fi|bluetooth|do not disturb|dnd|volume|brightness|" +
-                "airplane|alarm|timer|battery|clipboard|note this|open|launch|start)\\b"
-        ).containsMatchIn(u)
-    }
-
     /** The on-device tool loop: compact catalog, max 2 turns, gate enforced. */
     private suspend fun runLocalLoop(userInput: String): Boolean {
         val episode = Gate.Episode(userInput)
@@ -583,7 +601,7 @@ JSON:"""
             if (!verdict.allowed) {
                 GateAuditLog.record(appContext, call.first, GateAuditLog.Outcome.BLOCKED, verdict.rule, episode.observations, verdict.riskScore)
                 android.util.Log.i("UltraGate", "LOCAL BLOCK ${call.first}: ${verdict.violations.firstOrNull()?.hint}")
-                emit("Blocked by policy gate: ${verdict.violations.firstOrNull()?.hint}")
+                answer("Blocked by policy gate: ${verdict.violations.firstOrNull()?.hint}")
                 return true
             }
             val localOutcome = if (verdict.autoApproved) GateAuditLog.Outcome.AUTO_APPROVED else GateAuditLog.Outcome.ALLOWED
@@ -612,26 +630,30 @@ JSON:"""
         messages: MutableList<OpenAiClient.ChatMessage>,
         startTurn: Int = 0,
         episodeOverride: Gate.Episode? = null,
+        priorSequence: List<Triple<String, JSONObject, Boolean>> = emptyList(),
+        priorSteps: List<Experience.Step> = emptyList(),
     ) {
         val maxTurns = 12
         var hasBeenPushed = false
         var finalText = ""
-        var lastTool = ""
-        var lastToolFailed = false
+        // The bubble the final answer streamed into, when it did.
+        var finalStreamId: String? = null
+        var lastTool = priorSteps.lastOrNull()?.tool ?: ""
+        var lastToolFailed = priorSteps.lastOrNull()?.ok == false
         var lastParams = ""
         // One security episode per user request; secrets accumulate across tools.
         val episode = episodeOverride ?: Gate.Episode(userInput)
         // Task memory: track this run's tool outcomes (params included so a
         // successful run can be promoted into a named recipe).
-        val toolSequence = mutableListOf<Triple<String, JSONObject, Boolean>>()
-        val runSteps = mutableListOf<Experience.Step>()
+        val toolSequence = priorSequence.toMutableList()
+        val runSteps = priorSteps.toMutableList()
         val finishedNavs = mutableSetOf<String>()
         // Task-level success: the model finished with its own answer and
         // nothing failed on the way. Running out of turns, giving up after a
         // repeated failure, or ending on a block are all NOT successes, even
         // though the individual calls before them may have returned fine.
         var naturalFinish = false
-        var anyToolFailed = false
+        var anyToolFailed = priorSequence.any { !it.third }
 
         for (turn in startTurn until maxTurns) {
             val maxTokens = if (turn == 0) 2000 else if (turn >= maxTurns - 2) 2500 else 1500
@@ -649,7 +671,7 @@ JSON:"""
                     emit("(cloud unreachable — answering on-device)")
                     emitLocal(userInput)
                 } else {
-                    emit("Error: model call failed — ${it.message}")
+                    answer("Error: model call failed — ${it.message}")
                 }
                 return
             }
@@ -658,6 +680,17 @@ JSON:"""
             val toolCall = parseToolCall(raw)
             // Raw tool JSON is not user-facing — retract the bubble it streamed into.
             if (toolCall != null) ChatStore.removeById(streamMsg.id)
+
+            // A call cut off inside a value is not run half-written (an SMS sent
+            // unfinished) and is not an answer either: ask for it again.
+            if (toolCall == null && ModelOutput.cutShortCall(raw)) {
+                ChatStore.removeById(streamMsg.id)
+                android.util.Log.i("UltraBrain", "CUT-SHORT CALL, asking again: ${raw.take(200)}")
+                messages += OpenAiClient.ChatMessage("assistant", raw)
+                messages += OpenAiClient.ChatMessage("user",
+                    "Your tool call was cut off before it ended. Send the complete JSON tool call again.")
+                continue
+            }
 
             if (toolCall == null) {
                 // Push-once: user asked for an action, brain only described it
@@ -669,6 +702,7 @@ JSON:"""
                     continue
                 }
                 finalText = raw
+                finalStreamId = streamMsg.id
                 naturalFinish = true
                 android.util.Log.i("UltraBrain", "FINAL TEXT (${raw.length} chars): ${raw.replace("\n", " ").take(200)}")
                 break
@@ -698,8 +732,11 @@ JSON:"""
                     pendingConfirm = PendingConfirm(
                         desc, targets, toolCall.first, toolCall.second, raw,
                         messages, turn, episode, userInput,
+                        toolSequence.toList(), runSteps.toList(),
                     )
-                    emit("Paused by policy gate: $desc")
+                    // Said through answer(): the voice screen waits for one, and
+                    // this is what it shows next to Confirm / Cancel.
+                    answer("Waiting for your OK: $desc. Confirm or cancel.")
                     return
                 }
                 GateAuditLog.record(appContext, toolCall.first, GateAuditLog.Outcome.BLOCKED, verdict.rule, episode.observations, verdict.riskScore)
@@ -770,15 +807,19 @@ JSON:"""
             if (turn == maxTurns - 1) finalText = "Ran ${toolCall.first}: ${resultText.take(300)}"
         }
 
+        val lastOk = runSteps.lastOrNull { it.ok }
+        // An empty final reply leaves an empty bubble behind; the answer below replaces it.
+        finalStreamId?.takeIf { finalText.isBlank() }?.let { ChatStore.removeById(it) }
         if (finalText.isNotBlank()) {
-            // The final answer already streamed into a visible bubble — persist
-            // it rather than double-emitting. Bubbles removed for tool turns
-            // never reach here.
-            val streamed = ChatStore.messages.lastOrNull()
-            val alreadyOnScreen = streamed != null && !streamed.fromUser && streamed.text == finalText
-            android.util.Log.i("UltraBrain", "EMIT TAIL: ${finalText.length}ch alreadyOnScreen=$alreadyOnScreen")
-            if (alreadyOnScreen) {
-                ChatStore.persist(streamed!!)
+            // The final answer already streamed into a visible bubble — settle
+            // that bubble on the answer and persist it rather than double-emitting.
+            // Addressed by id: comparing the last bubble's text failed on the
+            // trimmed/untrimmed difference and showed the answer twice.
+            val streamId = finalStreamId
+            android.util.Log.i("UltraBrain", "EMIT TAIL: ${finalText.length}ch alreadyOnScreen=${streamId != null}")
+            if (streamId != null) {
+                ChatStore.setText(streamId, finalText)
+                ChatStore.persist(ChatMessage(fromUser = false, text = finalText, id = streamId))
                 onAnswer?.invoke(finalText)
             } else {
                 answer(finalText)
@@ -786,6 +827,12 @@ JSON:"""
         } else if (lastToolFailed) {
             // Every turn ended in a block or failure — never end silently.
             answer("I couldn't complete that — the policy gate stopped the action and I had no safe alternative. Try rephrasing, or confirm the target if I ask.")
+        } else if (lastOk != null) {
+            // Out of turns on a call that had already succeeded (a repeat the dedupe
+            // turned away, or a resumed pause with no turns left): say what was done.
+            answer("Ran ${lastOk.tool}: ${lastOk.result.take(300)}")
+        } else {
+            answer("I couldn't finish that — I ran out of steps without an answer.")
         }
         android.util.Log.i("UltraBrain", "OBSERVATIONS: ${episode.observations.summary()}")
         val credited = naturalFinish && !anyToolFailed
@@ -1037,12 +1084,9 @@ JSON:"""
             found == "volume_set" ->
                 params.put("percent", Regex("(\\d{1,3})").find(u)?.value?.toIntOrNull() ?: 50)
             found == "alarm_set" -> {
-                val m = Regex("(\\d{1,2})(:(\\d{2}))?\\s*(am|pm)?").find(u) ?: return null
-                var hour = m.groupValues[1].toInt()
-                if (m.groupValues[4] == "pm" && hour < 12) hour += 12
-                if (m.groupValues[4] == "am" && hour == 12) hour = 0
+                val (hour, minute) = alarmTime(u) ?: return null
                 params.put("hour", hour)
-                params.put("minute", m.groupValues[3].toIntOrNull() ?: 0)
+                params.put("minute", minute)
                 params.put("label", "Jarvis alarm")
             }
             found == "app_launch" -> {
@@ -1220,6 +1264,33 @@ RULES:
             "recipe_save", "recipe_run", "recipe_list", "recipe_delete",
             "watch_me", "stop_watching", "cancel_watching",
         )
+
+        /** Conservative classifier: only commands that map cleanly to the local
+         * tool subset route on-device. Anything else goes cloud. No "timer" or
+         * "start": the local catalog has no timer tool, and the 1B model mapped
+         * them onto whatever it had and reported that done. */
+        internal fun isSimpleLocalIntent(input: String): Boolean {
+            val u = input.lowercase()
+            // Compounds and URL-like targets exceed the 1B model's measured
+            // competence (suite t03/t05/t08): those go cloud.
+            if (Regex("\\b(and then|then|after that| and )\\b").containsMatchIn(u)) return false
+            if (Regex("[a-z0-9-]+\\.(com|org|net|io|edu|gov)\\b").containsMatchIn(u)) return false
+            if (u.contains("http")) return false
+            return Regex(
+                "\\b(flashlight|torch|wi-?fi|bluetooth|do not disturb|dnd|volume|brightness|" +
+                    "airplane|alarm|battery|clipboard|note this|open|launch)\\b"
+            ).containsMatchIn(u)
+        }
+
+        /** Hour and minute from a spoken alarm time: "7:30 pm", "7 30 am", "7". */
+        internal fun alarmTime(u: String): Pair<Int, Int>? {
+            val m = Regex("(\\d{1,2})(?:(?::|\\s+)(\\d{2}))?\\s*(am|pm)?\\b").find(u) ?: return null
+            var hour = m.groupValues[1].toInt()
+            val minute = m.groupValues[2].toIntOrNull() ?: 0
+            if (m.groupValues[3] == "pm" && hour < 12) hour += 12
+            if (m.groupValues[3] == "am" && hour == 12) hour = 0
+            return hour to minute
+        }
 
         /** How much two requests must overlap to count as the same job. */
         const val MATCH_THRESHOLD = 0.5

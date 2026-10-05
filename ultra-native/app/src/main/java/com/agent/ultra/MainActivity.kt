@@ -27,12 +27,13 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             AgentUltraTheme {
-                var screen by remember { mutableStateOf("chat") }
+                // Saveable: rotating inside Settings must not bounce back to chat.
+                var screen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("chat") }
                 // Shared engine — one JNI handle, never two 800MB loads.
                 // Process-wide, so the voice session reuses this same context.
                 val engine = remember { LocalModelEngine.shared(applicationContext) }
                 // Bump on provider save so the brain rebuilds with the new config.
-                var configVersion by remember { mutableIntStateOf(0) }
+                var configVersion by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
                 when (screen) {
                     "chat" -> ChatScreen(
                         localEngine = engine,
@@ -46,6 +47,17 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Ambient listening the user left on but that isn't running (Android 15+ refuses to start
+        // it at boot; a mic permission granted later): start it now, from the foreground.
+        if (com.agent.ultra.listen.AmbientConfig(this).enabled &&
+            com.agent.ultra.listen.AmbientListenService.instance == null
+        ) {
+            com.agent.ultra.listen.AmbientListenService.start(this)
         }
     }
 }

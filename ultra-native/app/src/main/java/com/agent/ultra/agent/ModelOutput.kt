@@ -70,11 +70,14 @@ object ModelOutput {
      * and nothing after. llama-3.3-70b ended a reply there; it read as prose, the run "finished"
      * having done nothing, and the task was lost (AndroidWorld MarkorCreateNote, 2026-09-20). Only
      * a reply that BEGINS as a tool call is repaired, and only by closing what it left open.
+     *
+     * Never by closing an open string: that executes a value the model never finished — a text
+     * message sent half-written. Such a call is not a call; [cutShortCall] lets the caller ask the
+     * model to send it again.
      */
     private fun cutShort(text: String): Pair<String, JSONObject>? {
-        val t = text.trim().removePrefix("```json").removePrefix("```").trim()
-        if (!t.startsWith("{\"tool\"")) return null
-        for (tail in listOf("\"}}", "}}", "\"}", "}")) {
+        val t = startOfCall(text) ?: return null
+        for (tail in listOf("}}", "}")) {
             try {
                 val obj = JSONObject(t + tail)
                 val tool = obj.optString("tool")
@@ -82,6 +85,21 @@ object ModelOutput {
             } catch (_: Exception) {}
         }
         return null
+    }
+
+    private fun startOfCall(text: String): String? {
+        val t = text.trim().removePrefix("```json").removePrefix("```").trim()
+        return if (t.startsWith("{\"tool\"")) t else null
+    }
+
+    /**
+     * A reply that began as a tool call and stopped before it was one — inside a string value,
+     * or anywhere else the closing brackets alone cannot finish. It is neither prose nor a call
+     * that can be run as it stands; the model has to send it again.
+     */
+    fun cutShortCall(text: String): Boolean {
+        val t = startOfCall(text) ?: return false
+        return firstJsonObject(t) == null && toolCall(text) == null
     }
 
     private fun bareCall(text: String): Pair<String, JSONObject>? {

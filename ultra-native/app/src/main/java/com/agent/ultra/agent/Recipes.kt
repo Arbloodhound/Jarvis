@@ -106,8 +106,7 @@ class Recipes(private val dao: RecipeDao) {
      * currently unused is how data goes missing.
      */
     suspend fun updateJourney(rawName: String, routeJson: String): Boolean {
-        val name = normalizeForName(rawName)
-        val row = dao.byName(name) ?: return false
+        val row = rowFor(rawName) ?: return false
         return try {
             val existing = JSONObject(row.stepsJson)
             existing.put("journey", JSONArray(routeJson))
@@ -118,7 +117,7 @@ class Recipes(private val dao: RecipeDao) {
 
     /** The route of a routine learned by watching, or null if it is a tool recipe. */
     suspend fun journeyOf(rawName: String): String? {
-        val row = dao.byName(normalize(rawName)) ?: return null
+        val row = rowFor(rawName) ?: return null
         return try {
             val o = JSONObject(row.stepsJson)
             if (o.has("journey")) o.getJSONArray("journey").toString() else null
@@ -127,7 +126,7 @@ class Recipes(private val dao: RecipeDao) {
 
     /** The UI steps of a routine learned by watching, or null if it is a tool recipe. */
     suspend fun demonstrationOf(rawName: String): String? {
-        val row = dao.byName(normalize(rawName)) ?: return null
+        val row = rowFor(rawName) ?: return null
         return try {
             val o = JSONObject(row.stepsJson)
             if (o.has("demonstrated")) o.getJSONArray("demonstrated").toString() else null
@@ -135,7 +134,7 @@ class Recipes(private val dao: RecipeDao) {
     }
 
     suspend fun stepsOf(rawName: String): List<Step>? {
-        val row = dao.byName(normalize(rawName)) ?: return null
+        val row = rowFor(rawName) ?: return null
         return parse(row.stepsJson)
     }
 
@@ -151,15 +150,29 @@ class Recipes(private val dao: RecipeDao) {
      * Same shape as the task-memory bug: a shorter remembered thing claiming a
      * request that merely contains it. Length is the tiebreak because a longer
      * name that still fits is carrying more of what was actually said.
+     *
+     * Only whole words, and only the WHOLE name: a substring match ran any
+     * routine containing "it" for "do it", and a name containing the request
+     * ran a routine the user had only half named. A very short name is only
+     * ever matched exactly.
      */
     suspend fun resolve(spoken: String): RecipeEntity? {
         val n = normalize(spoken)
         if (n.isEmpty()) return null
-        dao.byName(n)?.let { return it }
-        val all = dao.list()
-        return all.filter { n.contains(it.name) }.maxByOrNull { it.name.length }
-            ?: all.filter { it.name.contains(n) }.minByOrNull { it.name.length }
+        rowFor(spoken)?.let { return it }
+        return pick(spoken, dao.list().map { it.name })?.let { name -> dao.byName(name) }
     }
+
+    /**
+     * The row a name refers to. A stored name is looked up as it is — names
+     * are kept in [normalizeForName] form, so [normalize] would strip a "my"
+     * the user chose and miss "my morning sites". Free text falls back to the
+     * stored form, then to the lookup form.
+     */
+    private suspend fun rowFor(rawName: String): RecipeEntity? =
+        dao.byName(rawName)
+            ?: dao.byName(normalizeForName(rawName))
+            ?: normalize(rawName).takeIf { it.isNotEmpty() }?.let { dao.byName(it) }
 
     suspend fun markRun(name: String) {
         val row = dao.byName(name) ?: return
@@ -185,7 +198,7 @@ class Recipes(private val dao: RecipeDao) {
         routeJson: String,
         doorsMoved: Int,
     ): Boolean {
-        val row = dao.byName(normalizeForName(rawName)) ?: return false
+        val row = rowFor(rawName) ?: return false
         return try {
             val payload = JSONObject(row.stepsJson)
             payload.put("journey", JSONArray(routeJson))
@@ -207,7 +220,7 @@ class Recipes(private val dao: RecipeDao) {
 
     /** What the agent knows about a taught routine, or null if it is a tool recipe. */
     suspend fun competenceOf(rawName: String): Competence? {
-        val row = dao.byName(normalize(rawName)) ?: return null
+        val row = rowFor(rawName) ?: return null
         return competenceIn(row.stepsJson)
     }
 
@@ -256,7 +269,7 @@ class Recipes(private val dao: RecipeDao) {
 
     suspend fun delete(rawName: String): String {
         val name = normalize(rawName)
-        val row = dao.byName(name) ?: return "Error: no recipe named \"$name\""
+        val row = rowFor(rawName) ?: return "Error: no recipe named \"$name\""
         dao.delete(row.name)
         return "Deleted recipe \"${row.name}\""
     }
@@ -308,5 +321,20 @@ class Recipes(private val dao: RecipeDao) {
             .replace(Regex("[^a-z0-9 ]"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
+
+        /** Names shorter than this are only ever matched exactly. */
+        const val MIN_CONTAINED_NAME = 4
+
+        /**
+         * The longest stored name that appears in what was said as whole
+         * words, read in both the stored and the lookup form so "run my
+         * morning sites please" still finds "my morning sites".
+         */
+        fun pick(spoken: String, names: List<String>): String? {
+            val forms = listOf(normalizeForName(spoken), normalize(spoken)).map { " $it " }
+            return names
+                .filter { name -> name.length >= MIN_CONTAINED_NAME && forms.any { it.contains(" $name ") } }
+                .maxByOrNull { it.length }
+        }
     }
 }

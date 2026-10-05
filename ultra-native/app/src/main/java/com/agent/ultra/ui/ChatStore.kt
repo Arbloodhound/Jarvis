@@ -141,16 +141,45 @@ object ChatStore {
             d.insertMessage(MessageEntity(msg.id, cid, msg.fromUser, msg.text, msg.timestamp))
             d.touch(cid, System.currentTimeMillis())
             if (msg.fromUser) {
-                conversations.find { it.id == cid }?.let { conv ->
-                    if (conv.title == "New chat") {
-                        val title = msg.text.take(40)
-                        val updated = conv.copy(title = title, updatedAt = System.currentTimeMillis())
-                        d.upsertConversation(updated)
-                        val idx = conversations.indexOfFirst { it.id == cid }
-                        if (idx >= 0) conversations[idx] = updated
+                // The drawer list is snapshot state: mutate it on the main thread
+                // only, and do the DB write back here on IO.
+                onUi {
+                    val idx = conversations.indexOfFirst { it.id == cid }
+                    if (idx >= 0 && conversations[idx].title == "New chat") {
+                        val updated = conversations[idx].copy(
+                            title = msg.text.take(40), updatedAt = System.currentTimeMillis())
+                        conversations[idx] = updated
+                        scope.launch { d.upsertConversation(updated) }
                     }
                 }
             }
+        }
+    }
+
+    // ── The chat screen's brain ──────────────────────────────────────────
+    // Owned by the process, not by the screen: runs live on [agentScope], so a
+    // brain built per composition was orphaned when Settings opened mid-run
+    // (its pending confirmation vanished with it). Rebuilt for a new config
+    // only when nothing is in flight. Main thread only.
+    private var chatBrain: com.agent.ultra.agent.Brain? = null
+    private var chatBrainVersion = 0
+    private var chatSpeaker: Speaker? = null
+
+    fun chatBrain(
+        context: Context,
+        engine: com.agent.ultra.local.LocalModelEngine,
+        configVersion: Int,
+    ): com.agent.ultra.agent.Brain {
+        val current = chatBrain
+        if (current != null &&
+            (configVersion == chatBrainVersion || thinking.value || current.pendingConfirm != null)
+        ) return current
+        val app = context.applicationContext
+        val speaker = chatSpeaker ?: Speaker(app).also { chatSpeaker = it }
+        return com.agent.ultra.agent.Brain(app, engine).also { b ->
+            b.onAnswer = { text -> if (UltraPrefs.speakAnswers(app)) speaker.speak(text) }
+            chatBrain = b
+            chatBrainVersion = configVersion
         }
     }
 }
