@@ -1,18 +1,22 @@
 # Builds the DEBUG APK on GitHub (no signing secrets needed), for testing on a phone.
-# Run it: Actions -> "Debug APK" -> Run workflow (once this file is on main), or push a tag
-# like debug-<anything>. The APK is attached to the run as "app-debug" (kept 14 days).
+# Run it: Actions -> "Debug APK" -> Run workflow (once this file is on main), push a tag like
+# debug-<anything>, or push to a claude/** branch with "[apk]" in the commit message.
+# The APK is attached to the run as "app-debug" (kept 14 days).
 name: Debug APK
 
 on:
   workflow_dispatch:
   push:
     tags: ['debug-*']
+    branches: ['claude/**']
 
 permissions:
   contents: read
 
 jobs:
   debug:
+    # Branch pushes build only when asked, so ordinary pushes don't spend build minutes.
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[apk]')
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
