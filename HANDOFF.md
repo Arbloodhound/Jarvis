@@ -11,13 +11,13 @@ Read `CLAUDE.md` (honesty statuses, no drift) and the top of `DEVLOG.md` first. 
   - Merged locally on top of that and pushed with this handoff: **unit 2** (#3), **unit 1** (#6), **unit 5** (#4), **unit 6** (#5).
     - Conflicts resolved: `LocalModelEngine.baseThreads()` uses unit 1's version (`CpuTopology.current.llmThreads`); the nativeLoad log line combines unit 1's and unit 5's.
     - The host harness on the merged shim passes, pinned to CPUs 2-3 (workers stay on 2-3, and the caller is restored afterwards).
-    - **The full Gradle test + assembleDebug on the merge was still running at handoff, and its result is unknown. Re-run it first.**
+    - **Gradle on this 4-unit merge: PROVEN.** `testDebugUnitTest` 583 tests, 0 failures; `assembleDebug` OK.
 - **Not merged yet:**
   - **Unit 4**, PR **#7**, branch `ccr-3726b695-6kt0de-u4-kv-prefix-reuse` (4a32d22): KV prompt-prefix reuse plus `top_k(40)`. It edits `nativeGenerate` in `ultra_llm.cpp`, the same function as unit 1's pin/resume/pause, so **expect a conflict**. Keep both:
     - unit 1's per-call affinity pin and pool resume/pause;
     - unit 4's `cached` tokens, `seq_rm` and `resetCache`.
     - Unit 4 notes: differences from a fresh engine are flash-attention float order (proven); set `cparams.swa_full = true` explicitly in nativeLoad for Gemma.
-  - **Unit 3**, whisper.cpp CPU variants, branch `ccr-3726b695-6kt0de-u3-whisper-variants`. It was still running at handoff. Check whether that branch exists on origin or a PR is open. If neither, redo it by mirroring commit 59e671f for whisper:
+  - **Unit 3**, PR **#8**, branch `ccr-3726b695-6kt0de-u3-whisper-variants` (63342a1): whisper.cpp built as 3 CPU variants (proven: i8mm whisper .so has 995 sdot / 260 smmla), `WHISPER_ANDROID_HOME` override, `CpuVariant.suffixes/candidates(base)`, `WhisperNative` load loop. Expect conflicts with unit 1 in `WhisperNative.kt` and the whisper section of `CMakeLists.txt`. What it mirrors from commit 59e671f:
     - `build-whisper-android.sh` builds 3 variants;
     - CMake builds `ultra_whisper[_dotprod|_i8mm]`;
     - `WhisperNative` load loop;
