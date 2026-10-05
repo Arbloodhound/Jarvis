@@ -650,8 +650,8 @@ class Tools(
         if (query.isBlank()) return@withContext "Error: missing query"
         // Grounding is a tool, not a leash: offline, tell the model to use its own knowledge
         // rather than stalling. (See system-prompt rules 13-15.)
-        if (!isOnline()) return@withContext
-            "OFFLINE: no network. Answer from your own knowledge; do not treat this as the fact being unavailable."
+        if (!isOnline()) return@withContext "OFFLINE: no network. " +
+            "Answer from your own knowledge; do not treat this as the fact being unavailable."
         instantAnswer(query)?.let { return@withContext it }
         wikipedia(query)?.let { return@withContext it }
         scrapeDdg(query)
