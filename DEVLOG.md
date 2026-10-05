@@ -148,6 +148,19 @@ ambient off mid-sentence, and an emoji reply on the debug build.
   pip. YAML parses and each step was run by hand here; **never run on GitHub**.
 - Guides: `ondevice-brain/G15_TEST_GUIDE.md`, `ondevice-brain/RELEASE_SIGNING.md`.
 - Tests: 496, 0 failures.
+- GitHub Actions: the `Debug APK` workflow run 37349873141 passed in ~7 min on GitHub's runners
+  (native builds, unit tests, assembleDebug, alignment). **PROVEN**. The release workflow's signing
+  step has not run yet.
+- Training notebook, from a read-only review (library sources at the notebook's pins + llama.cpp
+  master): output now `qwen3moe-ultra-iq2m/iq2s.gguf` (the stock file name would have kept phones on
+  the stock model); training checkpoints on Drive with resume, plus a 6b restore-from-adapter cell
+  (**not run**); `max_length=MAXLEN` explicit (TRL default 1024); sanity check warns instead of
+  asserting at 400 tokens (now 2048); converter deps in their own venv (llama.cpp's requirements pin an
+  older torch/transformers); imatrix `--parse-special`; validator handles BOM/null/non-list (run
+  locally on synthetic data: **PROVEN**); examples get the app's OFFLINE_RULES system turn; HF upload
+  public by default, both sizes, token from a Colab secret; Drive copies are loud and GGUFs optional.
+  App presets "Ultra fine-tune (IQ2_M/IQ2_S)" point at the notebook's repo, so no code change after
+  training. The notebook as a whole: **CANNOT VERIFY** here (no GPU; 80 GB fit and run time unknown).
 
 ## 2026-09-20 (day) — the gate asks on top of the app; routes are played by the engine
 

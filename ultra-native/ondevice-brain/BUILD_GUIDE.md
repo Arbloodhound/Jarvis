@@ -89,13 +89,18 @@ tool); saying "<wake name>, <request>" triggers an answer; ordinary talk does NO
 PHASE 6 — YOUR specialized + abliterated model (path 2b)
 ====================================================================
 On Colab with an 80GB-class GPU (>=64GB VRAM; a 40GB A100 will OOM), open Qwen3_30B_A3B_LoRA_Colab.ipynb:
-  1. Upload train.jsonl (chat format; mix your 6 domains: psych/psychoanalysis, sociolinguistics,
-     chemistry, coding, pharmacology, opsec).
-  2. Run top-to-bottom: preflight -> data check -> LoRA on the abliterated model -> merge ->
-     imatrix on your formatted chats -> quantize to IQ2_M. Most answers need <think> traces; no refusals.
-     Watch the ETA printed after 13 steps; interrupt if it's over budget.
-  3. The GGUF lands on Drive; section 15 uploads it to huggingface.co/arbloodhound/<repo> (public, or adb push).
-  4. In LocalModelEngine.kt, change the ABLITERATED (IQ2_M) entry's URL to your HF repo. Rebuild.
+  1. Put train.jsonl (chat format; mix your 6 domains: psych/psychoanalysis, sociolinguistics,
+     chemistry, coding, pharmacology, opsec) in Google Drive at MyDrive/ultra-train/train.jsonl
+     (survives a runtime reset), or upload it to /content. Examples without a system turn get the app's
+     own offline system prompt added automatically.
+  2. Optional: Colab key icon -> secret HF_TOKEN = a WRITE token from huggingface.co/settings/tokens.
+  3. Run top-to-bottom: preflight -> data check -> LoRA on the abliterated model -> merge ->
+     imatrix on your formatted chats -> quantize to IQ2_M (+ IQ2_S). Most answers need <think> traces; no refusals.
+     Watch the ETA printed after 13 steps; interrupt if it's over budget. Training checkpoints go to Drive:
+     a disconnect resumes (re-run sections 0-6), and section 6b restores a finished adapter.
+  4. Section 15 uploads both GGUFs to huggingface.co/arbloodhound/ultra-qwen3moe-abliterated-gguf (public).
+  5. On the phone: Settings -> model list -> "Ultra fine-tune (IQ2_M)" or "(IQ2_S)", whichever size the
+     Pixel test chose -> Download (or adb push the file). No code change or rebuild, unless you changed REPO.
 
 SUCCESS: on-device answers reflect your domains; offline; uncensored; ~1.6GB RAM free.
 

@@ -291,11 +291,26 @@ class LocalModelEngine(private val context: Context) {
          * mmap'd, but the KV cache and the rest of the app still need room.
          */
         val PRESETS = listOf(
+            // The fine-tune from Qwen3_30B_A3B_LoRA_Colab.ipynb (its REPO / OUT_M / OUT_S). These 404
+            // until that notebook has run and uploaded. Own file names, so a phone holding the stock
+            // MoE still fetches these (the app knows a model by its file name).
+            ModelChoice(
+                "Ultra fine-tune (IQ2_M) — after the training run",
+                "https://huggingface.co/arbloodhound/ultra-qwen3moe-abliterated-gguf/resolve/main/qwen3moe-ultra-iq2m.gguf",
+                "qwen3moe-ultra-iq2m.gguf", 10240,
+                "Your domains baked into the abliterated MoE. Pick this one if the Pixel test passed IQ2_M. Download fails until the notebook has uploaded it.",
+            ),
+            ModelChoice(
+                "Ultra fine-tune (IQ2_S) — after the training run",
+                "https://huggingface.co/arbloodhound/ultra-qwen3moe-abliterated-gguf/resolve/main/qwen3moe-ultra-iq2s.gguf",
+                "qwen3moe-ultra-iq2s.gguf", 9300,
+                "The same fine-tune, lighter. Pick this one if IQ2_M was borderline on the Pixel. Download fails until the notebook has uploaded it.",
+            ),
             ModelChoice(
                 "Qwen3-30B-A3B Thinking ABLITERATED (IQ2_M) — on-device MoE",
                 "https://huggingface.co/mradermacher/Huihui-Qwen3-30B-A3B-Thinking-2507-abliterated-i1-GGUF/resolve/main/Huihui-Qwen3-30B-A3B-Thinking-2507-abliterated.i1-IQ2_M.gguf",
                 "qwen3moe-abliterated-iq2m.gguf", 10240,
-                "RECOMMENDED MoE. 30B total / 3B active, best reasoning that fits 16GB. Abliterated (uncensored) for research. ~10.2GB → ~1.6GB free in an assistant-only setup. Cap context at 4k. Replace this URL with YOUR fine-tuned+abliterated build (notebook path 2b).",
+                "Stock abliterated MoE (no fine-tune). 30B total / 3B active, best reasoning that fits 16GB. ~10.2GB → ~1.6GB free in an assistant-only setup. Cap context at 4k. Your fine-tune is the \"Ultra fine-tune\" entry.",
             ),
             ModelChoice(
                 "Qwen3-30B-A3B Thinking ABLITERATED (IQ2_S) — roomier fallback",
