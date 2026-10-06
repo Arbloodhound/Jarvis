@@ -56,6 +56,20 @@ DEVLOG entry, commit with `[apk]`, push, send the owner the Actions run link whe
     - ambient only watches the thinker's `busy`;
     - the new 8B default strands a half-downloaded 4B file.
 
+- `claude/brain-memory` @ d4029d5: agent tests pass (98, `--tests com.agent.ultra.agent.*`); the full
+  suite and assembleDebug were NOT run.
+  - Done: `HistoryPolicy` (only Q10 of the 11 test questions gets history), `HistoryPolicy.window`
+    (drops old turns in blocks of 4 from an anchor, for prefix reuse), and `MemoryBrief.provider`,
+    `wants()`, `cap` 800, `recall(q, 4000 ms)`.
+  - The brief lands via `LocalPrompt.build(..., memory)` as a second system block just before the user
+    turn, and `emitLocal` is wired to it.
+  - **Open review findings to fix:**
+    - `window` can drop the only assistant turn that fits;
+    - "rewrite that in this style: …" counts as a self-contained paste, so it gets no history;
+    - plain-"it" questions like "what time is it" get history;
+    - possessive names, "recall" and "earlier" start memory searches for general questions;
+    - for referring-back requests the memory search query has no real content.
+
 **Queued by the owner after that build:**
 - Pause/timing tags in transcripts: whisper.cpp word timestamps (today `no_timestamps`) + VAD gaps →
   `[pause 1.8s]`, speech-rate/loudness tags, so the models can see hesitation.
