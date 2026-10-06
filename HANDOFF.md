@@ -1,6 +1,14 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
-## IN PROGRESS (session 01BUKa, 2026-10-06 ~22:40 UTC) — read this first
+## STOPPED (session 01BUKa, 2026-10-06 ~23:00 UTC, session limit) — read this first
+The three workers below were told to STOP and push their work as "WIP (stopped, not fully tested): …"
+to their branches. Read each branch's last commit message for what's done, then finish, test, merge,
+build and release as listed. The owner's next step after that: install as an Update → Settings →
+DOWNLOADS → Download all missing → Jarvis Tests 5 · Feature check → send the file.
+Owner's preferences: short plain answers; the guide is `DEPLOY_GUIDE.md`; update it if a button or
+section name changes (e.g. the new DOWNLOADS section replaces the per-model download steps in Part 2).
+
+## IN PROGRESS (session 01BUKa, 2026-10-06 ~22:40 UTC)
 Owner's Feature-check file: `/root/.claude/uploads/54f3fe27-91b3-59c8-8eda-5b26d60c8d8d/4a86451b-Jarvis-results-20261006-1528.txt`.
 Summary of it:
 - The Jarvis TTS voice and the MiniLM embedder were never downloaded.
