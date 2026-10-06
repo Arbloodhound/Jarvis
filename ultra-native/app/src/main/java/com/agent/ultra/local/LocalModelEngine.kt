@@ -169,8 +169,16 @@ class LocalModelEngine(private val context: Context) {
      * demand and evict under pressure, so the guard is for the KV cache plus
      * working headroom, not the whole file. The 806MB Gemma model ran clean
      * through llama-bench on this device class with ~850MB available.
+     *
+     * Always on Dispatchers.IO. The chat brain runs on the main thread and called this
+     * directly: on the Pixel 10 Pro, loading the 10 GB MoE sat in nativeLoad (llama_mmap)
+     * long past Android's 5 s input timeout, and both on-device ANRs of 2026-10-06 have
+     * exactly that stack (main → Brain.runUnlocked → ensureLoaded → nativeLoad).
      */
-    fun ensureLoaded(): Boolean {
+    suspend fun ensureLoaded(): Boolean =
+        if (loaded) true else withContext(Dispatchers.IO) { loadBlocking() }
+
+    private fun loadBlocking(): Boolean {
         if (loaded) return true
         if (!LlmNative.available) return false          // build without llama.cpp (emulator)
         if (!modelPresent) {
@@ -272,7 +280,7 @@ class LocalModelEngine(private val context: Context) {
      * was. "Free memory" is a button a user presses whenever they like, so this
      * has to be safe at any moment, not only at a convenient one.
      */
-    suspend fun unload() {
+    suspend fun unload() = withContext(Dispatchers.IO) {
         genMutex.withLock {
             synchronized(lock) {
                 if (handle != 0L) {

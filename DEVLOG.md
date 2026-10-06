@@ -3,6 +3,30 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 — First Pixel 10 Pro runtime evidence: ANR on model load (fixed in source)
+
+**Evidence** (`ultra-native/ondevice-brain/evidence/2026-10-06-pixel10pro-anr.md`, two ANRs from
+the Pixel 10 Pro, Android 17, app 2.6.0): "Input dispatching timed out … MainActivity". In both,
+the MAIN thread is in `Brain.runUnlocked → LocalModelEngine.ensureLoaded → LlmNative.nativeLoad`
+(ANR 1 deep in `llama_mmap → mmap`; ANR 2 just after `llama_model_load_from_file` returned).
+Process RSS ~8.6 GB, so the 10 GB MoE file was being mapped/paged in. Ambient whisper was also
+transcribing on a worker at the time (not the cause).
+
+**Root cause (PROVEN by the stacks + source):** the chat brain runs on the main dispatcher
+(ChatStore.agentScope = Main.immediate) and `ensureLoaded()` was a plain blocking function, so
+the first on-device answer loaded the model on the UI thread. Generation itself was already on
+Dispatchers.IO.
+
+**Fix:** `ensureLoaded()` is now `suspend` and always loads on Dispatchers.IO (`loadBlocking()`
+holds the old body); `unload()` (Settings → Free memory, also called from a composition scope)
+moved to IO too. Callers (Brain ×3, generate, BenchReceiver) were already suspend. 658 tests pass,
+assembleDebug passes.
+
+**Status:** SOURCE-FIXED BUT RUNTIME-UNPROVEN until the next Pixel run. Also seen, not acted on:
+model load itself is long (the mmap populates the whole file); the first answer after a load will
+still take a while, but the screen stays responsive. Good news in the same evidence: the 10 GB
+model does load on the Pixel (handle returned in ANR 2).
+
 ## 2026-10-06 (night, final) — Fixed signing key for CI test builds
 
 Found: every CI debug build was signed with the runner's fresh random debug key, so a new test APK
