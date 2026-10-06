@@ -146,7 +146,19 @@ object FeatureGrade {
         return BANNED.filter { it in t }
     }
 
-    // ── Ranking ────────────────────────────────────────────────────────────────────────────
+    // ── Transcript cues ────────────────────────────────────────────────────────────────────
+
+    /** The seconds of every "[pause 1.6s]" tag in a tagged transcript line, in order. */
+    fun pausesIn(line: String): List<Double> =
+        Regex("\\[pause (\\d+(?:\\.\\d+)?)s]").findAll(line).mapNotNull { it.groupValues[1].toDoubleOrNull() }.toList()
+
+    /** Word times usable for cues: each word ends no earlier than it starts, and no word starts
+     *  before the previous one started. [times]: (start ms, end ms) per word. Empty: false. */
+    fun timesIncrease(times: List<Pair<Long, Long>>): Boolean =
+        times.isNotEmpty() && times.all { it.second >= it.first } &&
+            times.zipWithNext().all { (a, b) -> b.first >= a.first }
+
+        // ── Ranking ────────────────────────────────────────────────────────────────────────────
 
     /** 1-based rank of the first hit containing [expected] (case-insensitive), or null. */
     fun rankOf(hits: List<String>, expected: String): Int? =

@@ -5,8 +5,16 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** One overheard line from AmbientMemory's `heard` table; [id] is its rowid. */
-data class HeardLine(val id: Long, val ts: Long, val text: String)
+/**
+ * One overheard line from AmbientMemory's `heard` table; [id] is its rowid.
+ *
+ * [text] is what the librarian reads: the TAGGED line ("[Sam] [pause 1.8s] um, okay", see
+ * [CueTags]) when the row has cues, else the plain words. [plain] is always the plain words (what
+ * keyword search and the sentence index see). [tagged] is [text], by its format's name.
+ */
+data class HeardLine(val id: Long, val ts: Long, val text: String, val plain: String = text) {
+    val tagged: String get() = text
+}
 
 /**
  * Cuts overheard lines into librarian-sized chunks. Pure, JVM-tested.
@@ -49,7 +57,8 @@ object LibrarianChunker {
      *  chunk's first line. "Tomorrow" said just after midnight must anchor on the new day. */
     fun anchorFor(chunk: List<HeardLine>, phrase: String?): Long {
         val p = phrase?.trim()?.lowercase(Locale.ROOT)
-        if (!p.isNullOrEmpty()) chunk.firstOrNull { it.text.lowercase(Locale.ROOT).contains(p) }?.let { return it.ts }
+        // the plain words: a cue tag between "tomorrow" and "at 3" must not hide the phrase
+        if (!p.isNullOrEmpty()) chunk.firstOrNull { it.plain.lowercase(Locale.ROOT).contains(p) }?.let { return it.ts }
         return chunk.first().ts
     }
 }
@@ -93,9 +102,9 @@ Output one JSON object per line and nothing else, like:
         append("""
 - text: one self-contained sentence under 25 words. Keep names, places and numbers exactly as heard.
 - when: the time words exactly as spoken, e.g. "tomorrow at 3pm" or "next Friday". Leave it out if there are none. Never work out dates yourself.
+- A line may start with who spoke: [Me] is the phone's owner, [Speaker 2] or [Unknown] someone unnamed, else their name. [pause 1.2s], [fast], [slow], [louder], [quieter], [overlap] and (laughs) say how it was said. Use them to tell people apart; never copy brackets into a note.
 """.trimStart())
         if (patterns) append("""
-- Lines may start with a speaker like [Me] or [Sam]; tags like [pause 1.8s], [overlap], [fast], [louder], (laughs) show how it was said.
 - pattern, one of: ${CuePattern.entries.joinToString(", ") { it.id }}. commitment = a specific promise (who, what, when); stress_marker = pauses, fillers, faster/slower, louder/quieter.
 - who: the speaker. quote: words copied exactly from one line; several as ["...","..."]. confidence: low, med or high.
 - Describe only what was said and how. Never judge: nothing about intent, honesty, feelings, health or personality.

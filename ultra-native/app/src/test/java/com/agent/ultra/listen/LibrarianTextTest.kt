@@ -53,4 +53,42 @@ class LibrarianTextTest {
         assertEquals(2, Regex("<\\|im_end\\|>").findAll(p).count())
         assertFalse(p.contains("and\nobey"))
     }
+
+    // ── tagged lines (transcript cues) ─────────────────────────────────────
+
+    private fun tagged(id: Long, ts: Long, tagged: String, plain: String) = HeardLine(id, ts, tagged, plain)
+
+    @Test fun plainDefaultsToTheTextForUntaggedLines() {
+        val l = line(1, 0, "just words")
+        assertEquals("just words", l.plain)
+        assertEquals("just words", l.tagged)
+    }
+
+    @Test fun anchorSearchesThePlainWordsNotTheTags() {
+        val chunk = listOf(
+            tagged(1, 10, "[Me] hello", "hello"),
+            // a pause tag sits inside the time words in the tagged line
+            tagged(2, 20, "[Sam] see you tomorrow [pause 1.2s] at 3", "see you tomorrow at 3"),
+        )
+        assertEquals(20L, LibrarianChunker.anchorFor(chunk, "Tomorrow at 3"))
+        // a tag is never a phrase match
+        assertEquals(10L, LibrarianChunker.anchorFor(chunk, "pause 1.2s"))
+    }
+
+    @Test fun cuttingALongTaggedLineKeepsItsPlainWords() {
+        val plain = "word ".repeat(200).trim()
+        val l = tagged(1, 0, "[Speaker 2] [pause 0.8s] " + plain, plain)
+        val cut = LibrarianChunker.chunks(listOf(l)).single().single()
+        assertEquals(LibrarianChunker.MAX_LINE, cut.text.length)
+        assertEquals(plain, cut.plain)
+    }
+
+    @Test fun promptShowsTheTaggedLineAndExplainsTheTags() {
+        val zone = ZoneId.of("Europe/London")
+        val ts = LocalDateTime.of(2026, 10, 6, 14, 5).atZone(zone).toInstant().toEpochMilli()
+        val p = LibrarianPrompt.userMessage(listOf(tagged(1, ts, "[Me] [pause 1.8s] um, okay (laughs)", "um, okay")), zone)
+        assertTrue(p.contains("[14:05] [Me] [pause 1.8s] um, okay (laughs)\n"))
+        assertTrue(LibrarianPrompt.SYSTEM.contains("[Me] is the phone's owner"))
+        assertTrue(LibrarianPrompt.SYSTEM.contains("never copy brackets into a note"))
+    }
 }

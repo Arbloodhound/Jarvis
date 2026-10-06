@@ -117,6 +117,18 @@ class FeatureGradeTest {
     @Test fun bannedYouAreLying() = assertEquals(listOf("you are lying"), FeatureGrade.banned("He said: You are lying!"))
     @Test fun bannedNone() = assertTrue(FeatureGrade.banned("Sam hedged about Friday; may suggest uncertainty").isEmpty())
 
+    @Test fun pauseTagsParsed() {
+        assertEquals(listOf(1.6, 0.8), FeatureGrade.pausesIn("[Me] so [pause 1.6s] maybe Friday [pause 0.8s] okay"))
+        assertTrue(FeatureGrade.pausesIn("no tags [fast] here").isEmpty())
+    }
+
+    @Test fun wordTimesIncrease() {
+        assertTrue(FeatureGrade.timesIncrease(listOf(0L to 200L, 200L to 450L, 900L to 1200L)))
+        assertFalse(FeatureGrade.timesIncrease(listOf(0L to 200L, 100L to 50L)))
+        assertFalse(FeatureGrade.timesIncrease(listOf(500L to 600L, 100L to 200L)))
+        assertFalse(FeatureGrade.timesIncrease(emptyList()))
+    }
+
     @Test fun rank() {
         val hits = listOf("weather rainy", "The Honda will be fixed", "honda again")
         assertEquals(2, FeatureGrade.rankOf(hits, "honda"))

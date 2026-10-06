@@ -167,18 +167,126 @@ object FeatureProbes {
         else -> "${min / (24 * 60)} days ago"
     }
 
-    // ── 11. Transcript cues (speakers / pauses) ────────────────────────────────────────────
+    // ── 11. Transcript cues (pauses, word timing, speakers) ────────────────────────────────
 
-    /** The coordinator extends this once TranscriptCues / VoicePrints are merged. */
+    const val CUE_FIRST = "I was thinking we could go to the market on Saturday."
+    const val CUE_SECOND = "Or maybe we should just stay home and rest instead."
+    const val CUE_PAUSE_MS = 1_500
+    /** TranscriptCueWorker's PART_MS (private there): the shortest quiet run that is joined into a pause. */
+    private const val CUE_PART_MS = 300L
+
     suspend fun transcriptCues(env: ProbeEnv): List<Result> {
-        val names = listOf("com.agent.ultra.listen.TranscriptCues", "com.agent.ultra.listen.VoicePrints")
-        val present = names.filter { runCatching { Class.forName(it) }.isSuccess }
-        return listOf(if (present.isEmpty()) {
-            Result("Transcript cues", Verdict.MISSING, "not merged yet", "speaker and pause tags are not in this build")
-        } else {
-            Result("Transcript cues", Verdict.WARN, "present: ${present.joinToString { it.substringAfterLast('.') }}",
-                "the feature is in this build, but its probe is not written yet")
-        })
+        val ctx = env.ctx
+        val ttsOk = LocalVoice.available && LocalVoice.voicePresent(ctx)
+        val sttOk = WhisperNative.available && LocalWhisper.modelPresent(ctx)
+        val speaker = speakerTags(env)
+        if (!ttsOk || !sttOk) {
+            val why = "needs Jarvis's voice and the speech model (${if (!ttsOk) "voice" else "speech model"} missing)"
+            return listOf(
+                Result("Transcript cues: pauses", Verdict.MISSING, why, "can't make or hear the test audio"),
+                Result("Transcript cues: word timing", Verdict.MISSING, why, "can't make or hear the test audio"),
+            ) + speaker
+        }
+        // Two sentences in Jarvis's voice with 1.5 s of silence between them, as ambient would hear it.
+        env.status("Transcript cues: making test speech with a 1.5 s pause")
+        val (a, _) = speak16k(ctx, CUE_FIRST, 200, 0) ?: return listOf(
+            Result("Transcript cues: pauses", Verdict.FAIL, "voice produced no audio", "couldn't make the test audio")) + speaker
+        val (b, _) = speak16k(ctx, CUE_SECOND, CUE_PAUSE_MS, 400) ?: return listOf(
+            Result("Transcript cues: pauses", Verdict.FAIL, "voice produced no audio", "couldn't make the test audio")) + speaker
+        val pcm = a + b
+        // Whisper with word timing on, its own context, the ambient prompt; freed afterwards.
+        env.status("Transcript cues: transcribing with word timing")
+        val dir = ctx.filesDir
+        val vad = File(dir, AmbientConfig.VAD_MODEL).let { if (it.exists()) it.absolutePath else "" }
+        val handle = WhisperNative.nativeInit(File(dir, AmbientConfig.ASR_MODEL).absolutePath, vad)
+        if (handle == 0L) return listOf(
+            Result("Transcript cues: word timing", Verdict.FAIL, "speech model did not load", "whisper could not start")) + speaker
+        val t0 = System.currentTimeMillis()
+        val r = try {
+            val topo = CpuTopology.current
+            WhisperNative.transcribe(handle, pcm, if (topo.llmCpus.isEmpty()) 4 else minOf(4, topo.llmCpus.size),
+                WhisperNative.verbatimPrompt(AmbientConfig(ctx).wakeName), topo.llmCpus.toIntArray(), timing = true)
+        } finally { WhisperNative.nativeFree(handle) }
+        val sttMs = ms(t0)
+        val words = r?.words.orEmpty()
+        val times = words.map { it.t0Ms to it.t1Ms }
+        val increasing = FeatureGrade.timesIncrease(times)
+        val refWords = FeatureGrade.words("$CUE_FIRST $CUE_SECOND").size
+        val timingV = when {
+            r == null -> Verdict.FAIL
+            words.isEmpty() -> Verdict.FAIL
+            !increasing -> Verdict.FAIL
+            words.size < refWords / 2 -> Verdict.WARN
+            else -> Verdict.PASS
+        }
+        val timing = Result("Transcript cues: word timing", timingV,
+            "${words.size} timed words of $refWords, times ${if (increasing) "increase" else "DO NOT increase"}, " +
+                "${r?.vad?.size ?: 0} speech stretches, whisper ${secs(sttMs)}",
+            when (timingV) {
+                Verdict.PASS -> "whisper says when each word was spoken, so pauses can be placed"
+                Verdict.WARN -> "word times come back, but for few of the words"
+                else -> "no usable word times: pauses can't be placed in the line"
+            },
+            listOf("heard: ${r?.text ?: "(nothing)"}",
+                "words: " + words.take(24).joinToString(" ") { "${it.text}@${it.t0Ms}" },
+                "vad: " + r?.vad.orEmpty().joinToString(" ") { "${it.startMs}-${it.endMs}" }))
+
+        // The same pause measurement and tagging as TranscriptCueWorker.process.
+        val db = com.agent.ultra.listen.CueAudio.frameDb(pcm)
+        val gate = com.agent.ultra.listen.CueAudio.gateDb(db.minOrNull() ?: -90f)
+        val pauses = com.agent.ultra.listen.CueAudio.union(
+            com.agent.ultra.listen.CueAudio.silences(db, gate, CUE_PART_MS),
+            com.agent.ultra.listen.CueAudio.vadGaps(r?.vad.orEmpty(), CUE_PART_MS),
+            com.agent.ultra.listen.CueTags.MIN_PAUSE_MS,
+        )
+        val body = com.agent.ultra.listen.CueTags.body(r?.text.orEmpty(), words, pauses, null, emptyList())
+        val tagged = FeatureGrade.pausesIn(body)
+        val longest = tagged.maxOrNull()
+        // The voice adds its own short silence at the end of a sentence, so a bit over 1.5 s is right.
+        val pauseV = when {
+            longest == null -> Verdict.FAIL
+            longest in 1.3..2.3 && tagged.size == 1 -> Verdict.PASS
+            longest in 1.0..3.0 -> Verdict.WARN
+            else -> Verdict.FAIL
+        }
+        val pause = Result("Transcript cues: pauses", pauseV,
+            "inserted ${FeatureGrade.f1(CUE_PAUSE_MS / 1000.0)} s → tagged ${if (tagged.isEmpty()) "none" else tagged.joinToString { "${it}s" }}",
+            when (pauseV) {
+                Verdict.PASS -> "a pause in speech is measured and tagged at the right length"
+                Verdict.WARN -> "the pause is tagged, but its length or count is off"
+                else -> "the pause was not tagged"
+            },
+            listOf("tagged line: $body", "measured silences: " + pauses.joinToString { "${it.startMs}-${it.endMs} ms" },
+                "speech gate ${FeatureGrade.f1(gate.toDouble())} dB (from the quietest frame of the test clip)"))
+        return listOf(pause, timing) + speaker
+    }
+
+    /** Speaker tags: the setting, the voiceprint model, and whether one voice matches itself. */
+    private suspend fun speakerTags(env: ProbeEnv): List<Result> {
+        val ctx = env.ctx
+        val on = AmbientConfig(ctx).speakerTags
+        val model = com.agent.ultra.listen.VoicePrints.downloaded(ctx)
+        val head = "setting ${if (on) "on" else "off"}, voiceprint model ${if (model) "present" else "missing"}"
+        if (!model) return listOf(Result("Speaker tags", Verdict.MISSING, head,
+            "record your voice in Settings to download the voiceprint model and turn speaker tags on"))
+        if (!(LocalVoice.available && LocalVoice.voicePresent(ctx))) return listOf(Result("Speaker tags", Verdict.WARN,
+            "$head; same-voice check not run", "needs Jarvis's voice to make test speech"))
+        val a = speak16k(ctx, CUE_FIRST, 0, 0)?.first
+        val b = speak16k(ctx, CUE_SECOND, 0, 0)?.first
+        val ea = a?.let { com.agent.ultra.listen.VoicePrints.embed(ctx, it) }
+        val eb = b?.let { com.agent.ultra.listen.VoicePrints.embed(ctx, it) }
+        if (ea == null || eb == null) return listOf(Result("Speaker tags", Verdict.FAIL, "$head; voiceprint failed",
+            "the voiceprint model did not produce a print"))
+        val sim = com.agent.ultra.listen.VoiceMatch.cosine(ea, eb)
+        val same = sim >= com.agent.ultra.listen.VoiceMatch.MATCH
+        // Jarvis's voice has one speaker (LocalVoice always speaks as speaker 0), so telling two
+        // people apart needs two real voices; only "same voice matches itself" is tested here.
+        return listOf(Result("Speaker tags", if (same) Verdict.WARN else Verdict.FAIL,
+            "$head; same voice twice: similarity ${FeatureGrade.f2(sim.toDouble())} (match at ${com.agent.ultra.listen.VoiceMatch.MATCH}) → " +
+                if (same) "matched" else "NOT matched",
+            if (same) "one voice is recognised as the same person; telling two people apart needs two real voices"
+            else "the same voice was not recognised as the same person",
+            listOf("two different sentences in Jarvis's one voice; a two-voice test needs real people")))
     }
 
     // ── 4. Memory search (sandbox) ─────────────────────────────────────────────────────────
