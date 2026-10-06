@@ -14,7 +14,7 @@ Local JVM tests: 1066, 0 failures; the debug APK builds.
 
 **Builds:**
 - **Release APK run 37535503016** (test_kit=true, a1aaced): https://github.com/Arbloodhound/Jarvis/actions/runs/37535503016
-  It was running at handoff. A self check-in was set for ~22:14 UTC (trigger trig_01CaTfzy1MHX46ZiSyNcBuet).
+  **SUCCEEDED 22:02 UTC** (app-test-realkey 47.7 MB, app-release 35.2 MB; expire 2026-10-20). Link sent to the owner with DEPLOY_GUIDE.md. A self check-in was set for ~22:14 UTC (trigger trig_01CaTfzy1MHX46ZiSyNcBuet).
   - If it's green, give the owner the link. He installs `app-test-realkey` as an Update (models stay),
     then Jarvis Tests → 5 · Feature check (airplane on, say Yes to the flashlight), Save results, and
     pastes the file. `app-release` comes later, as an Update.
