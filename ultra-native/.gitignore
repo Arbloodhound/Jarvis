@@ -13,3 +13,5 @@ tools/brainbench/
 tools/__pycache__/
 tools/learnrun*.log
 tools/learnrun/
+# Prebuilt sherpa-onnx TTS library, fetched (pinned + sha256) by ondevice-brain/fetch-sherpa.sh.
+app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so

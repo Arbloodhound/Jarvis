@@ -605,6 +605,28 @@ fun SettingsScreen(
             }
         }
         run {
+            var ownVoice by remember { mutableStateOf(UltraPrefs.ownVoice(context)) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Jarvis's own voice", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Speaks answers with the voice model on this phone: no Google, works " +
+                            "offline. Downloads about 21 MB the first time, using Android's voice " +
+                            "until then. Off uses Android's text-to-speech (Google's, on most phones).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = ownVoice, onCheckedChange = { on ->
+                    ownVoice = on
+                    UltraPrefs.setOwnVoice(context, on)
+                })
+            }
+        }
+        run {
             val ambientCfg = remember { com.agent.ultra.listen.AmbientConfig(context) }
             var ambient by remember { mutableStateOf(ambientCfg.enabled) }
             var wakeName by remember { mutableStateOf(ambientCfg.wakeName) }

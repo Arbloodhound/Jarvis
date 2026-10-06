@@ -24,6 +24,11 @@
 # release showed it.
 -keep class ai.onnxruntime.** { *; }
 
+# sherpa-onnx (Jarvis's own voice). libsherpa-onnx-jni.so binds OfflineTts's natives by name,
+# reads every Offline*Config field by name (GetFieldID "model", "vits", "dataDir"…), builds
+# GeneratedAudio through its ([FI)V constructor, and calls the progress lambda's invoke.
+-keep class com.k2fsa.sherpa.onnx.** { *; }
+
 # ── Components named as strings outside the code ─────────────────────────
 # The accessibility service is written into Settings.Secure by its fully
 # qualified name and matched by the system on every bind.

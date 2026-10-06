@@ -24,6 +24,17 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OWN_SPEECH, on).apply()
     }
 
+    private const val K_OWN_VOICE = "own_voice"
+
+    /** Speak with Jarvis's own on-phone voice instead of Android's TextToSpeech (Google's, on a
+     * Pixel). On by default: works offline and on a de-Googled phone. */
+    fun ownVoice(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_OWN_VOICE, true)
+
+    fun setOwnVoice(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OWN_VOICE, on).apply()
+    }
+
     private const val K_NOTIF = "capture_notifications"
     private const val K_PERSONAL = "allow_personal_data"
 
