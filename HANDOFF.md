@@ -79,6 +79,20 @@ DEVLOG entry, commit with `[apk]`, push, send the owner the Actions run link whe
     - the CPU fallback can close an ONNX session still in use;
     - the indexer downloads 23 MB hourly even though nothing calls `MemoryRecall` yet.
 
+**Owner-approved order after the librarian + thinker build lands (2026-10-06, session 01K5Mi):**
+1. Make cues visible in transcripts: speaker tags (sherpa-onnx speaker embeddings, enrol owner, "that was Sam"),
+   pause lengths ([pause 1.8s] from whisper word timestamps + VAD), overlaps/interruptions, speech rate,
+   loudness change, laughter, and keep fillers (whisper prompt/verbatim). On-device only (biometrics).
+2. A fixed taxonomy of OBSERVABLE patterns (commitments vs vague promises, hedging, topic avoidance/shifts,
+   interruptions/dominance, politeness shifts, agreement/disagreement, tone change, stress markers, decisions,
+   recurring themes); each note = observation + exact quote/timestamp evidence + confidence. Observations,
+   never verdicts/diagnoses.
+3. Zero-shot first: put the taxonomy in the librarian prompt; owner lives with it ~1 week.
+4. Only then fine-tune the 1.7B librarian (LoRA) on labelled examples: public corpora with labels (AMI, ICSI,
+   Switchboard DA, DailyDialog, MELD, Stanford Politeness, ConvoKit, AnnoMI — check each license) plus
+   teacher-labelled owner-format transcripts reviewed by a human; quantize Q4_0; add preset.
+5. Evaluate on held-out labelled conversations. Remind owner: consent laws for recording others.
+
 **Queued by the owner after that build:**
 - Pause/timing tags in transcripts: whisper.cpp word timestamps (today `no_timestamps`) + VAD gaps →
   `[pause 1.8s]`, speech-rate/loudness tags, so the models can see hesitation.
