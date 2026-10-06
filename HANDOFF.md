@@ -1,5 +1,47 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## NOW (session 01BUKa, 2026-10-06 21:45 UTC) — read this first; the sections below are history
+**State:** `claude/new-session-t3cy17` @ a1aaced. Everything is merged and pushed:
+- the two models (thinker Qwen3-8B Q4_K_S + librarian Qwen3-1.7B Q4_0);
+- semantic memory, librarian notes, pattern notes (hedged, no diagnoses), HistoryPolicy (the Q8/Q11
+  copy fix), offline phone control;
+- transcript cues: pauses/rate/loudness tags, plus speaker tags that are OFF until the owner records
+  their voice;
+- the Jarvis Tests "Feature check" (button 5);
+- the cue fixes (a1aaced): enrolment via the ambient tap, no "[Unknown]" with tags off, a smaller
+  cue queue, and probes that follow the live path.
+Local JVM tests: 1066, 0 failures; the debug APK builds.
+
+**Builds:**
+- **Release APK run 37535503016** (test_kit=true, a1aaced): https://github.com/Arbloodhound/Jarvis/actions/runs/37535503016
+  It was running at handoff. A self check-in was set for ~22:14 UTC (trigger trig_01CaTfzy1MHX46ZiSyNcBuet).
+  - If it's green, give the owner the link. He installs `app-test-realkey` as an Update (models stay),
+    then Jarvis Tests → 5 · Feature check (airplane on, say Yes to the flashlight), Save results, and
+    pastes the file. `app-release` comes later, as an Update.
+  - If it failed, read the job logs, fix, push, then re-run Release APK (workflow_dispatch, ref
+    `claude/new-session-t3cy17`, test_kit=true).
+- Previous good build: 37527886135 (e475273), the same minus the cue fixes.
+
+**Next, once the owner's Feature-check file arrives:**
+1. Read each PASS/WARN/FAIL line.
+2. Tune the first-guess thresholds: WER 10/25%, 5 tok/s, pause 1.3–2.3 s (note: a 1.5 s pause
+   splits the speech into two lines; the tag lands at the start of the second line), voice match 0.5,
+   top-3 ≥ 80%, whisper MIN_TOKEN_P 0.45 (the wake probe prints confidence with and without the
+   filler prompt and timing).
+3. Fix what fails.
+
+**Known, not fixed:**
+- "pay 240 pounds" doesn't trigger the wrong-amount refusal (`Disagreement.statedByUser` needs £/GBP
+  or "pay 240").
+- If Jarvis is speaking when voice enrolment starts, the end of its speech can lift the enrolment
+  mute early.
+- Lines stored before a1aaced with tags off still read "[Unknown]".
+
+**Postponed by the owner:** GPU (Vulkan), the LoRA fine-tune kit, the release build install.
+
+**Owner:** Pixel 10 Pro XL, Chromebook, no adb. Wants plain, short answers. Installs by downloading
+the artifact on the phone and choosing Update, never uninstall. Commit footer: see earlier sections.
+
 ## FINAL (session 01BUKa, 2026-10-06 20:40 UTC) — read this first
 - Everything is merged on `claude/new-session-t3cy17` @ e475273: offline navigation, transcript cues
   (speakers/pauses; speaker tags OFF by default), the Jarvis Tests "Feature check" (button 5; 15 probes,
