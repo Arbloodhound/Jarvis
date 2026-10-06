@@ -3,6 +3,19 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (night) — "Thinking…" status in chat; RAM-based default model (parallel agents)
+
+- Chat status line (5f31a44): "Loading the brain…" during a real load, then "Thinking… N s" until
+  the first visible token of an on-device answer; never persisted or spoken (ChatStore.status, pure
+  ChatStatus + 3 tests; generate() gained an onStart hook). Not covered: fast path / runLocalLoop /
+  /local / preload, and a rare unload-between-load-and-generate race.
+- Default model by RAM (acd2d43): with no saved choice, `LocalModelEngine.defaultFor(totalRam,
+  downloaded)` picks the MoE IQ2_M where fitFor isn't TOO_BIG (16 GB → MoE; ≤12 GB, unknown → Gemma
+  3 1B); an existing on-disk Gemma with no saved choice keeps Gemma; user choice always wins; nothing
+  downloads by itself. 9 tests. Side effect to know: thinking models are excluded from the quick
+  on-device command path, so with no cloud configured simple commands use the offline brain.
+- Merged tree: 685 tests, 0 failures; assembleDebug passes. RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (evening) — Jarvis Tests: quick 3-question test, Stop, live timer
 
 Pixel: "the brain test on airplane mode takes too long" (11 questions with silent thinking of up to
