@@ -48,6 +48,9 @@ jobs:
           bash ultra-native/ondevice-brain/build-whisper-android.sh
           bash ultra-native/ondevice-brain/fetch-sherpa.sh
 
+      - name: Fixed test signing key (so each test build installs over the last)
+        run: mkdir -p ~/.android && cp ultra-native/ci/test-debug.keystore ~/.android/debug.keystore
+
       - name: local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > ultra-native/local.properties
 
@@ -70,6 +73,12 @@ jobs:
 
       - name: Check the CPU variants carry their instructions
         run: ANDROID_NDK="$ANDROID_HOME/ndk/27.2.12479018" bash ultra-native/ondevice-brain/check-cpu-variants.sh "$RUNNER_TEMP/apk/lib/arm64-v8a"
+
+      - name: Check it is signed with the fixed test key
+        run: |
+          SIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          "$SIGNER" verify --print-certs ultra-native/app/build/outputs/apk/debug/app-debug.apk | tee "$RUNNER_TEMP/certs.txt"
+          grep -q "CN=Jarvis CI test build" "$RUNNER_TEMP/certs.txt" || { echo "::error::not signed with ci/test-debug.keystore"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:

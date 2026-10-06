@@ -3,6 +3,16 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-06 (night, final) — Fixed signing key for CI test builds
+
+Found: every CI debug build was signed with the runner's fresh random debug key, so a new test APK
+could not install over the last one and the only way forward (uninstall) wiped the 10 GB model. Added
+`ultra-native/ci/test-debug.keystore` (test-only key, standard debug passwords, committed on purpose,
+see ci/README.md; NOT the release key) — debug-apk.yml copies it to ~/.android/debug.keystore and
+then checks the APK's signer is "CN=Jarvis CI test build". PROVEN locally: assembleDebug with it →
+apksigner shows that DN. Builds before this one (runs ≤19) still have random keys: the first switch
+needs one uninstall; after that, updates keep data.
+
 ## 2026-10-06 (night, latest) — No-laptop path: on-phone "Jarvis Tests" + Colab key notebook
 
 Dafarus is on a Chromebook with no adb; Colab can't reach a USB phone (it runs on Google's

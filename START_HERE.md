@@ -21,6 +21,8 @@ login. For Part 7 only: your Chromebook (just Chrome, nothing installed).
    (If a "Play Protect" warning shows: **More details → Install anyway**.)
    If it says "App not installed": long-press any old Jarvis / Agent Ultra icon → App info →
    **Uninstall**, then tap the APK again.
+   From now on, newer test versions install straight over this one and keep everything you
+   downloaded (just tap the new APK → Update).
 6. You now have **two** new icons: **Jarvis** (the app) and **Jarvis Tests** (the test screen,
    only in this test version).
 7. Open **Jarvis** and **allow every permission** it asks for.
