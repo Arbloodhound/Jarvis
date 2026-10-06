@@ -46,7 +46,12 @@ class LibrarianRunTest {
         val prompts = ArrayList<String>()
         override suspend fun complete(prompt: String, maxTokens: Int): Result<String> {
             prompts += prompt
-            assertEquals(LibrarianPrompt.MAX_TOKENS, maxTokens)
+            val reading = prompt.contains(ReadingPrompt.SYSTEM)
+            val plain = prompt.contains(LibrarianPrompt.SYSTEM_PLAIN)
+            assertEquals(
+                if (reading) ReadingPrompt.MAX_TOKENS else if (plain) LibrarianPrompt.MAX_TOKENS_PLAIN else LibrarianPrompt.MAX_TOKENS,
+                maxTokens,
+            )
             val key = answers.keys.firstOrNull { prompt.contains(it) }
             return answers[key] ?: Result.success("NONE")
         }
@@ -201,6 +206,73 @@ class LibrarianRunTest {
         val rest = run(q, Shelf(), FakeModel(emptyMap()), at(20))
         assertEquals(4, rest.chunks)
         assertFalse(rest.more)
+    }
+
+    private val talk = listOf(
+        HeardLine(1, at(18, 0), "[Me] are you coming on Friday?"),
+        HeardLine(2, at(18, 1), "[Sam] I mean, um, [pause 1.8s] maybe Friday, I'll see"),
+        HeardLine(3, at(18, 2), "[Me] I'll book the table for 7pm on Friday"),
+    )
+    private val talkNotes =
+        "{\"kind\":\"observation\",\"pattern\":\"hedging\",\"who\":\"Sam\",\"quote\":\"maybe Friday, I'll see\",\"confidence\":\"med\",\"text\":\"Sam hedged about Friday\"}\n" +
+            "{\"kind\":\"observation\",\"pattern\":\"hedging\",\"who\":\"Sam\",\"quote\":\"I'll definitely come\",\"confidence\":\"high\",\"text\":\"Sam promised to come\"}\n" +
+            "{\"kind\":\"plan\",\"text\":\"Table booked for Friday\",\"when\":\"Friday at 7pm\"}"
+
+    @Test fun observationsAreVerifiedFiledAndGetASecondPassReading() = runTest {
+        val q = Queue(talk)
+        val shelf = Shelf()
+        val model = FakeModel(mapOf(
+            ReadingPrompt.SYSTEM to Result.success(
+                "{\"obs\":1,\"id\":\"avoidance\",\"hedge\":\"may suggest\",\"confidence\":\"low\",\"alt\":\"Sam may not know his shifts yet\"}"),
+            "are you coming" to Result.success(talkNotes),
+        ))
+        val r = run(q, shelf, model, at(20))
+        assertEquals(2, model.prompts.size)
+        assertTrue(model.prompts[1].contains("1. hedging, Sam: \"maybe Friday, I'll see\""))
+        assertEquals(1, r.rejected)                       // the invented quote
+        assertEquals(1, r.observations)
+        assertEquals(1, r.readings)
+        val o = shelf.notes.single { it.kind == NoteKind.OBSERVATION }
+        assertEquals(
+            "Observation (hedging, med confidence): Sam hedged about Friday. Evidence: Sam at 18:01: \"maybe Friday, I'll see\". " +
+                "Possible reading (low confidence): may suggest avoidance (moving away from the topic). Alternative: Sam may not know his shifts yet.",
+            o.text,
+        )
+        assertEquals(at(18, 1), o.heardTs)
+        assertNull(o.whenTs)
+        assertEquals(1, shelf.notes.count { it.kind == NoteKind.PLAN })    // the old kinds still work
+        // the same pattern seen again is a second data point, never merged
+        q.rows = q.rows + talk.map { it.copy(id = it.id + 10, ts = it.ts + 3_600_000L) }
+        run(q, shelf, model, at(21))
+        assertEquals(2, shelf.notes.count { it.kind == NoteKind.OBSERVATION })
+    }
+
+    @Test fun readingsOffOrPatternsOff() = runTest {
+        val model = FakeModel(mapOf("are you coming" to Result.success(talkNotes)))
+        val noReadings = Shelf()
+        val r = LibrarianRun.run(Queue(talk), noReadings, model, zone, { at(20) }, { true }, LibrarianRun.Failures(), readings = false)
+        assertEquals(1, model.prompts.size)              // no second pass
+        assertEquals(1, r.observations)
+        assertFalse(noReadings.notes.single { it.kind == NoteKind.OBSERVATION }.text.contains("reading"))
+
+        val noPatterns = Shelf()
+        LibrarianRun.run(Queue(talk), noPatterns, model, zone, { at(20) }, { true }, LibrarianRun.Failures(), patterns = false)
+        assertTrue(model.prompts.last().contains(LibrarianPrompt.SYSTEM_PLAIN))
+        assertEquals(listOf(NoteKind.PLAN), noPatterns.notes.map { it.kind })
+    }
+
+    @Test fun aFailedReadingPassStillFilesTheObservation() = runTest {
+        val model = FakeModel(mapOf(
+            ReadingPrompt.SYSTEM to Result.failure(IllegalStateException("oom")),
+            "are you coming" to Result.success(talkNotes),
+        ))
+        val q = Queue(talk)
+        val shelf = Shelf()
+        val r = run(q, shelf, model, at(20))
+        assertEquals(LibrarianRun.Stop.DONE, r.stop)
+        assertEquals(3L, q.mark)
+        assertEquals(0, r.readings)
+        assertEquals(1, shelf.notes.count { it.kind == NoteKind.OBSERVATION })
     }
 
     @Test fun gate() {

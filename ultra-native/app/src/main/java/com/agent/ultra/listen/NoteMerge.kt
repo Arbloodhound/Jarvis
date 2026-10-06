@@ -7,7 +7,9 @@ import java.util.Locale
 
 /** What a memory note is about. Stored as [key] (lower case) in MemoryNotes. */
 enum class NoteKind {
-    PERSON, PLAN, TODO, FACT;
+    PERSON, PLAN, TODO, FACT,
+    /** A conversational pattern with verbatim evidence ([Observation]); never merged. */
+    OBSERVATION;
 
     val key: String get() = name.lowercase(Locale.ROOT)
 
@@ -19,6 +21,7 @@ enum class NoteKind {
             "task" to TODO, "to-do" to TODO, "to_do" to TODO, "reminder" to TODO,
             "event" to PLAN, "appointment" to PLAN, "meeting" to PLAN,
             "preference" to FACT, "place" to FACT, "people" to PERSON,
+            "pattern" to OBSERVATION, "cue" to OBSERVATION,
         )
 
         /** Case-insensitive; a few synonyms a small model tends to write; null otherwise. */

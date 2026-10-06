@@ -58,6 +58,11 @@ interface NoteStore {
  * the run with the rows left in the queue; after [MAX_FAILURES] failures on the same chunk it is
  * skipped so one bad chunk can't block the queue for ever. [keepGoing] is checked before every
  * chunk (charging, screen, brain busy).
+ *
+ * With [patterns] the prompt carries the observable-pattern taxonomy ([CuePattern]) and the
+ * parser checks each observation's quotes against the chunk. With [readings] too, a chunk that
+ * produced observations gets a second, short call ([ReadingPrompt]) for hedged possible
+ * readings; if that call fails the observations are filed without readings (not retried).
  */
 object LibrarianRun {
     const val MAX_ROWS = 400
@@ -73,6 +78,9 @@ object LibrarianRun {
         val stop: Stop,
         /** More rows are waiting: run again soon. */
         val more: Boolean,
+        /** Observation notes filed, and how many of them carry a possible reading. */
+        val observations: Int = 0,
+        val readings: Int = 0,
     )
 
     /** Consecutive model failures, keyed by the chunk's first row; lives as long as the process. */
@@ -95,6 +103,8 @@ object LibrarianRun {
         keepGoing: () -> Boolean,
         failures: Failures,
         log: (String) -> Unit = {},
+        patterns: Boolean = true,
+        readings: Boolean = true,
     ): Result {
         val fetched = source.unprocessed(MAX_ROWS + 1)   // one extra: is there more after this batch?
         val rows = fetched.take(MAX_ROWS)
@@ -110,6 +120,7 @@ object LibrarianRun {
             (next.ts > cutoff || chunks.size > 1)
         ) chunks = chunks.dropLast(1)
         var done = 0; var added = 0; var merged = 0; var rejected = 0; var skipped = 0
+        var observations = 0; var withReading = 0
         var stop = Stop.DONE
         for (chunk in chunks) {
             if (done + skipped >= MAX_CHUNKS) { stop = Stop.CAP; break }
@@ -117,7 +128,7 @@ object LibrarianRun {
             val last = chunk.maxOf { it.id }
             val lastTs = chunk.maxOf { it.ts }
             val out = try {
-                model.complete(LibrarianPrompt.build(chunk, zone), LibrarianPrompt.MAX_TOKENS)
+                model.complete(LibrarianPrompt.build(chunk, zone, patterns), LibrarianPrompt.maxTokens(patterns))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -138,13 +149,44 @@ object LibrarianRun {
                 continue
             }
             failures.clear()
-            val parsed = NoteParser.parse(text)
-            val (a, m) = file(parsed.notes, chunk, store, zone, now())
-            added += a; merged += m; rejected += parsed.rejected
+            val parsed = NoteParser.parse(text, chunk)
+            rejected += parsed.rejected
+            var drafts = when {
+                !patterns -> parsed.notes.filter { it.obs == null }
+                !readings -> parsed.notes.map { d -> d.obs?.let { d.copy(obs = it.copy(reading = null)) } ?: d }
+                else -> parsed.notes
+            }
+            // Second, short pass: possible readings, only for observations that came without one.
+            val bare = drafts.indices.filter { drafts[it].obs != null && drafts[it].obs?.reading == null }.take(ReadingPrompt.MAX_OBS)
+            if (patterns && readings && bare.isNotEmpty() && keepGoing()) {
+                val list = bare.map { drafts[it].text to drafts[it].obs!! }
+                val rOut = try {
+                    model.complete(ReadingPrompt.build(list), ReadingPrompt.MAX_TOKENS)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    kotlin.Result.failure(e)
+                }
+                currentCoroutineContext().ensureActive()
+                val rText = rOut.getOrNull()
+                if (rText == null) log("reading pass failed on rows ${chunk.first().id}..$last: ${rOut.exceptionOrNull()?.message}")
+                else {
+                    val (found, rRejected) = NoteParser.parseReadings(rText, list.size)
+                    rejected += rRejected
+                    val byDraft = found.mapKeys { bare[it.key] }
+                    drafts = drafts.mapIndexed { i, d ->
+                        byDraft[i]?.let { r -> d.copy(obs = d.obs!!.copy(reading = r)) } ?: d
+                    }
+                }
+            }
+            observations += drafts.count { it.obs != null }
+            withReading += drafts.count { it.obs?.reading != null }
+            val (a, m) = file(drafts, chunk, store, zone, now())
+            added += a; merged += m
             source.markProcessed(last, lastTs); done++
         }
         val more = stop == Stop.CAP || (stop == Stop.DONE && fetched.size > MAX_ROWS && ready.size == rows.size)
-        return Result(done, added, merged, rejected, skipped, stop, more)
+        return Result(done, added, merged, rejected, skipped, stop, more, observations, withReading)
     }
 
     /** Files [drafts] from [chunk]: new notes inserted, duplicates merged. Returns (added, merged). */
@@ -152,6 +194,17 @@ object LibrarianRun {
         var added = 0; var merged = 0
         val ids = chunk.map { it.id }
         for (d in drafts) {
+            if (d.obs != null) {
+                // Observations keep their own evidence and are never merged: a pattern seen again
+                // is a second data point, not a duplicate.
+                store.insert(Note(
+                    kind = NoteKind.OBSERVATION, text = ObservationText.render(d.text, d.obs, zone),
+                    whenTs = null, whenEnd = null, heardTs = d.obs.quoteTs.minOrNull() ?: chunk.first().ts,
+                    sourceIds = ids, createdTs = now, updatedTs = now,
+                ))
+                added++
+                continue
+            }
             val heard = LibrarianChunker.anchorFor(chunk, d.whenPhrase)
             val span = TimeResolver.resolve(d.whenPhrase, heard, zone)
             val fresh = Note(
@@ -244,12 +297,14 @@ object Librarian {
             override fun unprocessed(limit: Int): List<HeardLine> = mem.librarianQueue(limit)
             override fun markProcessed(id: Long, ts: Long) = mem.markLibrarian(id, ts)
         }
+        val cfg = AmbientConfig(ctx)
         val result = coroutineScope {
             val work = async {
                 LibrarianRun.run(
                     source, MemoryNotes.get(ctx), m, ZoneId.systemDefault(),
                     now = System::currentTimeMillis, keepGoing = { allowed(ctx) }, failures = failures,
                     log = { android.util.Log.w(TAG, it) },
+                    patterns = cfg.notePatterns, readings = cfg.patternReadings,
                 )
             }
             val watch = launch {
@@ -269,7 +324,8 @@ object Librarian {
             }
         } ?: return false
         android.util.Log.i(TAG, "run: chunks=${result.chunks} added=${result.added} merged=${result.merged} " +
-            "rejected=${result.rejected} skipped=${result.skipped} stop=${result.stop}")
+            "rejected=${result.rejected} skipped=${result.skipped} stop=${result.stop} " +
+            "observations=${result.observations} readings=${result.readings}")
         return result.more
     }
 
