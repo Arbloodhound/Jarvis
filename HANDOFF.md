@@ -8,6 +8,49 @@ DOWNLOADS → Download all missing → Jarvis Tests 5 · Feature check → send 
 Owner's preferences: short plain answers; the guide is `DEPLOY_GUIDE.md`; update it if a button or
 section name changes (e.g. the new DOWNLOADS section replaces the per-model download steps in Part 2).
 
+**All three workers stopped before writing any code.** Each branch holds only one empty
+"WIP (stopped, not fully tested)" commit; its message records the findings below. Nothing has been
+built or tested on them. So all of the implementation is still to do, starting from the current
+`claude/new-session-t3cy17`. The branches are only notes; there is nothing to cherry-pick.
+None of the findings below has been checked on the phone. They come from reading the code and from the owner's results file.
+- **`claude/download-all` @ 2282bb5**
+  - **Voice:** the TTS voice downloads only when Jarvis is about to speak an answer, and spoken replies
+    are off by default, so it never downloads.
+  - **Embedder:** it needs at least one ambient line, plus Wi‑Fi, plus the retry backoff to have passed, plus an indexer trigger.
+  - **Sizes:** whisper 59.7 MB, VAD 0.9, wake 1.1+1.3+1.3, voice 21.0, speaker 40.3, embedder 23.0 + 0.2 vocab,
+    8B 4.8 GB, 1.7B 1.06 GB.
+  - **To build:**
+    - a Settings DOWNLOADS section at the top, listing every asset with its size and status, plus "Download all missing";
+    - a first-run card;
+    - a Jarvis Tests "Download everything missing" button;
+    - Feature-check MISSING lines that point to it.
+- **`claude/broken-fixes` @ 00b98ed**
+  - (1) Ambient holds transcription whenever either model is generating, loading or warming, with no
+    time cap. At WARM/HOT it silently drops overheard speech, a thermal rule written before whisper got
+    its own cores [0,1]. Fix: cap the hold, and don't drop on thermal now that whisper is on separate cores.
+  - (2) The librarian parser never fills `when` from the note text and never turns a fact into a to-do
+    ("need to …"). The prompt's example is also the probe's own test case, so change the example.
+  - (3) The brain-test verdict text (it wrongly suggests the IQ2_S MoE) was not started; make it model-aware.
+  - (4) A cool, idle phone already reads headroom 0.58 against WARM at 0.65, so the thresholds need retuning.
+- **`claude/fast-reasoning` @ 193bb59**
+  - **Benchmarks:** in Qwen's published thinking-mode numbers (4B-2507 model card, and Qwen3 Tech Report
+    arXiv 2505.09388 Table 17), the **4B-Thinking-2507 beats the 8B**:
+    - GPQA 65.8 vs 62.0
+    - AIME25 81.3 vs 67.3
+    - LiveBench 71.8 vs 67.1
+    - IFEval 87.4 vs 85.0
+    - BFCL-v3 71.2 vs 68.1
+    - The 8B is ahead only on MMLU-Redux, 87.5 vs 86.1.
+  - **So:** make the 4B-Thinking-2507 the default thinker. It runs at 8–11 tok/s on the Pixel, against 2–4 for the 8B. That answers the owner's
+    "too slow but I need powerful reasoning".
+  - **Think budgets are tiny:** WaitBudget's 20 s / 60 s wait caps, then the 0.6 scaling at WARM. Add the
+    Thinking depth setting (Quick/Balanced/Deep), with Deep lifting those caps.
+  - **8B paging:** its ctx is sized from total RAM, so it loaded resident at 16384 and left about 2.4 GB free.
+    Size it from the model plus free memory instead.
+  - **Later candidate:** Qwen3.5-4B (Q4_0 2.58 GB; card GPQA 76.2). llama.cpp 8345f33 supports its architecture. It is
+    untested on the phone, and it would re-read the whole prompt every turn (no prefix reuse), so don't
+    switch to it yet.
+
 ## IN PROGRESS (session 01BUKa, 2026-10-06 ~22:40 UTC)
 Owner's Feature-check file: `/root/.claude/uploads/54f3fe27-91b3-59c8-8eda-5b26d60c8d8d/4a86451b-Jarvis-results-20261006-1528.txt`.
 Summary of it:
