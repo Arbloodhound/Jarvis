@@ -9,13 +9,38 @@ class ThermalPolicyTest {
     private fun lv(h: Float, s: Int = 0, p: Level = Level.NORMAL) = ThermalPolicy.levelFor(h, s, p)
 
     @Test fun headroomBands() {
-        assertEquals(Level.NORMAL, lv(0.3f)); assertEquals(Level.WARM, lv(0.7f))
-        assertEquals(Level.HOT, lv(0.85f)); assertEquals(Level.CRITICAL, lv(0.97f))
+        assertEquals(Level.NORMAL, lv(0.3f)); assertEquals(Level.WARM, lv(0.8f))
+        assertEquals(Level.HOT, lv(0.9f)); assertEquals(Level.CRITICAL, lv(0.97f))
+    }
+
+    /** Pixel 10 Pro XL Feature check, 2026-10-06: a cool, idle phone read headroom 0.58, which
+     *  the old WARM at 0.65 was only 0.07 above. Idle, and some warming above it, is NORMAL. */
+    @Test fun coolIdlePixelIsNormal() {
+        assertEquals(Level.NORMAL, lv(0.58f))
+        assertEquals(Level.NORMAL, lv(0.65f))
+        assertEquals(Level.NORMAL, lv(0.7f))
+        assertEquals(Level.NORMAL, lv(0.58f, p = Level.WARM))   // back to idle after a warm spell
+        assertEquals(ThermalPolicy.AmbientMode.NORMAL, lv(0.58f).ambient)
+    }
+    @Test fun thresholdsLeaveRoomForHysteresis() {
+        assertTrue(ThermalPolicy.WARM_AT - ThermalPolicy.HYST > 0.58f + 0.1f)   // dropping back stays clear of idle
+        assertTrue(ThermalPolicy.HOT_AT - ThermalPolicy.HYST > ThermalPolicy.WARM_AT)
+        assertTrue(ThermalPolicy.CRIT_AT - ThermalPolicy.HYST > ThermalPolicy.HOT_AT)
+        assertTrue(ThermalPolicy.CRIT_AT < 1.0f)                                // before the OS's SEVERE
     }
     @Test fun hysteresisPreventsFlapping() {
-        assertEquals(Level.HOT, lv(0.78f, p = Level.HOT))       // stays HOT just under 0.80
-        assertEquals(Level.WARM, lv(0.74f, p = Level.HOT))      // drops once clearly below
-        assertEquals(Level.WARM, lv(0.78f, p = Level.NORMAL))   // rising from NORMAL to 0.78 is only WARM
+        assertEquals(Level.HOT, lv(0.85f, p = Level.HOT))       // stays HOT just under 0.87
+        assertEquals(Level.WARM, lv(0.8f, p = Level.HOT))       // drops once clearly below
+        assertEquals(Level.WARM, lv(0.85f, p = Level.NORMAL))   // rising from NORMAL to 0.85 is only WARM
+        assertEquals(Level.WARM, lv(0.72f, p = Level.WARM))     // stays WARM just under 0.75
+        assertEquals(Level.CRITICAL, lv(0.92f, p = Level.CRITICAL))
+        assertEquals(Level.HOT, lv(0.92f, p = Level.HOT))
+    }
+    /** Whisper has its own cores: WARM leaves ambient alone, HOT slows it, only CRITICAL pauses it. */
+    @Test fun ambientOnlyPausesAtCritical() {
+        assertEquals(ThermalPolicy.AmbientMode.NORMAL, Level.WARM.ambient)
+        assertEquals(ThermalPolicy.AmbientMode.SLOWED, Level.HOT.ambient)
+        assertEquals(ThermalPolicy.AmbientMode.WAKE_ONLY, Level.CRITICAL.ambient)
     }
     @Test fun unsupportedFailsOpen() = assertEquals(Level.NORMAL, lv(Float.NaN))
     @Test fun osStatusIsAFloor() {
@@ -30,14 +55,14 @@ class ThermalPolicyTest {
         assertEquals(Level.NORMAL, lv(0.3f, ThermalPolicy.STATUS_LIGHT))
         assertEquals(6, ThermalPolicy.resolveThreads(0, lv(0.3f, ThermalPolicy.STATUS_LIGHT), 6))
         // leaving a hot spell under LIGHT follows the headroom (and its hysteresis) alone
-        assertEquals(Level.NORMAL, lv(0.5f, ThermalPolicy.STATUS_LIGHT, p = Level.WARM))
-        assertEquals(Level.WARM, lv(0.62f, ThermalPolicy.STATUS_LIGHT, p = Level.WARM))
+        assertEquals(Level.NORMAL, lv(0.68f, ThermalPolicy.STATUS_LIGHT, p = Level.WARM))
+        assertEquals(Level.WARM, lv(0.72f, ThermalPolicy.STATUS_LIGHT, p = Level.WARM))
     }
     @Test fun headroomStillRaisesTheLevelUnderLight() {
-        assertEquals(Level.WARM, lv(0.7f, ThermalPolicy.STATUS_LIGHT))
-        assertEquals(Level.HOT, lv(0.85f, ThermalPolicy.STATUS_LIGHT))
-        assertEquals(2, ThermalPolicy.resolveThreads(0, lv(0.85f, ThermalPolicy.STATUS_LIGHT), 6))
-        assertEquals(Level.HOT, lv(0.78f, ThermalPolicy.STATUS_LIGHT, p = Level.HOT))   // hysteresis kept
+        assertEquals(Level.WARM, lv(0.8f, ThermalPolicy.STATUS_LIGHT))
+        assertEquals(Level.HOT, lv(0.9f, ThermalPolicy.STATUS_LIGHT))
+        assertEquals(2, ThermalPolicy.resolveThreads(0, lv(0.9f, ThermalPolicy.STATUS_LIGHT), 6))
+        assertEquals(Level.HOT, lv(0.85f, ThermalPolicy.STATUS_LIGHT, p = Level.HOT))   // hysteresis kept
     }
     @Test fun moderateAndAboveStillSetAFloor() {
         assertEquals(Level.HOT, lv(Float.NaN, ThermalPolicy.STATUS_MODERATE))

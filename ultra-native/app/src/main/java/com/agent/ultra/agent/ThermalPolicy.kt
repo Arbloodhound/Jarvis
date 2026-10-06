@@ -13,18 +13,29 @@ object ThermalPolicy {
 
     // LLM threads per level come from threadsFor(level, base), not a fixed column here:
     // the full-speed count is the device's, not the policy's.
+    // Ambient listening: whisper runs on the cores the LLM doesn't use (CpuTopology.whisperCpus),
+    // so WARM leaves it alone, HOT runs it on one thread, and only CRITICAL pauses memory-only
+    // capture (AmbientThrottle). WARM used to throttle it and HOT to drop overheard speech.
     enum class Level(val budgetScale: Float, val ambient: AmbientMode) {
         NORMAL(1.0f, AmbientMode.NORMAL),
-        WARM(0.6f, AmbientMode.SLOWED),
-        HOT(0.3f, AmbientMode.WAKE_ONLY),
+        WARM(0.6f, AmbientMode.NORMAL),
+        HOT(0.3f, AmbientMode.SLOWED),
         CRITICAL(0.0f, AmbientMode.WAKE_ONLY),   // device commands only
     }
 
-    // upward thresholds; coming back down needs HYST lower, so it doesn't oscillate
-    private const val WARM_AT = 0.65f
-    private const val HOT_AT = 0.80f
-    private const val CRIT_AT = 0.95f
-    private const val HYST = 0.05f
+    // Upward thresholds; coming back down needs HYST lower, so it doesn't oscillate.
+    // getThermalHeadroom is a forecast scaled so that 1.0 is where the OS starts SEVERE
+    // throttling; Android does not promise it is linear, nor that 0.0 is any particular state.
+    // On the owner's Pixel 10 Pro XL a cool, idle phone reads ~0.58 (Feature check, 2026-10-06),
+    // so the usable band is ~0.6..1.0, not 0..1. The old WARM at 0.65 sat 0.07 above idle and
+    // cut threads and think budget at the first warm-up. Now: WARM 0.75 (~40% of the way from
+    // idle to severe; it drops back below 0.70, still 0.12 above idle), HOT 0.87 (~70%; MODERATE
+    // status also forces HOT, below), CRITICAL 0.95 unchanged (just short of SEVERE). One idle
+    // reading from one phone: re-check against the next Feature check's "headroom=" line.
+    const val WARM_AT = 0.75f
+    const val HOT_AT = 0.87f
+    const val CRIT_AT = 0.95f
+    const val HYST = 0.05f
 
     // android.os.PowerManager.THERMAL_STATUS_* values (LIGHT is named for the tests: it sets no floor)
     const val STATUS_LIGHT = 1

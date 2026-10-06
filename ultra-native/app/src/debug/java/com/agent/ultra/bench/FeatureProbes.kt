@@ -99,7 +99,9 @@ object FeatureProbes {
                 Verdict.PASS -> "phone is cool: answers run at full speed"
                 Verdict.WARN -> "phone is warm: Jarvis uses fewer threads and shorter thinking (slower answers)"
                 else -> "phone is too hot: only device commands run"
-            })
+            },
+            listOf("headroom thresholds: warm ${ThermalPolicy.WARM_AT}, hot ${ThermalPolicy.HOT_AT}, " +
+                "critical ${ThermalPolicy.CRIT_AT} (1.0 = the OS's severe throttling)"))
         return listOf(cpu, thermal)
     }
 
@@ -163,7 +165,14 @@ object FeatureProbes {
             ageMin == null || ageMin > 24 * 60 -> Verdict.WARN to "listening, but nothing was stored in the last day"
             else -> Verdict.PASS to "listening, and storing what it hears"
         }
-        return listOf(Result("Ambient listening", v, numbers, meaning, listOf("wake name=\"${cfg.wakeName}\" retention=${cfg.retentionDays} days")))
+        // Since the service started (this process): speech, whisper runs, drops. "last heard" above is
+        // the newest stored line; these say whether speech was heard but held, dropped or filtered out.
+        fun since(ts: Long) = if (ts <= 0L) "never" else ago((System.currentTimeMillis() - ts) / 60_000)
+        val pipeline = "since start: last speech ${since(AmbientListenService.lastSpeechAt)}, " +
+            "last transcribed ${since(AmbientListenService.lastTranscribedAt)}, " +
+            "dropped untranscribed ${AmbientListenService.dropped.get()}"
+        return listOf(Result("Ambient listening", v, numbers, meaning,
+            listOf("wake name=\"${cfg.wakeName}\" retention=${cfg.retentionDays} days", pipeline)))
     }
 
     private fun ago(min: Long) = when {
@@ -690,6 +699,19 @@ object FeatureProbes {
 
     private fun thinker(env: ProbeEnv) = LocalModelEngine.shared(env.ctx)
 
+    /** The Change-model list, for [KitReport.smallerModel]. */
+    private fun presets() = LocalModelEngine.PRESETS.map { KitReport.Preset(it.label, it.fileName, it.approxMb, it.desktopOnly) }
+
+    /** [engine]'s weights in MB: its preset's listed size, else the file on disk. */
+    private fun modelMb(engine: LocalModelEngine): Int =
+        LocalModelEngine.PRESETS.firstOrNull { it.fileName == engine.modelFileName }?.approxMb
+            ?: (engine.modelFileSizeBytes / 1_048_576).toInt()
+
+    /** The brain test's verdict line for the model in use ([KitReport.advice]). */
+    fun modelAdvice(engine: LocalModelEngine, verdict: KitReport.Model, medianTps: Double?): String =
+        KitReport.advice(verdict, engine.modelLabel, engine.modelFileName, modelMb(engine), medianTps, presets(),
+            exclude = setOf(LocalModelEngine.LIBRARIAN_DEFAULT.fileName))
+
     private fun missingThinker(feature: String) =
         Result(feature, Verdict.MISSING, "not downloaded", "Settings → ON-DEVICE MODEL → download one first")
 
@@ -729,8 +751,12 @@ object FeatureProbes {
                 v == Verdict.WARN -> "works, but slower than comfortable reading speed"
                 else -> "too slow to be useful on this phone"
             },
-            listOf("model=${engine.modelLabel} file=${engine.modelFileSizeBytes / 1_048_576} MB ctx=${engine.contextSize} " +
-                "thinking=${engine.isThinkingModel}", "tokens=$pieces thermal=${ThermalGuard.level}")))
+            listOfNotNull("model=${engine.modelLabel} file=${engine.modelFileSizeBytes / 1_048_576} MB ctx=${engine.contextSize} " +
+                "thinking=${engine.isThinkingModel}", "tokens=$pieces thermal=${ThermalGuard.level}",
+                // Slow or paging: a smaller model is the remedy for both. One 64-token sample, so a guide only.
+                if (tps < KitReport.COMFORT_TOK_PER_SEC || faults > 1000)
+                    "one short sample: " + modelAdvice(engine, KitReport.Model.TRY_SMALLER, tps.takeIf { it > 0 })
+                else null)))
     }
 
     /** Think budget and answer room for the graded questions: modest, so 6 questions fit in minutes. */

@@ -35,7 +35,7 @@ object KitReport {
     const val COMFORT_TOK_PER_SEC = 5.0
 
     /**
-     * The keep / try-IQ2_S rule from the Pixel guide. [tps]: tokens/sec per question, in order
+     * The keep / try-a-smaller-model rule from the Pixel guide (which model: [smallerModel]). [tps]: tokens/sec per question, in order
      * (null = that question produced no on-device answer). Keep when there was no crash, the
      * median is at least [COMFORT_TOK_PER_SEC], and the last question runs at no less than two
      * thirds of the second's speed (the first absorbs loading). Fewer than 3 measured
@@ -45,12 +45,87 @@ object KitReport {
         if (crashed) return Model.TRY_SMALLER to "the app crashed during the test"
         val measured = tps.filterNotNull()
         if (measured.size < 3) return Model.NOT_ENOUGH_DATA to "only ${measured.size} answers were measured"
-        val median = measured.sorted().let { s -> if (s.size % 2 == 1) s[s.size / 2] else (s[s.size / 2 - 1] + s[s.size / 2]) / 2 }
+        val median = median(measured)!!
         if (median < COMFORT_TOK_PER_SEC) return Model.TRY_SMALLER to "median ${fmt(median)} tok/s is below $COMFORT_TOK_PER_SEC"
         val second = measured[1]
         val last = measured.last()
         if (last < second * 2 / 3) return Model.TRY_SMALLER to "slowed down from ${fmt(second)} to ${fmt(last)} tok/s"
         return Model.KEEP to "median ${fmt(median)} tok/s, steady (${fmt(second)} → ${fmt(last)})"
+    }
+
+    /** Median of the measured speeds (nulls skipped), or null when none was measured. */
+    fun median(tps: List<Double?>): Double? {
+        val s = tps.filterNotNull().sorted()
+        if (s.isEmpty()) return null
+        return if (s.size % 2 == 1) s[s.size / 2] else (s[s.size / 2 - 1] + s[s.size / 2]) / 2
+    }
+
+    /** A model the Change-model list offers ([com.agent.ultra.local.ModelChoice], without Android). */
+    data class Preset(val label: String, val fileName: String, val approxMb: Int, val desktopOnly: Boolean = false)
+
+    /** A suggested model is at most this share of the current one's size. */
+    const val MAX_SIZE_RATIO = 0.75
+
+    /** The model to try and its expected speed (tok/s; null when nothing was measured). */
+    data class Suggestion(val preset: Preset, val expectedTokPerSec: Double?)
+
+    /**
+     * The model to try when the current one ([currentFile], [currentMb] of weights) is too slow,
+     * from the presets that exist ([presets], in the list's order: preferred first). Never the
+     * desktop-only ones, nor the Qwen3-30B-A3B MoE or its fine-tunes ("moe" in the file name, as
+     * LocalModelEngine tells them apart): on the
+     * 16 GB Pixel only ~8.6 GB is free, the MoE's 9.3–10 GB pages from storage and measured
+     * 0.4–1.6 tok/s, so it is never the cure for slowness (the old advice named its IQ2_S).
+     * Nor anything in [exclude] (the librarian's own model).
+     *
+     * Candidates are at most [MAX_SIZE_RATIO] of the current model's size (a model a few percent
+     * smaller would not fix the slowness). Decoding on the CPU is bound by memory
+     * bandwidth, so speed scales roughly with 1 / weight size: each one's expected speed is
+     * [medianTps] × currentMb / its size (a rough guide; the 8B→4B step on the Pixel went from
+     * 2–4 to 8–11 tok/s, a little better than this predicts). The first candidate expected to
+     * reach [COMFORT_TOK_PER_SEC] wins; with nothing measured, the first candidate in list order;
+     * with none expected to reach it, the smallest (the fastest expected).
+     * Null when no smaller model is listed.
+     */
+    fun smallerModel(
+        currentFile: String,
+        currentMb: Int,
+        medianTps: Double?,
+        presets: List<Preset>,
+        exclude: Set<String> = emptySet(),
+    ): Suggestion? {
+        if (currentMb <= 0) return null
+        val candidates = presets.filter {
+            !it.desktopOnly && !it.fileName.contains("moe") && it.fileName != currentFile &&
+                it.fileName !in exclude && it.approxMb in 1..(currentMb * MAX_SIZE_RATIO).toInt()
+        }
+        if (candidates.isEmpty()) return null
+        fun expected(p: Preset) = medianTps?.let { it * currentMb / p.approxMb }
+        val pick = if (medianTps == null) candidates.first()
+            else candidates.firstOrNull { expected(it)!! >= COMFORT_TOK_PER_SEC } ?: candidates.minBy { it.approxMb }
+        return Suggestion(pick, expected(pick))
+    }
+
+    /** The brain test's one-line verdict for the model in use ([currentLabel]), naming a real
+     *  smaller preset ([smallerModel]) when it is too slow. */
+    fun advice(
+        verdict: Model,
+        currentLabel: String,
+        currentFile: String,
+        currentMb: Int,
+        medianTps: Double?,
+        presets: List<Preset>,
+        exclude: Set<String> = emptySet(),
+    ): String = when (verdict) {
+        Model.KEEP -> "KEEP this model ($currentLabel)."
+        Model.NOT_ENOUGH_DATA -> "Not enough answers to judge — send me the results file."
+        Model.TRY_SMALLER -> when (val s = smallerModel(currentFile, currentMb, medianTps, presets, exclude)) {
+            null -> "$currentLabel is already the smallest model listed; nothing smaller to try — send me the results file."
+            else -> "TRY A SMALLER MODEL: Settings → ON-DEVICE MODEL → Change model → \"${s.preset.label}\" → Download, " +
+                "then run test 2 again." + (s.expectedTokPerSec?.let {
+                    " Expect roughly ${fmt(it)} tok/s (this model's ${fmt(medianTps!!)} scaled by size: ${currentMb} → ${s.preset.approxMb} MB)."
+                } ?: "")
+        }
     }
 
     fun fmt(v: Double): String = String.format(java.util.Locale.ROOT, "%.1f", v)

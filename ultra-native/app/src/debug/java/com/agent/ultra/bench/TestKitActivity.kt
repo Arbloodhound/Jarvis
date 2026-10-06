@@ -256,11 +256,8 @@ class TestKitActivity : ComponentActivity() {
             record("BRAIN TEST Q${i + 1}", listOf(summary, "answer: ${answer.take(300).replace('\n', ' ')}") + log)
         }
         val (verdict, why) = KitReport.modelVerdict(tps.take(10), crashed = false)
-        val advice = when (verdict) {
-            KitReport.Model.KEEP -> "KEEP this model."
-            KitReport.Model.TRY_SMALLER -> "TRY THE SMALLER ONE: Settings → ON-DEVICE MODEL → Change model → \"(IQ2_S) — roomier fallback\" → Download, then run test 2 again."
-            KitReport.Model.NOT_ENOUGH_DATA -> "Not enough answers to judge — send me the results file."
-        }
+        // Model-aware: names a smaller preset that exists, from this model's measured speed.
+        val advice = FeatureProbes.modelAdvice(engine, verdict, KitReport.median(tps.take(10)))
         val tail = listOfNotNull(
             "Verdict: $advice ($why)",
             "<think> text visible: ${if (thinkLeak == 0) "never (good)" else "$thinkLeak times (send me the file)"}",

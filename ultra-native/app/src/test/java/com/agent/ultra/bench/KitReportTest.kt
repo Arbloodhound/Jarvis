@@ -26,4 +26,77 @@ class KitReportTest {
     @Test fun logcatSinceFormat() = assertEquals("1700000000.005", KitReport.logcatSince(1_700_000_000_005))
     @Test fun crashDetected() = assertTrue(KitReport.hasCrash(listOf("E/AndroidRuntime: FATAL EXCEPTION: main")))
     @Test fun noCrash() = assertFalse(KitReport.hasCrash(listOf("I/UltraLlm: ok")))
+
+    // The real list's shape (LocalModelEngine.PRESETS, in order): file names and listed sizes.
+    private val presets = listOf(
+        KitReport.Preset("Qwen3-4B Thinking 2507 (Q4_0)", "qwen3-4b-thinking-2507-q4_0.gguf", 2266),
+        KitReport.Preset("Qwen3-4B Thinking 2507 ABLITERATED (Q4_K_M)", "qwen3-4b-thinking-2507-abliterated-q4km.gguf", 2382),
+        KitReport.Preset("Qwen3-8B (Q4_K_S)", "qwen3-8b-q4ks.gguf", 4580),
+        KitReport.Preset("Jarvis fine-tune (IQ2_S)", "qwen3moe-jarvis-iq2s.gguf", 9300),
+        KitReport.Preset("Qwen3-30B-A3B Thinking ABLITERATED (IQ2_M)", "qwen3moe-abliterated-iq2m.gguf", 10240),
+        KitReport.Preset("Qwen3-30B-A3B Thinking ABLITERATED (IQ2_S) — roomier fallback", "qwen3moe-abliterated-iq2s.gguf", 9300),
+        KitReport.Preset("Qwen3-30B-A3B Thinking (IQ3) — DESKTOP ONLY", "qwen3moe-thinking-iq3xxs.gguf", 12900, desktopOnly = true),
+        KitReport.Preset("Qwen3 1.7B (Q4_K_M)", "qwen3-1.7b-q4km.gguf", 1110),
+        KitReport.Preset("Qwen3 1.7B (Q4_0) — memory model", "qwen3-1.7b-q4_0.gguf", 1008),
+        KitReport.Preset("Gemma 3 1B (Q4_K_M)", "gemma3-1b-q4km.gguf", 768),
+    )
+    private val lib = setOf("qwen3-1.7b-q4_0.gguf")
+
+    /** Pixel 10 Pro XL: the 8B at 2–4 tok/s. The advice is the 4B, never the MoE's IQ2_S. */
+    @Test fun slow8bSuggestsThe4b() {
+        val s = KitReport.smallerModel("qwen3-8b-q4ks.gguf", 4580, 3.0, presets, lib)!!
+        assertEquals("qwen3-4b-thinking-2507-q4_0.gguf", s.preset.fileName)
+        assertEquals(3.0 * 4580 / 2266, s.expectedTokPerSec!!, 1e-9)
+        val text = KitReport.advice(KitReport.Model.TRY_SMALLER, "Qwen3-8B (Q4_K_S)", "qwen3-8b-q4ks.gguf", 4580, 3.0, presets, lib)
+        assertTrue(text, "Qwen3-4B Thinking 2507 (Q4_0)" in text)
+        assertFalse(text, "IQ2" in text)
+    }
+
+    @Test fun neverTheMoeOrDesktopOnly() {
+        // Even from the MoE itself (10 GB), the suggestion is a fast-path model, not another MoE.
+        val s = KitReport.smallerModel("qwen3moe-abliterated-iq2m.gguf", 10240, 1.0, presets, lib)!!
+        assertFalse(s.preset.fileName.startsWith("qwen3moe"))
+        for (mb in listOf(20_000, 4580, 2266)) for (tps in listOf(null, 0.5, 4.0)) {
+            val p = KitReport.smallerModel("x.gguf", mb, tps, presets, lib)?.preset ?: continue
+            assertFalse(p.fileName.startsWith("qwen3moe")); assertFalse(p.desktopOnly)
+        }
+    }
+
+    @Test fun slow4bSuggestsTheNextSmallerNotTheLibrarian() {
+        val s = KitReport.smallerModel("qwen3-4b-thinking-2507-q4_0.gguf", 2266, 3.0, presets, lib)!!
+        assertEquals("qwen3-1.7b-q4km.gguf", s.preset.fileName)   // the abliterated 4B is not smaller
+    }
+
+    @Test fun veryslowTakesTheSmallest() =
+        assertEquals("gemma3-1b-q4km.gguf", KitReport.smallerModel("qwen3-8b-q4ks.gguf", 4580, 0.5, presets, lib)!!.preset.fileName)
+
+    @Test fun unmeasuredTakesTheFirstSmallerInListOrder() {
+        val s = KitReport.smallerModel("qwen3-8b-q4ks.gguf", 4580, null, presets, lib)!!
+        assertEquals("qwen3-4b-thinking-2507-q4_0.gguf", s.preset.fileName)
+        assertNull(s.expectedTokPerSec)
+    }
+
+    @Test fun smallestModelHasNothingSmaller() {
+        assertNull(KitReport.smallerModel("gemma3-1b-q4km.gguf", 768, 2.0, presets, lib))
+        val text = KitReport.advice(KitReport.Model.TRY_SMALLER, "Gemma 3 1B", "gemma3-1b-q4km.gguf", 768, 2.0, presets, lib)
+        assertTrue(text, "already the smallest" in text)
+    }
+
+    @Test fun keepAndNotEnoughDataNameNoModel() {
+        assertTrue(KitReport.advice(KitReport.Model.KEEP, "Qwen3-8B", "qwen3-8b-q4ks.gguf", 4580, 9.0, presets).startsWith("KEEP"))
+        assertTrue(KitReport.advice(KitReport.Model.NOT_ENOUGH_DATA, "Qwen3-8B", "qwen3-8b-q4ks.gguf", 4580, null, presets)
+            .startsWith("Not enough"))
+    }
+
+    @Test fun medianSkipsUnmeasured() {
+        assertEquals(6.0, KitReport.median(listOf(null, 5.0, 6.0, 7.0))!!, 1e-9)
+        assertEquals(5.5, KitReport.median(listOf(5.0, 6.0))!!, 1e-9)
+        assertNull(KitReport.median(listOf(null, null)))
+    }
+
+    /** A 4B a few percent smaller than another 4B is no cure: the next real step down is suggested. */
+    @Test fun aBarelySmallerModelIsNotSuggested() {
+        val s = KitReport.smallerModel("qwen3-4b-thinking-2507-abliterated-q4km.gguf", 2382, 4.9, presets, lib)!!
+        assertEquals("qwen3-1.7b-q4km.gguf", s.preset.fileName)
+    }
 }

@@ -60,7 +60,6 @@ class AmbientListenService : Service() {
     @Volatile private var windowId = 0L
     private var consumedWindowId = 0L            // whisper worker only
     private val windowLock = Any()               // a new window vs. the worker holding one open
-    private var lastMemoryAt = 0L          // thermal throttle: last memory-only transcription
     @Volatile private var cues: TranscriptCueWorker? = null   // speaker/pause tags, after storing
     private val turnGaps = TurnGaps()      // whisper worker only: the pause before each utterance
     // The cores the LLM doesn't run on (the little ones on big.LITTLE); empty = unpinned.
@@ -130,7 +129,11 @@ class AmbientListenService : Service() {
             if (!initModels()) { stopSelf(); return }
             // The worker moves these into its own bounded backlog before each transcription, so
             // this drop only matters if a single transcription outlasts 16 utterances.
-            val utterances = Channel<Utterance>(16, BufferOverflow.DROP_OLDEST)
+            // Overflow only: elements left behind when the pipeline stops are not "dropped".
+            var stopping = false
+            val utterances = Channel<Utterance>(16, BufferOverflow.DROP_OLDEST) { d ->
+                if (!stopping) logDropped("handoff queue full", d.pcm.size, d.windowId != 0L)
+            }
             val cueWorker = TranscriptCueWorker(applicationContext, mem, cfg).also { cues = it }
             coroutineScope {
                 // whisper runs off the capture thread, so reading the mic (and feeding
@@ -138,7 +141,7 @@ class AmbientListenService : Service() {
                 launch { transcribeWorker(utterances) }
                 // Cues (voiceprints etc.) are added after a line is stored, never in its way.
                 launch { cueWorker.run() }
-                try { capture(utterances) } finally { utterances.close(); cueWorker.close() }
+                try { capture(utterances) } finally { stopping = true; utterances.close(); cueWorker.close() }
             }
             // Capture ended on its own (mic error), not by onDestroy: don't stay "listening".
             if (currentCoroutineContext().isActive) stopSelf()
@@ -156,20 +159,26 @@ class AmbientListenService : Service() {
     private class Utterance(val pcm: ShortArray, val endedAt: Long, val windowId: Long, val floorDb: Float)
 
     /**
-     * Transcribes utterances in the order they ended, but not while the on-device brain is
+     * Transcribes utterances in the order they ended, preferably not while the on-device brain is
      * generating, loading or warming (nor within [AmbientBacklog.SETTLE_MS] of it): they wait in a
-     * bounded backlog ([AmbientBacklog]) and run once it is idle. Wake-word detection is
-     * unaffected (capture thread). A command heard meanwhile is judged and dispatched after the
-     * current answer, with the window it was stamped with.
+     * bounded backlog ([AmbientBacklog]) and run once it is idle, or once the oldest has waited
+     * [AmbientBacklog.maxHoldMs] (whisper is on its own cores). Wake-word detection is
+     * unaffected (capture thread). A command heard meanwhile is judged with the window it was
+     * stamped with, and [dispatch] holds it until the brain is idle, so it still runs after the
+     * current answer.
      */
     private suspend fun transcribeWorker(utterances: Channel<Utterance>) = coroutineScope {
         // Either model: the thinker answering, or the librarian sorting memory.
         val busy = com.agent.ultra.local.LocalModelEngine.anyBusy
         val busyChangedAt = java.util.concurrent.atomic.AtomicLong(0L)
         val watcher = launch { busy.collect { busyChangedAt.set(System.currentTimeMillis()) } }
-        fun ready() = AmbientBacklog.mayTranscribe(busy.value, System.currentTimeMillis(), busyChangedAt.get())
         val backlog = ArrayDeque<Utterance>()
+        val maxHold = AmbientBacklog.maxHoldMs(whisperPinned = whisperCpus.isNotEmpty())
+        fun idleNow() = AmbientBacklog.mayTranscribe(busy.value, System.currentTimeMillis(), busyChangedAt.get())
+        fun ready() = AmbientBacklog.shouldDrain(busy.value, System.currentTimeMillis(), busyChangedAt.get(),
+            backlog.firstOrNull()?.endedAt, maxHold)
         var heldWindow = 0L
+        var capLogged = false
 
         fun take(u: Utterance) {
             val dropped = AmbientBacklog.admit(backlog, u, { it.pcm.size }, { it.windowId != 0L })
@@ -184,9 +193,7 @@ class AmbientListenService : Service() {
                     }
                 }
             }
-            for (d in dropped) android.util.Log.w("UltraAmbient",
-                "backlog full: dropped a ${d.pcm.size * 1000L / AmbientConfig.SAMPLE_RATE} ms utterance " +
-                    "(window=${d.windowId != 0L})")
+            for (d in dropped) logDropped("backlog full", d.pcm.size, d.windowId != 0L)
         }
 
         try {
@@ -198,6 +205,12 @@ class AmbientListenService : Service() {
                     take(r.getOrNull() ?: break)
                 }
                 if (backlog.isNotEmpty() && ready()) {
+                    if (idleNow()) capLogged = false
+                    else if (!capLogged) {
+                        capLogged = true
+                        android.util.Log.i("UltraAmbient", "brain busy over ${maxHold / 1000} s: transcribing " +
+                            "${backlog.size} held utterance(s) anyway (whisper cpus=${whisperCpus.toList()})")
+                    }
                     val u = backlog.removeFirst()
                     onUtterance(u.pcm, u.endedAt, u.windowId, u.floorDb)
                     continue
@@ -206,13 +219,15 @@ class AmbientListenService : Service() {
                     take(utterances.receiveCatching().getOrNull() ?: return@coroutineScope)
                     continue
                 }
-                // Queued and busy: sleep until speech arrives or the brain has settled. select
-                // takes an element atomically, so none is lost when the idle side wins.
+                // Queued and busy: sleep until speech arrives, the brain has settled or the hold
+                // cap is reached. select takes an element atomically, so none is lost when the
+                // idle side wins.
                 val idle = async {
                     while (!ready()) {
-                        if (busy.value) busy.first { !it }
-                        else delay((AmbientBacklog.SETTLE_MS - (System.currentTimeMillis() - busyChangedAt.get()))
-                            .coerceIn(1L, AmbientBacklog.SETTLE_MS))
+                        val wait = AmbientBacklog.waitMs(busy.value, System.currentTimeMillis(), busyChangedAt.get(),
+                            backlog.firstOrNull()?.endedAt, maxHold)
+                        if (busy.value) kotlinx.coroutines.withTimeoutOrNull(wait) { busy.first { !it } }
+                        else delay(wait)
                     }
                 }
                 try {
@@ -226,6 +241,12 @@ class AmbientListenService : Service() {
             watcher.cancel()
             if (backlog.isNotEmpty()) android.util.Log.i("UltraAmbient", "stopping with ${backlog.size} untranscribed")
         }
+    }
+
+    private fun logDropped(why: String, samples: Int, window: Boolean) {
+        val n = dropped.incrementAndGet()
+        android.util.Log.w("UltraAmbient", "$why: dropped a ${samples * 1000L / AmbientConfig.SAMPLE_RATE} ms " +
+            "utterance untranscribed (window=$window, $n dropped since start)")
     }
 
     /** Returns false if listening can't start. Checks for cancellation between the
@@ -266,6 +287,7 @@ class AmbientListenService : Service() {
         seg = Segmenter { pcm, _ ->
             val now = System.currentTimeMillis()
             val open = gate != null && now < cmdWindowUntil
+            lastSpeechAt = now
             out.trySend(Utterance(pcm, now, if (open) windowId else 0L, seg.noiseFloorDb))
         }
         var failures = 0
@@ -344,14 +366,16 @@ class AmbientListenService : Service() {
         val audioMs = pcm.size * 1000L / AmbientConfig.SAMPLE_RATE
         val gapBefore = turnGaps.next(db, floorDb, t, audioMs)
         val windowOpen = gate != null && wid != 0L && wid != consumedWindowId
-        val plan = AmbientThrottle.decide(
-            com.agent.ultra.agent.ThermalGuard.level.ambient, windowOpen, gate != null, t, lastMemoryAt,
-        )
-        if (!plan.transcribe) return                       // hot: memory-only capture dropped
-        if (!windowOpen) lastMemoryAt = t
+        val level = com.agent.ultra.agent.ThermalGuard.level
+        val plan = AmbientThrottle.decide(level.ambient, windowOpen, gate != null)
+        if (!plan.transcribe) {                            // CRITICAL: memory-only capture paused
+            logDropped("thermal $level", pcm.size, false)
+            return
+        }
         val r = WhisperNative.transcribe(
             whisper, pcm, plan.threads, WhisperNative.verbatimPrompt(cfg.wakeName), whisperCpus, timing = true,
         ) ?: return
+        lastTranscribedAt = System.currentTimeMillis()
         if (!kept(r)) return
 
         val now = System.currentTimeMillis()
@@ -395,9 +419,30 @@ class AmbientListenService : Service() {
         return (listOf(cfg.wakeName) + fromModel).filter { it.isNotBlank() }
     }
 
+    /** Commands heard while the brain was busy (transcribed past the hold cap), in order. */
+    private val pendingCommands = Channel<String>(Channel.UNLIMITED)
+    private var commandRunner: Job? = null
+
+    /**
+     * Runs [request] once the on-device brain is idle. Past the hold cap whisper transcribes
+     * while the brain is still answering; a command it hears then waits here, so it runs after
+     * the current answer (as when transcription itself waited) instead of beside it.
+     */
+    @Synchronized private fun dispatch(request: String) {
+        val busy = com.agent.ultra.local.LocalModelEngine.anyBusy
+        if (commandRunner == null) commandRunner = scope.launch {
+            for (r in pendingCommands) {
+                if (busy.value) android.util.Log.i("UltraAmbient", "command heard while the brain is busy: runs after it")
+                busy.first { !it }
+                dispatchNow(r)
+            }
+        }
+        pendingCommands.trySend(request)
+    }
+
     /** The voice screen's brain answers when it is open; otherwise a brain owned by
      * this service does, so a command is never dropped because no Activity is alive. */
-    private fun dispatch(request: String) {
+    private fun dispatchNow(request: String) {
         AmbientBridge.onCommand?.let { it(request); return }
         // Main, as VoiceActivity's lifecycleScope runs it.
         scope.launch(Dispatchers.Main) {
@@ -482,6 +527,16 @@ class AmbientListenService : Service() {
         private const val NOTIF_ID = 7101
         private const val MAX_MIC_FAILURES = 3
         @Volatile var instance: AmbientListenService? = null
+
+        // For the Feature check's "Ambient listening" line (this process only; 0 = not yet):
+        // when speech last ended, when whisper last ran on it, and how many utterances were
+        // dropped without being transcribed. "last heard" there is the newest STORED line, so
+        // these tell "nothing said" from "said but held, dropped or filtered".
+        @Volatile var lastSpeechAt = 0L
+            private set
+        @Volatile var lastTranscribedAt = 0L
+            private set
+        val dropped = java.util.concurrent.atomic.AtomicInteger(0)
 
         /** Starts listening if it can. A service started with startForegroundService must call
          * startForeground, and without the mic permission it can't (microphone type): Android

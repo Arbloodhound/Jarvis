@@ -117,6 +117,66 @@ object TimeResolver {
             day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1)
     }
 
+    private const val WEEKDAY_RE = "(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?"
+    private const val HOUR_WORD = "(?:\\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+    private const val PART_RE = "(?:morning|afternoon|evening|night)"
+    private const val ORD = "\\d{1,2}(?:st|nd|rd|th)"
+    /** Months without "may": as a bare word it is mostly the verb ("2 may come"). */
+    private const val MONTH_NOT_MAY = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|june?|july?|aug(?:ust)?|" +
+        "sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+
+    /** Time words [phraseIn] looks for (case-insensitive), each a piece [resolve] understands. */
+    private val PHRASE_PIECES = Regex(listOf(
+        "\\bin (?:half an hour|$NUM (?:minute|min|hour|day|week)s?)\\b",
+        "\\b$NUM (?:minute|min|hour|day|week)s? ago\\b",
+        "\\bday (?:after tomorrow|before yesterday)\\b",
+        "\\b(?:tomorrow|tonight|today|yesterday)(?: $PART_RE)?\\b",
+        "\\b(?:(?:this|next|last|on|coming) )?$WEEKDAY_RE(?: $PART_RE)?\\b",
+        "\\b(?:this|in the) (?:morning|afternoon|evening)\\b",
+        "\\blast night\\b|\\bat night\\b",
+        "\\bnext week\\b|\\b(?:this|the|next) weekend\\b",
+        "\\b(?:half past|quarter past|quarter to) $HOUR_WORD\\b",
+        "\\b(?:at )?\\d{1,2}(?::\\d{2})? ?(?:am|pm|a\\.m\\.|p\\.m\\.)(?!\\w)",
+        "\\b(?:at )?\\d{1,2}:\\d{2}\\b",
+        "\\b(?:at )?(?:noon|midday|midnight)\\b",
+        "\\b$HOUR_WORD o'?clock\\b",
+        "\\b(?:the )?\\d{1,2}(?:st|nd|rd|th)?(?: of)? $MONTH_NOT_MAY\\b",
+        "\\b$MONTH_NOT_MAY (?:the )?\\d{1,2}(?:st|nd|rd|th)?\\b",
+        // May only where it can't be the verb: "the 5th of May", "5th May", "May the 5th", "May 5th".
+        "\\b(?:the )?$ORD(?: of)? may\\b|\\b\\d{1,2} of may\\b|\\bmay (?:the )?$ORD\\b",
+    ).joinToString("|"), RegexOption.IGNORE_CASE)
+
+    /** "at 3" / "at three" with no am/pm: only at the end of a clause or before a word that goes
+     *  with a time ("at 3 tomorrow", "at 7 sharp"), so "at 12 Baker Street", "at one point" and
+     *  "look at two flats" are not times. */
+    private val BARE_AT = Regex(
+        "\\b[Aa]t $HOUR_WORD\\b(?!:)(?=\\s*(?:$|[.,;!?)\\-]|(?:today|tomorrow|tonight|this|next|on|in|and|then|" +
+            "sharp|or|until|till|to|for|with|every|each|at)\\b))"
+    )
+
+    /** Text between two time pieces that still makes them one time ("Friday, at 9", "tomorrow at 3pm"). */
+    private val JOIN_GAP = Regex("^[\\s,]*(?:(?:and|at|on|by|from|around|about)\\s+)?$", RegexOption.IGNORE_CASE)
+
+    /**
+     * The time words inside free text ("Dentist with Dr Lee tomorrow at 3pm" → "tomorrow at 3pm"),
+     * or null when there are none [resolve] understands. For a note whose model left `when`
+     * empty but wrote the time into its text. Pieces next to each other make one phrase; two
+     * separate times ("lost it yesterday, call the bank next Friday") give null rather than a guess.
+     */
+    fun phraseIn(text: String?): String? {
+        if (text.isNullOrBlank()) return null
+        val hits = (PHRASE_PIECES.findAll(text) + BARE_AT.findAll(text)).map { it.range }
+            .sortedWith(compareBy<IntRange> { it.first }.thenByDescending { it.last })
+        val kept = ArrayList<IntRange>()
+        for (r in hits) if (kept.isEmpty() || r.first > kept.last().last) kept += r
+        if (kept.isEmpty()) return null
+        for (i in 1 until kept.size) {
+            if (!JOIN_GAP.matches(text.substring(kept[i - 1].last + 1, kept[i].first))) return null
+        }
+        val phrase = text.substring(kept.first().first, kept.last().last + 1).trim()
+        return phrase.takeIf { resolve(it, 0L, ZoneId.of("UTC")) != null }
+    }
+
     private fun point(t: LocalDateTime, zone: ZoneId) = Span(t.atZone(zone).toInstant().toEpochMilli(), null)
 
     private fun number(s: String): Int? = s.toIntOrNull() ?: NUMBER_WORDS[s]
