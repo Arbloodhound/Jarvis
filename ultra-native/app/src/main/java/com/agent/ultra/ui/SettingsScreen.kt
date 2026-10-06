@@ -170,6 +170,9 @@ fun SettingsScreen(
             while (true) { statusTick++; kotlinx.coroutines.delay(1500) }
         }
         val onDisk = remember(statusTick, downloading) { localEngine.downloadedFileNames() }
+        // Unfinished downloads (file -> bytes). Same folder for both models, so one listing.
+        val partials = remember(statusTick, downloading, libDownloading) { localEngine.partialDownloads() }
+        fun gb(bytes: Long) = String.format(java.util.Locale.ROOT, "%.1f GB", bytes / 1_073_741_824.0)
         val liveStatus = remember(statusTick, downloading) {
             when {
                 localEngine.loaded ->
@@ -185,6 +188,22 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
         )
+        // A download of a model that is neither model's choice now (e.g. the 4B a 16 GB phone
+        // started before its default became the 8B): kept, so it can continue, but shown.
+        val stranded = partials.filterKeys { it != localEngine.modelFileName && it != librarian.modelFileName }
+        for ((f, b) in stranded) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Unfinished download on this phone: " +
+                        (LocalModelEngine.PRESETS.firstOrNull { it.fileName == f }?.label ?: f) + " (" + gb(b) +
+                        "). Pick it under Change model to continue.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { localEngine.deletePartial(f); statusTick++ }) { Text("Delete") }
+            }
+        }
         Text(
             "\"Loads on first use\" is normal. The weights stay on disk until something " +
                 "needs them, then take a few seconds to map into memory and stay there " +
@@ -323,8 +342,13 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = fitColor,
                     )
+                    val partial = if (here) null else partials[m.fileName]
                     Text(
-                        "${if (here) "on this phone" else "not downloaded"}\n${m.note}",
+                        "${when {
+                            here -> "on this phone"
+                            partial != null -> "unfinished download: ${gb(partial)} so far"
+                            else -> "not downloaded"
+                        }}\n${m.note}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
@@ -344,7 +368,11 @@ fun SettingsScreen(
                                     }
                                 }
                                 statusTick++
-                            } }) { Text(if (here) "Use this" else "Download & use") }
+                            } }) { Text(when {
+                                here -> "Use this"
+                                partial != null -> "Continue & use"
+                                else -> "Download & use"
+                            }) }
                         }
                         // Not the memory model's file: it may be in use there.
                         if (here && !current && m.fileName != librarian.modelFileName) {
@@ -352,6 +380,13 @@ fun SettingsScreen(
                                 java.io.File(context.filesDir, "models/" + m.fileName).delete()
                                 statusTick++
                             }) { Text("Delete file") }
+                        }
+                        // Not while it downloads, nor the memory model's own unfinished download.
+                        if (partial != null && !current && m.fileName != librarian.modelFileName) {
+                            TextButton(onClick = {
+                                localEngine.deletePartial(m.fileName)
+                                statusTick++
+                            }) { Text("Delete unfinished download") }
                         }
                     }
                 }
@@ -400,8 +435,10 @@ fun SettingsScreen(
         // ── Memory model (librarian) ──────────────────────────────────
         SectionTitle("MEMORY MODEL")
         Text(
-            "A small model that sorts and searches what Jarvis remembers. It runs on this " +
-                "phone next to the model above, and steps aside if the two don't fit in memory together.",
+            "A small model for sorting and searching what Jarvis remembers. It runs on this " +
+                "phone next to the model above, and steps aside if the two don't fit in memory " +
+                "together. Not used by anything yet: the memory sorting that will use it comes next, " +
+                "so there is no need to download it now.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
         )
@@ -467,8 +504,13 @@ fun SettingsScreen(
                         color = if (current) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurface,
                     )
+                    val partial = if (here) null else partials[m.fileName]
                     Text(
-                        "${m.approxMb} MB  ·  ${if (here) "on this phone" else "not downloaded"}\n${m.note}",
+                        "${m.approxMb} MB  ·  ${when {
+                            here -> "on this phone"
+                            partial != null -> "unfinished download: ${gb(partial)} so far"
+                            else -> "not downloaded"
+                        }}\n${m.note}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
@@ -488,7 +530,11 @@ fun SettingsScreen(
                                         }
                                     }
                                     statusTick++
-                                } }) { Text(if (here) "Use this" else "Download & use") }
+                                } }) { Text(when {
+                                    here -> "Use this"
+                                    partial != null -> "Continue & use"
+                                    else -> "Download & use"
+                                }) }
                         }
                         // Not the main model's file: it may be in use there.
                         if (here && !current && m.fileName != localEngine.modelFileName) {
@@ -496,6 +542,12 @@ fun SettingsScreen(
                                 java.io.File(context.filesDir, "models/" + m.fileName).delete()
                                 statusTick++
                             }) { Text("Delete file") }
+                        }
+                        if (partial != null && !current && m.fileName != localEngine.modelFileName) {
+                            TextButton(onClick = {
+                                librarian.deletePartial(m.fileName)
+                                statusTick++
+                            }) { Text("Delete unfinished download") }
                         }
                     }
                 }

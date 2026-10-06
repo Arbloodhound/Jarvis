@@ -94,7 +94,8 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         if (role == Role.LIBRARIAN) CTX_SIZE else contextFor(totalRam, modelFileName, modelFileSizeBytes)
 
     /** Threads this engine generates with at full speed: [baseThreads] for the thinker, at most
-     *  [LIBRARIAN_THREADS] for the librarian, so a memory search leaves the big cores mostly free. */
+     *  [LIBRARIAN_THREADS] for the librarian (on the fastest LLM cores: the two never generate at
+     *  once, so it takes no cores from the thinker; fewer threads leave the rest of the phone room). */
     private val engineThreads: Int
         get() = if (role == Role.LIBRARIAN) minOf(LIBRARIAN_THREADS, baseThreads()) else baseThreads()
 
@@ -130,11 +131,29 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         return modelFile.exists() && modelFile.delete()
     }
 
-    /** Models on disk, so the user can see what a switch would cost to undo. */
+    /** Models on disk, so the user can see what a switch would cost to undo. Finished files
+     *  only: an unfinished download is in [partialDownloads]. */
     fun downloadedFileNames(): Set<String> =
         File(context.filesDir, "models").listFiles()
-            ?.filter { it.isFile && it.length() > 100_000_000 }
+            ?.filter { it.isFile && !it.name.endsWith(PART_SUFFIX) && it.length() > 100_000_000 }
             ?.map { it.name }?.toSet() ?: emptySet()
+
+    /**
+     * Unfinished downloads on disk: model file name -> bytes so far. Each belongs to its own
+     * model (the .part is named after it) and continues when that model is chosen again, e.g. a
+     * 4B download started before the 16 GB default became the 8B. Settings lists them so they
+     * don't take space unseen.
+     */
+    fun partialDownloads(): Map<String, Long> =
+        File(context.filesDir, "models").listFiles()
+            ?.filter { it.isFile && it.name.endsWith(PART_SUFFIX) && it.length() > 0 }
+            ?.associate { it.name.removeSuffix(PART_SUFFIX) to it.length() } ?: emptyMap()
+
+    /** Delete the unfinished download of [fileName]; false while either engine downloads it. */
+    fun deletePartial(fileName: String): Boolean {
+        if (fileName in downloadsInFlight) return false
+        return File(File(context.filesDir, "models"), fileName + PART_SUFFIX).delete()
+    }
 
     /**
      * Download the model into app-private storage, reporting progress 0..1.
@@ -161,7 +180,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         }
         // Per-model partial file: a leftover from one model can never be
         // renamed into another model's name.
-        val tmp = File(target.parentFile, target.name + ".part")
+        val tmp = File(target.parentFile, target.name + PART_SUFFIX)
         downloadProgress.value = 0f
         android.util.Log.i("UltraLlm", "download start: $url -> ${target.name} (have ${tmp.length() / 1_048_576} MB)")
         // A 10 GB file over a phone's Wi-Fi will be interrupted. The bytes already in the .part
@@ -266,31 +285,53 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
      * exactly that stack (main → Brain.runUnlocked → ensureLoaded → nativeLoad).
      */
     suspend fun ensureLoaded(): Boolean =
-        if (loaded) true else withContext(Dispatchers.IO) { loadWithRoom() }
+        if (loaded) true else withContext(Dispatchers.IO) { thinkerDemanding { loadWithRoom() } }
 
     /** The other engine of the pair, if it was ever created (not created = not loaded). */
     private fun otherEngine(): LocalModelEngine? =
         if (role == Role.THINKER) librarianInstance else sharedInstance
 
     /**
+     * Runs [block] with [thinkerDemand] raised when this is the thinker: while it is, the
+     * librarian neither loads nor starts a generation, and one already running stops at its next
+     * token ([generate]). Nests (a generate's load raises it again).
+     */
+    private inline fun <T> thinkerDemanding(block: () -> T): T {
+        if (role != Role.THINKER) return block()
+        thinkerDemand.incrementAndGet()
+        try { return block() } finally { thinkerDemand.decrementAndGet() }
+    }
+
+    /**
      * Load, after checking memory against the other engine ([loadDecision]). Decided under
      * [nativeMutex], so the other engine can't load between the check and this load. The
      * librarian's yield (its unload) runs outside the mutex: unload takes the librarian's own
      * generation lock first, and the lock order everywhere is generation lock, then [nativeMutex].
+     *
+     * Bounded: the thinker runs this inside [thinkerDemanding], so a librarian it unloaded can't
+     * load again before the thinker's next round (its load refuses while the thinker wants the
+     * engine); the second round therefore sees it unloaded. Should it somehow still be loaded
+     * after [MAX_YIELD_ROUNDS], the thinker is not loaded beside it: it fails like a missing
+     * model, rather than putting both in a memory that holds one.
      */
     private suspend fun loadWithRoom(): Boolean {
-        repeat(2) {
+        repeat(MAX_YIELD_ROUNDS) {
             val yielding = nativeMutex.withLock {
                 if (handle != 0L) return true
                 if (!LlmNative.available || !modelPresent) return loadBlocking()   // logs why
+                if (role == Role.LIBRARIAN && thinkerDemand.get() > 0) {
+                    android.util.Log.i("UltraLlm", "$role load deferred: the thinker is using the engine")
+                    return false
+                }
                 val other = otherEngine()
                 val otherLoaded = other != null && other.loaded
                 // Mapped weights are page cache, which availMem counts as free; they must stay.
-                val otherMapped = if (other != null && otherLoaded && !other.residentLoaded) other.modelFileSizeBytes else 0L
+                val otherMapped = if (other == null) 0L else otherMappedBytes(
+                    otherLoaded, other.residentLoaded, other.modelFilePath == modelFilePath, other.modelFileSizeBytes)
                 val avail = availableRam()
                 val need = residentNeedBytes(modelFileName, modelFileSizeBytes, plannedContext())
                 when (loadDecision(role, avail, need, otherLoaded, otherMapped)) {
-                    LoadDecision.LOAD -> return loadBlocking()
+                    LoadDecision.LOAD -> return loadBlocking(otherMapped)
                     LoadDecision.REFUSE -> {
                         android.util.Log.w("UltraLlm", "$role refused: availMB=${avail / MIB} " +
                             "otherMappedMB=${otherMapped / MIB} needMB=${need / MIB} (+${MIN_AVAIL_BYTES / MIB} headroom)")
@@ -305,8 +346,9 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             }
             yielding?.unload()
         }
-        // The thinker is never refused by this check; after two yields it loads as it always did.
-        return nativeMutex.withLock { loadBlocking() }
+        android.util.Log.w("UltraLlm", "$role not loaded: the librarian was still loaded after " +
+            "$MAX_YIELD_ROUNDS rounds, and both don't fit")
+        return false
     }
 
     /**
@@ -359,10 +401,14 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
     }
 
     /** Bytes of an unfinished download of the selected model (0 = none): "Continue download". */
-    fun partialBytes(): Long = File(modelFile.parentFile, modelFile.name + ".part").let { if (it.exists()) it.length() else 0L }
+    fun partialBytes(): Long = File(modelFile.parentFile, modelFile.name + PART_SUFFIX).let { if (it.exists()) it.length() else 0L }
 
-    /** Caller holds [nativeMutex] (it serialises loads of both engines, and against generate/free). */
-    private fun loadBlocking(): Boolean {
+    /**
+     * Caller holds [nativeMutex] (it serialises loads of both engines, and against generate/free).
+     * [otherMappedBytes]: the other engine's mapped weights ([otherMappedBytes] in the companion),
+     * which availMem counts as free but which must stay; a resident copy can't use them.
+     */
+    private fun loadBlocking(otherMappedBytes: Long = 0L): Boolean {
         if (loaded) return true
         if (!LlmNative.available) return false          // build without llama.cpp (emulator)
         if (!modelPresent) {
@@ -389,9 +435,10 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             // The librarian is always mapped: the setting is about the thinker, and availMem
             // counts the thinker's mapped weights as free, which a resident copy would take.
             val resident = role == Role.THINKER && residentLoad(
-                com.agent.ultra.ui.UltraPrefs.keepBrainInMemory(context), avail,
+                com.agent.ultra.ui.UltraPrefs.keepBrainInMemory(context), roomBesideOther(avail, otherMappedBytes),
                 modelFileSizeBytes + ctxGrowthBytes(modelFileName, ctx))
             android.util.Log.i("UltraLlm", "$role load resident=$resident ctx=$ctx availMB=${avail / 1_048_576} " +
+                "otherMappedMB=${otherMappedBytes / 1_048_576} " +
                 "fileMB=${modelFileSizeBytes / 1_048_576} totalMB=${totalRam / 1_048_576}")
             handle = LlmNative.nativeLoad(modelFile.absolutePath, threads, ctx, cpus.toIntArray(), resident)
             loadedCtx = if (handle != 0L) LlmNative.nativeContextSize(handle) else 0
@@ -432,16 +479,20 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
      *  before one has run since load. Read-only; reset on unload and on a model switch. */
     val decodeTokPerSec: Double? get() = decodeSpeed.tokPerSec(modelFile.name)
 
-    /** True while a generation holds [genMutex], a load runs or the page cache is warmed. Ambient
-     * listening watches it and holds whisper back meanwhile: both want the same big cores and
-     * memory bandwidth (Pixel 10 Pro ANR dumps). */
+    /** True while a generation of THIS engine holds [genMutex], a load runs or the page cache is
+     * warmed. Ambient listening watches [anyBusy] (either engine) and holds whisper back meanwhile:
+     * both want the same big cores and memory bandwidth (Pixel 10 Pro ANR dumps). */
     val busy: kotlinx.coroutines.flow.StateFlow<Boolean> get() = busyFlow
     private val busyFlow = kotlinx.coroutines.flow.MutableStateFlow(false)
     private var busyCount = 0                       // guarded by busyFlow; load nests in generate
 
     private inline fun <T> busyWhile(block: () -> T): T {
         synchronized(busyFlow) { busyFlow.value = ++busyCount > 0 }
-        try { return block() } finally { synchronized(busyFlow) { busyFlow.value = --busyCount > 0 } }
+        anyBusyChange(+1)
+        try { return block() } finally {
+            synchronized(busyFlow) { busyFlow.value = --busyCount > 0 }
+            anyBusyChange(-1)
+        }
     }
 
     /**
@@ -462,14 +513,21 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         exactThreads: Boolean = false,
         onStart: () -> Unit = {},
         onToken: (String) -> Unit = {},
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<String> = withContext(Dispatchers.IO) { thinkerDemanding {
+        // The librarian gives way to the thinker: it doesn't start while the thinker wants the
+        // engine (checked again once each lock is held), and stops at the next token when the
+        // thinker asks meanwhile. The caller gets [YieldedToThinker] and may try again later.
+        val yields = role == Role.LIBRARIAN
+        if (yields && thinkerDemand.get() > 0) return@withContext Result.failure(YieldedToThinker())
         genMutex.withLock { busyWhile {
+            if (yields && thinkerDemand.get() > 0) return@withLock Result.failure(YieldedToThinker())
             // Outside nativeMutex: a load takes it itself (and the thinker's may unload the librarian).
             if (!ensureLoaded()) return@withLock Result.failure(
-                IllegalStateException(if (role == Role.LIBRARIAN) "memory model not available"
-                    else "on-device model not available")
+                if (yields && thinkerDemand.get() > 0) YieldedToThinker()
+                else IllegalStateException(if (yields) "memory model not available" else "on-device model not available")
             )
             nativeMutex.withLock {
+                if (yields && thinkerDemand.get() > 0) return@withLock Result.failure(YieldedToThinker())
                 // Read the handle INSIDE the lock. Reading it outside was the
                 // use-after-free: unload could zero and free it between the check
                 // and the call.
@@ -488,7 +546,9 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 var pieces = 0
                 var tFirst = 0L
                 var tLast = 0L
-                val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, nThreads) { piece ->
+                var stopped = false
+                val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, nThreads) cb@{ piece ->
+                    if (yields && thinkerDemand.get() > 0) { stopped = true; return@cb LlmNative.STOP }
                     tLast = System.currentTimeMillis()
                     if (pieces++ == 0) tFirst = tLast
                     if (thinkBudget == null) {
@@ -510,17 +570,27 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 thinkBudget?.let {
                     android.util.Log.d("UltraRoute", "thinkTokens=${it.thinkTokens} forced=${it.forced} budget=${it.budgetTokens}")
                 }
-                if (n < 0) Result.failure(IllegalStateException("native generate failed ($n)"))
-                else Result.success(sb.toString())
+                when {
+                    n < 0 -> Result.failure(IllegalStateException("native generate failed ($n)"))
+                    stopped -> {
+                        android.util.Log.i("UltraLlm", "$role stopped after $pieces tokens: the thinker asked for the engine")
+                        Result.failure(YieldedToThinker())
+                    }
+                    else -> Result.success(sb.toString())
+                }
             }
         } }
-    }
+    } }
 
     /**
      * A plain answer without reasoning: the librarian's call for sorting and searching memory.
      * [prompt] is a finished prompt, normally [com.agent.ultra.agent.LocalPrompt.buildNoThink];
      * any think block the model writes anyway is removed from the result. Same queueing and
-     * locks as [generate], at this engine's thread count.
+     * locks as [generate], at this engine's thread count; safe from any coroutine (it switches
+     * to Dispatchers.IO). On the librarian it never runs while the thinker generates or loads:
+     * it fails with [YieldedToThinker] instead (before starting, or at the next token if the
+     * thinker asks while it runs; reading the prompt itself can't be interrupted), and the
+     * caller tries again later.
      */
     suspend fun complete(prompt: String, maxTokens: Int): Result<String> =
         generate(prompt, maxTokens).map { com.agent.ultra.agent.ThinkBudget.stripForHistory(it) }
@@ -569,6 +639,39 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
          * makes them. Lock order: an engine's own generation lock first, then this one.
          */
         private val nativeMutex = kotlinx.coroutines.sync.Mutex()
+
+        /** An unfinished download: the model's file name plus this. */
+        const val PART_SUFFIX = ".part"
+
+        /** Thinker calls in progress ([thinkerDemanding]): a generate, or a load. While above 0
+         *  the librarian doesn't load or start, and one running stops at its next token. */
+        private val thinkerDemand = java.util.concurrent.atomic.AtomicInteger(0)
+
+        /** Rounds of [loadWithRoom]: the thinker needs at most two (yield, then load). */
+        const val MAX_YIELD_ROUNDS = 3
+
+        private val anyBusyFlow = kotlinx.coroutines.flow.MutableStateFlow(false)
+        private var anyBusyCount = 0                // guarded by anyBusyFlow
+
+        /** True while either engine is [busy]: what ambient listening waits on. */
+        val anyBusy: kotlinx.coroutines.flow.StateFlow<Boolean> get() = anyBusyFlow
+
+        private fun anyBusyChange(delta: Int) =
+            synchronized(anyBusyFlow) { anyBusyCount += delta; anyBusyFlow.value = anyBusyCount > 0 }
+
+        /**
+         * The other engine's weights that availMem counts as free but which must stay in memory
+         * (mapped pages in page cache). 0 when it is not loaded, when it holds a resident copy
+         * (availMem already excludes that), or when it maps the same file as this load (the pages
+         * are shared, and this load's own need already counts them once). Pure, JVM-tested.
+         */
+        fun otherMappedBytes(otherLoaded: Boolean, otherResident: Boolean, sameFile: Boolean, otherFileBytes: Long): Long =
+            if (!otherLoaded || otherResident || sameFile) 0L else otherFileBytes.coerceAtLeast(0L)
+
+        /** Memory a resident load may count on: [availBytes] less [otherMappedBytes]. Unknown
+         *  memory (<= 0) stays unknown, which [residentLoad] treats as "map it". Pure, JVM-tested. */
+        fun roomBesideOther(availBytes: Long, otherMappedBytes: Long): Long =
+            if (availBytes <= 0) availBytes else (availBytes - otherMappedBytes.coerceAtLeast(0L)).coerceAtLeast(0L)
 
         /** Model files being downloaded by either engine: both may pick the same file. */
         private val downloadsInFlight: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
@@ -1037,6 +1140,9 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         }
     }
 }
+
+/** The librarian gave way to the thinker (didn't start, or stopped early); try again later. */
+class YieldedToThinker : IllegalStateException("memory model gave way to the main model")
 
 /** A downloadable on-device model. */
 data class ModelChoice(

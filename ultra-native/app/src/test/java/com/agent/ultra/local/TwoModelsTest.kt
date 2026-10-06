@@ -118,4 +118,50 @@ class TwoModelsTest {
 
     @Test fun otherMappedBytesIgnoredWhenTheOtherIsNotLoaded() =
         assertEquals(LoadDecision.LOAD, decide(Role.LIBRARIAN, 4_000_000_000L, librarianNeed, false, thinkerBytes))
+    // ── the other engine's mapped weights ──
+
+    @Test fun otherMappedCountsALoadedMappedOtherFile() =
+        assertEquals(librarianBytes, LocalModelEngine.otherMappedBytes(true, false, false, librarianBytes))
+
+    @Test fun otherMappedIsZeroWhenNotLoaded() =
+        assertEquals(0L, LocalModelEngine.otherMappedBytes(false, false, false, librarianBytes))
+
+    /** A resident copy is outside availMem already: nothing to subtract. */
+    @Test fun otherMappedIsZeroWhenResident() =
+        assertEquals(0L, LocalModelEngine.otherMappedBytes(true, true, false, thinkerBytes))
+
+    /** Both engines on one file share its pages, which this load's need already counts once. */
+    @Test fun sameFileIsNotCountedTwice() {
+        assertEquals(0L, LocalModelEngine.otherMappedBytes(true, false, true, librarianBytes))
+        // So the same 1.7B as both models loads where one copy fits.
+        val avail = librarianNeed + headroom
+        assertEquals(LoadDecision.LOAD, decide(Role.LIBRARIAN, avail, librarianNeed, true,
+            LocalModelEngine.otherMappedBytes(true, false, true, librarianBytes)))
+    }
+
+    // ── resident thinker beside a mapped librarian ──
+
+    @Test fun residentRoomSubtractsTheLibrariansMappedPages() =
+        assertEquals(6_000_000_000L - librarianBytes, LocalModelEngine.roomBesideOther(6_000_000_000L, librarianBytes))
+
+    @Test fun residentRoomKeepsUnknownMemoryUnknown() {
+        assertEquals(0L, LocalModelEngine.roomBesideOther(0L, librarianBytes))
+        assertEquals(-1L, LocalModelEngine.roomBesideOther(-1L, librarianBytes))
+    }
+
+    @Test fun residentRoomNeverGoesNegative() =
+        assertEquals(0L, LocalModelEngine.roomBesideOther(500_000_000L, librarianBytes))
+
+    /** availMem holds the thinker + headroom only because the librarian's pages count as free:
+     *  the thinker maps instead of taking a resident copy that would push them out. */
+    @Test fun thinkerMapsWhenOnlyTheLibrariansPagesMakeRoom() {
+        val avail = thinkerBytes + LocalModelEngine.RESIDENT_HEADROOM_BYTES + librarianBytes / 2
+        assertTrue(LocalModelEngine.residentLoad(true, avail, thinkerBytes))
+        assertFalse(LocalModelEngine.residentLoad(true, LocalModelEngine.roomBesideOther(avail, librarianBytes), thinkerBytes))
+        assertTrue(LocalModelEngine.residentLoad(true,
+            LocalModelEngine.roomBesideOther(avail + librarianBytes, librarianBytes), thinkerBytes))
+    }
+
+    /** The load loop needs one round to make the librarian yield and one to load. */
+    @Test fun yieldLoopHasRoomForYieldThenLoad() = assertTrue(LocalModelEngine.MAX_YIELD_ROUNDS >= 2)
 }
