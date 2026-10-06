@@ -15,7 +15,9 @@ import java.time.temporal.TemporalAdjusters
  * past hour, N hours ago, N days ago, the day before yesterday, on <weekday> /
  * last <weekday>, this week, last week, past few days, this month, last month.
  * Day parts: morning 05–12, afternoon 12–17, evening 17–22, night 18–05 next day.
- * A window never extends past [now]. Returns null when the question names no time.
+ * A window never extends past [now]; one that would start after [now] ("this evening" asked
+ * at 10 am) is a plan, not when something was heard, so it is null like no time at all.
+ * Returns null when the question names no time.
  */
 data class TimeWindow(val fromMs: Long, val toMs: Long, val phrase: String) {
     operator fun contains(ts: Long) = ts in fromMs until toMs
@@ -36,7 +38,8 @@ data class TimeWindow(val fromMs: Long, val toMs: Long, val phrase: String) {
             val today = nowZ.toLocalDate()
             fun at(d: LocalDate, h: Int): Long = d.atTime(LocalTime.of(h, 0)).atZone(zone).toInstant().toEpochMilli()
             fun day(d: LocalDate): Long = d.atStartOfDay(zone).toInstant().toEpochMilli()
-            fun w(from: Long, to: Long, phrase: String) = TimeWindow(from, minOf(to, now + 1), phrase)
+            fun w(from: Long, to: Long, phrase: String): TimeWindow? =
+                if (from > now) null else TimeWindow(from, minOf(to, now + 1), phrase)
             fun has(p: String) = q.contains(" $p ")
             val yday = today.minusDays(1)
 
@@ -49,9 +52,10 @@ data class TimeWindow(val fromMs: Long, val toMs: Long, val phrase: String) {
             if (has("last night")) return w(at(yday, 18), at(today, 5), "last night")
             if (has("tonight")) return w(at(today, 17), day(today.plusDays(1)), "tonight")
             if (has("yesterday")) return w(day(yday), day(today), "yesterday")
-            if (has("just now") || has("a minute ago") || has("a moment ago") || has("a few minutes ago"))
-                return w(now - 15 * 60_000L, now, "just now")
-            if (has("last hour") || has("past hour")) return w(now - 3_600_000L, now, "last hour")
+            // The phrase is the words actually used, so strip() removes exactly them.
+            listOf("just now", "a minute ago", "a moment ago", "a few minutes ago").firstOrNull { has(it) }
+                ?.let { return w(now - 15 * 60_000L, now, it) }
+            listOf("last hour", "past hour").firstOrNull { has(it) }?.let { return w(now - 3_600_000L, now, it) }
             HOURS_AGO.find(q)?.let { m ->
                 val n = num(m.groupValues[1])
                 return w(now - (n + 1) * 3_600_000L, now - maxOf(0, n - 1) * 3_600_000L, m.value.trim())
@@ -64,8 +68,8 @@ data class TimeWindow(val fromMs: Long, val toMs: Long, val phrase: String) {
                 val d = today.minusDays(n.toLong())
                 return w(day(d), day(d.plusDays(1)), m.value.trim())
             }
-            if (has("past few days") || has("last few days") || has("past couple of days") || has("last couple of days"))
-                return w(day(today.minusDays(3)), now, "past few days")
+            listOf("past few days", "last few days", "past couple of days", "last couple of days")
+                .firstOrNull { has(it) }?.let { return w(day(today.minusDays(3)), now, it) }
             val monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
             if (has("this week")) return w(day(monday), now, "this week")
             if (has("last week") || has("past week")) {
@@ -92,13 +96,21 @@ data class TimeWindow(val fromMs: Long, val toMs: Long, val phrase: String) {
 
         private fun num(s: String): Int = s.toIntOrNull() ?: WORD_NUM[s] ?: 1
 
-        /** The question without its time phrase, so "yesterday" isn't searched for as a word. */
+        /** The question without its time phrase, so "yesterday" isn't searched for as a word.
+         * Only the phrase itself goes: "the last thing Sam said last week" keeps the first
+         * "last". If the phrase isn't there word for word ("morning … today" → "this morning"),
+         * the first occurrence of each of its words goes instead. */
         fun strip(query: String, window: TimeWindow?): String {
             if (window == null) return query
-            val words = window.phrase.split(' ')
-            return query.split(Regex("\\s+")).filter { tok ->
-                tok.lowercase().trim { !it.isLetterOrDigit() } !in words
-            }.joinToString(" ")
+            val phrase = window.phrase.split(' ').filter { it.isNotEmpty() }
+            val toks = query.split(Regex("\\s+")).filter { it.isNotEmpty() }
+            fun norm(t: String) = t.lowercase().trim { !it.isLetterOrDigit() }
+            val n = toks.map(::norm)
+            val drop = HashSet<Int>()
+            val at = (0..n.size - phrase.size).firstOrNull { i -> phrase.indices.all { n[i + it] == phrase[it] } }
+            if (at != null) drop += at until at + phrase.size
+            else for (p in phrase) n.indices.firstOrNull { it !in drop && n[it] == p }?.let { drop += it }
+            return toks.filterIndexed { i, _ -> i !in drop }.joinToString(" ")
         }
     }
 }

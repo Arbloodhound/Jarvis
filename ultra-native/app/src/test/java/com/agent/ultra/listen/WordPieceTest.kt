@@ -6,7 +6,7 @@ import org.junit.Test
 
 /**
  * The fixture copies the real all-MiniLM-L6-v2 vocab.txt layout (checked on the Hub): line 0
- * [PAD], lines 1–99 [unused0..98], then [UNK]=100, [CLS]=101, [SEP]=102, [MASK]=103. The
+ * [PAD], lines 1–99 "[unused0]" to "[unused98]", then [UNK]=100, [CLS]=101, [SEP]=102, [MASK]=103. The
  * words after that are a small hand-picked set; expected ids are counted by hand from it.
  */
 class WordPieceTest {

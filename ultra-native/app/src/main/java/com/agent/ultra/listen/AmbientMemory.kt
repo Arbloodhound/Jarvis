@@ -62,17 +62,6 @@ class AmbientMemory private constructor(ctx: Context) :
         return lines.asReversed().joinToString("\n").trim()
     }
 
-    /** FTS search, newest first — backs the ambient_recall agent tool. */
-    fun search(query: String, limit: Int): List<Pair<Long, String>> {
-        val out = ArrayList<Pair<Long, String>>()
-        val q = query.trim().ifEmpty { return out }
-        readableDatabase.rawQuery(
-            "SELECT ts,text FROM heard WHERE text MATCH ? ORDER BY ts DESC LIMIT ?",
-            arrayOf(q, limit.toString())
-        ).use { c -> while (c.moveToNext()) out += c.getLong(0) to c.getString(1) }
-        return out
-    }
-
     class Row(val rowid: Long, val ts: Long, val text: String)
 
     // ── Vectors (semantic recall) ──────────────────────────────────────────
@@ -108,28 +97,59 @@ class AmbientMemory private constructor(ctx: Context) :
         )
     }
 
-    /** Stores [vecs] (same order as [rows]); an empty blob marks a row that failed to embed. */
-    fun putVectors(rows: List<Row>, vecs: List<ByteArray>) {
+    /** Bumped by [wipe] (and by [prune] when it empties the table): rowids may then be reused,
+     * so an indexer pass that started before must not write its high-water mark. */
+    fun generation(): Long = metaGet(META_VEC_GEN) ?: 0L
+
+    /**
+     * Stores [vecs] (same order as [rows]); an empty blob marks a row that failed to embed.
+     * A vector is written only if its heard row still exists with the same ts, so a row erased
+     * or pruned while it was being embedded (and a reused rowid) never gets a stale vector.
+     * With [newHw], also advances the indexer's high-water mark, but only if [generation] is
+     * still [gen]. All in one transaction (SQLite serialises it against [wipe] / [prune]).
+     * False = the store was wiped meanwhile; nothing was written.
+     */
+    fun putVectors(rows: List<Row>, vecs: List<ByteArray>, gen: Long, newHw: Long? = null): Boolean {
         require(rows.size == vecs.size)
         val db = writableDatabase
         db.beginTransaction()
         try {
-            for (i in rows.indices) db.insertWithOnConflict("heard_vec", null, ContentValues().apply {
-                put("rowid", rows[i].rowid); put("ts", rows[i].ts); put("vec", vecs[i])
-            }, SQLiteDatabase.CONFLICT_REPLACE)
+            if (generation() != gen) return false
+            db.compileStatement(
+                "INSERT OR REPLACE INTO heard_vec(rowid,ts,vec) " +
+                    "SELECT rowid,?,? FROM heard WHERE rowid=? AND ts=CAST(? AS INTEGER)"
+            ).use { st ->
+                for (i in rows.indices) {
+                    st.clearBindings()
+                    st.bindLong(1, rows[i].ts); st.bindBlob(2, vecs[i])
+                    st.bindLong(3, rows[i].rowid); st.bindString(4, rows[i].ts.toString())
+                    st.executeInsert()
+                }
+            }
+            if (newHw != null) metaPut(META_VEC_HW, newHw)
             db.setTransactionSuccessful()
+            return true
         } finally { db.endTransaction() }
     }
 
     /** Streams stored, non-empty vectors, newest first, inside [window] when given, at most
      * [limit] of them (brute force; see [MemoryRecall.SCAN_LIMIT] for the size). heard_vec.ts
      * is a plain INTEGER column, so bound text args get integer affinity here (no CAST needed). */
-    fun forEachVector(window: TimeWindow?, limit: Int, each: (rowid: Long, vec: ByteArray) -> Unit) {
-        val (sql, args) = if (window != null)
-            "SELECT rowid,vec FROM heard_vec WHERE ts>=? AND ts<? AND length(vec)>0 ORDER BY ts DESC LIMIT ?" to
-                arrayOf(window.fromMs.toString(), window.toMs.toString(), limit.toString())
-        else "SELECT rowid,vec FROM heard_vec WHERE length(vec)>0 ORDER BY rowid DESC LIMIT ?" to
-            arrayOf(limit.toString())
+    fun forEachVector(
+        window: TimeWindow?, limit: Int, excluding: TimeWindow? = null,
+        each: (rowid: Long, vec: ByteArray) -> Unit,
+    ) {
+        val (sql, args) = when {
+            window != null ->
+                "SELECT rowid,vec FROM heard_vec WHERE ts>=? AND ts<? AND length(vec)>0 ORDER BY ts DESC LIMIT ?" to
+                    arrayOf(window.fromMs.toString(), window.toMs.toString(), limit.toString())
+            // Everything except [excluding] (already scanned by a window pass).
+            excluding != null ->
+                "SELECT rowid,vec FROM heard_vec WHERE length(vec)>0 AND NOT (ts>=? AND ts<?) ORDER BY rowid DESC LIMIT ?" to
+                    arrayOf(excluding.fromMs.toString(), excluding.toMs.toString(), limit.toString())
+            else -> "SELECT rowid,vec FROM heard_vec WHERE length(vec)>0 ORDER BY rowid DESC LIMIT ?" to
+                arrayOf(limit.toString())
+        }
         readableDatabase.rawQuery(sql, args).use { c -> while (c.moveToNext()) each(c.getLong(0), c.getBlob(1)) }
     }
 
@@ -188,19 +208,42 @@ class AmbientMemory private constructor(ctx: Context) :
                 arrayOf((count - maxRows).toString())
             )
         }
-        // Vectors go with their rows.
-        db.execSQL("DELETE FROM heard_vec WHERE rowid NOT IN (SELECT rowid FROM heard)")
+        db.beginTransaction()
+        try {
+            // Vectors go with their rows.
+            db.execSQL("DELETE FROM heard_vec WHERE rowid NOT IN (SELECT rowid FROM heard)")
+            // Everything pruned: rowids restart from 1, so the indexer must too.
+            if (maxRowid() == 0L) resetIndex(db)
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
     }
 
+    /** Blocking (disk); call off the main thread. */
     fun wipe() {
-        writableDatabase.execSQL("DELETE FROM heard")
-        writableDatabase.execSQL("DELETE FROM heard_vec")
-        writableDatabase.execSQL("DELETE FROM meta WHERE k=?", arrayOf(META_VEC_HW))
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL("DELETE FROM heard")
+            db.execSQL("DELETE FROM heard_vec")
+            resetIndex(db)
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    private fun resetIndex(db: SQLiteDatabase) {
+        db.execSQL("DELETE FROM meta WHERE k=?", arrayOf(META_VEC_HW))
+        metaPut(META_VEC_GEN, generation() + 1)
     }
 
     companion object {
         /** meta key: every heard row with rowid ≤ this has been offered to the embedder. */
         const val META_VEC_HW = "vec_hw"
+        /** meta key: see [generation]. */
+        const val META_VEC_GEN = "vec_gen"
+        /** meta key: when the embedder download last failed (epoch ms), for a persisted backoff. */
+        const val META_VEC_FETCH_FAIL = "vec_fetch_fail"
+        /** meta key: consecutive failed embedder downloads (for the growing backoff). */
+        const val META_VEC_FETCH_FAILS = "vec_fetch_fails"
 
         @Volatile private var i: AmbientMemory? = null
         fun get(c: Context) = i ?: synchronized(this) {

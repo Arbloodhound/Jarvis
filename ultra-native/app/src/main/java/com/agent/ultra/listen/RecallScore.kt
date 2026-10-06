@@ -6,16 +6,17 @@ import java.util.Locale
 import java.util.TimeZone
 
 /** One remembered thing. [score] is 0..1 (1 = as relevant as it gets); [source] e.g. "heard", "notes". */
-data class Hit(val text: String, val ts: Long, val score: Float, val source: String)
+data class RecallHit(val ts: Long, val text: String, val score: Float, val source: String)
 
 /**
  * A second place to remember from (e.g. the librarian's notes), plugged into
  * [MemoryRecall.extraSources]. [query] arrives with its time phrase already removed and
  * parsed into [window] (null = no time named). Return at most [limit] hits, scores on the
  * same 0..1 scale as [RecallScore.score], so they merge fairly with heard lines.
+ * [MemoryRecall.textSource] builds one from a plain "(ts, text) search" and scores it.
  */
-interface RecallSource {
-    suspend fun search(query: String, window: TimeWindow?, limit: Int): List<Hit>
+fun interface RecallSource {
+    suspend fun search(query: String, window: TimeWindow?, nowMs: Long, limit: Int): List<RecallHit>
 }
 
 /**
@@ -66,16 +67,22 @@ object RecallScore {
             ?: cut("ed") ?: (if (w.endsWith("ss")) null else cut("s")) ?: w
     }
 
-    /** FTS4 MATCH text: any term, words as prefixes ("dentist* OR 5"). [terms] holds letters and
-     * digits only (see [words]), so nothing in it is FTS syntax. */
-    fun ftsQuery(terms: List<String>): String =
-        terms.joinToString(" OR ") { if (it[0].isDigit()) it else "$it*" }
+    /** Terms shorter than this match whole words only ("sam" must not match "same"/"sample");
+     * longer ones match as prefixes, which covers the stemmed endings ("meet" → "meetings"). */
+    const val PREFIX_MIN = 4
 
-    /** Share of [terms] found in [text] (word prefix for words, whole word for numbers). */
+    private fun isPrefixTerm(t: String) = !t[0].isDigit() && t.length >= PREFIX_MIN
+
+    /** FTS4 MATCH text: any term, long words as prefixes ("dentist* OR sam OR 5"). [terms] holds
+     * letters and digits only (see [words]), so nothing in it is FTS syntax. */
+    fun ftsQuery(terms: List<String>): String =
+        terms.joinToString(" OR ") { if (isPrefixTerm(it)) "$it*" else it }
+
+    /** Share of [terms] found in [text] (word prefix for long words, whole word otherwise). */
     fun keywordFraction(terms: List<String>, text: String): Float {
         if (terms.isEmpty()) return 0f
         val ws = words(text)
-        val n = terms.count { t -> ws.any { w -> if (t[0].isDigit()) w == t else w.startsWith(t) } }
+        val n = terms.count { t -> ws.any { w -> if (isPrefixTerm(t)) w.startsWith(t) else w == t } }
         return n.toFloat() / terms.size
     }
 
@@ -103,10 +110,20 @@ object RecallScore {
         return if (inWindow == false) base * OUT_OF_WINDOW else base
     }
 
+    /** A hit some other source found (it has no vector): its keyword overlap counts at least
+     * [SOURCE_FLOOR], since the source itself judged it a match. Null = not returned. */
+    fun sourceScore(terms: List<String>, text: String, ts: Long, now: Long, window: TimeWindow?): Float? {
+        val hasTerms = terms.isNotEmpty()
+        val kw = if (hasTerms) maxOf(keywordFraction(terms, text), SOURCE_FLOOR) else 0f
+        return score(null, kw, recency(ts, now), window?.contains(ts), hasTerms)
+    }
+
+    const val SOURCE_FLOOR = 0.4f
+
     /** Best first, the same words said twice (or found by two sources) kept once. */
-    fun merge(hits: List<Hit>, limit: Int): List<Hit> {
+    fun merge(hits: List<RecallHit>, limit: Int): List<RecallHit> {
         val seen = HashSet<String>()
-        return hits.sortedWith(compareByDescending<Hit> { it.score }.thenByDescending { it.ts })
+        return hits.sortedWith(compareByDescending<RecallHit> { it.score }.thenByDescending { it.ts })
             .filter { seen.add(words(it.text).joinToString(" ")) }
             .take(limit)
     }
@@ -115,11 +132,11 @@ object RecallScore {
      * A compact dated block for a prompt, oldest first, at most [maxChars] including the header.
      * Lower-scored hits are the ones left out when it doesn't all fit. Empty when nothing fits.
      */
-    fun brief(hits: List<Hit>, maxChars: Int = 800, zone: TimeZone = TimeZone.getDefault()): String {
-        val header = "What I remember (overheard speech may be misheard):"
+    fun brief(hits: List<RecallHit>, maxChars: Int = 600, zone: TimeZone = TimeZone.getDefault()): String {
+        val header = "What I remember (with times; overheard speech may be misheard):"
         val fmt = SimpleDateFormat("EEE MMM d, h:mm a", Locale.US).apply { timeZone = zone }
         var used = header.length
-        val kept = ArrayList<Pair<Hit, String>>()
+        val kept = ArrayList<Pair<RecallHit, String>>()
         for (h in hits.sortedByDescending { it.score }) {
             val text = h.text.replace(Regex("\\s+"), " ").trim()
             if (text.isEmpty()) continue

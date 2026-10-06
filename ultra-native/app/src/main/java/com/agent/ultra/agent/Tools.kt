@@ -200,13 +200,19 @@ class Tools(
                 // ── Information ──────────────────────────────────────
                 "web_search" -> webSearch(params.optString("query"))
                 "ambient_recall" -> {
-                    val hits = com.agent.ultra.listen.AmbientMemory.get(context)
-                        .search(params.optString("query"), params.optInt("limit", 8))
+                    // Meaning + keywords + recency + "yesterday"-style windows (keyword-only
+                    // until the embedder is downloaded). Same "[time] line" format as before, best
+                    // match first; a hit from another source (e.g. notes) is labelled with it.
+                    val hits = com.agent.ultra.listen.MemoryRecall.relevant(
+                        context, params.optString("query"), System.currentTimeMillis(),
+                        params.optInt("limit", 8).coerceIn(1, 20),
+                    )
                     if (hits.isEmpty()) "Nothing overheard matching that."
-                    else hits.joinToString("\n") { (ts, line) ->
+                    else hits.joinToString("\n") { h ->
                         val t = java.text.SimpleDateFormat("MMM d h:mm a", java.util.Locale.US)
-                            .format(java.util.Date(ts))
-                        "[$t] $line"
+                            .format(java.util.Date(h.ts))
+                        val src = if (h.source == com.agent.ultra.listen.MemoryRecall.SOURCE_HEARD) "" else "(${h.source}) "
+                        "[$t] $src${h.text}"
                     }
                 }
                 "device_info" -> controller.deviceInfo()

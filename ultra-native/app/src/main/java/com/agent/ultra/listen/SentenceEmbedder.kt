@@ -22,33 +22,34 @@ class SentenceEmbedder private constructor(model: File, vocab: File) {
     private val env = OrtEnvironment.getEnvironment()
     private val tokenizer = WordPiece(vocab.readLines(), MAX_LEN)
     private val modelFile = model
-    @Volatile private var session: OrtSession
-    var placement = ""; private set
+    /** Guarded by [lock]: every run and the CPU-fallback swap happen under it, so a session is
+     * never closed while another thread (indexer vs recall) is running it. */
+    private var session: OrtSession
+    private val lock = Any()
+    @Volatile var placement = ""; private set
 
     init {
         session = placed(model)
     }
 
     /** One normalised 384-d vector per text. An accelerator session that fails at run time
-     * (e.g. NNAPI refusing a new input shape) is replaced by a plain CPU session once. */
+     * (e.g. NNAPI refusing a new input shape) is replaced by a plain CPU session once.
+     * Calls are serialised: one ONNX run at a time (the indexer's batches are small). */
     fun embed(texts: List<String>): List<FloatArray> {
         if (texts.isEmpty()) return emptyList()
         val encoded = texts.map { tokenizer.encode(it) }
-        val s = session
-        return try {
-            run(s, encoded)
-        } catch (e: Exception) {
-            if (placement == "cpu") throw e
-            android.util.Log.w(TAG, "embedder $placement failed at run time (${e.message}); cpu from now on")
-            val cpu = synchronized(this) {
-                if (session === s) {
-                    session = cpuSession(modelFile)
-                    placement = "cpu"
-                    runCatching { s.close() }
-                }
-                session
+        synchronized(lock) {
+            return try {
+                run(session, encoded)
+            } catch (e: Exception) {
+                if (placement == "cpu") throw e
+                android.util.Log.w(TAG, "embedder $placement failed at run time (${e.message}); cpu from now on")
+                val old = session
+                session = cpuSession(modelFile)
+                placement = "cpu"
+                runCatching { old.close() }
+                run(session, encoded)
             }
-            run(cpu, encoded)
         }
     }
 
@@ -163,6 +164,16 @@ class SentenceEmbedder private constructor(model: File, vocab: File) {
         const val MODEL_BYTES = 23_026_053L
         const val VOCAB_BYTES = 231_508L
 
+        // NOTE: resolve/main, not a pinned commit (no commit hash could be verified from here).
+        // If upstream re-exports the file with another size, downloads are rejected by the exact
+        // size and MemoryIndexer backs off up to a week; pin to resolve/<sha>/ when one is known.
+
+        /** Both files present at their published sizes (cheap; no download). */
+        fun downloaded(ctx: Context): Boolean {
+            val dir = ctx.applicationContext.filesDir
+            return File(dir, MODEL).length() == MODEL_BYTES && File(dir, VOCAB).length() == VOCAB_BYTES
+        }
+
         /** Downloads the model + vocab once (blocking, ~23 MB). True when both are present. */
         fun fetch(ctx: Context): Boolean {
             val dir = ctx.applicationContext.filesDir
@@ -171,13 +182,20 @@ class SentenceEmbedder private constructor(model: File, vocab: File) {
         }
 
         @Volatile private var shared: SentenceEmbedder? = null
-        @Volatile private var failed = false
+        /** When loading last failed; another try only after [LOAD_RETRY_MS] (OOM or a busy
+         * accelerator can be transient). */
+        @Volatile private var failedAt = 0L
+        private const val LOAD_RETRY_MS = 6 * 3_600_000L
+
+        /** The embedder if it is already loaded; never loads or blocks. Recall uses this so a
+         * question never pays the ~1–2 s load + placement timing (the indexer loads it). */
+        fun loaded(): SentenceEmbedder? = shared
 
         /** The loaded embedder, or null when its files aren't downloaded yet or it can't load.
          * Never downloads (the indexer does that). The first call loads + times (~1–2 s). */
         fun shared(ctx: Context): SentenceEmbedder? {
             shared?.let { return it }
-            if (failed) return null
+            if (failedAt != 0L && System.currentTimeMillis() - failedAt in 0 until LOAD_RETRY_MS) return null
             val dir = ctx.applicationContext.filesDir
             val m = File(dir, MODEL); val v = File(dir, VOCAB)
             if (m.length() != MODEL_BYTES || v.length() != VOCAB_BYTES) return null
@@ -185,11 +203,18 @@ class SentenceEmbedder private constructor(model: File, vocab: File) {
                 shared ?: try {
                     SentenceEmbedder(m, v).also {
                         shared = it
+                        failedAt = 0L
                         android.util.Log.i(TAG, "embedder on: ${it.placement}")
                     }
                 } catch (e: Throwable) {
-                    android.util.Log.w(TAG, "embedder failed to load: ${e.message}")
-                    failed = true
+                    failedAt = System.currentTimeMillis()
+                    // ONNX rejecting the file itself = damaged bytes of the right size: delete it so
+                    // the indexer downloads it again. Anything else (OOM, missing native lib) keeps
+                    // the file and just waits for the retry.
+                    val corrupt = e is ai.onnxruntime.OrtException
+                    if (corrupt) m.delete()
+                    android.util.Log.w(TAG, "embedder failed to load (${e.javaClass.simpleName}: ${e.message})" +
+                        if (corrupt) "; model deleted, will re-download" else "; retry in 6 h")
                     null
                 }
             }

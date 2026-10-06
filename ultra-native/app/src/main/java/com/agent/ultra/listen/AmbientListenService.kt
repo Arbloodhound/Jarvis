@@ -73,7 +73,6 @@ class AmbientListenService : Service() {
         super.onCreate()
         cfg = AmbientConfig(this)
         mem = AmbientMemory.get(this)
-        MemoryRecall.init(this)
         wake = WakeFilter(cfg)
         instance = this
     }

@@ -70,4 +70,27 @@ class TimeWindowTest {
         assertEquals("What did Sam say about the dentist", TimeWindow.strip(q, p(q)))
         assertEquals(q, TimeWindow.strip(q, null))
     }
+
+    @Test fun stripKeepsTimeWordsUsedAsContent() {
+        val q = "the last thing Sam said last week"
+        assertEquals("the last thing Sam said", TimeWindow.strip(q, p(q)))
+        val q2 = "the morning run today"                       // phrase "this morning", not verbatim
+        assertEquals("the run today", TimeWindow.strip(q2, p(q2)))
+    }
+
+    @Test fun aDayPartStillAheadIsAPlanNotAWindow() {
+        // Asked at 15:30: the evening hasn't started, so no (inverted) window.
+        assertNull(p("what's on this evening"))
+        assertNull(p("tonight"))
+        val aft = p("this afternoon")!!
+        assertTrue(aft.fromMs < aft.toMs)
+    }
+
+    @Test fun stripLeavesNoTimeWordsBehindForEquivalentPhrases() {
+        for (q in listOf("what did she say a minute ago", "what did she say in the past hour",
+                         "what did she say in the last few days", "what did she say just now")) {
+            val stripped = TimeWindow.strip(q, p(q))
+            assertTrue("$q -> $stripped", RecallScore.terms(stripped).isEmpty())
+        }
+    }
 }

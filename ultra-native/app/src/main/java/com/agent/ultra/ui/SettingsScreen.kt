@@ -739,7 +739,9 @@ fun SettingsScreen(
             )
             OutlinedButton(
                 onClick = {
-                    com.agent.ultra.listen.AmbientMemory.get(context).wipe()
+                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        com.agent.ultra.listen.AmbientMemory.get(context).wipe()
+                    }
                 },
                 modifier = Modifier.padding(top = 8.dp),
             ) { Text("Erase ambient memory") }

@@ -10,16 +10,16 @@ import java.util.concurrent.CopyOnWriteArrayList
 /**
  * "What do I remember about X?" over everything heard (and, through [extraSources], notes).
  *
- *   MemoryRecall.init(context)                                  // once; idempotent
- *   val hits = MemoryRecall.relevant("what did Sam say about the dentist yesterday", now)
+ *   val hits = MemoryRecall.relevant(context, "what did Sam say about the dentist yesterday", now)
  *   val block = MemoryRecall.brief(hits)                        // "" when nothing was found
  *
  * Heard lines are found three ways and scored together by [RecallScore]: (a) meaning — cosine
  * between the query's sentence vector and each stored line vector ([SentenceEmbedder], brute
  * force over the newest [SCAN_LIMIT] vectors plus the asked-for window), (b) words — FTS4
  * prefix match on the query's content words, (c) recency, and (d) the time window parsed
- * from the question by [TimeWindow]. With no embedder (not downloaded yet, or ONNX failed)
- * (a) is skipped and the rest still work.
+ * from the question by [TimeWindow]. With no embedder (not downloaded yet, not loaded yet, or
+ * ONNX failed) (a) is skipped, the background indexer is kicked, and the rest still works.
+ * A question never loads the model or downloads anything inline.
  *
  * Expected size: ambient keeps ≤ 90 days / 250k lines; real speech is likely a few hundred
  * to a few thousand lines a day, so N ≈ 10k–100k vectors. A full scan of [SCAN_LIMIT] (40k ×
@@ -34,35 +34,47 @@ object MemoryRecall {
     private const val KEYWORD_ROWS = 100
     private const val WINDOW_ROWS = 200
 
-    /** More places to remember from (e.g. notes); each is asked in turn, failures skipped. */
+    /** More places to remember from (e.g. notes); each is asked in turn, failures skipped.
+     * One line to add the librarian's notes:
+     * `MemoryRecall.extraSources += MemoryRecall.textSource("notes") { q, n -> MemoryNotes.get(ctx).search(q, n).map { it.ts to it.text } }` */
     val extraSources: MutableList<RecallSource> = CopyOnWriteArrayList()
 
-    @Volatile private var app: Context? = null
+    /**
+     * A [RecallSource] over a plain search returning (ts, text) pairs: its hits are scored by
+     * keyword overlap (at least [RecallScore.SOURCE_FLOOR]), recency and the time window, on
+     * the same scale as heard lines.
+     */
+    fun textSource(name: String, search: suspend (query: String, limit: Int) -> List<Pair<Long, String>>) =
+        RecallSource { query, window, nowMs, limit ->
+            val terms = RecallScore.terms(query)
+            search(query, limit).mapNotNull { (ts, text) ->
+                RecallScore.sourceScore(terms, text, ts, nowMs, window)?.let { RecallHit(ts, text, it, name) }
+            }
+        }
 
-    fun init(ctx: Context) { app = ctx.applicationContext }
-
-    /** Up to [limit] hits, best first. Never throws (a failing source just contributes nothing). */
-    suspend fun relevant(query: String, now: Long, limit: Int = 6): List<Hit> = withContext(Dispatchers.IO) {
-        val window = TimeWindow.parse(query, now)
-        val stripped = TimeWindow.strip(query, window).trim()
-        val all = ArrayList<Hit>()
-        app?.let { ctx ->
-            try { all += heard(ctx, stripped, window, now, limit) }
+    /** Up to [limit] hits, best first. Never throws (a failing source just contributes
+     * nothing). Runs on Dispatchers.IO. */
+    suspend fun relevant(context: Context, query: String, nowMs: Long, limit: Int = 5): List<RecallHit> =
+        withContext(Dispatchers.IO) {
+            val ctx = context.applicationContext
+            val window = TimeWindow.parse(query, nowMs)
+            val stripped = TimeWindow.strip(query, window).trim()
+            val all = ArrayList<RecallHit>()
+            try { all += heard(ctx, stripped, window, nowMs, limit) }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) { android.util.Log.w(TAG, "recall (heard) failed: ${e.message}") }
+            for (s in extraSources) {
+                try { all += s.search(stripped, window, nowMs, limit) }
+                catch (e: CancellationException) { throw e }
+                catch (e: Exception) { android.util.Log.w(TAG, "recall source ${s.javaClass.simpleName} failed: ${e.message}") }
+            }
+            RecallScore.merge(all, limit)
         }
-        for (s in extraSources) {
-            try { all += s.search(stripped, window, limit) }
-            catch (e: CancellationException) { throw e }
-            catch (e: Exception) { android.util.Log.w(TAG, "recall source ${s.javaClass.simpleName} failed: ${e.message}") }
-        }
-        RecallScore.merge(all, limit)
-    }
 
-    /** A compact dated "What I remember" block for a prompt; "" for no hits. */
-    fun brief(hits: List<Hit>, maxChars: Int = 800): String = RecallScore.brief(hits, maxChars)
+    /** A compact dated "What I remember (with times…)" block for a prompt; "" for no hits. */
+    fun brief(hits: List<RecallHit>, maxChars: Int = 600): String = RecallScore.brief(hits, maxChars)
 
-    private fun heard(ctx: Context, query: String, window: TimeWindow?, now: Long, limit: Int): List<Hit> {
+    private fun heard(ctx: Context, query: String, window: TimeWindow?, now: Long, limit: Int): List<RecallHit> {
         val mem = AmbientMemory.get(ctx)
         val terms = RecallScore.terms(query)
         val hasTerms = terms.isNotEmpty()
@@ -78,20 +90,25 @@ object MemoryRecall {
         else if (!hasTerms) add(mem.newest(limit * 3))
 
         val cos = HashMap<Long, Float>()
-        val emb = if (hasTerms) SentenceEmbedder.shared(ctx) else null
+        val emb = if (hasTerms) SentenceEmbedder.loaded() else null
         if (hasTerms && emb == null) MemoryIndexer.kick(ctx)      // fetches + loads in the background
         if (emb != null) try {
-            MemoryIndexer.catchUp(mem, emb)
+            // Just-said lines without a vector yet — but not while the brain is generating
+            // (the indexer stays off then too); they are still found by keyword.
+            if (!com.agent.ultra.local.LocalModelEngine.shared(ctx).busy.value) MemoryIndexer.catchUp(mem, emb)
             val q = emb.embed(query)
+            // Only the best SEM_TOP survive the scan; the window pass and the rest-of-history
+            // pass don't overlap, so no id is seen twice.
             val top = PriorityQueue<Pair<Long, Float>>(compareBy { it.second })
             fun consider(id: Long, v: ByteArray) {
                 val c = MemoryVectors.cosine(q, v) ?: return
-                cos[id] = c
+                if (top.size >= SEM_TOP && c <= top.peek()!!.second) return
                 top.add(id to c)
                 if (top.size > SEM_TOP) top.poll()
             }
-            if (window != null) mem.forEachVector(window, SCAN_LIMIT, ::consider)
-            mem.forEachVector(null, SCAN_LIMIT, ::consider)
+            if (window != null) mem.forEachVector(window, SCAN_LIMIT, each = ::consider)
+            mem.forEachVector(null, SCAN_LIMIT, excluding = window, each = ::consider)
+            for ((id, c) in top) cos[id] = c
             add(mem.byIds(top.map { it.first }.filter { it !in rows }))
             val missing = rows.keys.filter { it !in cos }
             for ((id, v) in mem.vectorsFor(missing)) MemoryVectors.cosine(q, v)?.let { cos[id] = it }
@@ -109,7 +126,7 @@ object MemoryRecall {
                 inWindow = window?.contains(r.ts),
                 hasTerms = hasTerms,
             ) ?: return@mapNotNull null
-            Hit(r.text, r.ts, s, SOURCE_HEARD)
+            RecallHit(r.ts, r.text, s, SOURCE_HEARD)
         }.sortedByDescending { it.score }.take(limit * 2)
     }
 }
