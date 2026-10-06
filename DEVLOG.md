@@ -3,6 +3,31 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-08 (later) — Offline phone control, wait-bounded thinking, ambient yields, context by RAM (4 parallel agents)
+
+Owner approved the gap list. Merged (748 tests, 0 failures; assembleDebug passes; all RUNTIME-UNPROVEN):
+- **Offline tool use (2099d3b):** with no cloud client, device-like requests (isSimpleLocalIntent and not
+  DEEP for the thinking MoE; DEVICE tier only for 1B models) go to the local tool loop first, using
+  Qwen3's chat template + a DEVICE-tier think cap; `LocalToolCall` reads only post-think text, only the
+  11 offered tools (flashlight, wifi, bluetooth, DND, volume, alarm, note, launch app, battery, clipboard
+  r/w); falls back to the text answer. Same `gate.enforceCall` as cloud; a call needing confirmation is
+  refused offline (stricter). Multi-step offline ReAct: assessed, not built (cloud-bound navigator,
+  speed blocker). 18 tests.
+- **Think budget by wait time (c6624cd):** per-model decode-speed EMA (`DecodeSpeed`), `WaitBudget`
+  caps silent thinking at DEVICE/LIGHT 4 s, NORMAL 20 s, DEEP 60 s with floors 16/16/64/128; LIGHT
+  160→96. 14 tests.
+- **Ambient yields to the brain (1753248):** `LocalModelEngine.busy`; AmbientListenService queues
+  utterances (≤8 / 2 min, wake-window speech kept first) while busy + 2 s settle; wake windows held so a
+  "Hey Jarvis" command during an answer runs after it. 11 tests.
+- **Context by RAM (ead1a7f):** `contextFor()` with per-model KV table and full memory arithmetic;
+  n_ubatch pinned 512; native retries at 4096 if a larger ctx fails; Brain history scales with ctx.
+  For the MoE IQ2_M on a 16 GB Pixel the arithmetic most likely keeps 4096 (8192 needs ≥ ~17.0e9 B
+  total); log shows `ctx=` and `totalMB=`. Idea not done: n_outputs_max = 1 would free ~297 MiB.
+- Option B ("don't ask when I asked") was attempted again with the owner's explicit choice and was
+  DENIED again by the session's safety classifier (Security Weaken); not pursued further; files removed.
+- Owner was given a generated release keystore + base64 + password (local copies deleted) and steps to
+  add the 4 secrets and tag `v2.6.0-rc1` to prove the release workflow.
+
 ## 2026-10-08 — "Keep the whole brain in memory" (resident load)
 
 Dafarus: "shouldn't the model always be loaded?" Phones have no separate VRAM (unified memory); the
