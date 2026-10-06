@@ -3,6 +3,17 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-06 (night, later) — START_HERE.md handheld guide; version 2.6.0
+
+Dafarus asked whether everything discussed is in and fully optimized, and for a no-thinking
+step-by-step guide. Answer: all discussed features are built and merged (643 tests); not done on
+purpose: the confirmation-skip change (blocked by the safety classifier, needs his explicit answer)
+and the fine-tune (needs his corpus + 80 GB GPU). Further tuning (model size, threads, accelerator)
+needs Pixel numbers — doing it blind would be guessing. New `START_HERE.md` (repo root): laptop/adb
+setup, phone setup, install, accel probe, MoE test with keep/fallback rule, voice + ambient, bench,
+what to send back + 4 open decisions, release signing + `v2.6.0` release via GitHub Releases UI,
+optional fine-tune. Version bumped to 2.6.0 (versionCode 17) for that release.
+
 ## 2026-10-06 (night) — Pixel test guide replaces the G15 run
 
 Dafarus gets the Pixel 10 Pro sooner than expected, so the G15 run is dropped. New

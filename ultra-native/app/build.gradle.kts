@@ -40,8 +40,8 @@ android {
         applicationId = "com.agent.ultra"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "2.5.0-native"
+        versionCode = 17
+        versionName = "2.6.0-native"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
