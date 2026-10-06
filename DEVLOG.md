@@ -26,7 +26,7 @@ run on an older build — no `load resident=`/`warm` lines, so the memory fixes 
 
 **Change:** presets Qwen3-4B Thinking 2507 Q4_0 (~2.4 GB), its abliterated Q4_K_M, and Qwen3-8B Q4_0
 (~4.8 GB) — Qwen3 template/think handling unchanged, Q4_0/Q4_K repacked for i8mm (IQ2 never is);
-URLs unverified (HF blocked here). Default for ≥8 GB phones is now the 4B (was the MoE). MoE preset note
+URLs first unverified; then checked via the Hugging Face connector: the 4B Q4_0 (2,375,773,312 B) and abliterated Q4_K_M (2,497,281,344 B) exist; unsloth has NO Qwen3-8B Q4_0 → preset fixed to Qwen3-8B-Q4_K_S.gguf (4,802,012,992 B). Default for ≥8 GB phones is now the 4B (was the MoE). MoE preset note
 states the measurement. KV profiles for 4B/8B. Bench uses exact thread counts. 766 tests pass.
 
 ## 2026-10-08 (evening) — Option B: no confirmation card when the person asked for it

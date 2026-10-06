@@ -613,24 +613,25 @@ class LocalModelEngine(private val context: Context) {
             // 0.4–1.6 tok/s because only ~8.6 GB is ever available there, so its pages are read
             // back from storage continuously (25k–227k major faults per answer). Q4_0 / Q4_K are
             // repacked at load for i8mm (llama.cpp repack.cpp); IQ2 never is. Same Qwen3 chat
-            // template and <think> handling as the MoE ("qwen3-" file names). URLs NOT checked
-            // from the build machine (Hugging Face is blocked there).
+            // template and <think> handling as the MoE ("qwen3-" file names). Files and sizes
+            // checked on the Hub listing, 2026-10-06 (unsloth has no Q4_0 for the 8B: Q4_K_S,
+            // also repacked).
             ModelChoice(
                 "Qwen3-4B Thinking 2507 (Q4_0) — fast thinker, best fit for 16 GB",
                 "https://huggingface.co/unsloth/Qwen3-4B-Thinking-2507-GGUF/resolve/main/Qwen3-4B-Thinking-2507-Q4_0.gguf",
-                "qwen3-4b-thinking-2507-q4_0.gguf", 2400,
+                "qwen3-4b-thinking-2507-q4_0.gguf", 2266,
                 "Reasoning model small enough to stay fully in memory with room to spare, on the phone CPU's fast path. Strong maths/reasoning for its size and good at tool calls.",
             ),
             ModelChoice(
                 "Qwen3-4B Thinking 2507 ABLITERATED (Q4_K_M)",
                 "https://huggingface.co/mradermacher/Huihui-Qwen3-4B-Thinking-2507-abliterated-GGUF/resolve/main/Huihui-Qwen3-4B-Thinking-2507-abliterated.Q4_K_M.gguf",
-                "qwen3-4b-thinking-2507-abliterated-q4km.gguf", 2500,
-                "The same 4B with refusals removed. If the download fails, the file name upstream differs — use the plain 4B above.",
+                "qwen3-4b-thinking-2507-abliterated-q4km.gguf", 2382,
+                "The same 4B with refusals removed (Q4_K_M, also on the fast path).",
             ),
             ModelChoice(
-                "Qwen3-8B (Q4_0) — stronger, still on the fast path",
-                "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_0.gguf",
-                "qwen3-8b-q4_0.gguf", 4800,
+                "Qwen3-8B (Q4_K_S) — stronger, still on the fast path",
+                "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_S.gguf",
+                "qwen3-8b-q4ks.gguf", 4580,
                 "Twice the 4B's size: better answers, roughly half its speed. Fits in memory on a 16 GB phone.",
             ),
             // The fine-tune from Qwen3_30B_A3B_LoRA_Colab.ipynb (its REPO / OUT_M / OUT_S). These 404
