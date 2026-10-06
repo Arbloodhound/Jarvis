@@ -43,6 +43,14 @@ class AmbientConfig(context: Context) {
         get() = p.getBoolean("pattern_readings", true)
         set(v) = p.edit().putBoolean("pattern_readings", v).apply()
 
+    /** Speaker tags in the transcript: voiceprints made and kept on the phone (biometric data,
+     * of everyone heard), so off until the owner turns it on or records their voice in Settings.
+     * Off = new lines are "[Unknown]" with pause and non-speech cues only (rate and loudness are
+     * judged against a known speaker's usual), and the 40 MB model is never downloaded. */
+    var speakerTags: Boolean
+        get() = p.getBoolean("speaker_tags", false)
+        set(v) = p.edit().putBoolean("speaker_tags", v).apply()
+
     companion object {
         // Audio
         const val SAMPLE_RATE = 16_000

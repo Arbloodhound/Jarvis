@@ -31,6 +31,10 @@ class Segmenter(private val onUtterance: (ShortArray, Int) -> Unit) {
     /** True while a segment is open (speech started, not yet closed by silence). */
     val speaking: Boolean get() = inSpeech
 
+    /** The room's noise floor (dBFS) as the gate sees it; frozen while a segment is open, so
+     * read in the utterance callback it is the floor that utterance was cut against. */
+    val noiseFloorDb: Float get() = floorDb
+
     fun reset() {
         preRoll.clear(); current.clear()
         loudRun = 0; quietMs = 0; inSpeech = false

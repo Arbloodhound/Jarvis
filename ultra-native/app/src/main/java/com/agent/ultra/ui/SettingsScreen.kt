@@ -915,8 +915,9 @@ fun SettingsScreen(
                     }
                 },
                 modifier = Modifier.padding(top = 8.dp),
-            ) { Text("Erase ambient memory") }
+            ) { Text("Erase ambient memory (and voiceprints)") }
             MemorySettings(context)
+            VoiceSettings(context)
             Spacer(modifier = Modifier.height(16.dp))
         }
 
