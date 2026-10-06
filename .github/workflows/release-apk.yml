@@ -2,7 +2,7 @@
 # Run it: Actions tab -> "Release APK" -> Run workflow (after this file is on main), or push
 # a tag like v2.5.0. The APK is attached to the run as "app-release" (kept 14 days). A run with
 # test_kit ticked (the default for "Run workflow") also publishes both APKs, as plain .apk files,
-# to its own pre-release v2.6.<run number>-test for Obtainium to update from (newest 5 kept).
+# to its own release (marked Latest) v2.6.<run number>-test for Obtainium to update from (newest 5 kept).
 # See DEPLOY_GUIDE.md, "Updates in one tap with Obtainium".
 #
 # Each run, tag pushes included, is versioned 2.6.<run number> (versionCode 17 + run number), so
@@ -226,10 +226,10 @@ jobs:
           path: ultra-native/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
 
-  # Publishes this run's APKs, unzipped, as its own pre-release "v2.6.<run>-test" (name = tag),
+  # Publishes this run's APKs, unzipped, as its own release (marked Latest) "v2.6.<run>-test" (name = tag),
   # with jarvis-test.apk and jarvis-release.apk, for Obtainium. Only runs that built the test kit
-  # publish, so every test pre-release carries both files; tag pushes publish nothing (as before).
-  # Keeps the newest 5 test pre-releases. The only job allowed to write to the repository.
+  # publish, so every test release carries both files; tag pushes publish nothing (as before).
+  # Keeps the newest 5 test releases. The only job allowed to write to the repository.
   publish:
     needs: release
     if: inputs.test_kit
@@ -251,7 +251,7 @@ jobs:
         with:
           path: apks
 
-      - name: Publish the test pre-release
+      - name: Publish the test build as the Latest release
         run: |
           set -euo pipefail
           TAG="v$VERSION-test"
@@ -261,22 +261,23 @@ jobs:
           if gh release view "$TAG" > /dev/null 2>&1; then
             # A re-run of the same run number: replace the files, keep the release.
             gh release upload "$TAG" out/*.apk --clobber
+            gh release edit "$TAG" --prerelease=false --latest
           else
             gh release create "$TAG" out/*.apk \
-              --prerelease --target "$GITHUB_SHA" --title "$TAG" \
+              --latest --target "$GITHUB_SHA" --title "$TAG" \
               --notes "Build $VERSION (versionCode $((17 + RUN))), from $GITHUB_REF_NAME at ${GITHUB_SHA::7}. jarvis-test.apk has the Jarvis Tests app; jarvis-release.apk is the everyday build. Both are signed with the release key: install as an update, models stay."
           fi
           echo "Published $TAG: $(ls out)"
 
-      - name: Keep only the newest 5 test pre-releases
+      - name: Keep only the newest 5 test builds
         run: |
           set -euo pipefail
-          # Only pre-releases whose tag is exactly v2.6.<number>-test; real releases are never touched.
+          # Only releases whose tag is exactly v2.6.<number>-test (CI test builds); any other release is never touched.
           gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
-            --jq '.[] | select(.prerelease == true) | .tag_name' > pre.txt
+            --jq '.[] | .tag_name' > pre.txt
           { grep -E '^v2\.6\.[0-9]+-test$' pre.txt || true; } | sort -t. -k3,3 -n -r | tail -n +6 > old.txt
           while read -r t; do
             [ -n "$t" ] || continue
-            echo "Deleting old test pre-release $t"
+            echo "Deleting old test release $t"
             gh release delete "$t" --cleanup-tag --yes
           done < old.txt

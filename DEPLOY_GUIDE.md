@@ -39,7 +39,7 @@ This token can only **read** the Jarvis repo. It cannot change anything, and it 
 **3. Give the key to Obtainium:** Obtainium → **Settings** → **Source-specific** → **GitHub** → paste it into **GitHub personal access token**.
 
 **4. Add Jarvis:** Obtainium → **Add app** → URL `https://github.com/Arbloodhound/Jarvis`, then in the options below it:
-- **Include prereleases**: ON (the test builds are pre-releases).
+- **Include prereleases**: either way (test builds are now normal releases marked Latest).
 - **Filter APKs by regular expression**: `jarvis-test\.apk` (the test build, with the Jarvis Tests app).
 - Tap **Add**.
 
