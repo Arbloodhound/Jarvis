@@ -208,6 +208,11 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 )
                 return
             }
+            // Device commands try the on-device tool loop first, through the same policy gate as
+            // the cloud path; a request it cannot map is answered in text as before. The loop sees
+            // the command alone: overheard ambient text must not shape params or task memory.
+            if (LocalToolCall.offlineRoute(userInput, canDecline = local.isThinkingModel) &&
+                runLocalLoop(IntentRouter.requestPart(userInput))) return
             emitLocal(userInput)
             return
         }
@@ -572,7 +577,8 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         speakOut(finalMsg.text)
     }
 
-    /** The on-device tool loop: compact catalog, max 2 turns, gate enforced. */
+    /** The on-device tool loop: compact catalog, max 2 turns, gate enforced.
+     * Returns false when no tool call came out of it (the caller answers another way). */
     private suspend fun runLocalLoop(userInput: String): Boolean {
         val episode = Gate.Episode(userInput)
         // What worked before, for the 1B model too. One line, and only when a
@@ -583,6 +589,11 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         } catch (_: Exception) { null }
         if (recalled != null) {
             android.util.Log.i("UltraBrain", "MEMORY HINT (local): $recalled")
+        }
+        if (local.isThinkingModel) {
+            val call = thinkingToolCall(userInput, recalled) ?: return false
+            runLocalCall(userInput, episode, call)
+            return true
         }
         // Few-shot examples — 1B models map intents reliably with them, not
         // without (measured: zero-shot picked flashlight_toggle for 'open
@@ -640,31 +651,77 @@ JSON:"""
                 prompt += "\n\nThat was not a JSON tool call. Reply with ONLY the JSON."
                 return@repeat
             }
-            val verdict = gate.enforceCall(episode, call.first, call.second)
-            if (!verdict.allowed) {
-                GateAuditLog.record(appContext, call.first, GateAuditLog.Outcome.BLOCKED, verdict.rule, episode.observations, verdict.riskScore)
-                android.util.Log.i("UltraGate", "LOCAL BLOCK ${call.first}: ${verdict.violations.firstOrNull()?.hint}")
-                answer("Blocked by policy gate: ${verdict.violations.firstOrNull()?.hint}")
-                return true
-            }
-            val localOutcome = if (verdict.autoApproved) GateAuditLog.Outcome.AUTO_APPROVED else GateAuditLog.Outcome.ALLOWED
-            if (verdict.autoApproved) android.util.Log.i("UltraGate", "LOCAL AUTO-APPROVE ${call.first} (risk=${verdict.riskScore?.total})")
-            GateAuditLog.record(appContext, call.first, localOutcome, verdict.rule, episode.observations, verdict.riskScore)
-            android.util.Log.i("UltraBrain", "LOCAL TOOL: ${call.first} ${call.second.toString().take(80)}")
-            val result = tools.execute(call.first, call.second)
-            episode.observeSecrets(result)
-            episode.observeTool(call.first, result.take(80))
-            val verification = verifyAction(call.first, call.second) ?: ""
-            val failed = result.startsWith("Error:")
-            answer((if (failed) "Tried on-device: $result" else "$result (on-device)") + verification)
-            android.util.Log.i("UltraBrain", "RUN COMPLETE (local, tool=${call.first}, ok=${!failed})")
-            // On-device runs feed task memory and the recipe buffer too —
-            // otherwise "save that as X" after a local command has nothing
-            // to save.
-            recordMemory(userInput, listOf(Triple(call.first, call.second, !failed)), !failed)
+            runLocalCall(userInput, episode, call)
             return true
         }
         return false
+    }
+
+    /**
+     * One tool call from a thinking model (Qwen3 Thinking): its own ChatML template, the trace
+     * capped at the DEVICE tier's budget and hidden by [ThinkBudget], so only the post-think
+     * text is parsed. One attempt — every attempt is a full prefill plus a trace on the phone.
+     * Null when the model declined (not a device command) or gave nothing usable.
+     */
+    private suspend fun thinkingToolCall(userInput: String, recalled: String?): Pair<String, JSONObject>? {
+        val level = ThermalGuard.level
+        val prompt = LocalToolCall.prompt(userInput, recalled)
+        val reserve = LocalToolCall.ANSWER_RESERVE
+        val budget = ThermalPolicy.scaleBudget(
+            ThinkBudget.clipToContext(
+                LocalToolCall.thinkBudget, com.agent.ultra.local.LocalModelEngine.CTX_SIZE,
+                LocalPrompt.estimateTokens(prompt), reserve,
+            ),
+            level,
+        )
+        var shown: ChatStatus.Status? = null
+        val raw = try {
+            local.generate(
+                prompt, maxTokens = budget + reserve + 32,
+                thinkBudget = ThinkBudget(budget, startsInThink = true),
+                onStart = { shown = ChatStore.setStatus(ChatStatus.Phase.THINKING) },
+            ).getOrElse { return null }
+        } finally {
+            shown?.let { ChatStore.clearStatus(it) }
+        }
+        android.util.Log.i("UltraBrain", "LOCAL (thinking, budget=$budget): ${raw.take(160)}")
+        return when (val parsed = LocalToolCall.extract(raw)) {
+            is LocalToolCall.Parsed.Call -> parsed.tool to parsed.params
+            // A reply that is only a tool's name; params shaped from the request.
+            is LocalToolCall.Parsed.BareName -> parseBareToolCall(parsed.tool, IntentRouter.requestPart(userInput))
+            LocalToolCall.Parsed.Declined, LocalToolCall.Parsed.Unparsed -> null
+        }
+    }
+
+    /** Gate, run, verify and record one on-device tool call. The same policy gate as the
+     * cloud loop; a call it refuses (confirmable or not) is not run. */
+    private suspend fun runLocalCall(
+        userInput: String,
+        episode: Gate.Episode,
+        call: Pair<String, JSONObject>,
+    ) {
+        val verdict = gate.enforceCall(episode, call.first, call.second)
+        if (!verdict.allowed) {
+            GateAuditLog.record(appContext, call.first, GateAuditLog.Outcome.BLOCKED, verdict.rule, episode.observations, verdict.riskScore)
+            android.util.Log.i("UltraGate", "LOCAL BLOCK ${call.first}: ${verdict.violations.firstOrNull()?.hint}")
+            answer("Blocked by policy gate: ${verdict.violations.firstOrNull()?.hint}")
+            return
+        }
+        val localOutcome = if (verdict.autoApproved) GateAuditLog.Outcome.AUTO_APPROVED else GateAuditLog.Outcome.ALLOWED
+        if (verdict.autoApproved) android.util.Log.i("UltraGate", "LOCAL AUTO-APPROVE ${call.first} (risk=${verdict.riskScore?.total})")
+        GateAuditLog.record(appContext, call.first, localOutcome, verdict.rule, episode.observations, verdict.riskScore)
+        android.util.Log.i("UltraBrain", "LOCAL TOOL: ${call.first} ${call.second.toString().take(80)}")
+        val result = tools.execute(call.first, call.second)
+        episode.observeSecrets(result)
+        episode.observeTool(call.first, result.take(80))
+        val verification = verifyAction(call.first, call.second) ?: ""
+        val failed = result.startsWith("Error:")
+        answer((if (failed) "Tried on-device: $result" else "$result (on-device)") + verification)
+        android.util.Log.i("UltraBrain", "RUN COMPLETE (local, tool=${call.first}, ok=${!failed})")
+        // On-device runs feed task memory and the recipe buffer too —
+        // otherwise "save that as X" after a local command has nothing
+        // to save.
+        recordMemory(userInput, listOf(Triple(call.first, call.second, !failed)), !failed)
     }
 
     private suspend fun runLoop(
@@ -1113,11 +1170,7 @@ JSON:"""
     /** Bare tool-name fallback for the 1B model: it emits the intent name, a
      * deterministic engine shapes params from the request text. */
     private fun parseBareToolCall(output: String, request: String): Pair<String, JSONObject>? {
-        val names = listOf(
-            "flashlight_toggle", "wifi_toggle", "bluetooth_toggle", "do_not_disturb",
-            "volume_set", "alarm_set", "note_create", "app_launch",
-            "battery_status", "clipboard_read", "clipboard_write",
-        )
+        val names = LocalToolCall.TOOLS
         val found = names.firstOrNull { n -> Regex("(^|\\W)$n(\\W|$)").containsMatchIn(output.trim()) }
             ?: return null
         val u = request.lowercase()
