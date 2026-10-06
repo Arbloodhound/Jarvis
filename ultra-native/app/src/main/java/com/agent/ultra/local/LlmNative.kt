@@ -33,9 +33,14 @@ object LlmNative {
 
     fun interface TokenCallback {
         /** Return text to force-feed into the context without sampling (e.g. ThinkBudget's
-         *  "</think>"), or null to continue normally. */
+         *  "</think>"), null to continue normally, or [STOP] to end the generation here (the
+         *  token just delivered is not decoded; the KV cache stays consistent). */
         fun onToken(piece: String): String?
     }
+
+    /** Returned by a [TokenCallback] to stop generating (U+FFFF, a noncharacter no model text
+     *  is injected as; ultra_llm.cpp kStop matches its UTF-8). */
+    const val STOP = "\uFFFF"
 
     /**
      * Returns a handle, or 0 on failure. [cpus] non-empty: one persistent pool of [threads]

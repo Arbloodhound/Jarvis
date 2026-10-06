@@ -138,8 +138,12 @@ std::string jstringToUtf8(JNIEnv *env, jstring js) {
     return out;
 }
 
+// What Kotlin returns to stop generating (LlmNative.STOP, U+FFFF) in UTF-8.
+const std::string kStop = "\xEF\xBF\xBF";
+
 // Delivers one piece to Kotlin. Kotlin may return text to force-feed into the
-// context without sampling (ThinkBudget's "</think>" at the budget); empty = none.
+// context without sampling (ThinkBudget's "</think>" at the budget); empty = none;
+// kStop = stop here.
 std::string deliverToken(const std::string &piece) {
     std::string inject;
     if (!gVm || !gCallback || !gOnToken) return inject;
@@ -416,7 +420,11 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
         char buf[256];
         int len = llama_token_to_piece(engine->vocab, tok, buf, sizeof(buf), 0, true);
         std::string inject;
-        if (len > 0) inject = deliverToken(std::string(buf, len));
+        // Every token gets its callback, even one with an empty piece: a stop request (and
+        // ThinkBudget's count) must not miss it.
+        inject = deliverToken(len > 0 ? std::string(buf, len) : std::string());
+        // Before decoding tok: engine->cached still matches the KV cache exactly.
+        if (inject == kStop) break;
 
         llama_sampler_accept(chain, tok);
         llama_batch next = llama_batch_get_one(&tok, 1);

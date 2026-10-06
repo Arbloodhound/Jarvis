@@ -45,6 +45,21 @@ You are Jarvis, a private assistant running entirely on this phone, offline. You
         }
     }
 
+    /** Qwen3's soft switch: in the user turn it asks for an answer without reasoning. */
+    const val NO_THINK = "/no_think"
+
+    /**
+     * ChatML prompt for a plain answer without reasoning (the memory model's searches and
+     * sorting): the user turn ends in [NO_THINK], and the assistant turn starts with the empty
+     * think block Qwen3's own template emits with thinking off, so decoding begins at the answer.
+     * No history: each call stands alone. Do not pass the result to a ThinkBudget.
+     */
+    fun buildNoThink(system: String, user: String): String = buildString {
+        append("<|im_start|>system\n").append(system.trim()).append("<|im_end|>\n")
+        append("<|im_start|>user\n").append(user.trim()).append(' ').append(NO_THINK).append("<|im_end|>\n")
+        append("<|im_start|>assistant\n<think>\n\n</think>\n\n")
+    }
+
     /** No tokenizer on the Kotlin side: ~3 chars/token is a safe over-estimate for English. */
     fun estimateTokens(prompt: String): Int = prompt.length / 3 + 1
 

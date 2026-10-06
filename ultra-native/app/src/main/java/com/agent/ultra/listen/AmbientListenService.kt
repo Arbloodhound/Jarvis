@@ -142,7 +142,8 @@ class AmbientListenService : Service() {
      * current answer, with the window it was stamped with.
      */
     private suspend fun transcribeWorker(utterances: Channel<Utterance>) = coroutineScope {
-        val busy = com.agent.ultra.local.LocalModelEngine.shared(applicationContext).busy
+        // Either model: the thinker answering, or the librarian sorting memory.
+        val busy = com.agent.ultra.local.LocalModelEngine.anyBusy
         val busyChangedAt = java.util.concurrent.atomic.AtomicLong(0L)
         val watcher = launch { busy.collect { busyChangedAt.set(System.currentTimeMillis()) } }
         fun ready() = AmbientBacklog.mayTranscribe(busy.value, System.currentTimeMillis(), busyChangedAt.get())
