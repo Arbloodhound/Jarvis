@@ -59,4 +59,7 @@ object LlmNative {
     ): Int
 
     external fun nativeFree(handle: Long)
+
+    /** The ctx [handle] was created with: the one asked of [nativeLoad], or 4096 if that failed. */
+    external fun nativeContextSize(handle: Long): Int
 }

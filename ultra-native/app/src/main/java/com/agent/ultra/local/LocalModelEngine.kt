@@ -67,6 +67,19 @@ class LocalModelEngine(private val context: Context) {
         // budget, and a <think> trace in front of the tool call breaks the parse.
         get() = !isThinkingModel && modelFileSizeBytes in 1..FAST_PATH_MAX_BYTES
     val loaded: Boolean get() = handle != 0L
+
+    private val totalRam: Long by lazy { totalRamBytes(context) }
+    /** The ctx the loaded native context was created with (nativeContextSize); 0 while unloaded. */
+    @Volatile private var loadedCtx = 0
+    /** What the next load will use: [contextFor] this phone's RAM and the selected file. */
+    private fun plannedContext(): Int = contextFor(totalRam, modelFileName, modelFileSizeBytes)
+
+    /**
+     * Context window (tokens) a prompt plus its output must fit: the loaded model's, or before a
+     * load, the one the load will choose (same pure function, same inputs). The native side
+     * rejects a prompt longer than this minus maxTokens.
+     */
+    val contextSize: Int get() = loadedCtx.takeIf { it > 0 && handle != 0L } ?: plannedContext()
     val modelFileSizeBytes: Long get() = if (modelFile.exists()) modelFile.length() else 0L
     /** Qwen3 Thinking MoE presets: ChatML prompts, template-opened <think> trace. */
     /** Qwen3 thinking models: the MoE, and the small Qwen3 that stands in for it on a small phone. */
@@ -293,12 +306,17 @@ class LocalModelEngine(private val context: Context) {
             val t0 = System.currentTimeMillis()
             val topo = CpuTopology.current
             android.util.Log.i("UltraLlm", "cpus llm=${topo.llmCpus} whisper=${topo.whisperCpus} threads=${topo.llmThreads}")
+            val ctx = plannedContext()
+            // A resident copy can't give pages back: what a ctx above 4096 adds (KV, mask) must
+            // also fit beside it. At 4096 the check is unchanged (its headroom covered that size).
             val resident = residentLoad(
-                com.agent.ultra.ui.UltraPrefs.keepBrainInMemory(context), avail, modelFileSizeBytes)
-            android.util.Log.i("UltraLlm", "load resident=$resident availMB=${avail / 1_048_576} " +
-                "fileMB=${modelFileSizeBytes / 1_048_576}")
-            handle = LlmNative.nativeLoad(modelFile.absolutePath, topo.llmThreads, CTX_SIZE, topo.llmCpus.toIntArray(), resident)
-            android.util.Log.i("UltraLlm", "nativeLoad -> handle=$handle in ${System.currentTimeMillis() - t0}ms")
+                com.agent.ultra.ui.UltraPrefs.keepBrainInMemory(context), avail,
+                modelFileSizeBytes + ctxGrowthBytes(modelFileName, ctx))
+            android.util.Log.i("UltraLlm", "load resident=$resident ctx=$ctx availMB=${avail / 1_048_576} " +
+                "fileMB=${modelFileSizeBytes / 1_048_576} totalMB=${totalRam / 1_048_576}")
+            handle = LlmNative.nativeLoad(modelFile.absolutePath, topo.llmThreads, ctx, topo.llmCpus.toIntArray(), resident)
+            loadedCtx = if (handle != 0L) LlmNative.nativeContextSize(handle) else 0
+            android.util.Log.i("UltraLlm", "nativeLoad -> handle=$handle ctx=$loadedCtx in ${System.currentTimeMillis() - t0}ms")
             residentLoaded = resident && handle != 0L
             // A resident copy can't be dropped, so only the mapped mode needs the page cache warmed.
             if (handle != 0L && !resident) warmPageCache("after load")
@@ -395,6 +413,7 @@ class LocalModelEngine(private val context: Context) {
                 if (handle != 0L) {
                     LlmNative.nativeFree(handle)
                     handle = 0
+                    loadedCtx = 0
                 }
             }
         }
@@ -427,7 +446,111 @@ class LocalModelEngine(private val context: Context) {
          *  big core (see [CpuTopology]); [THREADS] when the core layout can't be read. The
          *  model loads with exactly this many pinned workers; more per call is clamped. */
         fun baseThreads(): Int = CpuTopology.current.llmThreads
+        /** The context every model gets at least (what all loads used before [contextFor]). */
         const val CTX_SIZE = 4096
+
+        /** Context windows [contextFor] picks from, smallest first. */
+        val CTX_STEPS = intArrayOf(CTX_SIZE, 8192, 16384)
+        private const val MIB = 1_048_576L
+        /** Left for Android and every other app: a planning figure (4.5 GiB), not a measurement. */
+        const val ANDROID_RESERVE_BYTES = 4_608L * MIB
+        /** The rest of this app (UI, Whisper, Java heap) plus error in the estimates below. */
+        const val APP_MARGIN_BYTES = 512L * MIB
+        /** = cparams.n_ubatch in ultra_llm.cpp (pinned there); the compute buffer is sized for it. */
+        const val N_UBATCH = 512
+        /** Compute-buffer activations besides logits and mask at N_UBATCH tokens: an estimate. */
+        const val ACTIVATIONS_BYTES = 128L * MIB
+
+        /**
+         * KV-cache shape of a model: per token, layers x kvHeads x headDim elements each for K and V.
+         * [vocab] sizes the logits part of the compute buffer; [trainCtx] caps the context
+         * (llama.cpp only warns past it, the model degrades).
+         */
+        internal data class KvProfile(
+            val layers: Int, val kvHeads: Int, val headDim: Int, val vocab: Int,
+            val trainCtx: Int = Int.MAX_VALUE,
+        ) {
+            /** q8_0: a 32-element block is 34 bytes (32 int8 + one f16 scale). */
+            val kvBytesPerToken: Long get() = layers.toLong() * kvHeads * headDim * 2 * 34 / 32
+        }
+
+        /** Shapes from each model's config, keyed by the preset file name's prefix. */
+        private val KV_PROFILES = listOf(
+            "qwen3moe" to KvProfile(48, 4, 128, 151_936),      // Qwen3-30B-A3B, all MoE presets + fine-tunes
+            "qwen3-1.7b" to KvProfile(28, 8, 128, 151_936),
+            "gemma3-1b" to KvProfile(26, 1, 256, 262_144),
+            "llama32-1b" to KvProfile(16, 8, 64, 128_256),
+            "qwen25-15b" to KvProfile(28, 2, 128, 151_936),
+            "qwen25-3b" to KvProfile(36, 2, 128, 151_936),
+            "phi35-mini" to KvProfile(32, 32, 96, 32_064),
+            "qwen25-7b" to KvProfile(28, 4, 128, 152_064),
+            "llama31-8b" to KvProfile(32, 8, 128, 128_256),
+            "gemma2-9b" to KvProfile(42, 8, 256, 256_000, trainCtx = 8192),
+            "qwen25-14b" to KvProfile(48, 8, 128, 152_064),
+        )
+        /** Any other file (Gemma 4 E2B, a custom GGUF): Phi-3.5's KV (the largest per token among
+         *  the presets that fit a phone) and Gemma's vocab, so an unknown model is over-counted;
+         *  capped at 8192 since its training context is not known here. */
+        internal val UNKNOWN_PROFILE = KvProfile(32, 32, 96, 262_144, trainCtx = 8192)
+
+        internal fun kvProfile(fileName: String): KvProfile =
+            KV_PROFILES.firstOrNull { fileName.startsWith(it.first) }?.second ?: UNKNOWN_PROFILE
+
+        /**
+         * Bytes a load at [ctx] needs in RAM, Android's share included: weights + q8_0 KV(ctx) +
+         * compute buffer + [ANDROID_RESERVE_BYTES] + [APP_MARGIN_BYTES]. Compute buffer, checked in
+         * llama.cpp 8345f33 (llama-context.cpp sched_reserve, llama-graph.cpp): reserved for
+         * min(n_ctx, n_ubatch) = 512 tokens, so n_batch = ctx does not grow it; it holds logits for
+         * 512 outputs (512 x vocab x 4 B: ~297 MiB Qwen, 512 MiB Gemma 3), the flash-attention KQ
+         * mask (n_ctx x 512 x f16; counted twice for every model, as Gemma's sliding-window
+         * layers add a second one), and activations
+         * ([ACTIVATIONS_BYTES], estimated, not measured). Flash attention reads q8_0 K/V directly
+         * (no f16 copy) and its CPU scratch is tiled, independent of n_ctx.
+         */
+        fun memoryNeedBytes(fileName: String, modelBytes: Long, ctx: Int): Long {
+            val p = kvProfile(fileName)
+            val compute = N_UBATCH.toLong() * p.vocab * 4 + 2L * ctx * N_UBATCH * 2 + ACTIVATIONS_BYTES
+            return modelBytes + p.kvBytesPerToken * ctx + compute + ANDROID_RESERVE_BYTES + APP_MARGIN_BYTES
+        }
+
+        /** Memory a load at [ctx] needs beyond the same load at [CTX_SIZE] (KV + mask growth). */
+        fun ctxGrowthBytes(fileName: String, ctx: Int): Long =
+            memoryNeedBytes(fileName, 0, ctx) - memoryNeedBytes(fileName, 0, CTX_SIZE)
+
+        /**
+         * Context window for this model on this phone: the largest of [CTX_STEPS] whose
+         * [memoryNeedBytes] fits in [totalRamBytes] (and within the model's training context);
+         * never below [CTX_SIZE], which every model ran at before (whether a model fits at all
+         * is [fitFor]'s call). Unknown RAM or size (<= 0) -> [CTX_SIZE]. Pure, JVM-tested.
+         *
+         * q8_0 KV per ctx (4096 / 8192 / 16384), MiB:
+         *  - Qwen3-30B-A3B MoE (48 x 4 x 128): 204 / 408 / 816 (51 KiB per token)
+         *  - Qwen3 1.7B 238 / 476 / 952; Gemma 3 1B 55 / 110 / 221; Llama 3.2 1B 68 / 136 / 272;
+         *    Qwen2.5 1.5B 60 / 119 / 238; Qwen2.5 3B 77 / 153 / 306; Qwen2.5 7B 119 / 238 / 476;
+         *    Llama 3.1 8B 272 / 544 / 1088; Qwen2.5 14B 408 / 816 / 1632;
+         *    Phi-3.5 mini (and unknown files) 816 / 1632 / 3264; Gemma 2 9B 714 / 1428 (capped 8192).
+         *
+         * MoE IQ2_M preset (10240 MiB of weights) on a 16 GB phone, bytes:
+         * weights 10,737,418,240 + compute 311,164,928 logits + 134,217,728 activations
+         * + reserve 4,831,838,208 + margin 536,870,912 = 16,551,510,016 before KV and mask;
+         *  - 8192:  + KV 427,819,008 + mask 16,777,216 = 16,996,106,240
+         *  - 16384: + KV 855,638,016 + mask 33,554,432 = 17,440,702,464 > 16 GiB (17,179,869,184)
+         * so 16384 never fits beside the MoE IQ2_M on a 16 GB phone, and 8192 only where the phone
+         * reports at least ~17.0e9 bytes total (a phone reporting 15-16e9 stays at 4096). The real
+         * file size is used at load, so a smaller file moves these lines down by the difference.
+         * MoE IQ2_S (9300 MiB): 8192 from ~16.01e9, 16384 from ~16.46e9. Small models (1-3B) reach
+         * 16384 from about 7-8.1e9 total (an 8 GB phone); below ~6.7e9 they stay at 4096.
+         */
+        fun contextFor(totalRamBytes: Long, fileName: String, modelBytes: Long): Int {
+            if (totalRamBytes <= 0 || modelBytes <= 0) return CTX_SIZE
+            val cap = kvProfile(fileName).trainCtx
+            return CTX_STEPS.filter { it <= cap && memoryNeedBytes(fileName, modelBytes, it) <= totalRamBytes }
+                .maxOrNull() ?: CTX_SIZE
+        }
+
+        /** [contextFor] a preset by its listed size (before the file is on disk). */
+        fun contextFor(totalRamBytes: Long, model: ModelChoice): Int =
+            contextFor(totalRamBytes, model.fileName, model.approxMb * MIB)
         /** Over a 10 GB download: 5, 10, 20, 40, then 60 s apart — about 25 minutes of trying. */
         const val MAX_DOWNLOAD_ATTEMPTS = 30
         const val MIN_AVAIL_BYTES = 500L * 1024 * 1024
@@ -581,6 +704,7 @@ class LocalModelEngine(private val context: Context) {
          *
          * The weights are not the whole bill: the KV cache and compute buffer
          * at CTX_SIZE come on top, so they are added before the fraction is taken.
+         * (A larger ctx is only chosen by [contextFor], against its own full memory budget.)
          */
         fun fitFor(model: ModelChoice, totalRamBytes: Long): Fit {
             if (model.desktopOnly) return Fit.TOO_BIG
