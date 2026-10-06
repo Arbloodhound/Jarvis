@@ -4,6 +4,47 @@ Read `CLAUDE.md` (honesty statuses, no drift, no proof-free claims) and the top 
 `DEVLOG.md` first. Repo `Arbloodhound/Jarvis`, app in `ultra-native/`, working branch
 **`claude/new-session-t3cy17`** (draft PR #1 → main; do not merge). Last commit on it: `9411941`.
 
+## UPDATE 2026-10-06 (later session 01BUKa) — read this first, it supersedes "Next steps" below
+
+**Owner's decision:** small model for memory (Qwen3-1.7B Q4_0 "librarian"), big model for reasoning
+(Qwen3-8B Q4_K_S "thinker"), both loaded (~6 GB of ~8.6 GB free). "Push the apk when done."
+
+**Four workers were building it and were STOPPED at the owner's request; each pushed WIP (not fully
+tested) to its own branch, draft PRs into `claude/new-session-t3cy17` may or may not exist:**
+1. `claude/two-models` — `LocalModelEngine.librarian(ctx)` (own prefs "ultra_local_model_librarian"),
+   ONE process-wide native mutex for both engines (shim globals are single-flight), Qwen3-1.7B Q4_0
+   preset (verify size with the HF MCP), thinker default = Qwen3-8B on ≥14 GB RAM, librarian yields
+   memory to the thinker, `complete(prompt,maxTokens)` non-thinking via `LocalPrompt.buildNoThink`
+   ("/no_think"), Settings "MEMORY MODEL" section.
+2. `claude/semantic-memory` (built on semantic-memory-wip) — MiniLM qint8 ONNX embedder + WordPiece,
+   vectors in SQLite, `MemoryRecall.relevant(query, now, limit)` = semantic + FTS + recency + TimeWindow,
+   `RecallSource` extension point, `brief(hits)`; keyword fallback when no embedder.
+3. `claude/memory-librarian` (built on memory-librarian-wip) — `MemoryNotes` SQLite store + `Librarian`
+   job (charging & idle & engine not busy) using `fun interface SmallModel`; setting "Organise memory
+   while charging"; `MemoryNotes.search` → `NoteHit`.
+4. `claude/brain-memory` — `HistoryPolicy` (offline history only when the request refers back; none for
+   long pastes → fixes Q8/Q11 copying), stable history block for KV prefix reuse, `MemoryBrief.provider`
+   hook that puts "What I remember…" into the offline prompt when the request needs memory.
+
+**To finish:** read each branch's last commit message, finish/fix + test each, merge all four into
+`claude/new-session-t3cy17`, then WIRE: `Librarian.model` → `LocalModelEngine.librarian(ctx).complete`;
+`MemoryRecall.extraSources` += adapter over `MemoryNotes.search`; `MemoryBrief.provider` →
+`MemoryRecall.brief(MemoryRecall.relevant(q, now))`; optionally the cloud `ambient_recall` tool too.
+Build (`source ~/android-env.sh`, `fetch-sherpa.sh` once, flock gradle; baseline 2026-10-06 passed),
+DEVLOG entry, commit with `[apk]`, push, send the owner the Actions run link when green.
+
+**Queued by the owner after that build:**
+- Pause/timing tags in transcripts: whisper.cpp word timestamps (today `no_timestamps`) + VAD gaps →
+  `[pause 1.8s]`, speech-rate/loudness tags, so the models can see hesitation.
+- Speaker tags: sherpa-onnx (already bundled for TTS) speaker-embedding model → voiceprint per
+  utterance, cluster into Speaker 1/2…, owner names them once ("that was Sam"), owner's voice enrolled;
+  on-device only (biometric data). Accuracy caveats told to the owner.
+- Owner asked about fine-tuning the memory model on sociolinguistics/psychology: told it only sees text,
+  so tags above must come first, needs labelled examples not textbooks, report observations not verdicts.
+
+**Pending owner test:** run 37486113860 (`9411941`) APK → switch to Qwen3-4B Q4_0 → Jarvis Tests 2 + 3.
+His last file (0859) was still the 30B on the newer build: warm worked, still 0.7–1.0 tok/s (doesn't fit).
+
 ## Who you're working with
 - Dafarus: not a professional programmer; wants plain, short, direct answers, no markdown guide files
   unless asked ("just tell me"). Swears when frustrated; stay calm and concrete.
