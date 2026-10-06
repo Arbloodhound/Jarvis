@@ -546,11 +546,11 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                         .map { LocalPrompt.Turn(it.fromUser, it.text) },
                     userInput,
                 )
-                val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput)
+                val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput, 3000 * local.contextSize / com.agent.ultra.local.LocalModelEngine.CTX_SIZE)
                 val reserve = LocalPrompt.answerReserve(level)
                 val speed = local.decodeTokPerSec
                 val clipped = ThinkBudget.clipToContext(
-                    WaitBudget.budget(route.tier, speed), com.agent.ultra.local.LocalModelEngine.CTX_SIZE,
+                    WaitBudget.budget(route.tier, speed), local.contextSize,
                     LocalPrompt.estimateTokens(prompt), reserve,
                 )
                 val budget = ThermalPolicy.scaleBudget(clipped, level)

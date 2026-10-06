@@ -197,7 +197,7 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = ctxSize;
     // KV cache at q8_0 instead of the f16 default: about half the bytes (Qwen3-30B-A3B
-    // at 4096 ctx: ~384 MB f16 -> ~204 MB q8_0), and on a 16 GB phone holding ~10 GB
+    // at 4096 ctx: ~384 MB f16 -> ~204 MB q8_0; ctx comes from contextFor), and on a 16 GB phone holding ~10 GB
     // of weights it is memory, not compute, that decides whether the model stays
     // resident. A quantized V cache needs flash attention; llama.cpp would promote
     // AUTO to ENABLED for it anyway, so ENABLED here only states the requirement.
@@ -208,6 +208,12 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
     // process (GGML_ASSERT) when a batch exceeds n_batch (default 2048). The
     // length guard in generate() allows up to ~ctxSize, so n_batch must match.
     cparams.n_batch = ctxSize;
+    // Physical batch: llama_decode splits the prompt into ubatches of this size, and the
+    // compute buffer is reserved for min(n_ctx, n_ubatch) tokens (llama-context.cpp sched_reserve
+    // at 8345f33), so with n_ubatch pinned a bigger ctx (LocalModelEngine.contextFor: up to
+    // 16384) grows it only by the f16 KQ mask (n_ctx x n_ubatch x 2 bytes), not by n_batch.
+    // 512 is llama.cpp's own default; set here so the memory arithmetic can't drift with it.
+    cparams.n_ubatch = 512;
     // Full-size cache for sliding-window layers (Gemma): a window-sized cache drops early
     // positions, and then generate() can never reuse the shared prompt prefix (it falls
     // back to a full prefill). No effect on models without SWA (the Qwen3 MoE).
@@ -216,6 +222,18 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
     cparams.n_threads_batch = threads;
 
     llama_context *ctx = llama_init_from_model(model, cparams);
+    // A context above the old 4096 (LocalModelEngine.CTX_SIZE) that can't be set up -- most
+    // likely its larger KV allocation -- is retried at 4096 with the same q8_0 KV before the
+    // f16 fallback below, which would otherwise double the KV at the larger size. The weights
+    // stay loaded. The ctx actually in use is reported by nativeContextSize.
+    constexpr int kBaseCtx = 4096;
+    if (!ctx && ctxSize > kBaseCtx) {
+        LOGE("ctx init failed at ctx=%d (cause in llama.cpp log); retrying at %d", ctxSize, kBaseCtx);
+        ctxSize = kBaseCtx;
+        cparams.n_ctx = ctxSize;
+        cparams.n_batch = ctxSize;
+        ctx = llama_init_from_model(model, cparams);
+    }
     if (!ctx) {
         // llama.cpp refuses q8_0 K/V when a head dim is not a multiple of the
         // 32-wide q8_0 block, or when flash attention cannot be enabled. Fall back
@@ -426,6 +444,13 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
 
     llama_sampler_free(chain);
     return generated;   // cbScope releases the callback
+}
+
+// The ctx the loaded context was created with (nativeLoad may have fallen back to 4096).
+JNIEXPORT jint JNICALL
+Java_com_agent_ultra_local_LlmNative_nativeContextSize(JNIEnv *, jobject, jlong handle) {
+    auto *engine = reinterpret_cast<Engine *>(handle);
+    return engine ? engine->ctxSize : 0;
 }
 
 JNIEXPORT void JNICALL
