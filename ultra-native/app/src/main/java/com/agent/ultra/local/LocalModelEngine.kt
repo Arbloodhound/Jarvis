@@ -26,19 +26,27 @@ class LocalModelEngine(private val context: Context) {
     private var handle: Long = 0
     private val lock = Any()
 
+    /** The model used while the user has not chosen one: [defaultFor] this phone's RAM and
+     *  what is already on disk. Resolved once per process and read by all three getters
+     *  below, so label, URL and file always agree. */
+    private val defaultChoice: ModelChoice by lazy { defaultFor(totalRamBytes(context), downloadedFileNames()) }
+
     /** Where the weights come from. Any GGUF the llama.cpp build understands. */
     var modelUrl: String
-        get() = prefs.getString(K_URL, DEFAULT.url) ?: DEFAULT.url
+        get() = prefs.getString(K_URL, null) ?: defaultChoice.url
         private set(v) { prefs.edit().putString(K_URL, v).apply() }
 
     /** Filename on disk. Distinct per model, so switching does not clobber
      * a model you already downloaded — swapping back is free. */
     var modelFileName: String
-        get() = prefs.getString(K_FILE, DEFAULT.fileName) ?: DEFAULT.fileName
+        get() = prefs.getString(K_FILE, null) ?: defaultChoice.fileName
         private set(v) { prefs.edit().putString(K_FILE, v).apply() }
 
+    /** The stored label; without one, the label of the preset whose file is in use, so the
+     *  label can't name a different model than the file that is loaded. */
     val modelLabel: String
-        get() = prefs.getString(K_LABEL, DEFAULT.label) ?: DEFAULT.label
+        get() = prefs.getString(K_LABEL, null)
+            ?: modelFileName.let { f -> PRESETS.firstOrNull { it.fileName == f }?.label ?: f }
 
     private val modelFile: File get() = File(context.filesDir, "models/" + modelFileName)
 
@@ -93,7 +101,7 @@ class LocalModelEngine(private val context: Context) {
 
     /**
      * Download the model into app-private storage, reporting progress 0..1.
-     * 806MB over Wi-Fi; streaming write, resumable by re-invocation (partial
+     * 806MB (Gemma) to ~10GB (the MoE a 16GB phone defaults to) over Wi-Fi; streaming write, resumable by re-invocation (partial
      * file is deleted on failure — no half-models).
      */
     suspend fun downloadModel(onProgress: (Float) -> Unit): Result<Long> = withContext(Dispatchers.IO) {
@@ -439,7 +447,7 @@ class LocalModelEngine(private val context: Context) {
                 "Same Qwen3 prompt format and <think> handling as the MoE, small enough for a 4GB phone. Tests the offline brain path (think budget, hidden trace, routing) before the MoE is on a phone that fits it.",
             ),
             ModelChoice(
-                "Gemma 3 1B (Q4_K_M) — default",
+                "Gemma 3 1B (Q4_K_M) — small-phone default",
                 "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf",
                 "gemma3-1b-q4km.gguf", 768,
                 "Smallest and fastest. Measured 10.1 tok/s on a mid-range phone; quicker on a flagship. The one the tool loop was tuned against.",
@@ -572,8 +580,29 @@ class LocalModelEngine(private val context: Context) {
         } catch (_: Exception) { 0L }
 
         /** Safe default stays the small Gemma, not the 12.9GB MoE now at index 0.
-         *  The MoE is an opt-in choice the user picks knowing the RAM cost. */
+         *  It is what any phone gets unless [defaultFor] shows the MoE fits. */
         val DEFAULT = PRESETS.first { it.fileName == "gemma3-1b-q4km.gguf" }
+
+        /** The MoE a phone with room for it defaults to: the stock abliterated IQ2_M. */
+        val MOE_DEFAULT = PRESETS.first { it.fileName == "qwen3moe-abliterated-iq2m.gguf" }
+
+        /**
+         * The model used before the user has chosen one. Pure, JVM-tested (DefaultModelTest).
+         *
+         * The MoE IQ2_M where [fitFor] says it fits this RAM (a 16 GB phone: TIGHT); everywhere
+         * else, and when RAM is unknown (<= 0, where fitFor answers COMFORTABLE for anything),
+         * the small Gemma. Only names the model — nothing is downloaded; the user still presses
+         * Download in Settings. A choice the user made (prefs set) always wins over this.
+         *
+         * [downloaded] (file names in models/): an install from before this default existed
+         * downloaded Gemma without saving any prefs. If Gemma is on disk and the MoE is not,
+         * stay on Gemma, so an update never points a working install at a missing 10 GB file.
+         */
+        fun defaultFor(totalRamBytes: Long, downloaded: Set<String> = emptySet()): ModelChoice {
+            val byRam = if (totalRamBytes > 0 && fitFor(MOE_DEFAULT, totalRamBytes) != Fit.TOO_BIG) MOE_DEFAULT
+                else DEFAULT
+            return if (byRam.fileName !in downloaded && DEFAULT.fileName in downloaded) DEFAULT else byRam
+        }
     }
 }
 
