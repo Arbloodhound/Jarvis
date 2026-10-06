@@ -63,7 +63,8 @@ line again first.**
 
 ## PART 3 — Install Jarvis (10 min)
 
-1. Open **github.com/Arbloodhound/Jarvis/actions/runs/37398748763** (logged in).
+1. Open **github.com/Arbloodhound/Jarvis/actions** (logged in) → click the **top run with a green
+   tick** whose name starts with "START_HERE.md step-by-step guide" (or anything newer I tell you).
 2. Scroll to the bottom → **Artifacts** → click **app-debug** → a zip downloads.
 3. Unzip it. You get `app-debug.apk`. Move it into `Desktop/Jarvis`.
 4. If the phone has any old Jarvis / Agent Ultra: long-press its icon → App info → **Uninstall**.
