@@ -17,6 +17,8 @@ import com.agent.ultra.bench.FeatureGrade.Verdict
 import com.agent.ultra.listen.AmbientConfig
 import com.agent.ultra.listen.AmbientListenService
 import com.agent.ultra.listen.AmbientMemory
+import com.agent.ultra.listen.CueAudio
+import com.agent.ultra.listen.CueTags
 import com.agent.ultra.listen.CueText
 import com.agent.ultra.listen.LibrarianPrompt
 import com.agent.ultra.listen.LocalVoice
@@ -26,7 +28,10 @@ import com.agent.ultra.listen.MemoryVectors
 import com.agent.ultra.listen.NoteParser
 import com.agent.ultra.listen.ObservationText
 import com.agent.ultra.listen.ReadingPrompt
+import com.agent.ultra.listen.Segmenter
 import com.agent.ultra.listen.SentenceEmbedder
+import com.agent.ultra.listen.TranscriptCueWorker
+import com.agent.ultra.listen.TurnGaps
 import com.agent.ultra.listen.WakeFilter
 import com.agent.ultra.listen.WakeGate
 import com.agent.ultra.listen.WhisperNative
@@ -194,18 +199,17 @@ object FeatureProbes {
         val pcm = a + b
         // Whisper with word timing on, its own context, the ambient prompt; freed afterwards.
         env.status("Transcript cues: transcribing with word timing")
-        val dir = ctx.filesDir
-        val vad = File(dir, AmbientConfig.VAD_MODEL).let { if (it.exists()) it.absolutePath else "" }
-        val handle = WhisperNative.nativeInit(File(dir, AmbientConfig.ASR_MODEL).absolutePath, vad)
-        if (handle == 0L) return listOf(
+        val prompt = WhisperNative.verbatimPrompt(AmbientConfig(ctx).wakeName)
+        var sttMs = 0L
+        val decoded = ambientWhisper(ctx) { h ->
+            val t0 = System.currentTimeMillis()
+            val whole = ambientTranscribe(h, pcm, prompt, timing = true)
+            sttMs = ms(t0)
+            env.status("Transcript cues: cutting and tagging the clip as ambient listening would")
+            whole to cutAndTag(h, pcm, prompt)
+        } ?: return listOf(
             Result("Transcript cues: word timing", Verdict.FAIL, "speech model did not load", "whisper could not start")) + speaker
-        val t0 = System.currentTimeMillis()
-        val r = try {
-            val topo = CpuTopology.current
-            WhisperNative.transcribe(handle, pcm, if (topo.llmCpus.isEmpty()) 4 else minOf(4, topo.llmCpus.size),
-                WhisperNative.verbatimPrompt(AmbientConfig(ctx).wakeName), topo.llmCpus.toIntArray(), timing = true)
-        } finally { WhisperNative.nativeFree(handle) }
-        val sttMs = ms(t0)
+        val (r, live) = decoded
         val words = r?.words.orEmpty()
         val times = words.map { it.t0Ms to it.t1Ms }
         val increasing = FeatureGrade.timesIncrease(times)
@@ -229,13 +233,10 @@ object FeatureProbes {
                 "words: " + words.take(24).joinToString(" ") { "${it.text}@${it.t0Ms}" },
                 "vad: " + r?.vad.orEmpty().joinToString(" ") { "${it.startMs}-${it.endMs}" }))
 
-        // TranscriptCueWorker's own pause step and tagging. The one difference: the worker's noise
-        // floor comes from the live microphone; here it is the test clip's quietest frame.
-        val db = com.agent.ultra.listen.CueAudio.frameDb(pcm)
-        val gate = com.agent.ultra.listen.CueAudio.gateDb(db.minOrNull() ?: -90f)
-        val pauses = com.agent.ultra.listen.TranscriptCueWorker.pauses(db, gate, r?.vad.orEmpty())
-        val body = com.agent.ultra.listen.CueTags.body(r?.text.orEmpty(), words, pauses, null, emptyList())
-        val tagged = FeatureGrade.pausesIn(body)
+        // The live path, step for step ([cutAndTag]): ambient's Segmenter cuts the clip (its own
+        // noise floor and gate), each utterance gets whisper, the pause before it and the pauses
+        // inside it, exactly as the service and the cue worker would tag them.
+        val tagged = live.flatMap { FeatureGrade.pausesIn(it.line) }
         val longest = tagged.maxOrNull()
         // The voice adds its own short silence at the end of a sentence, so a bit over 1.5 s is right.
         val pauseV = when {
@@ -251,9 +252,80 @@ object FeatureProbes {
                 Verdict.WARN -> "the pause is tagged, but its length or count is off"
                 else -> "the pause was not tagged"
             },
-            listOf("tagged line: $body", "measured silences: " + pauses.joinToString { "${it.startMs}-${it.endMs} ms" },
-                "speech gate ${FeatureGrade.f1(gate.toDouble())} dB (from the quietest frame of the test clip)"))
+            listOf("cut by ambient's Segmenter into ${live.size} utterance(s) (a silence over " +
+                "${AmbientConfig.HANGOVER_MS} ms ends one; the pause before the next is then measured between them)") +
+                live.mapIndexed { i, u -> "utterance ${i + 1}: ${u.describe()}" })
         return listOf(pause, timing) + speaker
+    }
+
+    /** One utterance of the test clip as ambient listening would cut, hear and tag it. */
+    private class LiveUtterance(
+        val startMs: Long, val endMs: Long, val floorDb: Float, val gapBeforeMs: Long?,
+        val inside: List<com.agent.ultra.listen.Span>, val line: String, val heard: String?,
+    ) {
+        fun describe() = "$startMs-$endMs ms of the clip, noise floor ${FeatureGrade.f1(floorDb.toDouble())} dB -> " +
+            "speech gate ${FeatureGrade.f1(CueAudio.gateDb(floorDb).toDouble())} dB, pause before " +
+            "${gapBeforeMs?.let { "$it ms" } ?: "none"}, silences inside: " +
+            (if (inside.isEmpty()) "none" else inside.joinToString { "${it.startMs}-${it.endMs} ms" }) +
+            if (heard == null) "; NOT stored (heard nothing, or ambient's text filters drop it)" else "; line: $line"
+    }
+
+    /**
+     * The clip through the live path: fed frame by frame to ambient's own [Segmenter] (then enough
+     * silence to close the last utterance, as a quiet room would), each utterance with the noise
+     * floor it was cut against; the pause before it ([TurnGaps]) and inside it
+     * ([TranscriptCueWorker.pauses]) as the service and the cue worker measure them; whisper with
+     * timing and the ambient [prompt]; ambient's text filters ([AmbientListenService.kept]); the
+     * stored body ([CueTags.body]). Clip ms stand in for the wall clock (capture reads in real
+     * time). An utterance live would not store gets no line (line = "") but still moves the pause
+     * clock, as live.
+     */
+    private fun cutAndTag(handle: Long, clip: ShortArray, prompt: String): List<LiveUtterance> {
+        val sr = AmbientConfig.SAMPLE_RATE
+        val cut = ArrayList<Triple<ShortArray, Long, Float>>()
+        var fedMs = 0L
+        lateinit var seg: Segmenter
+        seg = Segmenter { u, _ -> cut += Triple(u, fedMs, seg.noiseFloorDb) }
+        var i = 0
+        while (i < clip.size) {
+            val end = minOf(i + AmbientConfig.FRAME, clip.size)
+            fedMs = end * 1000L / sr
+            seg.push(clip.copyOfRange(i, end))
+            i = end
+        }
+        val quiet = ShortArray(AmbientConfig.FRAME)
+        repeat(AmbientConfig.HANGOVER_MS / AmbientConfig.FRAME_MS + 2) { fedMs += AmbientConfig.FRAME_MS; seg.push(quiet) }
+
+        val gaps = TurnGaps()
+        val out = ArrayList<LiveUtterance>()
+        for ((u, endMs, floor) in cut) {
+            val db = CueAudio.frameDb(u)
+            val audioMs = u.size * 1000L / sr
+            val gap = gaps.next(db, floor, endMs, audioMs)
+            val ur = ambientTranscribe(handle, u, prompt, timing = true)?.takeIf { AmbientListenService.kept(it) }
+            val inside = TranscriptCueWorker.pauses(db, CueAudio.gateDb(floor), ur?.vad.orEmpty())
+            val line = if (ur == null) ""
+                else CueTags.body(ur.text, ur.words, inside, null, listOfNotNull(gap?.let { CueTags.pause(it) }))
+            out += LiveUtterance(endMs - audioMs, endMs, floor, gap, inside, line, ur?.text)
+        }
+        return out
+    }
+
+    /** A whisper context like ambient listening's (Silero VAD when present) for [block], freed
+     *  after it; null when the speech model won't load. */
+    private suspend fun <T> ambientWhisper(ctx: Context, block: suspend (Long) -> T): T? {
+        val dir = ctx.filesDir
+        val vad = File(dir, AmbientConfig.VAD_MODEL).let { if (it.exists()) it.absolutePath else "" }
+        val handle = WhisperNative.nativeInit(File(dir, AmbientConfig.ASR_MODEL).absolutePath, vad)
+        if (handle == 0L) return null
+        return try { block(handle) } finally { WhisperNative.nativeFree(handle) }
+    }
+
+    /** whisper on [pcm] with [prompt], on the fast cores (the LLM is idle during the check). */
+    private fun ambientTranscribe(handle: Long, pcm: ShortArray, prompt: String, timing: Boolean): WhisperNative.Result? {
+        val topo = CpuTopology.current
+        return WhisperNative.transcribe(handle, pcm, if (topo.llmCpus.isEmpty()) 4 else minOf(4, topo.llmCpus.size),
+            prompt, topo.llmCpus.toIntArray(), timing)
     }
 
     /** Speaker tags: the setting, the voiceprint model, and whether one voice matches itself. */
@@ -461,6 +533,28 @@ object FeatureProbes {
         val name = AmbientConfig(ctx).wakeName
         val command = WakeFilter.addressedCommand(wakeText, name)
         val textWake = command != null
+        // Measurement only (nothing is graded on it): the same audio through ambient listening's
+        // decode, with its filler prompt and without it, to see whether the fillers cost the wake
+        // words. Timing off with the name alone is exactly ambient's decode before the cues.
+        env.status("Voice: the wake phrase with and without the filler prompt")
+        val filler = ambientWhisper(ctx) { h ->
+            listOf(
+                Triple("filler prompt, timing on (ambient now)", true, ambientTranscribe(h, wpcm, WhisperNative.verbatimPrompt(name), true)),
+                Triple("no filler (name only), timing on", false, ambientTranscribe(h, wpcm, name, true)),
+                Triple("no filler (name only), timing off (ambient before the cues)", false, ambientTranscribe(h, wpcm, name, false)),
+            )
+        }.orEmpty()
+        fun wakeIn(r: WhisperNative.Result?) = r != null && WakeFilter.addressedCommand(r.text, name) != null
+        val fillerLines = filler.map { (label, _, r) ->
+            "ambient decode, $label: wake ${if (wakeIn(r)) "yes" else "NO"}, confidence " +
+                "${FeatureGrade.f2((r?.confidence ?: 0f).toDouble())}" +
+                (if (r != null && r.confidence < AmbientConfig.MIN_TOKEN_P) " (below ${AmbientConfig.MIN_TOKEN_P}: ambient would drop it)" else "") +
+                ", heard: ${r?.text ?: "(nothing)"}"
+        }.ifEmpty { listOf("ambient decode with/without filler prompt: speech model did not load") }
+        val fillerSummary = filler.firstOrNull { it.second }?.let { (_, _, withF) ->
+            val without = filler.firstOrNull { !it.second }?.third
+            "; ambient decode wake: filler prompt ${if (wakeIn(withF)) "yes" else "NO"}, without ${if (wakeIn(without)) "yes" else "NO"}"
+        }.orEmpty()
         val wv = when {
             acoustic == true && textWake -> Verdict.PASS
             acoustic == true || textWake -> Verdict.WARN
@@ -468,14 +562,14 @@ object FeatureProbes {
         }
         val wake = Result("Wake phrase", wv,
             "acoustic ${when (acoustic) { true -> "fired"; false -> "did NOT fire"; null -> "n/a (wake models missing)" }} " +
-                "(max score ${FeatureGrade.f2(maxScore.toDouble())}), text match ${if (textWake) "yes" else "NO"}",
+                "(max score ${FeatureGrade.f2(maxScore.toDouble())}), text match ${if (textWake) "yes" else "NO"}$fillerSummary",
             when (wv) {
                 Verdict.PASS -> "\"Hey Jarvis\" is caught both by sound and by the words"
                 Verdict.WARN -> "\"Hey Jarvis\" is caught one way only"
                 else -> "\"Hey Jarvis\" was not recognised"
             },
             listOf("said: $WAKE_SENTENCE", "heard: $wakeText", "command after wake: ${command ?: "-"}",
-                "wake name=\"$name\" gate placement=${placement.ifBlank { "-" }}"))
+                "wake name=\"$name\" gate placement=${placement.ifBlank { "-" }}") + fillerLines)
         return listOf(round, wake)
     }
 

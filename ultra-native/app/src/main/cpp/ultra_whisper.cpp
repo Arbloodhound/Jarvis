@@ -111,7 +111,10 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
             int nt = whisper_full_n_tokens(c->w, i);
             for (int j = 0; j < nt; j++) {
                 auto d = whisper_full_get_token_data(c->w, i, j);
-                if (d.id >= whisper_token_eot(c->w)) continue;  // skip specials
+                // Text tokens only. Every special (eot, sot, language, task, prev, nosp, not) and
+                // every timestamp token (from whisper_token_beg up) has an id >= eot, so the mean
+                // below covers the same tokens with timing on or off.
+                if (d.id >= whisper_token_eot(c->w)) continue;
                 logprobSum += d.plog; tok++;
                 if (!timing_on) continue;
                 const char* piece = whisper_full_get_token_text(c->w, i, j);

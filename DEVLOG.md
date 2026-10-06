@@ -3,6 +3,43 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-06 (cloud session 01BUKa, agent) — transcript cues: enrolment mic, no "[Unknown]" with tags off, smaller cue queue, probes
+
+Branch `claude/cue-fixes` from claude/new-session-t3cy17 @ 3880bb2 (not merged). Subsystems C (memory/listen) and F (debug probes).
+1. Voice enrolment while ambient listening holds the mic: it no longer opens a second AudioRecord beside the
+   service's (Android may give one of two concurrent recorders silence). While capture is running, the 10 s
+   come from ambient capture through `AmbientListenService.tap` (`PcmTap`, fed before the mute); ambient keeps
+   running, still muted so the owner's speech isn't stored. Tap and mute are undone in `finally` (done, failed,
+   cancelled). Not capturing: own recorder as before.
+2. Speaker tags OFF: lines are stored with heard_tag.voice = `CueTags.UNLABELLED` (-1) and read with no
+   label (`CueTags.read`); pause/cue tags kept. "[Unknown]" only when tags are on and no voice matched.
+   The tags setting is taken when the line is heard (`CueJob.speakerTags`) and again when processed.
+   "Forget all voices" no longer turns unlabelled lines into "[Unknown]". Librarian prompt unchanged (it
+   already says a line *may* start with a speaker). Rows stored before this fix with tags off stay "[Unknown]"
+   (indistinguishable from tags-on "no match").
+3. Cue queue (`CueQueue`): jobs carry per-frame dB + whisper timing; the 16 kHz audio only when a voiceprint
+   may be taken (tags on, model present), and at most 2 min of audio across the queue (older lines let go of
+   it and are tagged without a voiceprint). Worst case ~4 MB audio + ~0.2 MB rest (+ the line being
+   processed, <=0.9 MB), was ~21.5 MB (24 x 28 s). Tags off (default): ~0.2 MB. offer() after close is ignored.
+4. Whisper confidence with timestamps on: NOT a bug. `ultra_whisper.cpp` already skips every id >= eot, which
+   covers all specials and all timestamp tokens (checked against whisper.cpp's vocab layout; header identical).
+   Comment added. Still unmeasured: with timestamps on, text-token log-probs are normalised over text +
+   timestamp tokens, so the mean may still sit lower than with timing off; the wake probe (6) now prints both.
+5. Feature check pause probe now runs the clip through ambient's own `Segmenter` (its noise floor and gate),
+   `TurnGaps` (extracted from the service, same code), whisper per utterance, the service's text filters
+   (`AmbientListenService.kept`, extracted) and the worker's pause step. Finding: live, a 1.5 s pause is
+   longer than HANGOVER_MS (700), so it ends the utterance; the tag is the next line's lead "[pause …]", not
+   an in-line pause. The old probe tagged it in-line on the whole clip, a path that doesn't happen live.
+6. Wake test also decodes "Hey Jarvis, …" as ambient does: filler prompt + timing, name only + timing, name
+   only without timing (the pre-cue ambient decode); prints wake yes/no, confidence and text. Not graded.
+No thresholds changed. 1066 JVM tests pass (1056 + 10), assembleDebug OK. Code review run; real findings fixed.
+
+Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN for 1, 2, 3, 5, 6 — nothing ran on the Pixel. Item 1's premise
+(the second recorder gets silence) is itself unproven on this phone. Item 4: PROVEN not a token-filter bug
+(source); the probability-scale effect of timestamps is CANNOT VERIFY until the wake probe's numbers come back.
+Known, not changed: the TTS echo-guard callback can still shorten enrolment's mute if Jarvis was speaking
+when recording started (pre-existing).
+
 ## 2026-10-06 (cloud session 01BUKa, agent) — Jarvis Tests "Feature check": every feature probed and scored
 
 Branch `claude/feature-check` (not merged). New debug-only button **5 · Feature check** on the Jarvis

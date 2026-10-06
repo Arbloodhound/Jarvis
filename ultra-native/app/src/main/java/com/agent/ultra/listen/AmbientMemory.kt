@@ -34,7 +34,8 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
     /**
      * v3: transcript cues, kept OUT of `heard` so keyword search and the sentence index only ever
      * see the plain words. heard_tag: one tagged body per heard row (same rowid, ts copied so a
-     * reused rowid never matches), [TranscriptCueWorker] writes it; voice 0 = no voiceprint.
+     * reused rowid never matches), [TranscriptCueWorker] writes it; voice 0 = no voiceprint,
+     * [CueTags.UNLABELLED] (-1) = stored with speaker tags off (read without a label).
      * voices: the voiceprints (biometric: on this phone only; [wipe] erases them).
      */
     private fun createCues(db: SQLiteDatabase) {
@@ -205,12 +206,13 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
     fun ownerEnrolled(): Boolean =
         readableDatabase.rawQuery("SELECT 1 FROM voices WHERE owner=1 LIMIT 1", null).use { it.moveToFirst() }
 
-    /** Forgets every voiceprint (lines keep their tags, labelled "[Unknown]"). */
+    /** Forgets every voiceprint (lines keep their tags, labelled "[Unknown]"; lines stored with
+     *  speaker tags off keep no label). */
     fun wipeVoices() {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            db.execSQL("UPDATE heard_tag SET voice=0")
+            db.execSQL("UPDATE heard_tag SET voice=0 WHERE voice>0")   // unlabelled lines stay unlabelled
             db.execSQL("DELETE FROM voices")
             db.execSQL("DELETE FROM meta WHERE k=?", arrayOf(META_VOICE_NEXT))
             db.setTransactionSuccessful()
@@ -396,14 +398,15 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
     /**
      * Rows stored after rowid [afterId], in stored order: the librarian's queue (see [Librarian]).
      * [HeardLine.text] (= [HeardLine.tagged]) is "[label] body" with the cues ([CueTags]), the
-     * label resolved now (so a rename covers old lines), or the plain line when the row has no
+     * label resolved now (so a rename covers old lines); just the body when it was stored with
+     * speaker tags off ([CueTags.read]); or the plain line when the row has no
      * cues (heard before this existed, or the cue worker hasn't reached it yet).
      * [HeardLine.plain] is always the plain line.
      */
     fun heardAfter(afterId: Long, limit: Int): List<HeardLine> {
         val out = ArrayList<HeardLine>()
         readableDatabase.rawQuery(
-            "SELECT h.rowid,h.ts,h.text,t.body,v.id,v.owner,v.name,v.num FROM heard h " +
+            "SELECT h.rowid,h.ts,h.text,t.body,t.voice,v.id,v.owner,v.name,v.num FROM heard h " +
                 "LEFT JOIN heard_tag t ON t.rowid=h.rowid AND t.ts=h.ts " +
                 "LEFT JOIN voices v ON v.id=t.voice " +
                 "WHERE h.rowid>CAST(? AS INTEGER) ORDER BY h.rowid ASC LIMIT ?",
@@ -411,10 +414,9 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
         ).use { c ->
             while (c.moveToNext()) {
                 val plain = c.getString(2)
-                val tagged = if (c.isNull(3)) plain else CueTags.line(
-                    if (c.isNull(4)) CueTags.UNKNOWN
-                    else CueTags.label(c.getInt(5) != 0, c.getString(6), c.getInt(7)),
-                    c.getString(3),
+                val tagged = if (c.isNull(3)) plain else CueTags.read(
+                    c.getString(3), c.getLong(4),
+                    if (c.isNull(5)) null else CueTags.label(c.getInt(6) != 0, c.getString(7), c.getInt(8)),
                 )
                 out += HeardLine(c.getLong(0), c.getLong(1), text = tagged, plain = plain)
             }

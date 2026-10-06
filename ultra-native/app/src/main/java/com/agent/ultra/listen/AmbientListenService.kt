@@ -62,12 +62,20 @@ class AmbientListenService : Service() {
     private val windowLock = Any()               // a new window vs. the worker holding one open
     private var lastMemoryAt = 0L          // thermal throttle: last memory-only transcription
     @Volatile private var cues: TranscriptCueWorker? = null   // speaker/pause tags, after storing
-    private var lastSpeechEndAt = 0L       // whisper worker only: wall clock the last utterance's speech ended
+    private val turnGaps = TurnGaps()      // whisper worker only: the pause before each utterance
     // The cores the LLM doesn't run on (the little ones on big.LITTLE); empty = unpinned.
     private val whisperCpus by lazy { com.agent.ultra.local.CpuTopology.current.whisperCpus.toIntArray() }
     private var wakeLock: PowerManager.WakeLock? = null
 
     @Volatile var mutedUntil = 0L          // echo guard: set by the TTS layer while speaking
+
+    /** Voice enrolment's copy of the mic while capture holds it ([VoicePrints.enrol]): every frame
+     *  read goes here too, before the mute (which keeps the recording out of memory). */
+    @Volatile var tap: PcmTap? = null
+
+    /** True while capture has the microphone open and reading. */
+    @Volatile var capturing = false
+        private set
 
     override fun onBind(i: Intent?): IBinder? = null
 
@@ -288,6 +296,7 @@ class AmbientListenService : Service() {
         var lastPrune = 0L
         try {
             rec.startRecording()
+            capturing = true
             while (currentCoroutineContext().isActive) {
                 val n = rec.read(frame, 0, frame.size)
                 if (n < 0) {                        // ERROR_DEAD_OBJECT etc. never recover in place
@@ -295,6 +304,7 @@ class AmbientListenService : Service() {
                     return false
                 }
                 if (n == 0) continue
+                tap?.offer(frame, n)
                 if (System.currentTimeMillis() < mutedUntil) { seg.reset(); gate?.reset(); continue }
                 val fr = if (n == frame.size) frame else frame.copyOf(n)
                 // Acoustic gate: when present, it decides when we're addressed.
@@ -319,6 +329,7 @@ class AmbientListenService : Service() {
             android.util.Log.w("UltraAmbient", "capture failed: ${e.message}")
             return false
         } finally {
+            capturing = false
             try { rec.stop() } catch (_: Exception) {}
             rec.release()
         }
@@ -329,12 +340,9 @@ class AmbientListenService : Service() {
      * A window is spent by one command, even if more of its speech is still queued. */
     private fun onUtterance(pcm: ShortArray, t: Long, wid: Long, floorDb: Float) {
         // Silence since the previous utterance's speech (every utterance counts, stored or not).
-        val gapBefore = CueAudio.speechSpan(CueAudio.frameDb(pcm), CueAudio.gateDb(floorDb))?.let { span ->
-            val audioStart = t - pcm.size * 1000L / AmbientConfig.SAMPLE_RATE
-            val gap = CueAudio.turnGap(lastSpeechEndAt, audioStart + span.startMs)
-            lastSpeechEndAt = audioStart + span.endMs
-            gap
-        }
+        val db = CueAudio.frameDb(pcm)
+        val audioMs = pcm.size * 1000L / AmbientConfig.SAMPLE_RATE
+        val gapBefore = turnGaps.next(db, floorDb, t, audioMs)
         val windowOpen = gate != null && wid != 0L && wid != consumedWindowId
         val plan = AmbientThrottle.decide(
             com.agent.ultra.agent.ThermalGuard.level.ambient, windowOpen, gate != null, t, lastMemoryAt,
@@ -344,17 +352,12 @@ class AmbientListenService : Service() {
         val r = WhisperNative.transcribe(
             whisper, pcm, plan.threads, WhisperNative.verbatimPrompt(cfg.wakeName), whisperCpus, timing = true,
         ) ?: return
-        // Text filters: drop low-confidence (hallucinated) and trivially short lines.
-        if (r.confidence < AmbientConfig.MIN_TOKEN_P) return
-        val words = r.text.split(Regex("\\s+")).filter { it.isNotBlank() }
-        if (words.size < AmbientConfig.MIN_WORDS) return
-        if (isWhisperNoise(r.text)) return
-        // "Um, uh." alone (or the filler prompt echoed back on noise): nothing to keep or act on
-        if (WhisperNative.onlyPromptFillers(r.text)) return
+        if (!kept(r)) return
 
         val now = System.currentTimeMillis()
         val rowid = mem.record(r.text, now, r.confidence)          // EVERYTHING kept as memory
-        if (rowid > 0) cues?.offer(CueJob(rowid, now, r.text, pcm, floorDb, r.words, r.vad, gapBefore))
+        if (rowid > 0) cues?.offer(
+            CueJob(rowid, now, r.text, db, audioMs, pcm, floorDb, r.words, r.vad, gapBefore, cfg.speakerTags))
 
         // Acoustic gate fired within the window -> this utterance is the command,
         // no need for the spoken name in the text. Falls through to text-match
@@ -508,6 +511,18 @@ class AmbientListenService : Service() {
             "[ silence ]", "(silence)", ".", "bye.", "so", "okay", "uh"
         )
         fun isWhisperNoise(t: String) = t.trim().lowercase().trim('.', ' ') in NOISE
+
+        /** The text filters a heard line must pass to be stored or acted on (also used by the
+         *  debug feature check, so it applies the same ones). */
+        fun kept(r: WhisperNative.Result): Boolean {
+            // drop low-confidence (hallucinated) and trivially short lines
+            if (r.confidence < AmbientConfig.MIN_TOKEN_P) return false
+            val words = r.text.split(Regex("\\s+")).filter { it.isNotBlank() }
+            if (words.size < AmbientConfig.MIN_WORDS) return false
+            if (isWhisperNoise(r.text)) return false
+            // "Um, uh." alone (or the filler prompt echoed back on noise): nothing to keep or act on
+            return !WhisperNative.onlyPromptFillers(r.text)
+        }
     }
 }
 

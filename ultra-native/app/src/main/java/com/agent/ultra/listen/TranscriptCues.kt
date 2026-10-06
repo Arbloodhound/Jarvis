@@ -96,6 +96,26 @@ object CueAudio {
 }
 
 /**
+ * The pause before each utterance, from one utterance to the next as ambient listening cuts
+ * them: the silence between the previous utterance's last speech frame and this one's first
+ * ([CueAudio.turnGap]). Every utterance moves the clock on, stored or not. One caller at a time
+ * (the whisper worker; the debug feature check uses its own). Pure, JVM-tested.
+ */
+class TurnGaps {
+    private var lastSpeechEndAt = 0L
+
+    /** [db]: the utterance's frame dB; [floorDb]: the noise floor it was cut against; [endedAt]:
+     *  when its audio ended (ms, any clock that only goes forward); [audioMs]: its length. */
+    fun next(db: FloatArray, floorDb: Float, endedAt: Long, audioMs: Long): Long? {
+        val span = CueAudio.speechSpan(db, CueAudio.gateDb(floorDb)) ?: return null
+        val audioStart = endedAt - audioMs
+        val gap = CueAudio.turnGap(lastSpeechEndAt, audioStart + span.startMs)
+        lastSpeechEndAt = audioStart + span.endMs
+        return gap
+    }
+}
+
+/**
  * A running mean and variance that keeps adapting: after [CAP] samples each new one weighs 1/CAP,
  * so a voice that changes over weeks (a cold, a new phone position) moves its baseline with it.
  * Pure, JVM-tested.
@@ -130,7 +150,8 @@ data class Baseline(val n: Int = 0, val mean: Double = 0.0, val variance: Double
  * A stored tagged line is "[label] " + body, e.g.
  * `[Sam] [pause 2.1s] [fast] so um [pause 0.9s] we could [overlap] go tomorrow (laughs)`.
  * The label is added when the line is read ([label]: a rename applies to old lines too); the body
- * is stored. The plain text (what search and the sentence index see) never carries any of this.
+ * is stored. A line stored with speaker tags off has no label at all ([UNLABELLED], [read]).
+ * The plain text (what search and the sentence index see) never carries any of this.
  */
 object CueTags {
     const val MIN_PAUSE_MS = 700L
@@ -170,6 +191,16 @@ object CueTags {
     private val RESERVED = Regex("(?i)me|unknown|speaker\\s*\\d*")
 
     fun line(label: String, body: String): String = "[$label] $body".trim()
+
+    /** heard_tag.voice of a line stored with speaker tags off: no speaker label when read (0 is
+     *  "no voiceprint matched", read as [UNKNOWN]; above 0 a voice). */
+    const val UNLABELLED = -1L
+
+    /** The tagged line for a stored [body] and its [voiceId]: the body alone when it was stored
+     *  with speaker tags off, else [line] with [label] (the voice's label now; null = no voice,
+     *  or one since forgotten: [UNKNOWN]). */
+    fun read(body: String, voiceId: Long, label: String?): String =
+        if (voiceId == UNLABELLED) body.trim() else line(label ?: UNKNOWN, body)
 
     /** "[fast]" / "[slow]" for [wordsPerSec] against the speaker's [b], or null. */
     fun rate(b: Baseline, wordsPerSec: Double): String? {

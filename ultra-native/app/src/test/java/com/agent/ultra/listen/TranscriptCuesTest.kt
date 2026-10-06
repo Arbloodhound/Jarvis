@@ -72,6 +72,22 @@ class TranscriptCuesTest {
         assertNull(CueAudio.turnGap(10_000L, 9_000L))                    // clock went backwards / overlap
     }
 
+    @Test fun turnGapsMeasureFromLastSpeechToNextSpeech() {
+        val g = TurnGaps()
+        // 10 frames: 2 quiet, 6 loud, 2 quiet; ends at 10 s on the clock
+        val db = CueAudio.frameDb(pcm(*frames(run(2, false), run(6, true), run(2, false))))
+        val audioMs = 10 * fms
+        assertNull(g.next(db, -70f, 10_000L, audioMs))                   // first: nothing before
+        // speech ended at 10 000 - 320 + 8*32 = 9 936; the next starts 1.5 s later
+        val start2 = 9_936L + 1_500L
+        val end2 = start2 - 2 * fms + audioMs
+        assertEquals(1_500L, g.next(db, -70f, end2, audioMs))
+        // an utterance with no speech frames neither measures nor moves the clock
+        assertNull(g.next(CueAudio.frameDb(pcm(*run(5, false))), -70f, end2 + 900L, 5 * fms))
+        // speech 2 ended at end2 - 64; one starting 800 ms later sits in audio ending at end2 + 992
+        assertEquals(800L, g.next(db, -70f, end2 + 992L, audioMs))
+    }
+
     @Test fun vadGapsAndUnionJoinOverlaps() {
         val vad = listOf(Span(2000, 3000), Span(0, 1000), Span(3100, 4000))
         assertEquals(listOf(Span(1000, 2000)), CueAudio.vadGaps(vad, 300))
@@ -129,6 +145,17 @@ class TranscriptCuesTest {
             assertNull(r, CueTags.cleanName(r))
         assertEquals("Mel", CueTags.cleanName("Mel"))
         assertEquals("Speaker Pelosi", CueTags.cleanName("Speaker Pelosi"))
+    }
+
+    @Test fun readLabelsTaggedLinesUnlessStoredWithTagsOff() {
+        assertEquals("[pause 1.2s] so um okay", CueTags.read("[pause 1.2s] so um okay", CueTags.UNLABELLED, null))
+        assertEquals("so um okay", CueTags.read(" so um okay ", CueTags.UNLABELLED, "Sam"))   // a label never applies
+        assertEquals("[Unknown] so um okay", CueTags.read("so um okay", 0L, null))          // tags on, no match
+        assertEquals("[Unknown] so", CueTags.read("so", 7L, null))                           // voice since forgotten
+        assertEquals("[Sam] so", CueTags.read("so", 7L, "Sam"))
+        // an unlabelled line reads as no speaker, so the librarian credits it to no one
+        assertNull(CueText.speaker(CueTags.read("[pause 1.2s] so", CueTags.UNLABELLED, null)))
+        assertNull(CueText.speaker(CueTags.read("so", CueTags.UNLABELLED, null)))
     }
 
     @Test fun rateAndLoudnessNeedABaselineAndAClearDifference() {

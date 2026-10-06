@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
@@ -157,9 +158,12 @@ object VoicePrints {
 
     /**
      * Records ~10 s of the owner talking and stores it as their voice ([AmbientMemory.enrolOwner]).
-     * Downloads the model first if needed (the owner asked, so any network). Ambient listening is
-     * muted meanwhile so the recording isn't also stored as heard speech. [onState] gets
-     * "downloading" / "recording" / "saving".
+     * Downloads the model first if needed (the owner asked, so any network). While ambient
+     * listening has the mic open, the 10 s come from its capture ([AmbientListenService.tap]):
+     * a second recorder beside it may be handed silence. Ambient is muted meanwhile so the
+     * recording isn't also stored as heard speech; tap and mute are undone however this ends
+     * (done, failed, or cancelled by leaving the screen). [onState] gets "downloading" /
+     * "recording" / "saving".
      */
     suspend fun enrol(ctx: Context, onState: (String) -> Unit): Enrol {
         val app = ctx.applicationContext
@@ -171,11 +175,14 @@ object VoicePrints {
         val ambient = AmbientListenService.instance
         // Never cut short a longer mute (Jarvis speaking: the echo guard's), and at the end lift
         // only our own: a mute someone else set meanwhile stands.
-        val ours = System.currentTimeMillis() + ENROL_MS + 2_000L
+        val ours = System.currentTimeMillis() + ENROL_MS + TAP_SLACK_MS + 1_000L   // the longest the recording can take
         val mute = ambient?.let { maxOf(it.mutedUntil, ours) }
         if (ambient != null && mute != null) ambient.mutedUntil = mute
         onState("recording")
-        val pcm = try { record(ENROL_MS) } finally {
+        val viaAmbient = ambient != null && ambient.capturing
+        val pcm = try {
+            if (viaAmbient) fromAmbient(ambient!!, ENROL_MS) else record(ENROL_MS)
+        } finally {
             if (ambient != null && ambient.mutedUntil == mute && mute == ours) {
                 ambient.mutedUntil = System.currentTimeMillis() + 300L
             }
@@ -188,7 +195,8 @@ object VoicePrints {
         val speechMs = speech.size * 1000L / AmbientConfig.SAMPLE_RATE
         if (speechMs < ENROL_MIN_SPEECH_MS) return Enrol.Failed(
             "Heard only ${speechMs / 1000} s of speech. Talk for the whole 10 seconds" +
-                if (ambient != null) ", or turn ambient listening off for a moment and try again." else "."
+                // own recorder beside a running service (its mic was between retries): may be silenced
+                if (ambient != null && !viaAmbient) ", or turn ambient listening off for a moment and try again." else "."
         )
         val emb = embed(app, speech)
         if (AmbientListenService.instance == null) release()   // nothing else will use it soon
@@ -208,6 +216,23 @@ object VoicePrints {
         for (i in db.indices) if (db[i] > gate) for (j in i * f until minOf(pcm.size, (i + 1) * f)) out += pcm[j]
         return out.toShortArray()
     }
+
+    /** [ms] of what ambient capture reads, or null when too little arrived in time (its mic
+     *  failed or listening stopped). The tap is removed however this ends. */
+    private suspend fun fromAmbient(svc: AmbientListenService, ms: Long): ShortArray? {
+        val tap = PcmTap((AmbientConfig.SAMPLE_RATE * ms / 1000).toInt())
+        svc.tap = tap
+        try {
+            val deadline = System.currentTimeMillis() + ms + TAP_SLACK_MS
+            while (!tap.full && System.currentTimeMillis() < deadline) delay(100)
+        } finally {
+            if (svc.tap === tap) svc.tap = null
+        }
+        return tap.take()
+    }
+
+    /** How long past [ENROL_MS] to wait for ambient capture's frames (it reads in real time). */
+    private const val TAP_SLACK_MS = 2_000L
 
     @android.annotation.SuppressLint("MissingPermission")   // checked by the caller (Settings)
     private suspend fun record(ms: Long): ShortArray? {
