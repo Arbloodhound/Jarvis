@@ -10,6 +10,7 @@ import com.agent.ultra.gate.Manifest
 import com.agent.ultra.provider.OpenAiClient
 import com.agent.ultra.provider.ProviderConfig
 import com.agent.ultra.ui.ChatMessage
+import com.agent.ultra.ui.ChatStatus
 import com.agent.ultra.ui.ChatStore
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -186,7 +187,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         val ai = client
         if (ai == null) {
             // Offline/unconfigured path: the on-device model is the brain.
-            if (!local.ensureLoaded()) {
+            if (!loadLocalShown()) {
                 // The first thing a brand-new install says to whoever just
                 // fought their way past four Android warnings. "No AI provider
                 // configured and no on-device model present" is accurate and
@@ -502,39 +503,66 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         speakOut(text)
     }
 
+    /** [LocalModelEngine.ensureLoaded], with "Loading the brain…" under the chat while a real
+     * load runs (the 10 GB MoE takes a long time on first use). Nothing shown if already loaded. */
+    private suspend fun loadLocalShown(): Boolean {
+        if (local.loaded) return true
+        val shown = if (local.modelPresent && com.agent.ultra.local.LlmNative.available) ChatStore.setStatus(ChatStatus.Phase.LOADING) else null
+        try {
+            return local.ensureLoaded()
+        } finally {
+            shown?.let { ChatStore.clearStatus(it) }
+        }
+    }
+
     /** Direct local answer for the offline path. Thinking MoE presets get ChatML,
      * a routed + thermal-scaled think budget and a hidden trace; small models keep
      * the original plain prompt. */
     private suspend fun emitLocal(userInput: String) {
         val msg = ChatMessage(false, "")
         ChatStore.addToState(msg)
-        val result = if (local.isThinkingModel) {
-            val level = ThermalGuard.level
-            val route = IntentRouter.route(userInput)
-            val history = LocalPrompt.withoutCurrentTurn(
-                ChatStore.messages.takeLast(8)
-                    .filter { it.id != msg.id }
-                    .map { LocalPrompt.Turn(it.fromUser, it.text) },
-                userInput,
-            )
-            val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput)
-            val reserve = LocalPrompt.answerReserve(level)
-            val clipped = ThinkBudget.clipToContext(
-                route.thinkBudget, com.agent.ultra.local.LocalModelEngine.CTX_SIZE,
-                LocalPrompt.estimateTokens(prompt), reserve,
-            )
-            val budget = ThermalPolicy.scaleBudget(clipped, level)
-            android.util.Log.d("UltraRoute", "tier=${route.tier} reason=${route.reason} level=$level budget=$budget")
-            ThermalPolicy.coolingNote(level, route.tier)?.let { ChatStore.appendTo(msg.id, it + "\n\n") }
-            local.generate(
-                prompt, maxTokens = budget + reserve + 32,
-                thinkBudget = ThinkBudget(budget, startsInThink = true),
-                // threads: the engine picks them from the level once it holds the generate lock
-            ) { piece -> ChatStore.appendTo(msg.id, piece) }
-        } else {
-            val prompt = "You are Jarvis, a concise assistant on an offline Android phone. " +
-                "Answer briefly and honestly.\n\nUser: $userInput\nJarvis:"
-            local.generate(prompt, 400) { piece -> ChatStore.appendTo(msg.id, piece) }
+        // "Thinking…" from the moment decoding starts (engine lock held, model loaded) until
+        // the first visible token: the trace is hidden, so without this the bubble stays
+        // silent for the whole think budget. Set and cleared on the engine's generate thread;
+        // the finally reads it after generate() has returned.
+        var shown: ChatStatus.Status? = null
+        val onStart: () -> Unit = { shown = ChatStore.setStatus(ChatStatus.Phase.THINKING) }
+        val onPiece: (String) -> Unit = { piece ->
+            if (piece.isNotEmpty()) shown?.let { ChatStore.clearStatus(it); shown = null }
+            ChatStore.appendTo(msg.id, piece)
+        }
+        val result = try {
+            if (local.isThinkingModel) {
+                val level = ThermalGuard.level
+                val route = IntentRouter.route(userInput)
+                val history = LocalPrompt.withoutCurrentTurn(
+                    ChatStore.messages.takeLast(8)
+                        .filter { it.id != msg.id }
+                        .map { LocalPrompt.Turn(it.fromUser, it.text) },
+                    userInput,
+                )
+                val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput)
+                val reserve = LocalPrompt.answerReserve(level)
+                val clipped = ThinkBudget.clipToContext(
+                    route.thinkBudget, com.agent.ultra.local.LocalModelEngine.CTX_SIZE,
+                    LocalPrompt.estimateTokens(prompt), reserve,
+                )
+                val budget = ThermalPolicy.scaleBudget(clipped, level)
+                android.util.Log.d("UltraRoute", "tier=${route.tier} reason=${route.reason} level=$level budget=$budget")
+                ThermalPolicy.coolingNote(level, route.tier)?.let { ChatStore.appendTo(msg.id, it + "\n\n") }
+                local.generate(
+                    prompt, maxTokens = budget + reserve + 32,
+                    thinkBudget = ThinkBudget(budget, startsInThink = true),
+                    // threads: the engine picks them from the level once it holds the generate lock
+                    onStart = onStart,
+                ) { piece -> onPiece(piece) }
+            } else {
+                val prompt = "You are Jarvis, a concise assistant on an offline Android phone. " +
+                    "Answer briefly and honestly.\n\nUser: $userInput\nJarvis:"
+                local.generate(prompt, 400, onStart = onStart) { piece -> onPiece(piece) }
+            }
+        } finally {
+            shown?.let { ChatStore.clearStatus(it) }
         }
         result.onFailure {
             ChatStore.setText(msg.id, "Error: on-device model failed — ${it.message}")
@@ -682,7 +710,7 @@ JSON:"""
                 ChatStore.removeById(streamMsg.id)
                 // Cloud failed (offline, quota, outage) — the on-device model
                 // answers what it can rather than dying.
-                if (local.ensureLoaded()) {
+                if (loadLocalShown()) {
                     emit("(cloud unreachable — answering on-device)")
                     emitLocal(userInput)
                 } else {

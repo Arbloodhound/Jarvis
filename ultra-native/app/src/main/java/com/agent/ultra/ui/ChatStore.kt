@@ -48,6 +48,20 @@ object ChatStore {
     val thinking = mutableStateOf(false)
 
     /**
+     * What the on-device model is doing while nothing visible arrives (see [ChatStatus]).
+     * Shown under the chat, never added to [messages]: not persisted, never spoken.
+     * Written only through [setStatus]/[clearStatus], which go through [onUi].
+     */
+    val status = mutableStateOf<ChatStatus.Status?>(null)
+
+    /** Start a status episode; returns it so the caller can clear exactly this one. */
+    fun setStatus(phase: ChatStatus.Phase): ChatStatus.Status =
+        ChatStatus.Status(phase, System.currentTimeMillis()).also { s -> onUi { status.value = s } }
+
+    /** Clear [s] if it is still the one showing (a newer episode is left alone). Any thread. */
+    fun clearStatus(s: ChatStatus.Status) = onUi { if (status.value === s) status.value = null }
+
+    /**
      * Compose snapshot state is not thread-safe. Streaming answers arrive on
      * OkHttp's IO threads and the on-device model emits from its own worker,
      * so every mutation of [messages] funnels through here. Writing it from a

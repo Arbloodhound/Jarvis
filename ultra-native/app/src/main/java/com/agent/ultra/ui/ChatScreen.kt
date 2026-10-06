@@ -100,8 +100,23 @@ fun ChatScreen(
         }
     }
 
+    // On-device model status ("Loading the brain…" / "Thinking…"): a line under the
+    // chat, never a message. The clock ticks only while one is showing.
+    val status by ChatStore.status
+    var statusNow by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(status) {
+        while (status != null) {
+            statusNow = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
     LaunchedEffect(ChatStore.messages.size) {
         if (ChatStore.messages.isNotEmpty()) listState.animateScrollToItem(ChatStore.messages.size - 1)
+    }
+    // Bring a newly shown status line into view; clearing it does not scroll.
+    LaunchedEffect(status) {
+        if (status != null) listState.animateScrollToItem(ChatStore.messages.size)
     }
 
     val currentTitle = ChatStore.conversations
@@ -273,6 +288,16 @@ fun ChatScreen(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                         )
                     }
+                }
+            }
+            status?.let { s ->
+                item(key = "status") {
+                    Text(
+                        text = ChatStatus.label(s.phase, statusNow - s.sinceMs),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+                    )
                 }
             }
         }

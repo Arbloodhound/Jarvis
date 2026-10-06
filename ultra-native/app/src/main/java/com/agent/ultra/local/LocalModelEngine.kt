@@ -281,12 +281,15 @@ class LocalModelEngine(private val context: Context) {
      * from the returned text (only the answer comes back). Threads: the thermal policy's
      * count for the level read once the lock is held ([threads] > 0 can only lower it); native
      * always gets an explicit count, and it stays fixed for the whole call.
+     * [onStart] runs once the lock is held and the model is loaded, right before decoding:
+     * the moment "thinking" really begins (not while queued behind another generation).
      */
     suspend fun generate(
         prompt: String,
         maxTokens: Int,
         thinkBudget: com.agent.ultra.agent.ThinkBudget? = null,
         threads: Int = 0,
+        onStart: () -> Unit = {},
         onToken: (String) -> Unit = {},
     ): Result<String> = withContext(Dispatchers.IO) {
         genMutex.withLock {
@@ -304,6 +307,7 @@ class LocalModelEngine(private val context: Context) {
             val t0 = System.currentTimeMillis()
             val faults0 = PageFaults.read()
             val nThreads = ThermalPolicy.resolveThreads(threads, ThermalGuard.level, baseThreads())
+            onStart()
             val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, nThreads) { piece ->
                 if (thinkBudget == null) {
                     sb.append(piece); onToken(piece); null
