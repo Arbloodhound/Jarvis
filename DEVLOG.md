@@ -14,7 +14,7 @@ locally but CI run #20 still signed with "CN=Android Debug" (the runner keeps it
 elsewhere) — the new signer check caught it and failed the run. Fix: build.gradle.kts creates a
 `ciTestDebug` signing config from the JARVIS_TEST_KEYSTORE env var (set by debug-apk.yml) and the
 debug build type uses it. PROVEN locally both ways: no env → CN=Android Debug, env → CN=Jarvis CI
-test build. CI proof pending (run after this push). Builds before this one (runs ≤19) still have random keys: the first switch
+test build. PROVEN on CI: run #21 passed its signer check (CN=Jarvis CI test build). Builds before this one (runs ≤19) still have random keys: the first switch
 needs one uninstall; after that, updates keep data.
 
 ## 2026-10-06 (night, latest) — No-laptop path: on-phone "Jarvis Tests" + Colab key notebook
