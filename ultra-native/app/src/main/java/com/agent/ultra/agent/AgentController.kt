@@ -377,6 +377,21 @@ class AgentController(private val context: Context) {
         "Error: ${e.message}"
     }
 
+    /** See [DirectRequest]: true = the person asked for this commitment, skip the card. False when
+     *  the setting is off; with contacts unreadable a message can't be shown to be to a known
+     *  contact, so it asks. */
+    fun directlyRequested(request: String, commitWord: String, screen: String): Boolean {
+        if (!com.agent.ultra.ui.UltraPrefs.skipConfirmWhenAsked(context)) return false
+        val names = mutableListOf<String>()
+        try {
+            context.contentResolver.query(
+                android.provider.ContactsContract.Contacts.CONTENT_URI,
+                arrayOf(android.provider.ContactsContract.Contacts.DISPLAY_NAME), null, null, null,
+            )?.use { c -> while (c.moveToNext() && names.size < 5000) c.getString(0)?.let { names.add(it) } }
+        } catch (_: Exception) { /* no contacts: a message can't be to a known contact, so it asks */ }
+        return DirectRequest.skipConfirmation(request, commitWord, screen, names)
+    }
+
     fun readContacts(nameQuery: String): String = try {
         val selection: String?
         val args: Array<String>?

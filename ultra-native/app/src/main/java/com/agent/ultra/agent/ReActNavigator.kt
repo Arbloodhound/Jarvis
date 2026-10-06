@@ -1470,7 +1470,11 @@ ACTION:"""
             return false
         }
 
-        val approved = ActionGate.approve(action, label, pkg ?: "this app", reason)
+        // Option B (owner's decision, 2026-10-08): a commitment the person asked for in their own
+        // words goes ahead without the card; money, deletion, new recipients etc. still ask.
+        val direct = controller.directlyRequested(userRequest, reason, screenNow)
+        if (direct) android.util.Log.i("UltraNav", "NO CARD (you asked for this): \"$label\" matched \"$reason\"")
+        val approved = direct || ActionGate.approve(action, label, pkg ?: "this app", reason)
         if (!approved) {
             android.util.Log.i("UltraNav", "action refused by operator: \"$label\"")
             return false

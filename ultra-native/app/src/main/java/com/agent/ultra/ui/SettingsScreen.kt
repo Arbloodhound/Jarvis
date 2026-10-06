@@ -787,6 +787,27 @@ fun SettingsScreen(
             }
         }) { Text("Choose assistant app") }
 
+        run {
+            var skipConfirm by remember { mutableStateOf(UltraPrefs.skipConfirmWhenAsked(context)) }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Don't ask when I asked for it", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "If you told Jarvis to send, post or install something, it does it without an " +
+                            "\"are you sure?\". It still always asks for anything with money or a price, " +
+                            "deleting or resetting, messages to someone not in your contacts, and anything " +
+                            "it decided on its own.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = skipConfirm, onCheckedChange = { on ->
+                    skipConfirm = on
+                    UltraPrefs.setSkipConfirmWhenAsked(context, on)
+                })
+            }
+        }
+
         // ── Gate audit log ────────────────────────────────────────────
         SectionTitle("GATE AUDIT LOG")
         val auditCount = remember(savedFlash) { com.agent.ultra.gate.GateAuditLog.entryCount(context) }

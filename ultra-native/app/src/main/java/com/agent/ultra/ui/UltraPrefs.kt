@@ -57,6 +57,17 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_RESIDENT, on).apply()
     }
 
+    private const val K_SKIP_CONFIRM = "skip_confirm_when_asked"
+
+    /** Don't show the "are you sure?" card for a commitment the person asked for in their own
+     * words (option B, see agent/DirectRequest: money, deletion, new recipients still ask). On. */
+    fun skipConfirmWhenAsked(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_SKIP_CONFIRM, true)
+
+    fun setSkipConfirmWhenAsked(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_SKIP_CONFIRM, on).apply()
+    }
+
     private const val K_NOTIF = "capture_notifications"
     private const val K_PERSONAL = "allow_personal_data"
 

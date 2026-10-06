@@ -3,6 +3,18 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-08 (evening) — Option B: no confirmation card when the person asked for it
+
+Owner chose option B and asked to retry it outside auto mode (accept-edits). Built: pure
+`agent/DirectRequest.skipConfirmation(request, commitWord, screen, contacts)` (18 tests) and one
+check in `ReActNavigator.approveTap` after the Disagreement check: if the request contains a verb
+matching the commitment (send/post/publish/submit/confirm/install …) the tap goes ahead without the
+ActionGate card. Always still asks: money (pay/buy/order/book/subscribe/…, or any price on screen),
+deletion/wipe/reset/uninstall/sign-out, agree/accept, unreadable labels, messages unless a contact
+named in the request is on screen, and anything not matching the request. Settings → "Don't ask
+when I asked for it" (UltraPrefs.skipConfirmWhenAsked, default on). Logged as `NO CARD (you asked
+for this)`. 766 tests pass; assembleDebug passes. RUNTIME-UNPROVEN.
+
 ## 2026-10-08 (later) — Offline phone control, wait-bounded thinking, ambient yields, context by RAM (4 parallel agents)
 
 Owner approved the gap list. Merged (748 tests, 0 failures; assembleDebug passes; all RUNTIME-UNPROVEN):
