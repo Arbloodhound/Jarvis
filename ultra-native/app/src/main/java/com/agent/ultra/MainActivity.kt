@@ -52,6 +52,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (com.agent.ultra.ui.UltraPrefs.preloadBrain(this)) {
+            LocalModelEngine.shared(applicationContext).preloadInBackground("app opened")
+        }
         // Ambient listening the user left on but that isn't running (Android 15+ refuses to start
         // it at boot; a mic permission granted later): start it now, from the foreground.
         if (com.agent.ultra.listen.AmbientConfig(this).enabled &&

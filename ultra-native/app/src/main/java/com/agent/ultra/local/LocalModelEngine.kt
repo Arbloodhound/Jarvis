@@ -4,6 +4,7 @@ import android.content.Context
 import com.agent.ultra.agent.ThermalGuard
 import com.agent.ultra.agent.ThermalPolicy
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -111,54 +112,91 @@ class LocalModelEngine(private val context: Context) {
         // renamed into another model's name.
         val tmp = File(target.parentFile, target.name + ".part")
         downloadProgress.value = 0f
-        android.util.Log.i("UltraLlm", "download start: $url -> ${target.name}")
+        android.util.Log.i("UltraLlm", "download start: $url -> ${target.name} (have ${tmp.length() / 1_048_576} MB)")
+        // A 10 GB file over a phone's Wi-Fi will be interrupted. The bytes already in the .part
+        // are kept and the rest is asked for with a Range request, retrying with a back-off;
+        // it used to delete the .part on any error and start again from zero. The CPU wake lock
+        // keeps the CPU awake; Settings also keeps the screen on while it runs, because a phone
+        // asleep in Doze cuts a background app's network.
+        val wake = (context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager)
+            ?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Jarvis:modelDownload")
         try {
+            wake?.acquire(6 * 60 * 60 * 1000L)
             val client = okhttp3.OkHttpClient.Builder()
                 .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
                 .followRedirects(true)
                 .build()
-            val req = okhttp3.Request.Builder().url(url).build()
-            client.newCall(req).execute().use { resp ->
-                android.util.Log.i("UltraLlm", "download HTTP ${resp.code}, length=${resp.body?.contentLength()}")
-                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
-                val total = resp.body?.contentLength() ?: -1
-                target.parentFile?.mkdirs()
-                var written = 0L
-                var lastReport = 0L
-                resp.body!!.byteStream().use { input ->
-                    tmp.outputStream().use { out ->
-                        val buf = ByteArray(256 * 1024)
-                        while (true) {
-                            val n = input.read(buf)
-                            if (n < 0) break
-                            out.write(buf, 0, n)
-                            written += n
-                            val now = System.currentTimeMillis()
-                            if (total > 0 && now - lastReport > 1000) {
-                                lastReport = now
-                                downloadProgress.value = written.toFloat() / total
-                                onProgress(written.toFloat() / total)
+            target.parentFile?.mkdirs()
+            var lastError: Exception? = null
+            for (attempt in 1..MAX_DOWNLOAD_ATTEMPTS) {
+                if (attempt > 1) {
+                    val wait = DownloadResume.backoffMs(attempt - 1)
+                    android.util.Log.i("UltraLlm", "download retry $attempt/$MAX_DOWNLOAD_ATTEMPTS in ${wait / 1000}s " +
+                        "(have ${tmp.length() / 1_048_576} MB): ${lastError?.message}")
+                    // Not cancellable: the download is started from the Settings screen's scope, and
+                    // leaving Settings mid-wait must not end it (the transfer itself already outlives it).
+                    withContext(kotlinx.coroutines.NonCancellable) { kotlinx.coroutines.delay(wait) }
+                }
+                try {
+                    val existing = if (tmp.exists()) tmp.length() else 0L
+                    val req = okhttp3.Request.Builder().url(url).apply {
+                        DownloadResume.rangeHeader(existing)?.let { header("Range", it) }
+                    }.build()
+                    client.newCall(req).execute().use { resp ->
+                        val len = resp.body?.contentLength() ?: -1
+                        android.util.Log.i("UltraLlm", "download HTTP ${resp.code}, length=$len, from=$existing")
+                        val plan = DownloadResume.plan(existing, resp.code, len, resp.header("Content-Range"))
+                        if (plan == null) {
+                            if (resp.code == 416) tmp.delete()           // .part doesn't match the file: start over
+                            if (resp.code in 400..499 && resp.code != 416 && resp.code != 429)
+                                return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                            throw java.io.IOException("HTTP ${resp.code}")
+                        }
+                        val total = plan.total
+                        var written = plan.startAt
+                        if (!plan.complete) {
+                            var lastReport = 0L
+                            resp.body!!.byteStream().use { input ->
+                                java.io.FileOutputStream(tmp, plan.append).use { out ->
+                                    val buf = ByteArray(256 * 1024)
+                                    while (true) {
+                                        val n = input.read(buf)
+                                        if (n < 0) break
+                                        out.write(buf, 0, n)
+                                        written += n
+                                        val now = System.currentTimeMillis()
+                                        if (total > 0 && now - lastReport > 1000) {
+                                            lastReport = now
+                                            downloadProgress.value = written.toFloat() / total
+                                            onProgress(written.toFloat() / total)
+                                        }
+                                    }
+                                }
                             }
                         }
+                        if (total > 0 && written != total) {
+                            if (written > total) tmp.delete()               // can't be repaired by resuming
+                            throw java.io.IOException("short read: $written/$total")
+                        }
+                        if (!tmp.renameTo(target)) {
+                            return@withContext Result.failure(Exception("could not move the download into place"))
+                        }
+                        android.util.Log.i("UltraLlm", "download complete: ${written / 1_048_576} MB (attempt $attempt)")
+                        return@withContext Result.success(written)
                     }
+                } catch (e: java.io.IOException) {
+                    lastError = e                                       // keep the .part; retry resumes it
                 }
-                if (total > 0 && written != total) {
-                    tmp.delete()
-                    return@withContext Result.failure(Exception("short read: $written/$total"))
-                }
-                if (!tmp.renameTo(target)) {
-                    tmp.delete()
-                    return@withContext Result.failure(Exception("could not move the download into place"))
-                }
-                android.util.Log.i("UltraLlm", "download complete: ${written / 1_048_576} MB")
-                Result.success(written)
             }
+            android.util.Log.w("UltraLlm", "download gave up after $MAX_DOWNLOAD_ATTEMPTS attempts", lastError)
+            Result.failure(Exception("${lastError?.message ?: "network error"} — tap Download again to continue " +
+                "from ${tmp.length() / 1_048_576} MB"))
         } catch (e: Exception) {
             android.util.Log.w("UltraLlm", "download failed", e)
-            tmp.delete()
             Result.failure(e)
         } finally {
+            runCatching { if (wake?.isHeld == true) wake.release() }
             downloadProgress.value = null
             downloadInFlight.set(false)
         }
@@ -177,6 +215,24 @@ class LocalModelEngine(private val context: Context) {
      */
     suspend fun ensureLoaded(): Boolean =
         if (loaded) true else withContext(Dispatchers.IO) { loadBlocking() }
+
+    /**
+     * Load the model in the background now, so the first question doesn't wait for 10 GB to be
+     * read in (the Pixel 10 Pro's ANRs showed how long that is). Called when Jarvis opens and when
+     * ambient listening starts, if Settings → "Get the brain ready in advance" is on. A question
+     * asked meanwhile simply waits for this same load (ensureLoaded holds one lock).
+     */
+    fun preloadInBackground(reason: String) {
+        if (loaded || !modelPresent || !LlmNative.available || downloadProgress.value != null) return
+        preloadScope.launch {
+            val t0 = System.currentTimeMillis()
+            val ok = ensureLoaded()
+            android.util.Log.i("UltraLlm", "preload ($reason) ok=$ok in ${System.currentTimeMillis() - t0}ms")
+        }
+    }
+
+    /** Bytes of an unfinished download of the selected model (0 = none): "Continue download". */
+    fun partialBytes(): Long = File(modelFile.parentFile, modelFile.name + ".part").let { if (it.exists()) it.length() else 0L }
 
     private fun loadBlocking(): Boolean {
         if (loaded) return true
@@ -302,6 +358,7 @@ class LocalModelEngine(private val context: Context) {
         /** One engine per process. The weights are ~800MB mmap'd against a
          * single native context — a second instance would load them twice. */
         @Volatile private var sharedInstance: LocalModelEngine? = null
+        private val preloadScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
         fun shared(context: Context): LocalModelEngine =
             sharedInstance ?: synchronized(this) {
@@ -318,6 +375,8 @@ class LocalModelEngine(private val context: Context) {
          *  model loads with exactly this many pinned workers; more per call is clamped. */
         fun baseThreads(): Int = CpuTopology.current.llmThreads
         const val CTX_SIZE = 4096
+        /** Over a 10 GB download: 5, 10, 20, 40, then 60 s apart — about 25 minutes of trying. */
+        const val MAX_DOWNLOAD_ATTEMPTS = 30
         const val MIN_AVAIL_BYTES = 500L * 1024 * 1024
         const val FAST_PATH_MAX_BYTES = 2_500L * 1024 * 1024
         private const val K_URL = "model_url"

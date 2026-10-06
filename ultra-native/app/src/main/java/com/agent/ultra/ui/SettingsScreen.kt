@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -181,6 +182,13 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
         )
 
+        // A phone asleep in Doze cuts a background app's network: keep the screen on while the
+        // model downloads (only while this screen shows it).
+        val view = androidx.compose.ui.platform.LocalView.current
+        DisposableEffect(downloading) {
+            view.keepScreenOn = downloading
+            onDispose { view.keepScreenOn = false }
+        }
         if (downloading) {
             LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
             Text("Downloading… ${(progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
@@ -203,10 +211,39 @@ fun SettingsScreen(
                         }.onFailure { downloadError = it.message }
                         downloading = false
                     }
-                }) { Text("Download") }
+                }) {
+                    val partial = remember(downloading) { localEngine.partialBytes() }
+                    Text(if (partial > 0) "Continue download (" +
+                        String.format(java.util.Locale.ROOT, "%.1f", partial / 1_073_741_824.0) + " GB done)"
+                        else "Download")
+                }
             }
             if (localEngine.loaded) {
                 OutlinedButton(onClick = { scope.launch { localEngine.unload() } }) { Text("Free memory") }
+            }
+        }
+
+        run {
+            var preload by remember { mutableStateOf(UltraPrefs.preloadBrain(context)) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Get the brain ready in advance", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Loads the on-device model in the background when Jarvis opens or starts " +
+                            "listening, so your first question doesn't wait for it. Uses the phone's " +
+                            "memory while loaded; Android can reclaim it if another app needs it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = preload, onCheckedChange = { on ->
+                    preload = on
+                    UltraPrefs.setPreloadBrain(context, on)
+                    if (on) localEngine.preloadInBackground("setting turned on")
+                })
             }
         }
 

@@ -93,6 +93,10 @@ class AmbientListenService : Service() {
         }
         acquireWake()
         if (captureJob == null) captureJob = scope.launch { runPipeline() }
+        // "Hey Jarvis" shouldn't have to wait for the brain to load either.
+        if (com.agent.ultra.ui.UltraPrefs.preloadBrain(this)) {
+            com.agent.ultra.local.LocalModelEngine.shared(applicationContext).preloadInBackground("ambient listening started")
+        }
         return START_STICKY
     }
 

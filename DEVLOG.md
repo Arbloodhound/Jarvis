@@ -3,6 +3,29 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (later) — Resumable model download; preload the brain
+
+Dafarus: the 10 GB download is slow; asked to fix resume and speed up loading.
+
+**Found (source):** `downloadModel` deleted model.part on ANY exception and every new attempt
+truncated it, so one Wi-Fi blip or a killed process restarted 10 GB from zero. (Checked and
+corrected my own claim: leaving Settings does NOT cancel a running transfer — the blocking loop runs
+on in withContext(IO).)
+
+**Built:**
+- Pure `local/DownloadResume` (Range header, 206/200/416 handling with Content-Range checks,
+  back-off 5→60 s) + 15 tests. `downloadModel` now keeps the .part, resumes with Range, retries up
+  to 30 times (~25 min), holds a partial wake lock, and only deletes the .part when it can't be
+  resumed (416 mismatch, overflow). The retry wait is NonCancellable so leaving Settings can't end
+  it. Settings keeps the screen on while downloading (Doze cuts background network) and the button
+  says "Continue download (x.x GB done)" when a .part exists.
+- Preload: `LocalModelEngine.preloadInBackground()` (IO scope) from MainActivity.onResume and
+  AmbientListenService.onStartCommand, behind Settings → ON-DEVICE MODEL → "Get the brain ready in
+  advance" (UltraPrefs.preloadBrain, default on). A question during preload waits on the same lock.
+
+**Status:** 673 unit tests, 0 failures; assembleDebug passes. Resume against the real HF/CDN host and
+preload timing: SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-07 — First Pixel 10 Pro runtime evidence: ANR on model load (fixed in source)
 
 **Evidence** (`ultra-native/ondevice-brain/evidence/2026-10-06-pixel10pro-anr.md`, two ANRs from

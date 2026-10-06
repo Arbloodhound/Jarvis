@@ -35,6 +35,17 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OWN_VOICE, on).apply()
     }
 
+    private const val K_PRELOAD = "preload_brain"
+
+    /** Load the on-device brain in the background when Jarvis opens / ambient listening starts,
+     * so the first answer doesn't wait for the model to load. On by default. */
+    fun preloadBrain(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_PRELOAD, true)
+
+    fun setPreloadBrain(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_PRELOAD, on).apply()
+    }
+
     private const val K_NOTIF = "capture_notifications"
     private const val K_PERSONAL = "allow_personal_data"
 
