@@ -33,6 +33,17 @@ tested) to its own branch, draft PRs into `claude/new-session-t3cy17` may or may
 Build (`source ~/android-env.sh`, `fetch-sherpa.sh` once, flock gradle; baseline 2026-10-06 passed),
 DEVLOG entry, commit with `[apk]`, push, send the owner the Actions run link when green.
 
+**Worker reports at stop:**
+- **Gotcha for every branch:** `app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so` is not in git. Run
+  `bash ultra-native/ondevice-brain/fetch-sherpa.sh` in each checkout, or Gradle stops at `:app:checkSherpaLib`
+  before compiling.
+- `claude/memory-librarian` @ 1d84b5e: NOT compiled or tested (stopped at that check). API:
+  - `Librarian.model: SmallModel?`, where `fun interface SmallModel { suspend fun complete(prompt: String, maxTokens: Int): Result<String> }`
+    gets a full ChatML no-think prompt.
+  - Start it with `Librarian.start(ctx, scope)` from `AmbientListenService.onStartCommand`. WorkManager is not a dependency.
+  - `MemoryNotes.get(ctx).search(query, limit): List<NoteHit(text, ts, kind)>`.
+  - If the small model sets `LocalModelEngine.busy`, also set `Librarian.brainBusy`, or the job cancels itself.
+
 **Queued by the owner after that build:**
 - Pause/timing tags in transcripts: whisper.cpp word timestamps (today `no_timestamps`) + VAD gaps →
   `[pause 1.8s]`, speech-rate/loudness tags, so the models can see hesitation.
