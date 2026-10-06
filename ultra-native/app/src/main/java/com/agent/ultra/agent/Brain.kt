@@ -213,6 +213,9 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             // the command alone: overheard ambient text must not shape params or task memory.
             if (LocalToolCall.offlineRoute(userInput, canDecline = local.isThinkingModel) &&
                 runLocalLoop(IntentRouter.requestPart(userInput))) return
+            // A job of several steps on screens ("open settings and turn on dark mode"): the
+            // on-device model drives the app itself, through the cloud navigator's action path.
+            offlineNavTask(userInput)?.let { runOfflineNav(userInput, it); return }
             emitLocal(userInput)
             return
         }
@@ -520,6 +523,41 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         }
     }
 
+    /** The on-device navigator, made on first use. It acts through the cloud navigator when there
+     * is one (same gate, same screen memory), else through one with no cloud model. */
+    private var offlineNavigator: OfflineNavigator? = null
+
+    private fun offlineNavigator(): OfflineNavigator = offlineNavigator ?: OfflineNavigator(
+        controller,
+        tools.navigator ?: ReActNavigator(controller, null).also {
+            it.screenMemory = com.agent.ultra.data.UltraDatabase.get(appContext).screenMemory()
+        },
+        local,
+    ).also { offlineNavigator = it }
+
+    /** A job of several steps on screens that the on-device thinker can drive ([OfflineNav.task]),
+     * or null. The app it names must be installed: "in X" is otherwise only a guess. */
+    private fun offlineNavTask(userInput: String): OfflineNav.Task? {
+        if (!local.isThinkingModel) return null
+        val task = OfflineNav.task(IntentRouter.requestPart(userInput)) ?: return null
+        if (task.appHint.isNotBlank() && controller.findPackage(task.appHint) == null) return null
+        // "scroll down" typed into Ultra's own chat has no other app to act on: answer in text as before.
+        if (task.appHint.isBlank() && controller.foregroundPackage().let { it == null || it == appContext.packageName }) return null
+        return task
+    }
+
+    private suspend fun runOfflineNav(userInput: String, task: OfflineNav.Task) {
+        android.util.Log.i("UltraBrain", "OFFLINE NAV: goal=\"${task.goal.take(120)}\" app=\"${task.appHint}\"")
+        val out = offlineNavigator().run(task, userInput)
+        val steps = "${out.steps} step${if (out.steps == 1) "" else "s"}"
+        answer(when {
+            out.success -> "The on-device model reports: ${out.summary} ($steps)"
+            out.stopped ->"Stopped after $steps."
+            else -> "I couldn't finish that on-device: ${out.summary} (after $steps)."
+        })
+        android.util.Log.i("UltraBrain", "RUN COMPLETE (offline nav, ok=${out.success}, steps=${out.steps})")
+    }
+
     /** Direct local answer for the offline path. Thinking MoE presets get ChatML,
      * a routed + thermal-scaled think budget and a hidden trace; small models keep
      * the original plain prompt. */
@@ -789,8 +827,15 @@ JSON:"""
                 // Cloud failed (offline, quota, outage) — the on-device model
                 // answers what it can rather than dying.
                 if (loadLocalShown()) {
-                    emit("(cloud unreachable — answering on-device)")
-                    emitLocal(userInput)
+                    // Only before anything ran: a run that already acted is not restarted on-device.
+                    val navTask = if (turn == 0 && startTurn == 0) offlineNavTask(userInput) else null
+                    if (navTask != null) {
+                        emit("(cloud unreachable — working on-device)")
+                        runOfflineNav(userInput, navTask)
+                    } else {
+                        emit("(cloud unreachable — answering on-device)")
+                        emitLocal(userInput)
+                    }
                 } else {
                     answer("Error: model call failed — ${it.message}")
                 }

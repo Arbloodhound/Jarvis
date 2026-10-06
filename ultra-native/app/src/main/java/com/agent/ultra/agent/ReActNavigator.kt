@@ -11,7 +11,9 @@ import org.json.JSONArray
  */
 class ReActNavigator(
     private val controller: AgentController,
-    private val client: OpenAiClient,
+    /** The cloud model that drives [execute]. Null when there is none: then only the hooks for an
+     * outside loop ([perceive] / [act], used by [OfflineNavigator]) are usable. */
+    private val client: OpenAiClient?,
 ) {
     companion object {
         private const val MAX_ITER = 15
@@ -246,6 +248,7 @@ ACTION:"""
     }
 
     private suspend fun executeRun(goal: String, appHint: String): NavResult {
+        val client = client ?: return NavResult(false, "no cloud model to drive the navigator", 0)
         if (!controller.serviceRunning) return NavResult(false, controller.serviceProblem, 0)
 
 
@@ -579,6 +582,45 @@ ACTION:"""
             else "iteration budget exhausted — " + NavPlan.progressSummary(plan, stage) +
                 if (!planActive) " (the plan was abandoned before the end)" else ""
         return NavResult(false, summary, iter)
+    }
+
+    // ── Hooks for an outside loop ([OfflineNavigator]) ───────────────────────────────────────
+    // The on-device loop chooses its actions itself but performs every one of them here, through
+    // executeAction: the same ActionGate card, Disagreement stop, DirectRequest (option B) rule,
+    // typing refusal, typed-text read-back and Enter check as a cloud-chosen action.
+
+    /** Start an outside run in [pkg]: clear the last run's stop/refusal, load the app's known controls. */
+    internal suspend fun beginExternalRun(pkg: String) {
+        stopReason = null
+        lastRefusal = null
+        known = loadOrLearnControls(pkg)
+    }
+
+    /** Read the screen exactly as [execute] does (secrets noted, index maps refreshed) and return the
+     * flat dump. The next [act] resolves indexes against THIS dump. */
+    internal suspend fun perceive(): String {
+        observe()
+        return lastFlat
+    }
+
+    /** The display size observe() filters on, so an outside compaction lists the same nodes. */
+    internal fun screenSize(): Pair<Int, Int> = displaySize()
+
+    /** Is [index] one of the text boxes the last [perceive] listed? type() only trusts those. */
+    internal fun isTypeable(index: Int): Boolean = index in typeableIndexes
+
+    /** What one action did. [refusal]: why it was not done (told to the model). [stop]: the run must
+     * end (the screen contradicted the request); nothing was committed. */
+    data class Acted(val ok: Boolean, val refusal: String?, val stop: String?)
+
+    /** Perform one action in this class's own syntax — tap(I), type(I, "text"), scroll(down|up),
+     * back(), home() — through executeAction. */
+    internal suspend fun act(action: String): Acted {
+        lastRefusal = null
+        val ok = executeAction(action, "")
+        val refusal = lastRefusal
+        lastRefusal = null
+        return Acted(ok, refusal, stopReason)
     }
 
     /**
@@ -1615,6 +1657,7 @@ ACTION:"""
      * able to make a run worse than not planning.
      */
     private suspend fun requestPlan(goal: String, observation: String): List<NavPlan.Checkpoint> {
+        val client = client ?: return emptyList()
         return try {
             val reply = client.complete(
                 listOf(OpenAiClient.ChatMessage("user", NavPlan.prompt(goal, observation, routeHint))),

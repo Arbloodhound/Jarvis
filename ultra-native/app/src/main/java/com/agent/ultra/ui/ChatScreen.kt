@@ -293,7 +293,7 @@ fun ChatScreen(
             status?.let { s ->
                 item(key = "status") {
                     Text(
-                        text = ChatStatus.label(s.phase, statusNow - s.sinceMs),
+                        text = ChatStatus.label(s.phase, statusNow - s.sinceMs, s.detail),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
@@ -437,6 +437,11 @@ fun ChatScreen(
                 }
             }) {
                 Text(if (listening) "🎙…" else "🎙")
+            }
+            // While the on-device model drives another app: stop it (generation stops at the next
+            // token; any open confirmation is denied).
+            if (status?.phase == ChatStatus.Phase.NAVIGATING) {
+                TextButton(onClick = { com.agent.ultra.agent.OfflineNavigator.stopActive() }) { Text("Stop") }
             }
             Button(
                 enabled = !thinking,

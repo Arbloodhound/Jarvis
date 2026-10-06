@@ -16,6 +16,12 @@ class ChatStatusTest {
         assertEquals("Loading the brain… 42 s", ChatStatus.label(Phase.LOADING, 42_900))
     }
 
+    @Test fun navigatingShowsTheStep() {
+        assertEquals("Working on the phone…", ChatStatus.label(Phase.NAVIGATING, 0))
+        assertEquals("Working on the phone… step 3/12", ChatStatus.label(Phase.NAVIGATING, 0, "step 3/12"))
+        assertEquals("Working on the phone… step 3/12 · tap 4 7 s", ChatStatus.label(Phase.NAVIGATING, 7_000, "step 3/12 · tap 4"))
+    }
+
     @Test fun negativeElapsedShowsNoSeconds() =
         assertEquals("Thinking…", ChatStatus.label(Phase.THINKING, -5_000))
 }

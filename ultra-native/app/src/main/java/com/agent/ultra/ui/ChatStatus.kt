@@ -12,20 +12,25 @@ package com.agent.ultra.ui
  * Pure, JVM-tested (ChatStatusTest).
  */
 object ChatStatus {
-    enum class Phase { LOADING, THINKING }
+    /** NAVIGATING: the on-device model is driving another app ([com.agent.ultra.agent.OfflineNavigator]);
+     * the chat shows a Stop button while this phase is up. */
+    enum class Phase { LOADING, THINKING, NAVIGATING }
 
-    /** One status episode. Identity matters: [ChatStore.clearStatus] only clears its own. */
-    class Status(val phase: Phase, val sinceMs: Long)
+    /** One status episode. Identity matters: [ChatStore.clearStatus] only clears its own.
+     * [detail] (e.g. "step 3/12") follows the phase text when non-blank. */
+    class Status(val phase: Phase, val sinceMs: Long, val detail: String = "")
 
     /** Elapsed seconds appear only once the wait is noticeable. */
     const val SHOW_SECONDS_AFTER_MS = 3_000L
 
     /** The line to show for [phase] after [elapsedMs]. */
-    fun label(phase: Phase, elapsedMs: Long): String {
-        val base = when (phase) {
+    fun label(phase: Phase, elapsedMs: Long, detail: String = ""): String {
+        val text = when (phase) {
             Phase.LOADING -> "Loading the brain…"
             Phase.THINKING -> "Thinking…"
+            Phase.NAVIGATING -> "Working on the phone…"
         }
+        val base = if (detail.isBlank()) text else "$text ${detail.trim()}"
         return if (elapsedMs >= SHOW_SECONDS_AFTER_MS) "$base ${elapsedMs / 1000} s" else base
     }
 }
