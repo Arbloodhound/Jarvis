@@ -29,6 +29,20 @@ class LocalPromptTest {
         assertEquals(1200, b)   // full DEEP budget survives with an empty history
     }
 
+    @Test fun noThinkMatchesQwenTemplateWithThinkingOff() {
+        val p = LocalPrompt.buildNoThink(" SYS ", " find my notes about the boat \n")
+        assertEquals("<|im_start|>system\nSYS<|im_end|>\n" +
+            "<|im_start|>user\nfind my notes about the boat /no_think<|im_end|>\n" +
+            "<|im_start|>assistant\n<think>\n\n</think>\n\n", p)
+    }
+    @Test fun noThinkClosesTheTraceItOpens() {
+        val p = LocalPrompt.buildNoThink("S", "q")
+        assertTrue(p.endsWith("<think>\n\n</think>\n\n"))
+        assertEquals(1, Regex("<think>").findAll(p).count())
+        assertEquals(1, Regex("</think>").findAll(p).count())
+        assertEquals(1, Regex(LocalPrompt.NO_THINK).findAll(p).count())
+    }
+
     /** After a cloud failure the current question is followed by a note; it must still appear once. */
     @Test fun currentTurnRemovedEvenWhenNotLast() {
         val h = listOf(

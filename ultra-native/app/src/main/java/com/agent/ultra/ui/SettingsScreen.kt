@@ -76,6 +76,17 @@ fun SettingsScreen(
     }
     var downloadError by remember { mutableStateOf<String?>(null) }
 
+    // The memory model (librarian): its own engine, so its own download state, picked up the same way.
+    val librarian = remember { LocalModelEngine.librarian(context) }
+    var libDownloading by remember { mutableStateOf(false) }
+    var libProgress by remember { mutableFloatStateOf(0f) }
+    val libEngineProgress by librarian.downloadProgress.collectAsState()
+    LaunchedEffect(libEngineProgress) {
+        val p = libEngineProgress
+        if (p != null) { libDownloading = true; libProgress = p } else libDownloading = false
+    }
+    var libDownloadError by remember { mutableStateOf<String?>(null) }
+
     androidx.compose.material3.Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -183,10 +194,10 @@ fun SettingsScreen(
         )
 
         // A phone asleep in Doze cuts a background app's network: keep the screen on while the
-        // model downloads (only while this screen shows it).
+        // model downloads (only while this screen shows it). Either model's download counts.
         val view = androidx.compose.ui.platform.LocalView.current
-        DisposableEffect(downloading) {
-            view.keepScreenOn = downloading
+        DisposableEffect(downloading || libDownloading) {
+            view.keepScreenOn = downloading || libDownloading
             onDispose { view.keepScreenOn = false }
         }
         if (downloading) {
@@ -335,7 +346,8 @@ fun SettingsScreen(
                                 statusTick++
                             } }) { Text(if (here) "Use this" else "Download & use") }
                         }
-                        if (here && !current) {
+                        // Not the memory model's file: it may be in use there.
+                        if (here && !current && m.fileName != librarian.modelFileName) {
                             TextButton(onClick = {
                                 java.io.File(context.filesDir, "models/" + m.fileName).delete()
                                 statusTick++
@@ -383,6 +395,111 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             )
+        }
+
+        // ── Memory model (librarian) ──────────────────────────────────
+        SectionTitle("MEMORY MODEL")
+        Text(
+            "A small model that sorts and searches what Jarvis remembers. It runs on this " +
+                "phone next to the model above, and steps aside if the two don't fit in memory together.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        )
+        val libOnDisk = remember(statusTick, libDownloading) { librarian.downloadedFileNames() }
+        val libStatus = remember(statusTick, libDownloading) {
+            when {
+                librarian.loaded ->
+                    "In memory and ready (${librarian.modelFileSizeBytes / 1_048_576} MB)"
+                librarian.modelPresent ->
+                    "Downloaded (${librarian.modelFileSizeBytes / 1_048_576} MB) — loads when needed"
+                else -> "Not downloaded"
+            }
+        }
+        Text(librarian.modelLabel, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            libStatus,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        )
+        if (libDownloading) {
+            LinearProgressIndicator(progress = { libProgress }, modifier = Modifier.fillMaxWidth())
+            Text("Downloading… ${(libProgress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+        }
+        libDownloadError?.let {
+            Text("Download failed: $it", color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (!librarian.modelPresent && !libDownloading) {
+                Button(onClick = {
+                    libDownloading = true; libDownloadError = null; libProgress = 0f
+                    scope.launch {
+                        librarian.downloadModel { p ->
+                            scope.launch(kotlinx.coroutines.Dispatchers.Main) { libProgress = p }
+                        }.onFailure { libDownloadError = it.message }
+                        libDownloading = false
+                    }
+                }) {
+                    val partial = remember(libDownloading) { librarian.partialBytes() }
+                    Text(if (partial > 0) "Continue download (" +
+                        String.format(java.util.Locale.ROOT, "%.1f", partial / 1_073_741_824.0) + " GB done)"
+                        else "Download")
+                }
+            }
+            if (librarian.loaded) {
+                OutlinedButton(onClick = { scope.launch { librarian.unload() } }) { Text("Free memory") }
+            }
+        }
+
+        // Memory model chooser: only the small presets.
+        var showLibModels by remember { mutableStateOf(false) }
+        TextButton(onClick = { showLibModels = !showLibModels }) {
+            Text(if (showLibModels) "Hide memory models" else "Change memory model")
+        }
+        if (showLibModels) {
+            for (m in LocalModelEngine.LIBRARIAN_PRESETS) {
+                val here = m.fileName in libOnDisk
+                val current = m.fileName == librarian.modelFileName
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Text(
+                        m.label + if (current) "  ← in use" else "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (current) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "${m.approxMb} MB  ·  ${if (here) "on this phone" else "not downloaded"}\n${m.note}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (!current) {
+                            OutlinedButton(
+                                enabled = !libDownloading,
+                                onClick = { scope.launch {
+                                    librarian.selectModel(m)
+                                    if (!librarian.modelPresent) {
+                                        libDownloading = true; libDownloadError = null; libProgress = 0f
+                                        scope.launch {
+                                            librarian.downloadModel { p ->
+                                                scope.launch(kotlinx.coroutines.Dispatchers.Main) { libProgress = p }
+                                            }.onFailure { libDownloadError = it.message }
+                                            libDownloading = false
+                                        }
+                                    }
+                                    statusTick++
+                                } }) { Text(if (here) "Use this" else "Download & use") }
+                        }
+                        // Not the main model's file: it may be in use there.
+                        if (here && !current && m.fileName != localEngine.modelFileName) {
+                            TextButton(onClick = {
+                                java.io.File(context.filesDir, "models/" + m.fileName).delete()
+                                statusTick++
+                            }) { Text("Delete file") }
+                        }
+                    }
+                }
+            }
         }
 
         // ── Recipes ───────────────────────────────────────────────────
