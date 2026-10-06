@@ -1,5 +1,29 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## LATEST (session 01K5Mi, 2026-10-06 ~17:00 UTC) — read this first
+- **FEATURE FREEZE** (owner): finish only what's listed here, then deploy. GPU (Vulkan) and the LoRA
+  fine-tune kit are postponed ("another day"); not started, nothing to merge.
+- Branch head `4f7ff10`: two models + librarian + semantic recall + brain memory + HistoryPolicy +
+  two-model fixes/thermal (merged), and release-apk.yml `test_kit` input (test build signed with the
+  REAL key → owner downloads models once; the release later installs over it as an update).
+- **APK for the owner:** Release APK workflow_dispatch on `claude/new-session-t3cy17` with
+  test_kit=true was started ~16:58 (Actions → Release APK, newest run). Artifacts:
+  `app-test-realkey` (install now, has Jarvis Tests) and `app-release` (later, as Update).
+  Owner must UNINSTALL the old test-key Jarvis first (loses only the useless 30B). Earlier trial
+  run 37498543984 failed on an NDK download glitch (before signing) and was re-run once.
+  Do NOT tell the owner to install the test-key debug run 37497677277.
+- **Agent branches to merge (each based on 6544e3e), then rerun Release APK with test_kit=true:**
+  - `claude/cue-taxonomy` @ 53c275a — pushed; observations + hedged psychological "readings",
+    no diagnoses; agent's report wasn't delivered: review the commit message, build, test.
+  - `claude/transcript-cues` — speaker/pause/overlap/rate/loudness tags; was still running.
+  - `claude/offline-navigation` — offline multi-step phone control; was still running.
+  If a branch isn't pushed, its worktree is under `.claude/worktrees/` (may be lost with the container).
+- Thermal: the Pixel slowdown was most likely headroom ≥0.80 → HOT → 2 threads (not status LIGHT);
+  tune WARM_AT/HOT_AT only after a run logs `UltraThermal` + `UltraLlm threads=` lines.
+- Owner then: install `app-test-realkey`, download Qwen3-8B + memory model (Qwen3-1.7B), run Jarvis
+  Tests (hardware, speed, full brain test), Save results, send file; then install `app-release`.
+- Status of everything above: SOURCE-FIXED BUT RUNTIME-UNPROVEN (nothing has run on the Pixel).
+
 Read `CLAUDE.md` (honesty statuses, no drift, no proof-free claims) and the top ~8 entries of
 `DEVLOG.md` first. Repo `Arbloodhound/Jarvis`, app in `ultra-native/`, working branch
 **`claude/new-session-t3cy17`** (draft PR #1 → main; do not merge). Last commit on it: `9411941`.
