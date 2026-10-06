@@ -1,5 +1,22 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## FINAL (session 01BUKa, 2026-10-06 20:40 UTC) — read this first
+- Everything is merged on `claude/new-session-t3cy17` @ e475273: offline navigation, transcript cues
+  (speakers/pauses; speaker tags OFF by default), the Jarvis Tests "Feature check" (button 5; 15 probes,
+  PASS/WARN/FAIL/MISSING + measured scores, summary in Save results). Locally: 1011 tests passed on the
+  cues merge; the feature-check worker reports 1056 tests, 0 failures, plus assembleDebug and
+  compileReleaseKotlin.
+- **Final signed build:** Release APK run 37527886135 (test_kit=true) at
+  https://github.com/Arbloodhound/Jarvis/actions/runs/37527886135. When it's green, give the owner
+  `app-test-realkey` (installs as an Update over run 37499999756's test build). Then:
+  1. Settings → download Qwen3-8B + the memory model.
+  2. Airplane mode on.
+  3. Jarvis Tests → 5 · Feature check.
+  4. Save results and paste the file.
+- Known gap (not fixed): `Disagreement.statedByUser` misses "240 pounds" (needs £/GBP or "pay 240").
+- Feature-check thresholds are first guesses: WER 10/25%, 5 tok/s, pause 1.3–2.3 s, top-3 ≥ 80%.
+  Tune them from the first file.
+
 ## LATEST+1 (session 01BUKa, 2026-10-06 ~20:15 UTC) — read this before "LATEST"
 - `claude/offline-navigation` (ebe2a2a) is MERGED into `claude/new-session-t3cy17` and pushed.
   The local test + assembleDebug run of that merge was in progress.
