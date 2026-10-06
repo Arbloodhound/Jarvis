@@ -3,6 +3,15 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-06 (night) — Pixel test guide replaces the G15 run
+
+Dafarus gets the Pixel 10 Pro sooner than expected, so the G15 run is dropped. New
+`ultra-native/ondevice-brain/PIXEL_TEST_GUIDE.md`: accelerator probe first, the real MoE (IQ2_M,
+IQ2_S fallback with the same keep/fallback rule as the client PDF), Google-free voice, ambient,
+safety, adb log checks, results table. It also replaces the PocketPal check (Pixel_Model_Check.pdf),
+since the real model is now tested in Jarvis itself. G15 guide marked "not needed any more".
+Docs only; nothing on-device proven yet (CANNOT VERIFY FROM CURRENT ARTIFACTS until the Pixel run).
+
 ## 2026-10-06 (later) — Accelerator research + probe, XNNPACK placement, Jarvis's own voice (batch)
 
 **Subsystems:** D (`listen/WakeGate`, `listen/LocalVoice`, `ui/Speaker`), F (debug accelerator probe),

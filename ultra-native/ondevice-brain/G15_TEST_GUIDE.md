@@ -1,5 +1,8 @@
 # Test run on the Moto G15 (before the Pixel)
 
+> **Not needed any more (2026-10-06):** the Pixel is available, so testing goes straight to
+> `PIXEL_TEST_GUIDE.md`. Kept for a future small-phone check.
+
 **What this proves:** the app installs and runs; the offline brain code path works (prompt format,
 thinking budget, hidden `<think>` trace, routing, emoji); ambient listening works ("Hey Jarvis",
 memory, echo guard, turning it off mid-sentence); the CPU speed-ups load (the right engine build
