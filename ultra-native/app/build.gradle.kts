@@ -109,7 +109,11 @@ android {
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.findByName("legacyDebug")
+            // release-apk.yml with test_kit=true: the test build signed with the real key, so the
+            // owner downloads the models once and the release later installs over it as an update.
+            signingConfig = (if (System.getenv("JARVIS_DEBUG_WITH_RELEASE_KEY") == "1")
+                signingConfigs.findByName("release") else null)
+                ?: signingConfigs.findByName("legacyDebug")
                 ?: signingConfigs.findByName("ciTestDebug")
                 ?: signingConfigs.getByName("debug")
         }

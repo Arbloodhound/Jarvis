@@ -9,6 +9,11 @@ name: Release APK
 
 on:
   workflow_dispatch:
+    inputs:
+      test_kit:
+        description: 'Also build the test build (with the Jarvis Tests app) signed with the real key'
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 
@@ -67,7 +72,11 @@ jobs:
 
       - name: Unit tests, then the release build
         working-directory: ultra-native
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleRelease
+        env:
+          JARVIS_DEBUG_WITH_RELEASE_KEY: ${{ inputs.test_kit && '1' || '' }}
+        run: |
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleRelease
+          if [ "$JARVIS_DEBUG_WITH_RELEASE_KEY" = 1 ]; then ./gradlew --no-daemon :app:assembleDebug; fi
 
       - name: Check signature and 16 KB alignment
         run: |
@@ -86,6 +95,15 @@ jobs:
       - name: Check the CPU variants carry their instructions
         run: ANDROID_NDK="$ANDROID_HOME/ndk/27.2.12479018" bash ultra-native/ondevice-brain/check-cpu-variants.sh "$RUNNER_TEMP/apk/lib/arm64-v8a"
 
+      - name: Check the test build is signed with the same key as the release
+        if: inputs.test_kit
+        run: |
+          S="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          A=$("$S" verify --print-certs ultra-native/app/build/outputs/apk/release/app-release.apk | grep 'SHA-256 digest')
+          B=$("$S" verify --print-certs ultra-native/app/build/outputs/apk/debug/app-debug.apk | grep 'SHA-256 digest')
+          echo "$B"
+          [ -n "$A" ] && [ "$A" = "$B" ] || { echo "::error::test build is not signed with the release key"; exit 1; }
+
       - name: Remove the key from the runner
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks" ultra-native/keystore.properties
@@ -94,4 +112,11 @@ jobs:
         with:
           name: app-release
           path: ultra-native/app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.test_kit
+        with:
+          name: app-test-realkey
+          path: ultra-native/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
