@@ -21,6 +21,10 @@ import java.time.ZoneId
  * The small on-device model, as the librarian sees it. [complete] gets a complete prompt
  * (ChatML, see [LibrarianPrompt.build]) and returns the raw generated text. A failure means
  * "couldn't run now" (not loaded, busy, out of memory): the rows are tried again later.
+ *
+ * Must be cancellable: when the screen comes on, the charger comes out or the big brain needs
+ * the cores, the librarian cancels the call and waits for it to return, so a blocking native
+ * generation loop has to check for cancellation (e.g. per token) and stop.
  */
 fun interface SmallModel {
     suspend fun complete(prompt: String, maxTokens: Int): Result<String>
@@ -30,8 +34,8 @@ fun interface SmallModel {
 interface HeardSource {
     /** Up to [limit] rows not yet organised, in stored order. */
     fun unprocessed(limit: Int): List<HeardLine>
-    /** Rows up to and including [id] are done. */
-    fun markProcessed(id: Long)
+    /** Rows up to and including [id] are done; [ts] is the newest ts among them. */
+    fun markProcessed(id: Long, ts: Long)
 }
 
 /** Where notes go; [MemoryNotes] on the phone. */
@@ -92,16 +96,26 @@ object LibrarianRun {
         failures: Failures,
         log: (String) -> Unit = {},
     ): Result {
-        val rows = source.unprocessed(MAX_ROWS)
+        val fetched = source.unprocessed(MAX_ROWS + 1)   // one extra: is there more after this batch?
+        val rows = fetched.take(MAX_ROWS)
         val cutoff = now() - MIN_AGE_MS
         val ready = rows.takeWhile { it.ts <= cutoff }
-        val chunks = LibrarianChunker.chunks(ready)
+        var chunks = LibrarianChunker.chunks(ready)
+        // The row after the last ready one (too young, or past the batch) continues the same
+        // conversation: hold the last chunk back so a plan and its time aren't split. Never hold
+        // back the only chunk of a full batch (it would never move).
+        val next = fetched.getOrNull(ready.size)
+        if (next != null && chunks.isNotEmpty() &&
+            next.ts - chunks.last().last().ts <= LibrarianChunker.MAX_GAP_MS &&
+            (next.ts > cutoff || chunks.size > 1)
+        ) chunks = chunks.dropLast(1)
         var done = 0; var added = 0; var merged = 0; var rejected = 0; var skipped = 0
         var stop = Stop.DONE
         for (chunk in chunks) {
             if (done + skipped >= MAX_CHUNKS) { stop = Stop.CAP; break }
             if (!keepGoing()) { stop = Stop.GATE; break }
             val last = chunk.maxOf { it.id }
+            val lastTs = chunk.maxOf { it.ts }
             val out = try {
                 model.complete(LibrarianPrompt.build(chunk, zone), LibrarianPrompt.MAX_TOKENS)
             } catch (e: CancellationException) {
@@ -109,22 +123,27 @@ object LibrarianRun {
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }
+            // Cancelled mid-call (screen on, charger out, brain busy, service stopped) is not a
+            // model failure, even when the model turned it into Result.failure (runCatching):
+            // the rows stay queued and nothing counts towards skipping them. A model's own
+            // timeout while we are still active does count.
+            currentCoroutineContext().ensureActive()
             val text = out.getOrNull()
             if (text == null) {
                 val n = failures.failed(chunk.first().id)
                 log("model failed on rows ${chunk.first().id}..$last ($n/$MAX_FAILURES): ${out.exceptionOrNull()?.message}")
                 if (n < MAX_FAILURES) { stop = Stop.MODEL_FAILED; break }
                 failures.clear()
-                source.markProcessed(last); skipped++
+                source.markProcessed(last, lastTs); skipped++
                 continue
             }
             failures.clear()
             val parsed = NoteParser.parse(text)
             val (a, m) = file(parsed.notes, chunk, store, zone, now())
             added += a; merged += m; rejected += parsed.rejected
-            source.markProcessed(last); done++
+            source.markProcessed(last, lastTs); done++
         }
-        val more = stop == Stop.CAP || (stop == Stop.DONE && rows.size >= MAX_ROWS && ready.size == rows.size)
+        val more = stop == Stop.CAP || (stop == Stop.DONE && fetched.size > MAX_ROWS && ready.size == rows.size)
         return Result(done, added, merged, rejected, skipped, stop, more)
     }
 
@@ -218,12 +237,8 @@ object Librarian {
         val m = model ?: return false
         val mem = AmbientMemory.get(ctx)
         val source = object : HeardSource {
-            override fun unprocessed(limit: Int): List<HeardLine> {
-                var mark = mem.librarianMark
-                if (mark > mem.maxRowId()) { mark = 0L; mem.librarianMark = 0L }   // rows were renumbered
-                return mem.heardAfter(mark, limit)
-            }
-            override fun markProcessed(id: Long) { mem.librarianMark = id }
+            override fun unprocessed(limit: Int): List<HeardLine> = mem.librarianQueue(limit)
+            override fun markProcessed(id: Long, ts: Long) = mem.markLibrarian(id, ts)
         }
         val result = coroutineScope {
             val work = async {

@@ -36,6 +36,14 @@ class TimeResolverTest {
         assertEquals(at(20), point("tonight at 8", at(14)))
     }
 
+    @Test fun nightSmallHoursAreAfterMidnight() {
+        assertEquals(at(1, day = 7), point("tonight at 1", at(22)))
+        assertEquals(at(2, day = 7), point("2am tonight", at(22)))
+        assertEquals(at(3), point("last night at 3", at(14)))           // early hours of today
+        assertEquals(at(2, day = 10), point("Friday night at 2", at(14)))   // Sat 10th
+        assertEquals(at(23), point("tonight at 11", at(14)))
+    }
+
     @Test fun weekdays() {
         val fri = TimeResolver.resolve("next Friday", at(14), zone)!!
         assertEquals(at(0, day = 9), fri.start)

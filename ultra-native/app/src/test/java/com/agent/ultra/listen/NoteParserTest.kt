@@ -53,14 +53,19 @@ class NoteParserTest {
             """
             {"kind":"weather","text":"It is sunny"}
             {"kind":"fact","text":""}
-            {"kind":"fact","text":"bad when","when":5}
             {"kind":"fact" "text":"no comma"}
             {kind:"fact",text:"unquoted keys"}
             {"kind":"plan","text":"Cut off by the token li
             """.trimIndent()
         )
         assertTrue(r.notes.isEmpty())
-        assertEquals(6, r.rejected)
+        assertEquals(5, r.rejected)
+    }
+
+    @Test fun aNonStringWhenKeepsTheNoteWithoutATime() {
+        val r = NoteParser.parse("{\"kind\":\"todo\",\"text\":\"Call Sam\",\"when\":3}")
+        assertEquals(listOf(NoteDraft(NoteKind.TODO, "Call Sam", null)), r.notes)
+        assertEquals(0, r.rejected)
     }
 
     @Test fun kindSynonymsAndCase() {

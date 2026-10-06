@@ -17,7 +17,8 @@ import java.util.Locale
  *
  * Rules (each a guess a person would make; all tested):
  *  - a bare hour without am/pm: 1–7 → afternoon/evening, 8–11 → morning, 12 → noon; a part of
- *    day ("tonight", "in the morning") decides instead when present;
+ *    day ("tonight", "in the morning") decides instead when present; at night 1–4 are the small
+ *    hours, after midnight of that night ("tonight at 1" → tomorrow 01:00);
  *  - a time with no day that is more than an hour in the past → the next day ("at 9" said at 22:00);
  *  - a weekday ("Friday", "this Friday", "next Friday", "on Friday") → the next such day after
  *    today (today's own name → a week ahead); "last Friday" → the most recent one before today;
@@ -99,6 +100,8 @@ object TimeResolver {
         }
 
         if (time != null) {
+            // "tonight at 1", "last night at 3", "Friday night at 2": after midnight of that night
+            if (part == Part.NIGHT && date != null && time.hour < 5) date = date.plusDays(1)
             var at = (date ?: today).atTime(time)
             if (!dayExplicit && at.isBefore(anchor.minusHours(1))) at = at.plusDays(1)
             return point(at, zone)
@@ -181,7 +184,8 @@ object TimeResolver {
         val pm = when (meridiem) {
             "am" -> false
             "pm" -> true
-            else -> part?.pm ?: (h12 in 1..7)
+            // "tonight at 1" / "at 2 at night": the small hours, not the afternoon
+            else -> if (part == Part.NIGHT && h12 in 1..4) false else part?.pm ?: (h12 in 1..7)
         }
         return when {
             h12 == 12 -> if (meridiem == "am") 0 else 12

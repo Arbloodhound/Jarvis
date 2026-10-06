@@ -72,7 +72,7 @@ object NoteParser {
         val whenEl = o["when"] ?: o["time"]
         val whenPhrase = when (whenEl) {
             null, JsonNull -> null
-            else -> string(whenEl) ?: return null
+            else -> string(whenEl)   // a number or object: keep the note, just without a time
         }?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) && !it.equals("none", true) }
         return NoteDraft(kind, text, whenPhrase)
     }

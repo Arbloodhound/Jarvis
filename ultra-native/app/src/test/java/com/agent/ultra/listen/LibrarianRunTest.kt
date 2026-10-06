@@ -1,5 +1,6 @@
 package com.agent.ultra.listen
 
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,7 +22,7 @@ class LibrarianRunTest {
     private class Queue(var rows: List<HeardLine>) : HeardSource {
         var mark = 0L
         override fun unprocessed(limit: Int) = rows.filter { it.id > mark }.take(limit)
-        override fun markProcessed(id: Long) { mark = id }
+        override fun markProcessed(id: Long, ts: Long) { mark = id }
     }
 
     /** Stands in for MemoryNotes: candidates = same kind sharing a word, like the FTS lookup. */
@@ -124,6 +125,36 @@ class LibrarianRunTest {
         val r = run(q, Shelf(), model, now = at(18, 20))
         assertEquals(1, r.chunks)
         assertEquals(3L, q.mark)
+    }
+
+    @Test fun aConversationStillGoingOnIsNotCutAtTheAgeCutoff() = runTest {
+        // 18:00..18:02 is old enough at 18:12 but 18:03 is not, and it continues the same talk
+        val rows = evening.take(3) + HeardLine(4, at(18, 3), "at the Main Street clinic")
+        val q = Queue(rows)
+        val model = FakeModel(emptyMap())
+        val r = run(q, Shelf(), model, now = at(18, 12))
+        assertEquals(0, r.chunks)
+        assertEquals(0L, q.mark)
+        assertTrue(model.prompts.isEmpty())
+        // once it has all aged, the whole conversation goes in one chunk
+        assertEquals(1, run(q, Shelf(), model, now = at(18, 14)).chunks)
+        assertTrue(model.prompts.single().contains("Main Street clinic"))
+        assertEquals(4L, q.mark)
+    }
+
+    @Test fun aCancelledCallIsNotAFailure() = runTest {
+        val q = Queue(evening)
+        val failures = LibrarianRun.Failures()
+        // a runCatching-style model turns cancellation into Result.failure
+        val model = SmallModel { _, _ -> runCatching { kotlinx.coroutines.awaitCancellation() } }
+        repeat(4) {
+            val job = launch { run(q, Shelf(), model, at(20), failures) }
+            testScheduler.runCurrent()
+            job.cancel()                          // the watcher: screen came on
+            job.join()
+        }
+        assertEquals(0L, q.mark)                  // never skipped
+        assertEquals(1, failures.failed(1L))      // and nothing was counted
     }
 
     @Test fun modelFailureLeavesRowsQueuedThenSkipsAfterThree() = runTest {
