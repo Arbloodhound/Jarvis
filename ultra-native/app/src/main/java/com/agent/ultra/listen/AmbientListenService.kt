@@ -425,6 +425,8 @@ class AmbientListenService : Service() {
         com.agent.ultra.agent.Brain(
             applicationContext, com.agent.ultra.local.LocalModelEngine.shared(applicationContext)
         ).also { b ->
+            // Spoken: no "Answer now" button, so keep thinking short.
+            b.maxThinkingDepth = com.agent.ultra.agent.WaitBudget.Depth.QUICK
             b.onAnswer = { text ->
                 // Same echo guard as VoiceActivity: mute while speaking, bounded.
                 mutedUntil = System.currentTimeMillis() + EchoGuard.muteMsFor(text)

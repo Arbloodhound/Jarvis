@@ -301,6 +301,32 @@ fun SettingsScreen(
             }
         }
 
+        run {
+            var depth by remember { mutableStateOf(UltraPrefs.thinkingDepth(context)) }
+            Text("Thinking depth", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                when (depth) {
+                    com.agent.ultra.agent.WaitBudget.Depth.QUICK ->
+                        "Quick: thinks up to about 20 seconds (a minute when you ask it to explain)."
+                    com.agent.ultra.agent.WaitBudget.Depth.BALANCED ->
+                        "Balanced: thinks up to about 45 seconds (2 minutes when you ask it to explain)."
+                    com.agent.ultra.agent.WaitBudget.Depth.DEEP ->
+                        "Deep: thinks up to about 3 minutes (5 when you ask it to explain), even when the phone is warm."
+                } + " Commands, greetings and spoken questions stay quick. While it thinks, \"Answer now\" " +
+                    "under the chat stops the thinking.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (d in com.agent.ultra.agent.WaitBudget.Depth.values()) {
+                    val name = d.name.lowercase().replaceFirstChar { it.uppercase() }
+                    val pick = { depth = d; UltraPrefs.setThinkingDepth(context, d) }
+                    if (d == depth) Button(onClick = pick) { Text(name) }
+                    else OutlinedButton(onClick = pick) { Text(name) }
+                }
+            }
+        }
+
         // Model chooser
         var showModels by remember { mutableStateOf(false) }
         var customUrl by remember { mutableStateOf("") }
@@ -316,6 +342,9 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
+            LocalModelEngine.fasterThinkerHint(localEngine.modelFileName)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
             for (m in LocalModelEngine.PRESETS) {
                 val here = m.fileName in onDisk
                 val current = m.fileName == localEngine.modelFileName

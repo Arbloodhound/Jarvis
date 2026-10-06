@@ -57,6 +57,18 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_RESIDENT, on).apply()
     }
 
+    private const val K_THINKING_DEPTH = "thinking_depth"
+
+    /** How long the on-device brain may think before answering (WaitBudget.Depth).
+     * BALANCED by default. */
+    fun thinkingDepth(context: Context): com.agent.ultra.agent.WaitBudget.Depth =
+        com.agent.ultra.agent.WaitBudget.depthOf(
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(K_THINKING_DEPTH, null))
+
+    fun setThinkingDepth(context: Context, depth: com.agent.ultra.agent.WaitBudget.Depth) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(K_THINKING_DEPTH, depth.name).apply()
+    }
+
     private const val K_SKIP_CONFIRM = "skip_confirm_when_asked"
 
     /** Don't show the "are you sure?" card for a commitment the person asked for in their own

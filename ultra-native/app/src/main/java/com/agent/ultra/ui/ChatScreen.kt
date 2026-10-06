@@ -443,6 +443,13 @@ fun ChatScreen(
             if (status?.phase == ChatStatus.Phase.NAVIGATING) {
                 TextButton(onClick = { com.agent.ultra.agent.OfflineNavigator.stopActive() }) { Text("Stop") }
             }
+            // While the on-device model thinks silently (up to minutes at Thinking depth: Deep):
+            // end the thinking and get the answer from what it has so far. Not while "Thinking…"
+            // only covers a memory search: there is no trace to end yet. (The trace is set active
+            // just before its THINKING status, so this recomposition already sees it.)
+            if (status?.phase == ChatStatus.Phase.THINKING && com.agent.ultra.agent.Brain.thinkingActive) {
+                TextButton(onClick = { com.agent.ultra.agent.Brain.answerNow() }) { Text("Answer now") }
+            }
             Button(
                 enabled = !thinking,
                 onClick = {

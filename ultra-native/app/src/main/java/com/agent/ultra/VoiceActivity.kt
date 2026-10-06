@@ -84,6 +84,8 @@ class VoiceActivity : ComponentActivity() {
                 val engine = remember { LocalModelEngine.shared(applicationContext) }
                 val brain = remember {
                     Brain(applicationContext, engine).also { b ->
+                        // Spoken: no "Answer now" button, so keep thinking short.
+                        b.maxThinkingDepth = com.agent.ultra.agent.WaitBudget.Depth.QUICK
                         b.onAnswer = { text ->
                             reply = text
                             state = "speaking"

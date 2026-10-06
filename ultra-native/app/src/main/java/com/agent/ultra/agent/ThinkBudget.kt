@@ -30,6 +30,16 @@ class ThinkBudget(
     var thinkTokens = 0; private set
     var forced = false; private set
 
+    /** Set from another thread (the chat's "Answer now" button); read on the generate thread. */
+    @Volatile private var answerNowRequested = false
+
+    /**
+     * End the trace at the next thinking token, the same way the budget does (wrap-up +
+     * close tag injected), so a long Deep trace can be cut short and still give an answer.
+     * No effect once the trace is over. Thread-safe.
+     */
+    fun answerNow() { answerNowRequested = true }
+
     private val carry = StringBuilder()   // holds text that might be the start of a tag
     private var skipNewlines = false      // drop the blank line(s) right after a trace ends
 
@@ -51,7 +61,7 @@ class ThinkBudget(
                 if (!countedThisToken) { thinkTokens++; countedThisToken = true }
                 // drop trace text, but keep a possible partial "</think>" at the tail
                 keepTail(CLOSE.length - 1)
-                if (!forced && thinkTokens >= budgetTokens) {
+                if (!forced && (thinkTokens >= budgetTokens || answerNowRequested)) {
                     forced = true
                     inject = (if (budgetTokens > 0) wrapUp else "") + CLOSE + "\n\n"
                     // the injected close tag ends the trace from the engine's view

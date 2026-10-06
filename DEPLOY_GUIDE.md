@@ -26,7 +26,7 @@ You need: the Pixel, Wi‑Fi, a charger, and about 1½ hours the first time (mos
 Stay on Wi‑Fi and keep the phone plugged in for this part.
 
 ### 2a. The two brains
-1. Jarvis → ⚙ **Settings** → **ON-DEVICE MODEL** → **Change model** → **Qwen3-8B (Q4_K_S)** → **Download & use**. About 4.8 GB.
+1. Jarvis → ⚙ **Settings** → **ON-DEVICE MODEL** → **Change model** → **Qwen3-4B Thinking 2507 (Q4_0)** → **Download & use**. About 2.4 GB. It's faster than the 8B and scores higher on Qwen's reasoning tests. (Already have the 8B? Pick the 4B anyway; the 8B stays on the phone.)
 2. Same screen, **MEMORY MODEL** → pick **Qwen3 1.7B (Q4_0)** → **Download**. About 1 GB.
 3. Wait until both say they're downloaded. Don't close Jarvis while they download.
 
