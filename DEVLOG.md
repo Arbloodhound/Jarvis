@@ -3,6 +3,30 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-06 (night, latest) — No-laptop path: on-phone "Jarvis Tests" + Colab key notebook
+
+Dafarus is on a Chromebook with no adb; Colab can't reach a USB phone (it runs on Google's
+servers). So everything now runs on the Pixel itself:
+- Debug-only `bench/TestKitActivity` ("Jarvis Tests" launcher icon, src/debug): phone info,
+  1 hardware check (calls the accel probe in-process via new `AccelProbeReceiver.runNow`; without
+  adb there are no NNAPI service names, so the TPU line can only say "unknown" — the per-model
+  timings still show whether an accelerator ran), 2 brain test (11 questions through the real chat
+  brain via ChatStore, incl. a long paste; per-question tok/s from the app's own logcat; `<think>`
+  leak check; keep / try-IQ2_S verdict), 3 speed sweep (`BenchReceiver.runNow`), 4 save results to
+  Downloads (MediaStore) + share sheet. Results also appended to filesDir/kit-results.txt.
+- Pure `bench/KitReport` (gen-line parser incl. comma decimals, verdict rule, logcat -T format,
+  crash check) + 15 JVM tests.
+- `ondevice-brain/Make_Release_Key_Colab.ipynb`: makes the release keystore + base64 in Colab
+  (cells run locally here: 4096-bit key + key.txt produced).
+- Fixed: tools/ask.sh, suite.sh, uitap.sh, androidworld_agent.py still looked for the pre-rename
+  "Ask Agent Ultra…" box (would fail to find the chat input).
+- START_HERE.md rewritten phone-only (install from the phone's browser, Jarvis Tests, voice checks,
+  upload results, Colab key, Releases-UI tag).
+
+**Status:** 658 unit tests, 0 failures; assembleDebug passes; TestKitActivity only in the debug
+merged manifest. On-device: SOURCE-FIXED BUT RUNTIME-UNPROVEN (logcat -T epoch form, MediaStore
+save, brain test through ChatStore all untested on a phone).
+
 ## 2026-10-06 (night, later) — START_HERE.md handheld guide; version 2.6.0
 
 Dafarus asked whether everything discussed is in and fully optimized, and for a no-thinking

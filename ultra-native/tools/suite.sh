@@ -16,7 +16,7 @@ send_task() {
   adb shell am start -n $APP/.MainActivity > /dev/null 2>&1
   sleep 3
   adb logcat -c
-  bash "$(dirname "$0")/uitap.sh" "Ask Agent Ultra…" || { echo "[$name] input field not found"; return 1; }
+  bash "$(dirname "$0")/uitap.sh" "Ask Jarvis…" || { echo "[$name] input field not found"; return 1; }
   sleep 1
   adb shell input text "$adbtext"
   sleep 1

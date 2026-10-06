@@ -1,6 +1,6 @@
 #!/bin/bash
 # Tap a UI element by its exact text. Retries the dump until found.
-# Usage: uitap.sh "Ask Agent Ultra…"
+# Usage: uitap.sh "Ask Jarvis…"
 TEXT="$1"
 for i in $(seq 1 10); do
   adb shell uiautomator dump /sdcard/_ui.xml > /dev/null 2>&1

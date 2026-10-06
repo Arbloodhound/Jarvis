@@ -60,7 +60,7 @@ class BenchReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun logTopology() {
+    internal fun logTopology() {
         val maxKHz = File("/sys/devices/system/cpu").listFiles().orEmpty()
             .mapNotNull { dir ->
                 val id = BenchReport.cpuIdOf(dir.name) ?: return@mapNotNull null
@@ -81,7 +81,7 @@ class BenchReceiver : BroadcastReceiver() {
         Log.i(TAG, "allowed process=$proc thread=$thread cpuset=$cpuset")
     }
 
-    private suspend fun bench(context: Context, threads: List<Int>, tokens: Int) {
+    internal suspend fun bench(context: Context, threads: List<Int>, tokens: Int) {
         val engine = LocalModelEngine.shared(context)
         // Load before timing anything: the first generate would otherwise count the load.
         if (!engine.ensureLoaded()) {
@@ -144,6 +144,26 @@ class BenchReceiver : BroadcastReceiver() {
     private fun readOrNull(f: File): String? = try { f.readText() } catch (_: Exception) { null }
 
     companion object {
+        /** The default sweep run from inside the app (TestKitActivity), for phones with no adb.
+         *  Suspends until done; logs exactly what the broadcast does. False when already running. */
+        suspend fun runNow(context: Context): Boolean {
+            if (!running.compareAndSet(false, true)) return false
+            try {
+                val threads = BenchReport.threadCounts(0)
+                val tokens = BenchReport.tokens(0)
+                Log.i(TAG, "start threads=$threads tokens=$tokens runs=${BenchReport.RUNS} (in-app)")
+                val r = BenchReceiver()
+                r.logTopology()
+                r.bench(context.applicationContext, threads, tokens)
+            } catch (t: Throwable) {
+                Log.e(TAG, "error: ${t.javaClass.simpleName}: ${t.message}", t)
+                Log.i(TAG, "done status=error")
+            } finally {
+                running.set(false)
+            }
+            return true
+        }
+
         private const val TAG = "UltraBench"
         private val running = AtomicBoolean(false)
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

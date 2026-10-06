@@ -27,6 +27,19 @@
                 <action android:name="com.agent.ultra.ACCEL_PROBE"/>
             </intent-filter>
         </receiver>
+        <!-- "Jarvis Tests": the same probe, benchmark and a 10-question brain test run from
+             the phone itself, for testers with no adb. Its own launcher icon, debug only. -->
+        <activity
+            android:name="com.agent.ultra.bench.TestKitActivity"
+            android:exported="true"
+            android:label="Jarvis Tests"
+            android:taskAffinity="com.agent.ultra.tests"
+            android:theme="@style/Theme.AgentUltra">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
         <uses-native-library android:name="libOpenCL.so" android:required="false"/>
     </application>
 </manifest>

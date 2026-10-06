@@ -11,7 +11,7 @@ DIR="$(dirname "$0")"
 adb shell am start -n $APP/.MainActivity > /dev/null 2>&1
 sleep 3
 adb logcat -c
-bash "$DIR/uitap.sh" "Ask Agent Ultra…" || { echo "[ask] input field not found" >&2; exit 1; }
+bash "$DIR/uitap.sh" "Ask Jarvis…" || { echo "[ask] input field not found" >&2; exit 1; }
 sleep 1
 # Quote-safe. An apostrophe in the task used to reach `adb shell input text`
 # unescaped, which failed with "no closing quote" and produced no log at all —

@@ -35,7 +35,7 @@ from android_world.agents import base_agent
 
 PKG = "com.agent.ultra"
 DONE = "UltraBrain: RUN COMPLETE"
-HINT = "Ask Agent Ultra"
+HINT = "Ask Jarvis"
 
 
 class UltraAgent(base_agent.EnvironmentInteractingAgent):

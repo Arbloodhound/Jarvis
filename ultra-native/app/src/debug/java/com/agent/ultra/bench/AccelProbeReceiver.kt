@@ -70,7 +70,7 @@ class AccelProbeReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun probe(context: Context, hal: List<String>?, halComplete: Boolean) {
+    internal fun probe(context: Context, hal: List<String>?, halComplete: Boolean) {
         // --- SoC and CPU
         val soc = if (Build.VERSION.SDK_INT >= 31) "${Build.SOC_MANUFACTURER} ${Build.SOC_MODEL}" else "n/a (API ${Build.VERSION.SDK_INT})"
         Log.i(TAG, "soc=$soc hardware=${Build.HARDWARE} board=${Build.BOARD} device=${Build.DEVICE} api=${Build.VERSION.SDK_INT}")
@@ -197,6 +197,27 @@ class AccelProbeReceiver : BroadcastReceiver() {
     private inline fun <T> safe(block: () -> T): T? = try { block() } catch (_: Throwable) { null }
 
     companion object {
+        /**
+         * The same probe run from inside the app (TestKitActivity), for phones with no adb.
+         * Blocking: call it off the main thread. Without the script there are no NNAPI service
+         * names, so the TPU verdict can only say "unknown"; the per-model timings still show
+         * whether an accelerator ran. False when a probe is already running.
+         */
+        fun runNow(context: Context): Boolean {
+            if (!running.compareAndSet(false, true)) return false
+            try {
+                Log.i(TAG, "start hal=not-given complete=false (in-app)")
+                AccelProbeReceiver().probe(context.applicationContext, null, false)
+                Log.i(TAG, "done status=ok")
+            } catch (t: Throwable) {
+                Log.e(TAG, "error: ${AccelReport.shortError(t)}", t)
+                Log.i(TAG, "done status=error")
+            } finally {
+                running.set(false)
+            }
+            return true
+        }
+
         private const val TAG = "UltraAccel"
         private const val WARMUP = 3
         private const val TIMED = 10
