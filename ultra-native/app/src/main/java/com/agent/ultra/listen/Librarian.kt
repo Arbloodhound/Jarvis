@@ -7,6 +7,7 @@ import android.os.BatteryManager
 import android.os.PowerManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -183,7 +184,8 @@ object Librarian {
         val ctx = context.applicationContext
         synchronized(this) {
             if (job?.isActive == true) return
-            job = scope.launch {
+            // IO: every check and run does SQLite work (the service scope is Dispatchers.Default)
+            job = scope.launch(Dispatchers.IO) {
                 delay(FIRST_CHECK_MS)
                 while (true) {
                     val more = try {
@@ -200,16 +202,13 @@ object Librarian {
         }
     }
 
+    /** [mayRun] on the live state, cheapest checks first and short-circuited: the usual answer
+     *  (no model, not charging, screen on) costs no engine lookup. */
     fun allowed(ctx: Context): Boolean {
-        val pm = ctx.getSystemService(PowerManager::class.java)
-        return mayRun(
-            enabled = AmbientConfig(ctx).organiseMemory,
-            hasModel = model != null,
-            charging = charging(ctx),
-            screenOn = pm?.isInteractive ?: true,
-            brainBusy = brainBusy?.invoke()
-                ?: com.agent.ultra.local.LocalModelEngine.shared(ctx).busy.value,
-        )
+        if (model == null || !AmbientConfig(ctx).organiseMemory || !charging(ctx)) return false
+        if (ctx.getSystemService(PowerManager::class.java)?.isInteractive != false) return false
+        val busy = brainBusy?.invoke() ?: com.agent.ultra.local.LocalModelEngine.shared(ctx).busy.value
+        return mayRun(enabled = true, hasModel = true, charging = true, screenOn = false, brainBusy = busy)
     }
 
     /** One run if allowed; returns whether more rows are waiting. Stopped mid-call (cancelled)

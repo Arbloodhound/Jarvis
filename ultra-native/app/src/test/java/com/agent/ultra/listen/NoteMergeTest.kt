@@ -82,4 +82,24 @@ class NoteMergeTest {
         assertEquals(NoteHit("Sam is Anna's brother", 5, "person"),
             MemoryNotes.hit(Note(2, NoteKind.PERSON, "Sam is Anna's brother", null, null, 5, listOf(1), 5, 5), zone))
     }
+
+    @Test fun timeWindowMatchesHeardOrAbout() {
+        val fact = note("Sam likes tea", NoteKind.FACT, heard = 50)
+        assertTrue(MemoryNotes.inWindow(fact, null, null))
+        assertTrue(MemoryNotes.inWindow(fact, 50, 60))      // from inclusive
+        assertFalse(MemoryNotes.inWindow(fact, 0, 50))      // to exclusive
+        // heard at 50, about 200..300: found by either window
+        val plan = Note(1, NoteKind.PLAN, "Dentist", 200, 300, 50, listOf(1), 50, 50)
+        assertTrue(MemoryNotes.inWindow(plan, 40, 60))
+        assertTrue(MemoryNotes.inWindow(plan, 250, 260))    // inside the span
+        assertTrue(MemoryNotes.inWindow(plan, 300, 400))    // touches the end
+        assertFalse(MemoryNotes.inWindow(plan, 301, 400))
+        assertFalse(MemoryNotes.inWindow(plan, 100, 200))   // ends where the span starts
+        assertTrue(MemoryNotes.inWindow(plan, null, 201))
+        assertFalse(MemoryNotes.inWindow(plan.copy(whenEnd = null), 201, null))   // a clock time is a point
+        assertEquals("1" to emptyList<String>(), MemoryNotes.windowSql(null, null))
+        val (sql, args) = MemoryNotes.windowSql(10, 20)
+        assertEquals(sql.count { it == '?' }, args.size)
+        assertEquals(listOf("10", "20", "20", "10"), args)
+    }
 }

@@ -50,22 +50,33 @@ class MemoryNotes private constructor(ctx: Context) :
     }
 
     /** Best matches for [query] (most query words, then newest); the newest notes when the
-     *  query has no searchable words. */
-    suspend fun search(query: String, limit: Int): List<NoteHit> = withContext(Dispatchers.IO) {
-        if (limit <= 0) return@withContext emptyList()
-        val q = NoteMerge.ftsQuery(query)
-        val found = if (q == null) {
-            notes("SELECT $COLS FROM notes ORDER BY updated_ts DESC LIMIT ?", limit.toString())
-        } else {
-            NoteMerge.rank(query, notes(
-                "SELECT $COLS FROM notes WHERE id IN (SELECT docid FROM notes_fts WHERE notes_fts MATCH ?) " +
-                    "ORDER BY updated_ts DESC LIMIT ?",
-                q, (limit * 5).coerceAtMost(200).toString(),
-            ), limit)
+     *  query has no searchable words. Same as [search] with no time window. */
+    suspend fun search(query: String, limit: Int): List<NoteHit> = search(query, limit, null, null)
+
+    /**
+     * Like [search], limited to notes that touch the window [fromTs, toTs) (epoch ms; null = open
+     * on that side): notes overheard in it, or whose time ([Note.whenTs]..[Note.whenEnd]) overlaps
+     * it. "What did they say yesterday" and "what's on Friday" both find their notes.
+     */
+    suspend fun search(query: String, limit: Int, fromTs: Long?, toTs: Long?): List<NoteHit> =
+        withContext(Dispatchers.IO) {
+            if (limit <= 0) return@withContext emptyList()
+            if (fromTs != null && toTs != null && toTs <= fromTs) return@withContext emptyList()
+            val (window, wArgs) = windowSql(fromTs, toTs)
+            val q = NoteMerge.ftsQuery(query)
+            val found = if (q == null) {
+                notes("SELECT $COLS FROM notes WHERE $window ORDER BY updated_ts DESC LIMIT ?",
+                    *(wArgs + limit.toString()).toTypedArray())
+            } else {
+                NoteMerge.rank(query, notes(
+                    "SELECT $COLS FROM notes WHERE id IN (SELECT docid FROM notes_fts WHERE notes_fts MATCH ?) " +
+                        "AND $window ORDER BY updated_ts DESC LIMIT ?",
+                    *(listOf(q) + wArgs + (limit * 5).coerceAtMost(200).toString()).toTypedArray(),
+                ), limit)
+            }
+            val zone = ZoneId.systemDefault()
+            found.map { hit(it, zone) }
         }
-        val zone = ZoneId.systemDefault()
-        found.map { hit(it, zone) }
-    }
 
     fun count(): Int =
         readableDatabase.rawQuery("SELECT COUNT(*) FROM notes", null).use { it.moveToFirst(); it.getInt(0) }
@@ -115,6 +126,30 @@ class MemoryNotes private constructor(ctx: Context) :
             "CREATE TRIGGER notes_au AFTER UPDATE ON notes BEGIN INSERT INTO notes_fts(docid, text) VALUES(new.id, new.text); END",
             "CREATE TRIGGER notes_ai AFTER INSERT ON notes BEGIN INSERT INTO notes_fts(docid, text) VALUES(new.id, new.text); END",
         )
+
+        /**
+         * The SQL form of [inWindow]: a WHERE clause and its arguments ("1" = no window).
+         * Integers go through CAST because rawQuery binds every argument as text.
+         */
+        fun windowSql(fromTs: Long?, toTs: Long?): Pair<String, List<String>> {
+            if (fromTs == null && toTs == null) return "1" to emptyList()
+            val heard = ArrayList<String>(); val span = ArrayList<String>(); val args = ArrayList<String>()
+            if (fromTs != null) { heard += "heard_ts>=CAST(? AS INTEGER)"; args += fromTs.toString() }
+            if (toTs != null) { heard += "heard_ts<CAST(? AS INTEGER)"; args += toTs.toString() }
+            span += "when_ts IS NOT NULL"
+            if (toTs != null) { span += "when_ts<CAST(? AS INTEGER)"; args += toTs.toString() }
+            if (fromTs != null) { span += "COALESCE(when_end,when_ts)>=CAST(? AS INTEGER)"; args += fromTs.toString() }
+            return "((${heard.joinToString(" AND ")}) OR (${span.joinToString(" AND ")}))" to args
+        }
+
+        /** Does [n] touch [fromTs, toTs)? Heard in it, or its time span overlaps it. Pure, JVM-tested;
+         *  [windowSql] is the same rule in SQL. */
+        fun inWindow(n: Note, fromTs: Long?, toTs: Long?): Boolean {
+            val heard = (fromTs == null || n.heardTs >= fromTs) && (toTs == null || n.heardTs < toTs)
+            val start = n.whenTs ?: return heard
+            val end = n.whenEnd ?: start
+            return heard || ((toTs == null || start < toTs) && (fromTs == null || end >= fromTs))
+        }
 
         /** The hit for one note; see [NoteHit]. Pure. */
         fun hit(n: Note, zone: ZoneId): NoteHit =

@@ -103,6 +103,14 @@ object NoteMerge {
         return if (contain >= CONTAINMENT) maxOf(jaccard, contain) else jaccard
     }
 
+    /** Plain Jaccard of content words: the tie-break when containment makes several candidates 1.0. */
+    private fun jaccard(a: String, b: String): Double {
+        val ta = tokens(a); val tb = tokens(b)
+        if (ta.isEmpty() || tb.isEmpty()) return 0.0
+        val inter = ta.count { it in tb }.toDouble()
+        return inter / (ta.size + tb.size - inter)
+    }
+
     fun similar(a: String, b: String): Boolean = similarity(a, b) >= JACCARD
 
     fun timesCompatible(a: Note, b: Note): Boolean {
@@ -118,7 +126,7 @@ object NoteMerge {
     /** The most similar duplicate of [fresh] among [candidates], or null. */
     fun findDuplicate(fresh: Note, candidates: List<Note>): Note? =
         candidates.filter { it.id != fresh.id && isDuplicate(fresh, it) }
-            .maxByOrNull { similarity(fresh.text, it.text) }
+            .maxWithOrNull(compareBy<Note>({ similarity(fresh.text, it.text) }, { jaccard(fresh.text, it.text) }))
 
     /** [old] absorbs [fresh]; keeps old's id and created time. */
     fun merge(old: Note, fresh: Note, now: Long): Note {
