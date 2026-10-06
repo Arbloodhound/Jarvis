@@ -231,11 +231,44 @@ class LocalModelEngine(private val context: Context) {
      * asked meanwhile simply waits for this same load (ensureLoaded holds one lock).
      */
     fun preloadInBackground(reason: String) {
-        if (loaded || !modelPresent || !LlmNative.available || downloadProgress.value != null) return
+        if (loaded) { warmPageCache(reason); return }
+        if (!modelPresent || !LlmNative.available || downloadProgress.value != null) return
         preloadScope.launch {
             val t0 = System.currentTimeMillis()
             val ok = ensureLoaded()
             android.util.Log.i("UltraLlm", "preload ($reason) ok=$ok in ${System.currentTimeMillis() - t0}ms")
+        }
+    }
+
+    @Volatile private var lastWarmMs = 0L
+
+    /**
+     * Read the whole model file once, sequentially, in the background. The weights are mmap'd, so
+     * their pages ARE the file's page cache: one fast sequential pass puts them in memory, where
+     * otherwise each missing page is a separate slow storage read in the middle of generating.
+     * First Pixel 10 Pro test (2026-10-07): "hi" ran at 1.6 tok/s with 42,299 major page faults
+     * and 8.6 GB free, i.e. the MoE's pages had been dropped and were faulted back in one by one.
+     * Throttled to once per 5 minutes; a pass over an already-cached file is a quick memory copy.
+     */
+    private fun warmPageCache(reason: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastWarmMs < 5 * 60_000L) return
+        lastWarmMs = now
+        val f = modelFile
+        preloadScope.launch {
+            val t0 = System.currentTimeMillis()
+            var n = 0L
+            try {
+                java.io.FileInputStream(f).use { input ->
+                    val buf = ByteArray(4 shl 20)
+                    while (true) { val r = input.read(buf); if (r < 0) break; n += r }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("UltraLlm", "warm ($reason) failed after ${n / 1_048_576} MB: ${e.message}")
+                return@launch
+            }
+            android.util.Log.i("UltraLlm", "warm ($reason) read ${n / 1_048_576} MB in ${System.currentTimeMillis() - t0}ms " +
+                "availMB=${availableRam() / 1_048_576}")
         }
     }
 
@@ -261,6 +294,7 @@ class LocalModelEngine(private val context: Context) {
             android.util.Log.i("UltraLlm", "cpus llm=${topo.llmCpus} whisper=${topo.whisperCpus} threads=${topo.llmThreads}")
             handle = LlmNative.nativeLoad(modelFile.absolutePath, topo.llmThreads, CTX_SIZE, topo.llmCpus.toIntArray())
             android.util.Log.i("UltraLlm", "nativeLoad -> handle=$handle in ${System.currentTimeMillis() - t0}ms")
+            if (handle != 0L) warmPageCache("after load")
             return handle != 0L
         }
     }

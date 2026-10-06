@@ -3,6 +3,21 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (late night) — First Pixel speed number: 1.6 tok/s, 42k major faults → warm the page cache
+
+**Evidence (user, Jarvis Tests quick test, Q1 "hi"):** `1.6 tok/s · 193 tokens · majfaults 42299 ·
+free RAM 8623 MB` with the MoE IQ2_M. PROVEN from that line: during generation the model's pages
+were not resident (42,299 major faults) although 8.6 GB was free — so not a memory shortage; the
+mmap'd weights had been dropped and were read back one page at a time. NOT proven: that faults are
+the whole cause of 1.6 tok/s (IQ2_M CPU kernels, thread count, ambient whisper competing for the big
+cores and thermal state are all still open; Q2/Q3 and the speed sweep will separate them).
+Also: "hi" spends ~160 tokens thinking (LIGHT tier) — at any slow speed that dominates.
+
+**Change:** `warmPageCache()` reads the whole model file sequentially in the background after every
+load and when the app reopens with the model loaded (throttled 5 min). Same file → same page cache
+pages as the mmap. Logs `warm (...) read N MB in X ms availMB=…`. Tests + build pass.
+Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN — next quick test must show majfaults near 0.
+
 ## 2026-10-07 (night) — "Thinking…" status in chat; RAM-based default model (parallel agents)
 
 - Chat status line (5f31a44): "Loading the brain…" during a real load, then "Thinking… N s" until
