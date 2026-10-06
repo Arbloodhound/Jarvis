@@ -23,6 +23,28 @@ class ThermalPolicyTest {
         assertEquals(Level.HOT, lv(0.2f, ThermalPolicy.STATUS_MODERATE))
         assertEquals(Level.CRITICAL, lv(0.97f, ThermalPolicy.STATUS_LIGHT))  // headroom can be worse than status
     }
+
+    /** Pixel 10 Pro: status LIGHT on its own must not cut the LLM's threads. */
+    @Test fun lightStatusAloneSetsNoFloor() {
+        assertEquals(Level.NORMAL, lv(Float.NaN, ThermalPolicy.STATUS_LIGHT))
+        assertEquals(Level.NORMAL, lv(0.3f, ThermalPolicy.STATUS_LIGHT))
+        assertEquals(6, ThermalPolicy.resolveThreads(0, lv(0.3f, ThermalPolicy.STATUS_LIGHT), 6))
+        // leaving a hot spell under LIGHT follows the headroom (and its hysteresis) alone
+        assertEquals(Level.NORMAL, lv(0.5f, ThermalPolicy.STATUS_LIGHT, p = Level.WARM))
+        assertEquals(Level.WARM, lv(0.62f, ThermalPolicy.STATUS_LIGHT, p = Level.WARM))
+    }
+    @Test fun headroomStillRaisesTheLevelUnderLight() {
+        assertEquals(Level.WARM, lv(0.7f, ThermalPolicy.STATUS_LIGHT))
+        assertEquals(Level.HOT, lv(0.85f, ThermalPolicy.STATUS_LIGHT))
+        assertEquals(2, ThermalPolicy.resolveThreads(0, lv(0.85f, ThermalPolicy.STATUS_LIGHT), 6))
+        assertEquals(Level.HOT, lv(0.78f, ThermalPolicy.STATUS_LIGHT, p = Level.HOT))   // hysteresis kept
+    }
+    @Test fun moderateAndAboveStillSetAFloor() {
+        assertEquals(Level.HOT, lv(Float.NaN, ThermalPolicy.STATUS_MODERATE))
+        assertEquals(Level.HOT, lv(0.0f, ThermalPolicy.STATUS_MODERATE, p = Level.NORMAL))
+        assertEquals(Level.CRITICAL, lv(0.0f, ThermalPolicy.STATUS_SEVERE))
+        assertEquals(Level.CRITICAL, lv(Float.NaN, 4))   // CRITICAL / EMERGENCY / SHUTDOWN
+    }
     @Test fun budgets() {
         assertEquals(1200, ThermalPolicy.scaleBudget(1200, Level.NORMAL))
         assertEquals(720, ThermalPolicy.scaleBudget(1200, Level.WARM))

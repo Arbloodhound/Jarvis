@@ -328,10 +328,13 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 // Mapped weights are page cache, which availMem counts as free; they must stay.
                 val otherMapped = if (other == null) 0L else otherMappedBytes(
                     otherLoaded, other.residentLoaded, other.modelFilePath == modelFilePath, other.modelFileSizeBytes)
+                // A resident copy shares no pages with the other engine's mapping, even of the same file.
+                val otherMappedBesideCopy = if (other == null) 0L else otherMappedBytes(
+                    otherLoaded, other.residentLoaded, false, other.modelFileSizeBytes)
                 val avail = availableRam()
                 val need = residentNeedBytes(modelFileName, modelFileSizeBytes, plannedContext())
                 when (loadDecision(role, avail, need, otherLoaded, otherMapped)) {
-                    LoadDecision.LOAD -> return loadBlocking(otherMapped)
+                    LoadDecision.LOAD -> return loadBlocking(otherMappedBesideCopy)
                     LoadDecision.REFUSE -> {
                         android.util.Log.w("UltraLlm", "$role refused: availMB=${avail / MIB} " +
                             "otherMappedMB=${otherMapped / MIB} needMB=${need / MIB} (+${MIN_AVAIL_BYTES / MIB} headroom)")
@@ -405,8 +408,8 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
 
     /**
      * Caller holds [nativeMutex] (it serialises loads of both engines, and against generate/free).
-     * [otherMappedBytes]: the other engine's mapped weights ([otherMappedBytes] in the companion),
-     * which availMem counts as free but which must stay; a resident copy can't use them.
+     * [otherMappedBytes]: the other engine's mapped weights ([otherMappedBytes] in the companion,
+     * same file included), which availMem counts as free but which must stay; a resident copy can't use them.
      */
     private fun loadBlocking(otherMappedBytes: Long = 0L): Boolean {
         if (loaded) return true

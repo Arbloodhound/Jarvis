@@ -26,7 +26,7 @@ object ThermalPolicy {
     private const val CRIT_AT = 0.95f
     private const val HYST = 0.05f
 
-    // android.os.PowerManager.THERMAL_STATUS_* values
+    // android.os.PowerManager.THERMAL_STATUS_* values (LIGHT is named for the tests: it sets no floor)
     const val STATUS_LIGHT = 1
     const val STATUS_MODERATE = 2
     const val STATUS_SEVERE = 3
@@ -41,11 +41,14 @@ object ThermalPolicy {
                 else -> Level.NORMAL
             }
         }
-        // the OS's own status is a floor: if it says we're throttling, we are
+        // The OS's own status is a floor from MODERATE up: there it is throttling, so we are.
+        // LIGHT sets no floor: Android describes it as light throttling with no UI impact, and the
+        // Pixel 10 Pro reported it from the third question of a brain test on. As a WARM floor it
+        // cut the LLM's threads and think budget by itself; the headroom forecast above still
+        // raises the level when the phone is really heating up.
         val fromStatus = when {
             status >= STATUS_SEVERE -> Level.CRITICAL
             status >= STATUS_MODERATE -> Level.HOT
-            status >= STATUS_LIGHT -> Level.WARM
             else -> Level.NORMAL
         }
         return maxOf(fromHeadroom, fromStatus)

@@ -162,6 +162,14 @@ class TwoModelsTest {
             LocalModelEngine.roomBesideOther(avail + librarianBytes, librarianBytes), thinkerBytes))
     }
 
+    /** Same file as the mapped librarian: a resident copy is a second copy, so the mapped pages
+     *  still count against it (only the mapped load shares them, [sameFileIsNotCountedTwice]). */
+    @Test fun residentCopyOfTheSameFileStillCountsTheMappedPages() {
+        val besideCopy = LocalModelEngine.otherMappedBytes(true, false, false, librarianBytes)
+        val avail = librarianBytes + LocalModelEngine.RESIDENT_HEADROOM_BYTES + librarianBytes / 2
+        assertFalse(LocalModelEngine.residentLoad(true, LocalModelEngine.roomBesideOther(avail, besideCopy), librarianBytes))
+    }
+
     /** The load loop needs one round to make the librarian yield and one to load. */
     @Test fun yieldLoopHasRoomForYieldThenLoad() = assertTrue(LocalModelEngine.MAX_YIELD_ROUNDS >= 2)
 }
