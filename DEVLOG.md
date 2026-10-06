@@ -3,6 +3,13 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (later still) — Chat header said "Gemma 3 1B" with the MoE selected
+
+Pixel report: chat screen showed "Gemma 3 1B" while Settings showed Qwen IQ2_M in use. Cause
+(PROVEN in source): `Brain.modelLabel` was hard-coded to "Gemma 3 1B (on-device)" when no cloud
+client is configured. Display only — generation always used the selected file. Now shows the
+selected preset's name. Tests pass, assembleDebug passes.
+
 ## 2026-10-07 (later) — Resumable model download; preload the brain
 
 Dafarus: the 10 GB download is slow; asked to fix resume and speed up loading.

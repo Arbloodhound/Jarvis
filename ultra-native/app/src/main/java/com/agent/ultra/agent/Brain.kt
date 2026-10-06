@@ -70,7 +70,8 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     val configured: Boolean get() = client != null
 
     /** What the model chip shows: the cloud model, or the on-device one. */
-    val modelLabel: String get() = client?.modelName ?: "Gemma 3 1B (on-device)"
+    // Was hard-coded to "Gemma 3 1B" whatever model was selected (seen on the Pixel with the MoE in use).
+    val modelLabel: String get() = client?.modelName ?: "${local.modelLabel.substringBefore(" — ")} (on-device)"
 
     /** Non-null while a confirmable policy-gate block waits on the operator.
      * The chat UI renders a confirm/cancel card from this. */
