@@ -3,6 +3,32 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-08 (night) — Pixel results: the MoE can't stay in memory on this phone → fast-path models
+
+**Evidence (owner's Jarvis Tests file, Pixel 10 Pro XL "mustang", Android 17, 15,081 MB total RAM;
+run on an older build — no `load resident=`/`warm` lines, so the memory fixes were not in it):**
+- Brain test, MoE IQ2_M (file 9,698 MB): 0.4–1.6 tok/s over 11 questions; majfaults 25k–227k per
+  answer the whole way through; availMB steady ~8.45–8.77 GB. Prefill 197 tokens: 25–57 s.
+- PROVEN: available memory (≈8.6 GB, which already counts reclaimable page cache) is smaller than
+  the weights (9.7 GB), so the weights can never all be resident; the steady fault count is the
+  kernel re-reading them. Resident mode would refuse (needs file + 1 GB); warming can't hold 9.7 GB in
+  8.6 GB. => the 30B MoE does not fit this phone's real free memory. Not a tunable.
+- Thermal: from Q3 the policy said HOT (status 1, headroom ~0.8) and ran threads=2; the speed sweep
+  asked for 4/5/6 and also got 2 → that sweep measured nothing about threads (fixed: exactThreads).
+- CPU: 1×3.78 GHz + 5×3.05 GHz + 2×2.25 GHz, i8mm/sve2/bf16; variant ultra_llm_i8mm loaded.
+- Accelerator (PROVEN): NNAPI exposes a device named **google-edgetpu** on Tensor G5 (darwinn HAL,
+  edgetpu libs). It rejects the mel/cls wake models ("cannot run using the current set of target
+  devices"); it accepts emb with identical output but no reliable speed-up (faster once, slower 4×).
+  OpenCL (libOpenCL-pixel) and Vulkan (PowerVR) load. None of this helps the LLM today.
+- Quality notes: offline "turn on the flashlight" gave a fake text answer (old build, before the
+  offline tool path); Q8 leaked "17x23 (391)" from earlier turns; Q11 (long paste) repeated Q10's
+  answer — open, not yet investigated.
+
+**Change:** presets Qwen3-4B Thinking 2507 Q4_0 (~2.4 GB), its abliterated Q4_K_M, and Qwen3-8B Q4_0
+(~4.8 GB) — Qwen3 template/think handling unchanged, Q4_0/Q4_K repacked for i8mm (IQ2 never is);
+URLs unverified (HF blocked here). Default for ≥8 GB phones is now the 4B (was the MoE). MoE preset note
+states the measurement. KV profiles for 4B/8B. Bench uses exact thread counts. 766 tests pass.
+
 ## 2026-10-08 (evening) — Option B: no confirmation card when the person asked for it
 
 Owner chose option B and asked to retry it outside auto mode (accept-edits). Built: pure

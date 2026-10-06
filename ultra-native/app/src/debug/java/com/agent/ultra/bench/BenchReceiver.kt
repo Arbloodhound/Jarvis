@@ -104,7 +104,7 @@ class BenchReceiver : BroadcastReceiver() {
                     val t0 = System.currentTimeMillis()
                     // A different first word each run: a KV cache that reuses a matching
                     // prefix must not skip the prompt the measurement is timing.
-                    val result = engine.generate("Run $seq. $PROMPT", maxTokens = tokens, threads = n) {
+                    val result = engine.generate("Run $seq. $PROMPT", maxTokens = tokens, threads = n, exactThreads = true) {
                         val now = System.currentTimeMillis()
                         if (first < 0) first = now
                         last = now

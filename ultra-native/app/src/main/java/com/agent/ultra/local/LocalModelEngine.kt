@@ -374,6 +374,9 @@ class LocalModelEngine(private val context: Context) {
         maxTokens: Int,
         thinkBudget: com.agent.ultra.agent.ThinkBudget? = null,
         threads: Int = 0,
+        /** Benchmark only: run exactly [threads] (capped at the loaded count), ignoring the thermal
+         *  policy. The Pixel speed sweep asked for 4/5/6 and every run got 2 (policy said HOT). */
+        exactThreads: Boolean = false,
         onStart: () -> Unit = {},
         onToken: (String) -> Unit = {},
     ): Result<String> = withContext(Dispatchers.IO) {
@@ -391,7 +394,8 @@ class LocalModelEngine(private val context: Context) {
             val sb = StringBuilder()
             val t0 = System.currentTimeMillis()
             val faults0 = PageFaults.read()
-            val nThreads = ThermalPolicy.resolveThreads(threads, ThermalGuard.level, baseThreads())
+            val nThreads = if (exactThreads && threads > 0) minOf(threads, baseThreads())
+                else ThermalPolicy.resolveThreads(threads, ThermalGuard.level, baseThreads())
             onStart()
             // Decode speed: time from the first sampled token to the last, so prompt prefill
             // (which grows with history) doesn't drag the estimate down.
@@ -505,6 +509,8 @@ class LocalModelEngine(private val context: Context) {
         private val KV_PROFILES = listOf(
             "qwen3moe" to KvProfile(48, 4, 128, 151_936),      // Qwen3-30B-A3B, all MoE presets + fine-tunes
             "qwen3-1.7b" to KvProfile(28, 8, 128, 151_936),
+            "qwen3-4b" to KvProfile(36, 8, 128, 151_936),           // Qwen3-4B (2507 thinking, abliterated)
+            "qwen3-8b" to KvProfile(36, 8, 128, 151_936),
             "gemma3-1b" to KvProfile(26, 1, 256, 262_144),
             "llama32-1b" to KvProfile(16, 8, 64, 128_256),
             "qwen25-15b" to KvProfile(28, 2, 128, 151_936),
@@ -603,6 +609,30 @@ class LocalModelEngine(private val context: Context) {
          * mmap'd, but the KV cache and the rest of the app still need room.
          */
         val PRESETS = listOf(
+            // Fast-path models (2026-10-08). Measured on the Pixel 10 Pro: the 9.7 GB MoE ran at
+            // 0.4–1.6 tok/s because only ~8.6 GB is ever available there, so its pages are read
+            // back from storage continuously (25k–227k major faults per answer). Q4_0 / Q4_K are
+            // repacked at load for i8mm (llama.cpp repack.cpp); IQ2 never is. Same Qwen3 chat
+            // template and <think> handling as the MoE ("qwen3-" file names). URLs NOT checked
+            // from the build machine (Hugging Face is blocked there).
+            ModelChoice(
+                "Qwen3-4B Thinking 2507 (Q4_0) — fast thinker, best fit for 16 GB",
+                "https://huggingface.co/unsloth/Qwen3-4B-Thinking-2507-GGUF/resolve/main/Qwen3-4B-Thinking-2507-Q4_0.gguf",
+                "qwen3-4b-thinking-2507-q4_0.gguf", 2400,
+                "Reasoning model small enough to stay fully in memory with room to spare, on the phone CPU's fast path. Strong maths/reasoning for its size and good at tool calls.",
+            ),
+            ModelChoice(
+                "Qwen3-4B Thinking 2507 ABLITERATED (Q4_K_M)",
+                "https://huggingface.co/mradermacher/Huihui-Qwen3-4B-Thinking-2507-abliterated-GGUF/resolve/main/Huihui-Qwen3-4B-Thinking-2507-abliterated.Q4_K_M.gguf",
+                "qwen3-4b-thinking-2507-abliterated-q4km.gguf", 2500,
+                "The same 4B with refusals removed. If the download fails, the file name upstream differs — use the plain 4B above.",
+            ),
+            ModelChoice(
+                "Qwen3-8B (Q4_0) — stronger, still on the fast path",
+                "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_0.gguf",
+                "qwen3-8b-q4_0.gguf", 4800,
+                "Twice the 4B's size: better answers, roughly half its speed. Fits in memory on a 16 GB phone.",
+            ),
             // The fine-tune from Qwen3_30B_A3B_LoRA_Colab.ipynb (its REPO / OUT_M / OUT_S). These 404
             // until that notebook has run and uploaded. Own file names, so a phone holding the stock
             // MoE still fetches these (the app knows a model by its file name).
@@ -622,7 +652,7 @@ class LocalModelEngine(private val context: Context) {
                 "Qwen3-30B-A3B Thinking ABLITERATED (IQ2_M) — on-device MoE",
                 "https://huggingface.co/mradermacher/Huihui-Qwen3-30B-A3B-Thinking-2507-abliterated-i1-GGUF/resolve/main/Huihui-Qwen3-30B-A3B-Thinking-2507-abliterated.i1-IQ2_M.gguf",
                 "qwen3moe-abliterated-iq2m.gguf", 10240,
-                "Stock abliterated MoE (no fine-tune). 30B total / 3B active, best reasoning that fits 16GB. ~10.2GB → ~1.6GB free in an assistant-only setup. Cap context at 4k. Your fine-tune is the \"Jarvis fine-tune\" entry.",
+                "Strongest reasoning, but too big to stay in memory on a 16 GB Pixel: measured 0.4–1.6 words/s there (only ~8.6 GB is free, the file is 9.7 GB). Needs a phone with more free memory.",
             ),
             ModelChoice(
                 "Qwen3-30B-A3B Thinking ABLITERATED (IQ2_S) — roomier fallback",
@@ -789,23 +819,27 @@ class LocalModelEngine(private val context: Context) {
          *  It is what any phone gets unless [defaultFor] shows the MoE fits. */
         val DEFAULT = PRESETS.first { it.fileName == "gemma3-1b-q4km.gguf" }
 
-        /** The MoE a phone with room for it defaults to: the stock abliterated IQ2_M. */
+        /** The abliterated MoE IQ2_M (kept for reference / ContextSizeTest; no longer a default). */
         val MOE_DEFAULT = PRESETS.first { it.fileName == "qwen3moe-abliterated-iq2m.gguf" }
+
+        /** What a phone with room for it defaults to: Qwen3-4B Thinking 2507 Q4_0. */
+        val FAST_DEFAULT = PRESETS.first { it.fileName == "qwen3-4b-thinking-2507-q4_0.gguf" }
 
         /**
          * The model used before the user has chosen one. Pure, JVM-tested (DefaultModelTest).
          *
-         * The MoE IQ2_M where [fitFor] says it fits this RAM (a 16 GB phone: TIGHT); everywhere
+         * Qwen3-4B Thinking Q4_0 where [fitFor] says it fits this RAM (8 GB and up); everywhere
          * else, and when RAM is unknown (<= 0, where fitFor answers COMFORTABLE for anything),
          * the small Gemma. Only names the model — nothing is downloaded; the user still presses
          * Download in Settings. A choice the user made (prefs set) always wins over this.
          *
          * [downloaded] (file names in models/): an install from before this default existed
-         * downloaded Gemma without saving any prefs. If Gemma is on disk and the MoE is not,
+         * downloaded Gemma without saving any prefs. If Gemma is on disk and the 4B is not,
          * stay on Gemma, so an update never points a working install at a missing 10 GB file.
          */
         fun defaultFor(totalRamBytes: Long, downloaded: Set<String> = emptySet()): ModelChoice {
-            val byRam = if (totalRamBytes > 0 && fitFor(MOE_DEFAULT, totalRamBytes) != Fit.TOO_BIG) MOE_DEFAULT
+            // Not the MoE any more: on the 16 GB Pixel it can't stay in memory (see PRESETS).
+            val byRam = if (totalRamBytes > 0 && fitFor(FAST_DEFAULT, totalRamBytes) != Fit.TOO_BIG) FAST_DEFAULT
                 else DEFAULT
             return if (byRam.fileName !in downloaded && DEFAULT.fileName in downloaded) DEFAULT else byRam
         }
