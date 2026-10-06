@@ -21,6 +21,34 @@ You need: the Pixel, Wi‑Fi, a charger, and about 1½ hours the first time (mos
 
 ---
 
+## Updates in one tap with Obtainium
+
+Set this up once and you never do the zip / Extract / tap-the-APK dance again. Every time a **Release APK** build with the test kit finishes, GitHub publishes it as its own pre-release, named like **v2.6.42-test**, with two plain .apk files (not zipped): **jarvis-test.apk** (with the Jarvis Tests app) and **jarvis-release.apk**. The newest 5 are kept. Obtainium watches for them and offers the update.
+
+**1. Install Obtainium** (no Google needed): from **F-Droid**, or download the APK from its GitHub releases page (github.com/ImranR98/Obtainium/releases).
+
+**2. Make a read-only key for this one repo** (skip steps 2 and 3 if you've already pasted a token into Obtainium). The Jarvis repo is private, so Obtainium needs a key to see it. In a browser, signed in to GitHub:
+1. Your picture → **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
+2. Name: `Obtainium`. Expiration: up to a year (put a reminder in your calendar to make a new one).
+3. **Repository access** → **Only select repositories** → **Jarvis**.
+4. **Permissions** → **Repository permissions** → **Contents** → **Read-only**. Leave everything else as it is.
+5. **Generate token** and copy it.
+
+This token can only **read** the Jarvis repo. It cannot change anything, and it cannot see your other repos. If you ever lose the phone, delete the token on that same GitHub page.
+
+**3. Give the key to Obtainium:** Obtainium → **Settings** → **Source-specific** → **GitHub** → paste it into **GitHub personal access token**.
+
+**4. Add Jarvis:** Obtainium → **Add app** → URL `https://github.com/Arbloodhound/Jarvis`, then in the options below it:
+- **Include prereleases**: ON (the test builds are pre-releases).
+- **Filter APKs by regular expression**: `jarvis-test\.apk` (the test build, with the Jarvis Tests app).
+- Tap **Add**.
+
+**After that:** Obtainium notifies you → tap **Update**. Your models and settings stay, because every build is signed with the same key. Each build has a higher version number (2.6.&lt;build number&gt;), so Android always accepts it as an update.
+
+The 14-day build links (Part 1) still work too, if you ever need them.
+
+---
+
 ## Part 2: One-time setup (20–40 min, mostly downloading)
 
 Stay on Wi‑Fi and keep the phone plugged in for this part.
