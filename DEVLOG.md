@@ -3,6 +3,28 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-06 (cloud session 01BUKa) — Pixel results file 0859 read; Q11 "repeat" and Q8 leak traced to history
+
+**Evidence (owner's file Jarvis-results-20261006-0859, Pixel 10 Pro XL, still the 30B MoE IQ2_M):**
+- Second run on the newer build shows `load resident=false` and `warm (after load) read 9698 MB in 7390ms availMB=8561`:
+  the page-cache warm ran, but free memory (8.5–8.9 GB) is still below the 9.7 GB file, so majfaults stay
+  48k–56k per answer and speed is 0.7–1.0 tok/s. PROVEN: same conclusion as before, now on the new build.
+- Thermal: Q2/Q3 ran at level HOT with a think budget of 19 tokens and threads=2. Supports handoff item 5
+  (ThermalPolicy too aggressive).
+- Q11 is NOT a harness artefact and NOT a KV-reuse bug. Q11 generated its own 493 tokens (230 think, forced),
+  and its log says `reused=170 of 2157 prompt tokens`. 170 is only the system prompt, the same as Q10
+  (`reused=170 of 656`). So the model wrote Q10's summary again. PARTIALLY PROVEN cause: the offline prompt
+  carries the last ~3000 chars of unrelated Q&A (`LocalPrompt.build`, `Brain.emitLocal` takeLast(8)); Q10's
+  assistant turn ("Weekend Trip & Mortgage Summary") was the last turn before "summarize this: <paste>", and
+  the IQ2 model copied it. Q8's "17x23 (391)" in a packing list is the same failure: the Q7 answer was in
+  history.
+- Side finding: the history window slides from the front each turn, so prefix reuse only ever keeps the
+  system prompt (170 tokens); Q11 re-read ~2000 tokens. CANNOT VERIFY the speed cost per token from this file.
+
+**Not changed yet.** Proposed: give offline answers history only when the request refers back
+("that", "it", "summarize everything we talked about", follow-ups), and none for a long self-contained paste;
+keep the history block stable between turns so prefix reuse covers it.
+
 ## 2026-10-08 (handoff) — session stopped at the owner's request; see HANDOFF.md
 
 Stopped two background agents (semantic memory search, memory librarian) mid-task; their partial,
