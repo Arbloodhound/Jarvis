@@ -325,6 +325,12 @@ class LocalModelEngine(private val context: Context) {
      */
     private val genMutex = kotlinx.coroutines.sync.Mutex()
 
+    private val decodeSpeed = DecodeSpeed()
+
+    /** Recent decode speed of the model in use (tokens/s, EMA of real generations), or null
+     *  before one has run since load. Read-only; reset on unload and on a model switch. */
+    val decodeTokPerSec: Double? get() = decodeSpeed.tokPerSec(modelFile.name)
+
     /**
      * [thinkBudget] non-null: the reasoning trace is capped, hidden from [onToken] and
      * from the returned text (only the answer comes back). Threads: the thermal policy's
@@ -357,7 +363,14 @@ class LocalModelEngine(private val context: Context) {
             val faults0 = PageFaults.read()
             val nThreads = ThermalPolicy.resolveThreads(threads, ThermalGuard.level, baseThreads())
             onStart()
+            // Decode speed: time from the first sampled token to the last, so prompt prefill
+            // (which grows with history) doesn't drag the estimate down.
+            var pieces = 0
+            var tFirst = 0L
+            var tLast = 0L
             val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, nThreads) { piece ->
+                tLast = System.currentTimeMillis()
+                if (pieces++ == 0) tFirst = tLast
                 if (thinkBudget == null) {
                     sb.append(piece); onToken(piece); null
                 } else {
@@ -373,6 +386,7 @@ class LocalModelEngine(private val context: Context) {
             android.util.Log.i("UltraLlm", "gen tokens=$n ms=$ms tokPerSec=${"%.1f".format(n * 1000.0 / ms)} " +
                 "majfaults=${if (faults0 >= 0 && faults1 >= 0) faults1 - faults0 else -1} " +
                 "availMB=${availableRam() / 1_048_576} model=${modelFile.name} cpu=${LlmNative.variant} threads=$nThreads")
+            if (n >= 0 && pieces > 1) decodeSpeed.observe(modelFile.name, pieces - 1, tLast - tFirst)
             thinkBudget?.let {
                 android.util.Log.d("UltraRoute", "thinkTokens=${it.thinkTokens} forced=${it.forced} budget=${it.budgetTokens}")
             }
@@ -395,6 +409,7 @@ class LocalModelEngine(private val context: Context) {
                 if (handle != 0L) {
                     LlmNative.nativeFree(handle)
                     handle = 0
+                    decodeSpeed.reset()
                 }
             }
         }

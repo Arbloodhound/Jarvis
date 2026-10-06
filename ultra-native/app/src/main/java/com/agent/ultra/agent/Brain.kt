@@ -543,12 +543,14 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 )
                 val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput)
                 val reserve = LocalPrompt.answerReserve(level)
+                val speed = local.decodeTokPerSec
                 val clipped = ThinkBudget.clipToContext(
-                    route.thinkBudget, com.agent.ultra.local.LocalModelEngine.CTX_SIZE,
+                    WaitBudget.budget(route.tier, speed), com.agent.ultra.local.LocalModelEngine.CTX_SIZE,
                     LocalPrompt.estimateTokens(prompt), reserve,
                 )
                 val budget = ThermalPolicy.scaleBudget(clipped, level)
-                android.util.Log.d("UltraRoute", "tier=${route.tier} reason=${route.reason} level=$level budget=$budget")
+                android.util.Log.d("UltraRoute", "tier=${route.tier} reason=${route.reason} level=$level budget=$budget " +
+                    "tierBudget=${route.thinkBudget} tokPerSec=${speed?.let { "%.2f".format(it) } ?: "unknown"}")
                 ThermalPolicy.coolingNote(level, route.tier)?.let { ChatStore.appendTo(msg.id, it + "\n\n") }
                 local.generate(
                     prompt, maxTokens = budget + reserve + 32,

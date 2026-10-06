@@ -7,9 +7,13 @@ package com.agent.ultra.agent
  */
 object IntentRouter {
 
+    /** Token ceilings for the hidden trace; [WaitBudget] lowers them further on a slow phone. */
     enum class Tier(val thinkBudget: Int) {
         DEVICE(64),    // toggles, alarms, timers, open/launch, media, calls — tool call, barely any thought
-        LIGHT(160),    // greetings, chit-chat, short recall
+        // greetings, chit-chat, brevity requests, short recall. Was 160: Pixel "hi" spent ~160 hidden
+        // tokens (~100 s at 1.6 tok/s). A greeting needs ~10-30; 96 (~70 words) still leaves room for
+        // recall ("what did she say about the lease") to locate the fact. WaitBudget caps it by time too.
+        LIGHT(96),
         NORMAL(512),   // default
         DEEP(1200),    // explain/why/derive/debug/compare, risk domains, long input
     }
