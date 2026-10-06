@@ -1,5 +1,23 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## LATEST+1 (session 01BUKa, 2026-10-06 ~20:15 UTC) — read this before "LATEST"
+- `claude/offline-navigation` (ebe2a2a) is MERGED into `claude/new-session-t3cy17` and pushed.
+  The local test + assembleDebug run of that merge was in progress.
+- `claude/transcript-cues`: a worker is finishing the WIP (ce5624c), which needs review, tests and a
+  build. If it isn't pushed, the worktree is at
+  `/tmp/claude-0/-workspace-Jarvis/54f3fe27-91b3-59c8-8eda-5b26d60c8d8d/scratchpad/cues`
+  (lost with the container). Otherwise restart from `origin/claude/transcript-cues-wip`.
+- NEW owner request: "a proper way to test all features, if present and how good they are".
+  A worker is building `claude/feature-check`: a "Feature check" button in Jarvis Tests with a
+  PASS/WARN/FAIL/MISSING line + measured score per feature. It covers native/CPU, thinker quality +
+  the Q8/Q11 regression, librarian notes, memory search hit rate, history policy, cue-taxonomy (no
+  diagnoses), TTS→whisper WER + wake phrase, offline flashlight on/off, safety gates and ambient
+  status. It writes a summary into Save results. The transcript-cue probe is to be added after
+  transcript-cues merges.
+- Then: merge both, run the full build, DEVLOG, push, and trigger **Release APK** (workflow_dispatch,
+  ref `claude/new-session-t3cy17`, test_kit=true). Send the owner the run link (`app-test-realkey` =
+  install as an Update over run 37499999756's test build).
+
 ## LATEST (session 01K5Mi, 2026-10-06 ~17:00 UTC) — read this first
 - **FEATURE FREEZE** (owner): finish only what's listed here, then deploy. GPU (Vulkan) and the LoRA
   fine-tune kit are postponed ("another day"); not started, nothing to merge.
