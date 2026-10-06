@@ -1,6 +1,7 @@
 package com.agent.ultra.listen
 
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -10,26 +11,53 @@ import java.net.URL
  * whisper model, nativeInit returned 0 and the service stopped without a word.
  *
  * Atomic: writes <name>.part, renames on success, so a dropped connection never
- * leaves a truncated model that whisper/ONNX would choke on. Blocking; call off main.
+ * leaves a truncated model that whisper/ONNX would choke on. A dropped connection
+ * keeps the .part and the next call resumes it with a Range request (a server that
+ * ignores Range answers 200 and the file starts over). Blocking; call off main.
  */
 object ModelFetcher {
-    fun ensure(dir: File, name: String, url: String, minBytes: Long = 1_000L): Boolean {
+    /**
+     * True when [dir]/[name] is present. [minBytes]: anything smaller is incomplete.
+     * [exactBytes] (> 0): the published size; a result of any other size is discarded.
+     */
+    fun ensure(dir: File, name: String, url: String, minBytes: Long = 1_000L, exactBytes: Long = -1L): Boolean {
         val dest = File(dir, name)
-        if (dest.exists() && dest.length() >= minBytes) return true
+        if (dest.exists() && complete(dest.length(), minBytes, exactBytes)) return true
         val part = File(dir, "$name.part")
+        if (exactBytes > 0 && part.length() > exactBytes) part.delete()
         return try {
+            val have = if (part.exists()) part.length() else 0L
             val c = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15_000; readTimeout = 30_000; instanceFollowRedirects = true
+                if (have > 0) setRequestProperty("Range", "bytes=$have-")
             }
             try {
-                if (c.responseCode !in 200..299) return false
-                c.inputStream.use { inp -> part.outputStream().use { inp.copyTo(it, 64 * 1024) } }
+                val code = c.responseCode
+                when {
+                    // Already have every byte (only possible with a Range request).
+                    code == 416 && have > 0 && complete(have, minBytes, exactBytes) -> {}
+                    code == 206 && have > 0 ->
+                        c.inputStream.use { inp -> FileOutputStream(part, true).use { inp.copyTo(it, 64 * 1024) } }
+                    code in 200..299 ->
+                        c.inputStream.use { inp -> FileOutputStream(part, false).use { inp.copyTo(it, 64 * 1024) } }
+                    else -> {
+                        if (code == 416) part.delete()   // a .part the server doesn't recognise
+                        return false
+                    }
+                }
             } finally { c.disconnect() }
-            if (part.length() < minBytes) { part.delete(); return false }
+            if (!complete(part.length(), minBytes, exactBytes)) {
+                // Short = keep for the next resume; any other wrong size = bad, start over.
+                if (exactBytes > 0 && part.length() > exactBytes || exactBytes <= 0) part.delete()
+                return false
+            }
             part.renameTo(dest)
         } catch (e: Exception) {
-            android.util.Log.w("UltraAmbient", "fetch $name failed: ${e.message}")
-            part.delete(); false
+            android.util.Log.w("UltraAmbient", "fetch $name failed (kept ${part.length()} B to resume): ${e.message}")
+            false
         }
     }
+
+    internal fun complete(len: Long, minBytes: Long, exactBytes: Long): Boolean =
+        if (exactBytes > 0) len == exactBytes else len >= minBytes
 }

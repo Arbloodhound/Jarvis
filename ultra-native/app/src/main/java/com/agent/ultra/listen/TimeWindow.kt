@@ -78,7 +78,10 @@ data class TimeWindow(val fromMs: Long, val toMs: Long, val phrase: String) {
                 return w(day(first.minusMonths(1)), day(first), "last month")
             }
             if (has("earlier")) return w(now - 3 * 3_600_000L, now, "earlier")
-            WEEKDAY.find(q)?.let { m ->
+            // "next Tuesday" / "this coming Tuesday" is a plan, not when something was heard.
+            WEEKDAY.findAll(q).firstOrNull { m ->
+                !q.substring(0, m.range.first).trimEnd().let { it.endsWith(" next") || it.endsWith(" coming") }
+            }?.let { m ->
                 val dow = DayOfWeek.valueOf(m.groupValues[1].uppercase())
                 // The most recent such day before today ("Monday" said on a Monday = a week ago).
                 val d = today.with(TemporalAdjusters.previous(dow))

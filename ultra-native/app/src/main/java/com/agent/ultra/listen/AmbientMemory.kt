@@ -29,7 +29,7 @@ class AmbientMemory private constructor(ctx: Context) :
         if (o < 2) createVectors(db)
     }
 
-    /** v2: one sentence vector per heard row (same rowid), filled lazily by [MemoryIndexer].
+    /** v2: one sentence vector per heard row (same rowid), filled by [MemoryIndexer].
      * vec is [MemoryVectors.quantize]d (388 bytes); empty = failed to embed, skipped. ts is
      * copied from heard so time windows use an index instead of scanning the FTS table. */
     private fun createVectors(db: SQLiteDatabase) {
@@ -75,14 +75,42 @@ class AmbientMemory private constructor(ctx: Context) :
 
     class Row(val rowid: Long, val ts: Long, val text: String)
 
-    /** Newest heard rows that have no vector yet (the indexer's work list). */
-    fun unembedded(limit: Int): List<Row> = rows(
-        "SELECT h.rowid,h.ts,h.text FROM heard h LEFT JOIN heard_vec v ON v.rowid=h.rowid " +
-            "WHERE v.rowid IS NULL ORDER BY h.rowid DESC LIMIT ?", arrayOf(limit.toString())
+    // ── Vectors (semantic recall) ──────────────────────────────────────────
+
+    /** Heard rows with rowid > [afterRowid], oldest first (the indexer's forward pass). */
+    fun rowsAfter(afterRowid: Long, limit: Int): List<Row> = rows(
+        "SELECT rowid,ts,text FROM heard WHERE rowid>CAST(? AS INTEGER) ORDER BY rowid ASC LIMIT ?",
+        arrayOf(afterRowid.toString(), limit.toString())
     )
+
+    /** The newest [limit] heard rows (recall embeds these inline so just-said lines are found). */
+    fun newest(limit: Int): List<Row> =
+        rows("SELECT rowid,ts,text FROM heard ORDER BY rowid DESC LIMIT ?", arrayOf(limit.toString()))
+
+    fun maxRowid(): Long = readableDatabase.rawQuery("SELECT IFNULL(MAX(rowid),0) FROM heard", null)
+        .use { it.moveToFirst(); it.getLong(0) }
+
+    /** Which of [ids] already have a vector row (including the empty "failed" marker). */
+    fun hasVector(ids: Collection<Long>): Set<Long> {
+        val out = HashSet<Long>()
+        for (chunk in ids.chunked(500)) readableDatabase.rawQuery(
+            "SELECT rowid FROM heard_vec WHERE rowid IN (${chunk.joinToString(",")})", null
+        ).use { c -> while (c.moveToNext()) out += c.getLong(0) }
+        return out
+    }
+
+    fun metaGet(k: String): Long? = readableDatabase.rawQuery("SELECT v FROM meta WHERE k=?", arrayOf(k))
+        .use { if (it.moveToFirst()) it.getLong(0) else null }
+
+    fun metaPut(k: String, v: Long) {
+        writableDatabase.insertWithOnConflict(
+            "meta", null, ContentValues().apply { put("k", k); put("v", v) }, SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
 
     /** Stores [vecs] (same order as [rows]); an empty blob marks a row that failed to embed. */
     fun putVectors(rows: List<Row>, vecs: List<ByteArray>) {
+        require(rows.size == vecs.size)
         val db = writableDatabase
         db.beginTransaction()
         try {
@@ -93,13 +121,15 @@ class AmbientMemory private constructor(ctx: Context) :
         } finally { db.endTransaction() }
     }
 
-    /** Streams stored vectors, newest first: inside [fromMs, toMs) when given, else the newest
-     * [limit]. Brute force is fine at this size (20k × 388 B ≈ 8 MB, one pass). */
-    fun forEachVector(fromMs: Long?, toMs: Long?, limit: Int, each: (rowid: Long, vec: ByteArray) -> Unit) {
-        val (sql, args) = if (fromMs != null && toMs != null)
-            "SELECT rowid,vec FROM heard_vec WHERE ts>=? AND ts<? ORDER BY ts DESC LIMIT ?" to
-                arrayOf(fromMs.toString(), toMs.toString(), limit.toString())
-        else "SELECT rowid,vec FROM heard_vec ORDER BY rowid DESC LIMIT ?" to arrayOf(limit.toString())
+    /** Streams stored, non-empty vectors, newest first, inside [window] when given, at most
+     * [limit] of them (brute force; see [MemoryRecall.SCAN_LIMIT] for the size). heard_vec.ts
+     * is a plain INTEGER column, so bound text args get integer affinity here (no CAST needed). */
+    fun forEachVector(window: TimeWindow?, limit: Int, each: (rowid: Long, vec: ByteArray) -> Unit) {
+        val (sql, args) = if (window != null)
+            "SELECT rowid,vec FROM heard_vec WHERE ts>=? AND ts<? AND length(vec)>0 ORDER BY ts DESC LIMIT ?" to
+                arrayOf(window.fromMs.toString(), window.toMs.toString(), limit.toString())
+        else "SELECT rowid,vec FROM heard_vec WHERE length(vec)>0 ORDER BY rowid DESC LIMIT ?" to
+            arrayOf(limit.toString())
         readableDatabase.rawQuery(sql, args).use { c -> while (c.moveToNext()) each(c.getLong(0), c.getBlob(1)) }
     }
 
@@ -117,10 +147,19 @@ class AmbientMemory private constructor(ctx: Context) :
         return out
     }
 
-    /** FTS [match] (FTS4 query syntax), newest first. */
-    fun keywordRows(match: String, limit: Int): List<Row> =
-        if (match.isBlank()) emptyList()
-        else rows("SELECT rowid,ts,text FROM heard WHERE text MATCH ? ORDER BY ts DESC LIMIT ?", arrayOf(match, limit.toString()))
+    /** FTS [match] (FTS4 query syntax), newest first, inside [window] when given. CAST: see [since]. */
+    fun keywordRows(match: String, window: TimeWindow?, limit: Int): List<Row> = when {
+        match.isBlank() -> emptyList()
+        window == null -> rows(
+            "SELECT rowid,ts,text FROM heard WHERE text MATCH ? ORDER BY ts DESC LIMIT ?",
+            arrayOf(match, limit.toString())
+        )
+        else -> rows(
+            "SELECT rowid,ts,text FROM heard WHERE text MATCH ? AND ts>=CAST(? AS INTEGER) " +
+                "AND ts<CAST(? AS INTEGER) ORDER BY ts DESC LIMIT ?",
+            arrayOf(match, window.fromMs.toString(), window.toMs.toString(), limit.toString())
+        )
+    }
 
     /** Everything heard in [fromMs, toMs), newest first. CAST: see [since]. */
     fun windowRows(fromMs: Long, toMs: Long, limit: Int): List<Row> = rows(
@@ -156,9 +195,13 @@ class AmbientMemory private constructor(ctx: Context) :
     fun wipe() {
         writableDatabase.execSQL("DELETE FROM heard")
         writableDatabase.execSQL("DELETE FROM heard_vec")
+        writableDatabase.execSQL("DELETE FROM meta WHERE k=?", arrayOf(META_VEC_HW))
     }
 
     companion object {
+        /** meta key: every heard row with rowid ≤ this has been offered to the embedder. */
+        const val META_VEC_HW = "vec_hw"
+
         @Volatile private var i: AmbientMemory? = null
         fun get(c: Context) = i ?: synchronized(this) {
             i ?: AmbientMemory(c).also { i = it }
