@@ -3,6 +3,23 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-08 (late) — Librarian + thinker build: two models, semantic recall, notes, history fix (3 parallel agents)
+
+Done (merged into claude/new-session-t3cy17):
+- claude/two-models: second engine `LocalModelEngine.librarian` (Qwen3-1.7B Q4_0, 4096 ctx, 2 threads), shared native mutex, librarian yields to the thinker; Settings "MEMORY MODEL".
+- claude/memory-librarian: `Librarian` turns overheard speech into dated notes (`MemoryNotes`) while charging; wired to the memory model in AmbientListenService. `generate()` now stops when its caller is cancelled.
+- claude/semantic-memory: `MemoryRecall.relevant` (MiniLM int8 vectors + keywords + recency + time window), background `MemoryIndexer` (pauses while either model is busy or the phone is warm), `ambient_recall` tool uses it.
+- claude/brain-memory: `HistoryPolicy` (offline history only when the request refers back; stable window for KV reuse) — the Q8/Q11 copying fix; `MemoryBrief` "What I remember" block for memory-type questions.
+- Wiring in UltraApplication: notes are a recall source; `MemoryBrief.provider` = recall brief. Erase ambient memory also erases notes and vectors.
+- 919 JVM tests pass, assembleDebug OK.
+
+Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN — nothing here has run on the Pixel yet (two-model memory fit, embedder speed/placement, recall quality, Q8/Q11).
+
+Open / next:
+- Owner: install the [apk] build, download Qwen3-8B + memory model in Settings, run Jarvis Tests, save results.
+- MiniLM URL uses resolve/main (not pinned); SQLite paths have no JVM test (no Robolectric).
+- Queued: speaker/pause/overlap tags → conversational-pattern taxonomy (zero-shot ~1 week) → LoRA of the 1.7B last.
+
 ## 2026-10-06 (cloud session 01BUKa) — Pixel results file 0859 read; Q11 "repeat" and Q8 leak traced to history
 
 **Evidence (owner's file Jarvis-results-20261006-0859, Pixel 10 Pro XL, still the 30B MoE IQ2_M):**

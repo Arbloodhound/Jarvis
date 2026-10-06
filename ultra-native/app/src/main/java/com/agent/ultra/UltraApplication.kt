@@ -13,6 +13,7 @@ class UltraApplication : Application() {
         // Pre-tick apps that look like they hold money or credentials, once,
         // before the agent has a chance to read anything.
         try { com.agent.ultra.ui.ProtectedApps.seedIfUnset(this) } catch (_: Exception) {}
+        wireMemory()
         // Foreground service keeps the process alive when backgrounded —
         // on this device class (3.5GB Samsung) backgrounded processes lose
         // their accessibility binding and get reclaimed.
@@ -22,6 +23,20 @@ class UltraApplication : Application() {
             )
         } catch (e: Exception) {
             android.util.Log.w("UltraApp", "background service start failed", e)
+        }
+    }
+
+    /** Memory search covers the librarian's notes too, and the offline brain gets its brief from
+     * it. MemoryBrief adds its own header, so the recall block's header line is dropped here. */
+    private fun wireMemory() {
+        val ctx = applicationContext
+        com.agent.ultra.listen.MemoryRecall.extraSources +=
+            com.agent.ultra.listen.MemoryRecall.textSource("notes") { q, n ->
+                com.agent.ultra.listen.MemoryNotes.get(ctx).search(q, n).map { it.ts to it.text }
+            }
+        com.agent.ultra.agent.MemoryBrief.provider = { q, now ->
+            val r = com.agent.ultra.listen.MemoryRecall
+            r.brief(r.relevant(ctx, q, now)).substringAfter('\n', "").ifBlank { null }
         }
     }
 

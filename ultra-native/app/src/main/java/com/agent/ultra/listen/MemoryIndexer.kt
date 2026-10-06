@@ -65,7 +65,8 @@ object MemoryIndexer {
             mem.metaPut(AmbientMemory.META_VEC_FETCH_FAILS, 0L)
         }
         val emb = SentenceEmbedder.shared(ctx) ?: return 0
-        val busy = com.agent.ultra.local.LocalModelEngine.shared(ctx).busy
+        // either model (thinker or librarian) generating: leave the CPU to it
+        val busy = com.agent.ultra.local.LocalModelEngine.anyBusy
         // Read the generation BEFORE the mark: a wipe in between bumps it and our writes are refused.
         val gen = mem.generation()
         var hw = mem.metaGet(AmbientMemory.META_VEC_HW) ?: 0L
