@@ -3,6 +3,12 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-08 (handoff) — session stopped at the owner's request; see HANDOFF.md
+
+Stopped two background agents (semantic memory search, memory librarian) mid-task; their partial,
+unbuilt code is pushed to `claude/semantic-memory-wip` and `claude/memory-librarian-wip`. HANDOFF.md
+rewritten with the exact state, pending CI runs (4c4ef42, 9411941), and next steps.
+
 ## 2026-10-08 (night) — Pixel results: the MoE can't stay in memory on this phone → fast-path models
 
 **Evidence (owner's Jarvis Tests file, Pixel 10 Pro XL "mustang", Android 17, 15,081 MB total RAM;

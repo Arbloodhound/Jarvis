@@ -1,64 +1,82 @@
-# HANDOFF — Pixel 10 Pro optimization batch (2026-10-05, cloud session)
+# HANDOFF — 2026-10-08, continue exactly from here
 
-Read `CLAUDE.md` (honesty statuses, no drift) and the top of `DEVLOG.md` first. The repo is `arbloodhound/jarvis`, and the app is in `ultra-native/`. There is no phone in the cloud, so everything on-device is **SOURCE-FIXED BUT RUNTIME-UNPROVEN** until `tools/bench.sh` runs on the client's Pixel 10 Pro.
+Read `CLAUDE.md` (honesty statuses, no drift, no proof-free claims) and the top ~8 entries of
+`DEVLOG.md` first. Repo `Arbloodhound/Jarvis`, app in `ultra-native/`, working branch
+**`claude/new-session-t3cy17`** (draft PR #1 → main; do not merge). Last commit on it: `9411941`.
 
-## Branches and PRs
-- **`ccr-3726b695-6kt0de`**: the working branch. PR **#2** (draft) targets `claude/new-session-t3cy17`.
-  - Commit 59e671f fixes the llama.cpp build:
-    - **The problem:** the engine was compiled for plain ARMv8.0, so it had no SDOT, no SMMLA and no weight repacking.
-    - **The fix:** three variants (armv8-a, dotprod, i8mm), with `CpuVariant` picking one at runtime and `check-cpu-variants.sh` in CI.
-    - **Proven:** 556 tests and 0 failures; in the APK, the i8mm `.so` has 995 `sdot` and 260 `smmla` instructions, and the baseline has 0.
-  - Merged locally on top of that and pushed with this handoff: **unit 2** (#3), **unit 1** (#6), **unit 5** (#4), **unit 6** (#5).
-    - Conflicts resolved: `LocalModelEngine.baseThreads()` uses unit 1's version (`CpuTopology.current.llmThreads`); the nativeLoad log line combines unit 1's and unit 5's.
-    - The host harness on the merged shim passes, pinned to CPUs 2-3 (workers stay on 2-3, and the caller is restored afterwards).
-    - **Gradle on this 4-unit merge: PROVEN.** `testDebugUnitTest` 582 tests (556 + 4 + 10 + 5 + 7), 0 failures; `assembleDebug` OK.
-- **Not merged yet:**
-  - **Unit 4**, PR **#7**, branch `ccr-3726b695-6kt0de-u4-kv-prefix-reuse` (4a32d22): KV prompt-prefix reuse plus `top_k(40)`. It edits `nativeGenerate` in `ultra_llm.cpp`, the same function as unit 1's pin/resume/pause, so **expect a conflict**. Keep both:
-    - unit 1's per-call affinity pin and pool resume/pause;
-    - unit 4's `cached` tokens, `seq_rm` and `resetCache`.
-    - Unit 4 notes: differences from a fresh engine are flash-attention float order (proven); set `cparams.swa_full = true` explicitly in nativeLoad for Gemma.
-  - **Unit 3**, PR **#8**, branch `ccr-3726b695-6kt0de-u3-whisper-variants` (63342a1): whisper.cpp built as 3 CPU variants (proven: i8mm whisper .so has 995 sdot / 260 smmla), `WHISPER_ANDROID_HOME` override, `CpuVariant.suffixes/candidates(base)`, `WhisperNative` load loop. Expect conflicts with unit 1 in `WhisperNative.kt` and the whisper section of `CMakeLists.txt`. What it mirrors from commit 59e671f:
-    - `build-whisper-android.sh` builds 3 variants;
-    - CMake builds `ultra_whisper[_dotprod|_i8mm]`;
-    - `WhisperNative` load loop;
-    - `check-cpu-variants.sh` covers the whisper libs too.
-    - **Caution:** unit 1 already changed `WhisperNative.nativeTranscribe` and `ultra_whisper.cpp` (CPU-list pinning), so keep those changes.
+## Who you're working with
+- Dafarus: not a professional programmer; wants plain, short, direct answers, no markdown guide files
+  unless asked ("just tell me"). Swears when frustrated; stay calm and concrete.
+- He tests on a **Pixel 10 Pro XL** (Tensor G5, 15,081 MB total RAM, Android 17, de-Googled intent:
+  avoid Google services). He's on a **Chromebook with no adb**: install = download the `app-debug`
+  artifact on the phone's browser (GitHub Actions run page → Artifacts; "Desktop site" if needed),
+  Files → Extract → tap APK → **Update** (never uninstall: the debug key is now fixed, updates keep
+  the downloaded models). Testing = the debug-only **"Jarvis Tests"** app icon (hardware check, quick
+  3-question brain test, full 11-question test, speed test, Save results → he pastes the file here).
+- Asked for parallel agents for speed (Agent tool, isolation "worktree", background). Workers must
+  `flock /tmp/jarvis-gradle.lock` every Gradle run and use their own scratchpad subfolder.
 
-## What the user asked, and what's left
-1. "**merge them all when they're done and push with [apk]**":
-   - merge #7 and unit 3 into `ccr-3726b695-6kt0de`;
-   - run the full verification below;
-   - add a DEVLOG entry (none written yet for this batch);
-   - commit with `[apk]` in the message and push.
-   - The Debug APK workflow only triggers on `claude/**` branches or `debug-*` tags, so also push a tag such as `git tag debug-pixel-opt && git push origin debug-pixel-opt`. The user was told this plan.
-2. The PRs merge into `ccr-3726b695-6kt0de` (#3–#7); PR #2 merges that into `claude/new-session-t3cy17`. Pushing the merges marks #3–#6 merged automatically.
+## How to build / ship
+- `source ~/android-env.sh && cd ultra-native && flock /tmp/jarvis-gradle.lock ./gradlew -q testDebugUnitTest assembleDebug`
+  (needs `bash ultra-native/ondevice-brain/fetch-sherpa.sh` once). Native compile can exceed 10 min.
+  Last result: 766 unit tests, 0 failures.
+- A CI debug APK builds on push to `claude/**` when the commit message contains `[apk]`
+  (`.github/workflows/debug-apk.yml`, ~18 min). Check runs with `mcp__github__actions_list`
+  (resource_id `debug-apk.yml`) and send him the run URL when `conclusion: success`.
+- **Pending right now:** CI runs for `4c4ef42` and `9411941` (both `[apk]`). `9411941` is the one to
+  give him (verified model links). He has not installed either yet.
+- Commits end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and
+  `Claude-Session: https://claude.ai/code/session_01K5MiduHeAWehbQ3gsEnbHY`. Update DEVLOG.md per session.
+- Hugging Face: shell curl is blocked (proxy), but the **Hugging Face MCP connector** works
+  (`mcp__Hugging_Face__hf_fs` → `ls hf://models/<repo>`) — use it to verify any model URL/size.
 
-## Verify (cloud container)
-- **Android SDK:**
-  - `cmdline-tools` into `~/Android/Sdk`, then `sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "ndk;27.0.12077973"`. `dl.google.com` was reachable this session.
-  - cmake 3.28.3 is on PATH.
-- **Native libs:** `ANDROID_NDK=~/Android/Sdk/ndk/27.2.12479018 bash ultra-native/ondevice-brain/build-llama-android.sh` and `build-whisper-android.sh`.
-- **Build and tests:** `cd ultra-native && echo "sdk.dir=$HOME/Android/Sdk" > local.properties && ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug`. Unit tests counted: 556 base, +4 (u2), +10 (u1), +5 (u5), +7 (u6).
-- **APK checks:** unzip the APK's `lib/arm64-v8a/*`, then run `ondevice-brain/check-cpu-variants.sh <dir>` and the 16 KB `llvm-readelf -lW` loop from `.github/workflows/debug-apk.yml`.
-- **Host JNI harness (no phone needed):**
-  - `ultra-native/tools/host-harness/setup.sh` once;
-  - then `HARNESS_CPUS="2,3" ultra-native/tools/host-harness/run.sh ultra-native/app/src/main/cpp/ultra_llm.cpp`.
-  - It must print `HARNESS PASS`. It compares carried vs fresh engines, a thread change, an inject, and per-thread CPU affinity.
-  - With unit 4 merged, small carried-vs-fresh mismatches can come from flash-attention float order. Unit 4's driver variant is in its PR description.
-- Hugging Face is **blocked** for curl in the cloud. The HF MCP tool works for listing files.
+## Where things stand (honest)
+- **PROVEN on the Pixel (old APK, before the memory fixes):** the Qwen3-30B-A3B IQ2_M MoE (9.7 GB)
+  runs at 0.4–1.6 tok/s because only ~8.6 GB is ever available, so weights are re-read from storage
+  (25k–227k major faults/answer). It cannot fit this phone; not tunable. Thermal policy also dropped
+  to 2 threads (HOT at status 1). NNAPI exposes **"google-edgetpu"** (TPU reachable, no Google
+  services) but it rejected 2 of 3 wake models and gave no speed-up on the third. OpenCL/Vulkan load.
+- **Response (in 4c4ef42/9411941):** new presets, verified on the Hub: Qwen3-4B Thinking 2507 Q4_0
+  (2,375,773,312 B, now the default on ≥8 GB phones), its abliterated Q4_K_M, Qwen3-8B Q4_K_S
+  (4,802,012,992 B). Q4_0/Q4_K are repacked for i8mm by llama.cpp; IQ2 never is. Bench now uses
+  exact thread counts (`exactThreads`).
+- **Built this session, all SOURCE-FIXED BUT RUNTIME-UNPROVEN:** ANR fix (model load off main),
+  resumable download + preload, page-cache warm, resident ("keep whole brain in memory") load,
+  "Loading the brain…/Thinking… N s" chat status, offline tool calls for thinking models
+  (`LocalToolCall`), wait-bounded think budgets (`WaitBudget`/`DecodeSpeed`), ambient yields to the
+  brain (`AmbientBacklog`), context size by RAM (`contextFor`), option B (`DirectRequest`: no
+  confirm card when the user asked for it; money/delete/new recipient/unreadable still ask; Settings
+  switch), Jarvis Tests quick test + Stop + live timer.
+- Release signing: he was given a keystore + password + key.txt (my copies deleted) and told to add 4
+  GitHub secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`=ultra, `KEY_PASSWORD`) and
+  publish a Release with tag `v2.6.0-rc1` targeting this branch to prove `release-apk.yml`. Unknown if done.
+  Don't install the release build on the Pixel yet (different key → reinstall + re-download).
 
-## Client PDF
-`ultra-native/ondevice-brain/client/Pixel_Model_Check.pdf`, made by `make_pdf.py` (reportlab). The steps were checked against PocketPal v1.19.1 source and the HF repo:
-- Settings are global (Settings screen).
-- Memory Mapping must be turned ON (PocketPal's Android default is off).
-- Flash Attention should be set to Auto.
-- The phone is a Pixel 10 Pro (16 GB), stated as fact.
-- It includes the "On speed" caveat.
-
-## Facts established (don't re-research)
-- **GPU and TPU are not usable** for our 30B GGUF:
-  - llama.cpp's OpenCL backend is Adreno-only;
-  - Vulkan on the PowerVR (Tensor G5) gives wrong k-quant output;
-  - the TPU is reachable only via the LiteRT Tensor SDK (Gemma-1B class) or Gemini Nano.
-- **CPU:** 1× X4, 5× A725, 2× A520 (press reports; `bench.sh` confirms on device).
-- **Quant formats:** Q4_0_4_4 is removed from llama.cpp (use Q4_0, which is repacked at load). Q2_K is repacked only on AVX512. IQ2_M is not repacked, but uses SDOT.
+## Next steps, in order
+1. When CI for `9411941` succeeds, send him the link. Ask him to: Update; Settings → ON-DEVICE MODEL →
+   Change model → **Qwen3-4B Thinking 2507 (Q4_0)** → Download; ambient listening OFF, airplane ON;
+   Jarvis Tests → **2 · Quick brain test**, then **3 · Speed test**; also "turn on the flashlight" in
+   chat; Save results and paste. (Optional comparison: same quick test with the 30B on the new build —
+   the log now shows `load resident=…` and `warm …` lines.)
+2. Decide the model setup from the numbers: one 4B for everything, or 8B thinker + Qwen3-1.7B Q4_0
+   (1,056,782,912 B, verified) as fast/librarian model (~6 GB together). The owner wants "fast but the
+   most powerful reasoning possible on this phone".
+3. **Owner-approved architecture to finish** (librarian + thinker): two agents were stopped mid-task
+   at the handoff. Their partial, NOT built/tested code is on:
+   - `claude/semantic-memory-wip` (5d4c929): all-MiniLM-L6-v2 qint8 ONNX embedder
+     (`hf://models/sentence-transformers/all-MiniLM-L6-v2/onnx/model_qint8_arm64.onnx`, 23,026,053 B),
+     WordPiece tokenizer, vector table, time-window parser; try NNAPI/edgetpu placement like WakeGate.
+     Goal: `MemoryRecall.relevant(query)` (semantic + keyword + recency) feeding a short "what I overheard"
+     brief into offline `Brain.emitLocal` and the cloud `ambient_recall` tool.
+   - `claude/memory-librarian-wip` (f745fc7): note parser, merge, time resolver. Goal:
+     `listen/MemoryNotes.kt` store + `Librarian` job that, while charging & idle and the engine isn't
+     busy, turns `heard` rows into dated notes (people/plans/todos/facts) with the small model; Settings
+     switch "Organise memory while charging" + note count. MemoryRecall should search notes as a 2nd source.
+   Re-spawn workers from those branches (or finish yourself), build, review, merge, `[apk]`.
+4. Open quality bugs seen in the Pixel test: an answer leaked "17x23 (391)" from earlier history; the
+   long-paste summary (Q11) repeated the previous answer instead of summarising — investigate
+   history/prompt building in `Brain.emitLocal`/`LocalPrompt` and KV prefix reuse.
+5. Later / optional: GPU (llama.cpp Vulkan on PowerVR) for faster prompt reading — experiment only
+   after the 4B numbers; ThermalPolicy may be too aggressive (HOT at Android status 1); multi-step
+   offline phone navigation (ReActNavigator is cloud-bound; speed is the blocker); fine-tune last;
+   release build at the end.
