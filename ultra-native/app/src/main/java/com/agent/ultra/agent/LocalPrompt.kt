@@ -25,8 +25,11 @@ You are Jarvis, a private assistant running entirely on this phone, offline. You
      * ChatML prompt ending in an opened <think> block, exactly like the model's own
      * template with add_generation_prompt=true. Pass startsInThink=true to ThinkBudget.
      * History turns are stripped of reasoning; oldest are dropped past [historyChars].
+     * A non-blank [memory] ([MemoryBrief]) goes in its own labelled system block after the
+     * history and before the user turn, so the system + history prefix stays the same
+     * whether or not this turn has a brief.
      */
-    fun build(system: String, history: List<Turn>, user: String, historyChars: Int = 3000): String {
+    fun build(system: String, history: List<Turn>, user: String, historyChars: Int = 3000, memory: String? = null): String {
         val kept = ArrayDeque<Turn>(); var used = 0
         for (t in history.asReversed()) {
             val text = if (t.fromUser) t.text.trim() else ThinkBudget.stripForHistory(t.text)
@@ -39,6 +42,10 @@ You are Jarvis, a private assistant running entirely on this phone, offline. You
             for (t in kept) {
                 append("<|im_start|>").append(if (t.fromUser) "user" else "assistant").append('\n')
                 append(t.text).append("<|im_end|>\n")
+            }
+            if (!memory.isNullOrBlank()) {
+                append("<|im_start|>system\n").append(MemoryBrief.HEADER).append('\n')
+                append(MemoryBrief.cap(memory)).append("<|im_end|>\n")
             }
             append("<|im_start|>user\n").append(user.trim()).append("<|im_end|>\n")
             append("<|im_start|>assistant\n<think>\n")
