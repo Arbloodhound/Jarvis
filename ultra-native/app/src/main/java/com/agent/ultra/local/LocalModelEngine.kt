@@ -256,7 +256,7 @@ class LocalModelEngine(private val context: Context) {
         if (now - lastWarmMs < 5 * 60_000L) return
         lastWarmMs = now
         val f = modelFile
-        preloadScope.launch {
+        preloadScope.launch { busyWhile {
             val t0 = System.currentTimeMillis()
             var n = 0L
             try {
@@ -270,7 +270,7 @@ class LocalModelEngine(private val context: Context) {
             }
             android.util.Log.i("UltraLlm", "warm ($reason) read ${n / 1_048_576} MB in ${System.currentTimeMillis() - t0}ms " +
                 "availMB=${availableRam() / 1_048_576}")
-        }
+        } }
     }
 
     /** Bytes of an unfinished download of the selected model (0 = none): "Continue download". */
@@ -283,7 +283,7 @@ class LocalModelEngine(private val context: Context) {
             android.util.Log.w("UltraLlm", "model file missing: ${modelFile.absolutePath}")
             return false
         }
-        synchronized(lock) {
+        synchronized(lock) { busyWhile {
             if (handle != 0L) return true
             val avail = availableRam()
             if (avail > 0 && avail < MIN_AVAIL_BYTES) {
@@ -303,7 +303,7 @@ class LocalModelEngine(private val context: Context) {
             // A resident copy can't be dropped, so only the mapped mode needs the page cache warmed.
             if (handle != 0L && !resident) warmPageCache("after load")
             return handle != 0L
-        }
+        } }
     }
 
     /**
@@ -331,6 +331,18 @@ class LocalModelEngine(private val context: Context) {
      *  before one has run since load. Read-only; reset on unload and on a model switch. */
     val decodeTokPerSec: Double? get() = decodeSpeed.tokPerSec(modelFile.name)
 
+    /** True while a generation holds [genMutex], a load runs or the page cache is warmed. Ambient
+     * listening watches it and holds whisper back meanwhile: both want the same big cores and
+     * memory bandwidth (Pixel 10 Pro ANR dumps). */
+    val busy: kotlinx.coroutines.flow.StateFlow<Boolean> get() = busyFlow
+    private val busyFlow = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private var busyCount = 0                       // guarded by busyFlow; load nests in generate
+
+    private inline fun <T> busyWhile(block: () -> T): T {
+        synchronized(busyFlow) { busyFlow.value = ++busyCount > 0 }
+        try { return block() } finally { synchronized(busyFlow) { busyFlow.value = --busyCount > 0 } }
+    }
+
     /**
      * [thinkBudget] non-null: the reasoning trace is capped, hidden from [onToken] and
      * from the returned text (only the answer comes back). Threads: the thermal policy's
@@ -347,7 +359,7 @@ class LocalModelEngine(private val context: Context) {
         onStart: () -> Unit = {},
         onToken: (String) -> Unit = {},
     ): Result<String> = withContext(Dispatchers.IO) {
-        genMutex.withLock {
+        genMutex.withLock { busyWhile {
             if (!ensureLoaded()) return@withLock Result.failure(
                 IllegalStateException("on-device model not available")
             )
@@ -392,7 +404,7 @@ class LocalModelEngine(private val context: Context) {
             }
             if (n < 0) Result.failure(IllegalStateException("native generate failed ($n)"))
             else Result.success(sb.toString())
-        }
+        } }
     }
 
     /**
