@@ -6,7 +6,7 @@
   PASS/WARN/FAIL/MISSING + measured scores, summary in Save results). Locally: 1011 tests passed on the
   cues merge; the feature-check worker reports 1056 tests, 0 failures, plus assembleDebug and
   compileReleaseKotlin.
-- **Final signed build:** Release APK run 37527886135 (test_kit=true) at
+- **Final signed build: SUCCEEDED 21:08 UTC** (artifacts app-test-realkey 47.7 MB, app-release 35.2 MB; expire 2026-10-20). Release APK run 37527886135 (test_kit=true) at
   https://github.com/Arbloodhound/Jarvis/actions/runs/37527886135. When it's green, give the owner
   `app-test-realkey` (installs as an Update over run 37499999756's test build). Then:
   1. Settings → download Qwen3-8B + the memory model.
