@@ -21,19 +21,35 @@ import java.nio.LongBuffer
 class SentenceEmbedder private constructor(model: File, vocab: File) {
     private val env = OrtEnvironment.getEnvironment()
     private val tokenizer = WordPiece(vocab.readLines(), MAX_LEN)
-    private val session: OrtSession
-    private val inputs: Set<String>
+    private val modelFile = model
+    @Volatile private var session: OrtSession
     var placement = ""; private set
 
     init {
         session = placed(model)
-        inputs = session.inputNames
     }
 
-    /** One normalised 384-d vector per text. */
+    /** One normalised 384-d vector per text. An accelerator session that fails at run time
+     * (e.g. NNAPI refusing a new input shape) is replaced by a plain CPU session once. */
     fun embed(texts: List<String>): List<FloatArray> {
         if (texts.isEmpty()) return emptyList()
-        return run(session, texts.map { tokenizer.encode(it) })
+        val encoded = texts.map { tokenizer.encode(it) }
+        val s = session
+        return try {
+            run(s, encoded)
+        } catch (e: Exception) {
+            if (placement == "cpu") throw e
+            android.util.Log.w(TAG, "embedder $placement failed at run time (${e.message}); cpu from now on")
+            val cpu = synchronized(this) {
+                if (session === s) {
+                    session = cpuSession(modelFile)
+                    placement = "cpu"
+                    runCatching { s.close() }
+                }
+                session
+            }
+            run(cpu, encoded)
+        }
     }
 
     fun embed(text: String): FloatArray = embed(listOf(text)).first()
@@ -72,9 +88,7 @@ class SentenceEmbedder private constructor(model: File, vocab: File) {
     }
 
     private fun placed(file: File): OrtSession {
-        val cpu = OrtSession.SessionOptions().use { o ->
-            o.setIntraOpNumThreads(THREADS); env.createSession(file.absolutePath, o)
-        }
+        val cpu = cpuSession(file)
         val sessions = LinkedHashMap<String, OrtSession>()
         candidate(file, "xnnpack") {
             setIntraOpNumThreads(1)
@@ -114,6 +128,10 @@ class SentenceEmbedder private constructor(model: File, vocab: File) {
         return sessions[choice]?.also { runCatching { cpu.close() } } ?: cpu
     }
 
+    private fun cpuSession(file: File): OrtSession = OrtSession.SessionOptions().use { o ->
+        o.setIntraOpNumThreads(THREADS); env.createSession(file.absolutePath, o)
+    }
+
     private fun candidate(file: File, name: String, setup: OrtSession.SessionOptions.() -> Unit): OrtSession? =
         try {
             OrtSession.SessionOptions().use { o -> o.setup(); env.createSession(file.absolutePath, o) }
@@ -141,14 +159,15 @@ class SentenceEmbedder private constructor(model: File, vocab: File) {
         private const val HUB = "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/"
         const val MODEL_URL = HUB + "onnx/model_qint8_arm64.onnx"
         const val VOCAB_URL = HUB + "vocab.txt"
-        private const val MODEL_BYTES = 23_026_053L
-        private const val VOCAB_BYTES = 231_508L
+        // Sizes checked on the Hub (hf_fs stat, 2026-10-06).
+        const val MODEL_BYTES = 23_026_053L
+        const val VOCAB_BYTES = 231_508L
 
         /** Downloads the model + vocab once (blocking, ~23 MB). True when both are present. */
         fun fetch(ctx: Context): Boolean {
             val dir = ctx.applicationContext.filesDir
-            return ModelFetcher.ensure(dir, VOCAB, VOCAB_URL, VOCAB_BYTES) &&
-                ModelFetcher.ensure(dir, MODEL, MODEL_URL, MODEL_BYTES)
+            return ModelFetcher.ensure(dir, VOCAB, VOCAB_URL, exactBytes = VOCAB_BYTES) &&
+                ModelFetcher.ensure(dir, MODEL, MODEL_URL, exactBytes = MODEL_BYTES)
         }
 
         @Volatile private var shared: SentenceEmbedder? = null
@@ -161,7 +180,7 @@ class SentenceEmbedder private constructor(model: File, vocab: File) {
             if (failed) return null
             val dir = ctx.applicationContext.filesDir
             val m = File(dir, MODEL); val v = File(dir, VOCAB)
-            if (m.length() < MODEL_BYTES || v.length() < VOCAB_BYTES) return null
+            if (m.length() != MODEL_BYTES || v.length() != VOCAB_BYTES) return null
             return synchronized(this) {
                 shared ?: try {
                     SentenceEmbedder(m, v).also {
