@@ -53,6 +53,20 @@ fun MemorySettings(context: Context) {
         }
         Switch(checked = on, onCheckedChange = { on = it; cfg.organiseMemory = it })
     }
+    var patterns by remember { mutableStateOf(cfg.notePatterns) }
+    var readings by remember { mutableStateOf(cfg.patternReadings) }
+    SubSwitch(
+        title = "Note conversation patterns",
+        detail = "Also notes how people talk: promises, hedging, topic changes, interruptions, " +
+            "agreement, pauses. Each note quotes the exact words and time. Observations only, never judgements.",
+        checked = patterns, enabled = on,
+    ) { patterns = it; cfg.notePatterns = it }
+    SubSwitch(
+        title = "Add possible psychological readings",
+        detail = "Adds a hedged possible reading to some observations (e.g. \"may suggest deflection\"), " +
+            "with a confidence and another explanation. A guess from a small model, not a fact or a diagnosis.",
+        checked = readings, enabled = on && patterns, indent = 32,
+    ) { readings = it; cfg.patternReadings = it }
     OutlinedButton(
         onClick = {
             scope.launch {
@@ -67,4 +81,25 @@ fun MemorySettings(context: Context) {
         },
         modifier = Modifier.padding(top = 8.dp),
     ) { Text("Erase notes") }
+}
+
+/** An indented switch that only means something while its parent switch is on. */
+@Composable
+private fun SubSwitch(
+    title: String, detail: String, checked: Boolean, enabled: Boolean, indent: Int = 16,
+    onChange: (Boolean) -> Unit,
+) {
+    val alpha = if (enabled) 1f else 0.5f
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = indent.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
+            Text(detail, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f * alpha))
+        }
+        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
+    }
 }

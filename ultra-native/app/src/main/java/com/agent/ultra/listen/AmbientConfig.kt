@@ -31,6 +31,18 @@ class AmbientConfig(context: Context) {
         get() = p.getBoolean("organise_memory", true)
         set(v) = p.edit().putBoolean("organise_memory", v).apply()
 
+    /** The librarian also notes observable conversation patterns (hedging, commitments, ...)
+     *  with verbatim quotes. Only used while [organiseMemory] is on. */
+    var notePatterns: Boolean
+        get() = p.getBoolean("note_patterns", true)
+        set(v) = p.edit().putBoolean("note_patterns", v).apply()
+
+    /** Observations may get a hedged possible psychological reading (second short pass). Only
+     *  used while [notePatterns] is on. */
+    var patternReadings: Boolean
+        get() = p.getBoolean("pattern_readings", true)
+        set(v) = p.edit().putBoolean("pattern_readings", v).apply()
+
     companion object {
         // Audio
         const val SAMPLE_RATE = 16_000

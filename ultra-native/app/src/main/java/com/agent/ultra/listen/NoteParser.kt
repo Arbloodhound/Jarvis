@@ -7,8 +7,9 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-/** A note as the model wrote it, before its time words are resolved. */
-data class NoteDraft(val kind: NoteKind, val text: String, val whenPhrase: String?)
+/** A note as the model wrote it, before its time words are resolved. [obs] is set (and only
+ *  set) for [NoteKind.OBSERVATION]; its quotes are already verified against the transcript. */
+data class NoteDraft(val kind: NoteKind, val text: String, val whenPhrase: String?, val obs: Observation? = null)
 
 /**
  * Tolerant parser for the librarian's "one JSON object per line" output. Pure, JVM-tested.
@@ -19,6 +20,32 @@ data class NoteDraft(val kind: NoteKind, val text: String, val whenPhrase: Strin
  * object that doesn't parse strictly, has an unknown kind, an empty or over-long text, or
  * wrong-typed fields, and a line cut off mid-object (the token limit). At most [MAX_NOTES]
  * notes per chunk.
+ *
+ * NOTE FORMAT (one JSON object per line; the contract for the zero-shot prompt and for any
+ * fine-tuned librarian):
+ *
+ *   {"kind":"plan|todo|person|fact","text":"<one sentence>","when":"<time words as spoken, optional>"}
+ *   {"kind":"observation","pattern":"<CuePattern id>","who":"<speaker label or name>",
+ *    "quote":"<words copied from one transcript line>" | ["<quote>", ... up to 3],
+ *    "confidence":"low|med|high","text":"<neutral one-sentence summary>",
+ *    "reading":{"id":"<ReadingId id>","hedge":"may suggest|could be|might reflect",
+ *               "confidence":"low|med|high","alt":"<one alternative explanation>"}}
+ *   ("reading" is optional.)
+ *
+ * The zero-shot pipeline asks for "reading" in a second pass ([ReadingPrompt]) whose lines are
+ * the reading object plus "obs":<1-based observation number>; [parseReadings] reads those.
+ *
+ * An observation is REJECTED when: the pattern isn't a [CuePattern] id; who/confidence/text is
+ * missing; any quote is not found verbatim (tags, case, punctuation and spacing aside) in one
+ * source line ([CueText.quoteIn]); the quoted lines name speakers and none of them is its "who"
+ * (untagged and [Unknown] lines name no one); or its text/who contains a verdict word
+ * ([CueText.VERDICT_WORDS]: diagnoses, personality labels, honesty claims) or an
+ * intent/mental-state claim ([CueText.INTENT_WORDS]). Only the verified quotes are exempt
+ * (they are what was said). A note of any other kind with a verdict word is rejected too.
+ * Timestamps come from the matched lines, never from the model; each quote is credited to its
+ * own line's speaker when that line names one. A reading is dropped (the observation kept, the
+ * drop counted as rejected) when its id is unknown, its hedge has no hedge word, confidence or
+ * alt is missing, or it contains a verdict word.
  */
 object NoteParser {
     const val MAX_NOTES = 12
@@ -28,13 +55,20 @@ object NoteParser {
 
     private val json = Json { isLenient = false; ignoreUnknownKeys = true }
 
-    fun parse(raw: String): Result {
+    const val MAX_QUOTES = 3
+    const val MAX_QUOTE = 200
+    const val MAX_WHO = 40
+    const val MAX_ALT = 200
+
+    /** [source] is the chunk the model read: observations are checked against it (none pass without). */
+    fun parse(raw: String, source: List<HeardLine> = emptyList()): Result {
         val body = stripReasoning(raw)
         val notes = ArrayList<NoteDraft>()
         var rejected = 0
+        val src = Source(source)
 
         fun take(e: JsonElement?) {
-            val d = (e as? JsonObject)?.let(::draft)
+            val d = (e as? JsonObject)?.let { draft(it, src) { rejected++ } }
             if (d == null) rejected++ else if (notes.size < MAX_NOTES) notes += d
         }
 
@@ -65,16 +99,85 @@ object NoteParser {
         return s
     }
 
-    private fun draft(o: JsonObject): NoteDraft? {
+    /** Readings from the second pass, keyed by 0-based observation index (first valid one wins),
+     *  for [count] observations; plus how many lines were rejected. */
+    fun parseReadings(raw: String, count: Int): Pair<Map<Int, Reading>, Int> {
+        val out = HashMap<Int, Reading>()
+        var rejected = 0
+        for (line0 in stripReasoning(raw).lines()) {
+            val line = line0.trim()
+            val open = line.indexOf('{')
+            val close = line.lastIndexOf('}')
+            if (open < 0) continue
+            if (close < open) { rejected++; continue }
+            val o = runCatching { json.parseToJsonElement(line.substring(open, close + 1)) }.getOrNull() as? JsonObject
+            val n = (o?.get("obs") as? JsonPrimitive)?.content?.trim()?.toIntOrNull()
+            val r = o?.let(::reading)
+            if (o == null || n == null || n !in 1..count || r == null) { rejected++; continue }
+            out.putIfAbsent(n - 1, r)
+        }
+        return out to rejected
+    }
+
+    /** A reading object ({"id" or "reading", "hedge", "confidence", "alt"}), or null if it breaks a rule. */
+    fun reading(o: JsonObject): Reading? {
+        val id = ReadingId.parse(string(o["id"]) ?: string(o["reading"])) ?: return null
+        val hedge = string(o["hedge"])?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.length <= 40 } ?: return null
+        if (!CueText.isHedged(hedge)) return null
+        val conf = Confidence.parse(string(o["confidence"])) ?: return null
+        val alt = string(o["alt"] ?: o["alternative"])?.replace(Regex("\\s+"), " ")?.trim() ?: return null
+        if (alt.isEmpty() || alt.length > MAX_ALT) return null
+        if (CueText.verdict(hedge) != null || CueText.verdict(alt) != null) return null
+        return Reading(id, hedge, conf, alt)
+    }
+
+    private fun draft(o: JsonObject, source: Source, droppedReading: () -> Unit): NoteDraft? {
         val kind = NoteKind.parse(string(o["kind"]) ?: return null) ?: return null
         val text = string(o["text"])?.replace(Regex("\\s+"), " ")?.trim() ?: return null
         if (text.isEmpty() || text.length > MAX_TEXT) return null
+        if (kind == NoteKind.OBSERVATION) {
+            val obs = observation(o, text, source, droppedReading) ?: return null
+            return NoteDraft(kind, text, null, obs)
+        }
+        // No diagnosis, personality label or honesty verdict in any note ("Sam is a liar" as a person note).
+        if (CueText.verdict(text) != null) return null
         val whenEl = o["when"] ?: o["time"]
         val whenPhrase = when (whenEl) {
             null, JsonNull -> null
             else -> string(whenEl)   // a number or object: keep the note, just without a time
         }?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) && !it.equals("none", true) }
         return NoteDraft(kind, text, whenPhrase)
+    }
+
+    private fun observation(o: JsonObject, text: String, source: Source, droppedReading: () -> Unit): Observation? {
+        val pattern = CuePattern.parse(string(o["pattern"])) ?: return null
+        val who = string(o["who"])?.replace(Regex("\\s+"), " ")?.trim()?.removePrefix("[")?.removeSuffix("]")?.trim()
+            ?.takeIf { it.isNotEmpty() && it.length <= MAX_WHO } ?: return null
+        val conf = Confidence.parse(string(o["confidence"])) ?: return null
+        val quotes = when (val q = o["quote"] ?: o["quotes"]) {
+            is JsonArray -> q.map { string(it) ?: return null }
+            else -> listOf(string(q) ?: return null)
+        }.map { it.replace(Regex("\\s+"), " ").trim().trim('"', '“', '”').trim() }
+        if (quotes.isEmpty() || quotes.size > MAX_QUOTES || quotes.any { it.isEmpty() || it.length > MAX_QUOTE }) return null
+        // Each quote's line: the first containing it whose speaker is [who] (or unnamed), else the first.
+        val lines = quotes.map { q ->
+            val qw = CueText.words(q)
+            val hits = source.indices.filter { CueText.quoteInWords(qw, source.words[it]) }
+            if (hits.isEmpty()) return null
+            source.lines[hits.firstOrNull { i -> source.speakers[i].let { it == null || CueText.sameSpeaker(who, it) } } ?: hits.first()]
+        }
+        val named = lines.map { CueText.namedSpeaker(it.text) }
+        if (named.any { it != null } && named.none { it != null && CueText.sameSpeaker(who, it) }) return null
+        for (s in listOf(text, who)) if (CueText.verdict(s, quotes) != null || CueText.intentClaim(s, quotes) != null) return null
+        val reading = (o["reading"] as? JsonObject)?.let { r -> reading(r).also { if (it == null) droppedReading() } }
+        return Observation(pattern, who, quotes, lines.map { it.ts }, conf, reading, quoteWho = named)
+    }
+
+    /** The chunk the model read, with each line's words and named speaker worked out once. */
+    private class Source(val lines: List<HeardLine>) {
+        val words: List<String> by lazy { lines.map { CueText.words(it.text) } }
+        val speakers: List<String?> by lazy { lines.map { CueText.namedSpeaker(it.text) } }
+        val indices get() = lines.indices
     }
 
     private fun string(e: JsonElement?): String? = (e as? JsonPrimitive)?.takeIf { it.isString }?.content
