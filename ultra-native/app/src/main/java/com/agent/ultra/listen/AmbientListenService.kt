@@ -341,13 +341,16 @@ class AmbientListenService : Service() {
         )
         if (!plan.transcribe) return                       // hot: memory-only capture dropped
         if (!windowOpen) lastMemoryAt = t
-        val r = WhisperNative.transcribe(whisper, pcm, plan.threads, WhisperNative.verbatimPrompt(cfg.wakeName), whisperCpus)
-            ?: return
+        val r = WhisperNative.transcribe(
+            whisper, pcm, plan.threads, WhisperNative.verbatimPrompt(cfg.wakeName), whisperCpus, timing = true,
+        ) ?: return
         // Text filters: drop low-confidence (hallucinated) and trivially short lines.
         if (r.confidence < AmbientConfig.MIN_TOKEN_P) return
         val words = r.text.split(Regex("\\s+")).filter { it.isNotBlank() }
         if (words.size < AmbientConfig.MIN_WORDS) return
         if (isWhisperNoise(r.text)) return
+        // "Um, uh." alone (or the filler prompt echoed back on noise): nothing to keep or act on
+        if (WhisperNative.onlyPromptFillers(r.text)) return
 
         val now = System.currentTimeMillis()
         val rowid = mem.record(r.text, now, r.confidence)          // EVERYTHING kept as memory

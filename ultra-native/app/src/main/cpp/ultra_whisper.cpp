@@ -38,7 +38,8 @@ extern "C"
 JNIEXPORT jbyteArray JNICALL
 Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
         JNIEnv* env, jobject, jlong handle, jfloatArray jpcm, jint threads, jstring jPrompt,
-        jintArray jCpus) {
+        jintArray jCpus, jboolean jTiming) {
+    const bool timing_on = jTiming == JNI_TRUE;
     auto* c = reinterpret_cast<Ctx*>(handle);
     auto empty = [&]{ return env->NewByteArray(0); };
     if (!c || !c->w) return empty();
@@ -55,15 +56,16 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
     p.print_realtime   = false;
     p.print_special    = false;
     p.single_segment   = false;
-    // Timestamps on, per token: the transcript's pause/overlap cues are placed between words
-    // by when whisper says each word was spoken (mapped back to the original audio when VAD
-    // trimmed silence). The text itself is unchanged.
-    p.no_timestamps    = false;
-    p.token_timestamps = true;
+    // Timing (ambient only): timestamps on, per token, so the transcript's pause/overlap cues
+    // can be placed between words by when whisper says each word was spoken (mapped back to
+    // the original audio when VAD trimmed silence). Timestamp decoding may segment the text
+    // differently and shift token probabilities; unmeasured. Off = exactly the old decode.
+    p.no_timestamps    = !timing_on;
+    p.token_timestamps = timing_on;
     p.suppress_blank   = true;
     p.temperature      = 0.0f;
     p.language         = "en";
-    p.initial_prompt   = prompt;              // wake-name spelling; fillers kept (see WhisperNative)
+    p.initial_prompt   = prompt;              // wake-name spelling (ambient: + fillers, see WhisperNative)
     if (!c->vadPath.empty()) {
         p.vad            = true;
         p.vad_model_path = c->vadPath.c_str();
@@ -111,6 +113,7 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
                 auto d = whisper_full_get_token_data(c->w, i, j);
                 if (d.id >= whisper_token_eot(c->w)) continue;  // skip specials
                 logprobSum += d.plog; tok++;
+                if (!timing_on) continue;
                 const char* piece = whisper_full_get_token_text(c->w, i, j);
                 if (!piece || !*piece) continue;
                 int64_t t0 = whisper_full_get_token_t0(c->w, i, j);   // centiseconds, original audio
@@ -120,7 +123,7 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
             }
         }
         if (!word.empty()) flush();
-        int nv = whisper_full_n_vad_segments(c->w);
+        int nv = timing_on ? whisper_full_n_vad_segments(c->w) : 0;
         for (int i = 0; i < nv; i++) {
             timing += "V\t" + std::to_string(whisper_full_get_vad_segment_t0(c->w, i) * 10) + "\t" +
                       std::to_string(whisper_full_get_vad_segment_t1(c->w, i) * 10) + "\n";
@@ -133,9 +136,11 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
     size_t s = text.find_first_not_of(" \t\n");
     if (s == std::string::npos) return empty();
     std::string out = std::to_string(meanP) + "\t" + text.substr(s);
-    // A NUL, then the timing lines (WhisperNative.parse splits on it).
-    out.push_back('\0');
-    out += timing;
+    // A NUL, then the timing lines (WhisperNative.parse splits on it). No timing: the old format.
+    if (timing_on) {
+        out.push_back('\0');
+        out += timing;
+    }
 
     jbyteArray arr = env->NewByteArray((jsize)out.size());
     env->SetByteArrayRegion(arr, 0, (jsize)out.size(),

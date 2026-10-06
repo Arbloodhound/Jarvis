@@ -63,7 +63,7 @@ fun VoiceSettings(context: Context) {
             Text(
                 "Marks each heard line with who said it ([Me], a name you give, or [Speaker 2]), plus " +
                     "pauses, talking faster or louder than usual, and laughter. Uses voiceprints made and " +
-                    "kept only on this phone (a 40 MB model, downloaded on Wi-Fi). It's a guess: similar " +
+                    "kept only on this phone (a 40 MB model, downloaded on Wi-Fi once this is on). It's a guess: similar " +
                     "voices, TV and distance can mix people up or split one person in two. Check the law " +
                     "where you live before recording other people.",
                 style = MaterialTheme.typography.bodySmall,
@@ -100,6 +100,8 @@ fun VoiceSettings(context: Context) {
                         }
                     }
                 }
+                // recording your voice is asking for speaker tags
+                if (r == VoicePrints.Enrol.Done && !on) { on = true; cfg.speakerTags = true }
                 status = when (r) {
                     VoicePrints.Enrol.Done -> "Got it. Lines in your voice are marked [Me]."
                     is VoicePrints.Enrol.Failed -> r.why

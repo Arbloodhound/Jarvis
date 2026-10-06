@@ -37,14 +37,16 @@ class WakeFilter(private val cfg: AmbientConfig) {
         /** Words that may precede the name in a wake phrase ("hey jarvis", "ok jarvis"). */
         val WAKE_PREFIXES = setOf("hey", "ok", "okay")
 
-        /** Fillers whisper now keeps (WhisperNative.verbatimPrompt): "Um, hey Jarvis" still wakes. */
+        /** Fillers whisper now keeps (WhisperNative.verbatimPrompt): "Um, hey Jarvis" still wakes,
+         *  and "Hey Jarvis, um." is a bare wake (not the command "um."). */
         private const val FILLERS = "um+|uh+|uhm+|erm+|er|hmm+|mm+"
 
         private fun wakeHead(names: List<String>): Regex {
             val prefixes = WAKE_PREFIXES.joinToString("|")
             return Regex(
                 "^\\W*(?:(?:$FILLERS)\\W+)*(?:(?:$prefixes)\\W+)?(?:" + names.joinToString("|") { Regex.escape(it) } +
-                    ")(?![\\p{L}\\p{N}])[\\s,.:;!?-]*",
+                    ")(?![\\p{L}\\p{N}])[\\s,.:;!?-]*" +
+                    "(?:(?:$FILLERS)(?![\\p{L}\\p{N}])[\\s,.:;!?-]*)*",
                 RegexOption.IGNORE_CASE,
             )
         }

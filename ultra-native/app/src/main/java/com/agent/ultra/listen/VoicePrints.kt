@@ -47,8 +47,13 @@ object VoicePrints {
 
     fun downloaded(ctx: Context): Boolean = File(ctx.applicationContext.filesDir, MODEL).length() == MODEL_BYTES
 
-    /** Downloads and checks the model (blocking, ~40 MB). True when it is present and intact. */
-    fun fetch(ctx: Context): Boolean {
+    /** One download at a time: the background fetch and an enrolment share one .part file. Not
+     *  the object's own monitor, which [embed] holds. */
+    private val fetchLock = Any()
+
+    /** Downloads and checks the model (blocking, ~40 MB). True when it is present and intact. A
+     *  second caller waits for a download already running, then finds the file. */
+    fun fetch(ctx: Context): Boolean = synchronized(fetchLock) {
         val dir = ctx.applicationContext.filesDir
         if (downloaded(ctx)) return true
         if (!ModelFetcher.ensure(dir, MODEL, MODEL_URL, exactBytes = MODEL_BYTES)) return false
@@ -164,9 +169,17 @@ object VoicePrints {
             if (!fetch(app)) return Enrol.Failed("Couldn't download the voice model (about 40 MB). Check the connection.")
         }
         val ambient = AmbientListenService.instance
-        ambient?.mutedUntil = System.currentTimeMillis() + ENROL_MS + 2_000L
+        // Never cut short a longer mute (Jarvis speaking: the echo guard's), and at the end lift
+        // only our own: a mute someone else set meanwhile stands.
+        val ours = System.currentTimeMillis() + ENROL_MS + 2_000L
+        val mute = ambient?.let { maxOf(it.mutedUntil, ours) }
+        if (ambient != null && mute != null) ambient.mutedUntil = mute
         onState("recording")
-        val pcm = try { record(ENROL_MS) } finally { ambient?.mutedUntil = System.currentTimeMillis() + 300L }
+        val pcm = try { record(ENROL_MS) } finally {
+            if (ambient != null && ambient.mutedUntil == mute && mute == ours) {
+                ambient.mutedUntil = System.currentTimeMillis() + 300L
+            }
+        }
             ?: return Enrol.Failed("The microphone isn't available.")
         onState("saving")
         val db = CueAudio.frameDb(pcm)

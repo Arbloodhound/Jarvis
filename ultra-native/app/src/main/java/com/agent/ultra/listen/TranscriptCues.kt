@@ -161,10 +161,13 @@ object CueTags {
     }
 
     /** A name as the owner typed it, made safe for a `[label]`: no brackets or line breaks, at
-     *  most 32 characters; null when nothing is left. */
+     *  most 32 characters; null when nothing is left, or when it is one of our own labels ("Me"
+     *  is the owner to the librarian; "Speaker 2" / "Unknown" would pass one voice off as another). */
     fun cleanName(raw: String): String? =
         raw.replace(Regex("[\\[\\]\\r\\n\\t]"), " ").replace(Regex("\\s+"), " ").trim().take(32).trim()
-            .takeIf { it.isNotEmpty() }
+            .takeIf { it.isNotEmpty() && !RESERVED.matches(it) }
+
+    private val RESERVED = Regex("(?i)me|unknown|speaker\\s*\\d*")
 
     fun line(label: String, body: String): String = "[$label] $body".trim()
 
@@ -272,7 +275,8 @@ object CueTags {
             }
         }
         var out = Regex("\\[\\s*([^\\[\\]\\u0001\\u0002]{1,40}?)\\s*]").replace(s) { norm(it.groupValues[1]) }
-        out = Regex("\\*\\s*([^*\\u0001\\u0002]{1,40}?)\\s*\\*").replace(out) { norm(it.groupValues[1]) }
+        // letters only between the stars, so "5 * 3 * 2" stays arithmetic
+        out = Regex("\\*\\s*(\\p{L}[\\p{L} '_-]{0,39}?)\\s*\\*").replace(out) { norm(it.groupValues[1]) }
         out = Regex("\\(\\s*([^()\\u0001\\u0002]{1,40}?)\\s*\\)").replace(out) {
             val e = it.groupValues[1].trim().lowercase(Locale.ROOT)
             if (LAUGH.matches(e)) "(laughs)" else if (DROP.matches(e)) "" else it.value

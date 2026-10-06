@@ -111,14 +111,15 @@ class AmbientMemory private constructor(ctx: Context) :
         } finally { db.endTransaction() }
     }
 
-    /** What the cue worker learned about a voice. Name and owner are never touched here (the
-     * owner may be renaming it in Settings at the same moment). No-op if it was deleted. */
-    fun updateVoice(id: Long, centroid: FloatArray, n: Int, lastSeen: Long, rate: Baseline, loud: Baseline) {
+    /** What the cue worker learned about voice [was] (the row as it read it). Name and owner are
+     * never touched here (the owner may be renaming it in Settings at the same moment). Applied
+     * only if the row is still as read ([Voice.n], [Voice.lastSeen]): an enrolment, merge or
+     * delete in between wins, and this line's update is dropped. Returns whether it applied. */
+    fun updateVoice(was: Voice, centroid: FloatArray, n: Int, lastSeen: Long, rate: Baseline, loud: Baseline): Boolean =
         writableDatabase.update("voices", ContentValues().apply {
             put("centroid", bytes(centroid)); put("n", n); put("last_seen", lastSeen)
             put("rate", rate.encode()); put("loud", loud.encode())
-        }, "id=?", arrayOf(id.toString()))
-    }
+        }, "id=? AND n=? AND last_seen=?", arrayOf(was.id.toString(), was.n.toString(), was.lastSeen.toString())) > 0
 
     /**
      * Gives voice [id] a name. A name another voice already has (any case) means they are the

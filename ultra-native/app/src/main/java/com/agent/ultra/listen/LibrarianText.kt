@@ -84,6 +84,7 @@ Output one JSON object per line and nothing else, like:
 - kind: plan (an appointment, meeting or trip), todo (something someone has to do), person (who someone is), fact (anything else worth keeping: an address, a like or dislike, a number).
 - text: one self-contained sentence under 25 words. Keep names, places and numbers exactly as heard.
 - when: the time words exactly as spoken, e.g. "tomorrow at 3pm" or "next Friday". Leave it out if there are none. Never work out dates yourself.
+- A line may start with who spoke: [Me] is the phone's owner, [Speaker 2] or [Unknown] someone unnamed, else their name. [pause 1.2s], [fast], [slow], [louder], [quieter], [overlap] and (laughs) say how it was said. Use them to tell people apart; never copy brackets into a note.
 - Skip small talk, greetings, TV, radio, songs and anything unclear. Never invent details.
 - At most 8 lines. If nothing is worth keeping, output NONE.
 """.trim()

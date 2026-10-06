@@ -3,6 +3,8 @@ package com.agent.ultra.listen
 import android.content.Context
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 
 /** One stored heard line waiting for its cues: its audio and whisper's timing. */
@@ -39,9 +41,12 @@ class TranscriptCueWorker(private val ctx: Context, private val mem: AmbientMemo
         val busy = com.agent.ultra.local.LocalModelEngine.anyBusy
         try {
             for (job in jobs) {
+                currentCoroutineContext().ensureActive()   // a full queue must not outlive the service
                 if (busy.value) busy.first { !it }
+                // Throwable, not Exception: this runs beside capture in one coroutineScope, so
+                // anything escaping here (a native/linkage Error included) would stop listening.
                 try { process(job) } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                catch (e: Exception) { android.util.Log.w(TAG, "cues failed for a line: ${e.message}") }
+                catch (e: Throwable) { android.util.Log.w(TAG, "cues failed for a line: ${e.message}") }
             }
         } finally {
             VoicePrints.release()
@@ -64,6 +69,7 @@ class TranscriptCueWorker(private val ctx: Context, private val mem: AmbientMemo
         var voice: Voice? = null
         var emb: FloatArray? = null
         var sim = 0f
+        var fresh = false   // a voice made from this very line: its centroid already is this line
         var voices: List<Voice> = emptyList()
         if (cfg.speakerTags) {
             if (!VoicePrints.downloaded(ctx)) VoicePrints.fetchInBackground(ctx)
@@ -76,9 +82,9 @@ class TranscriptCueWorker(private val ctx: Context, private val mem: AmbientMemo
                         val e = emb!!
                         val evict = VoiceMatch.evict(voices)
                         val id = mem.addVoice(e, now, evict?.id)
-                        voice = Voice(id, 0, null, false, e, 0, now)   // n=0: the update below makes it e, 1
+                        voice = Voice(id, 0, null, false, VoiceMatch.normalize(e), 1, now)   // as addVoice stored it
                         voices = voices.filter { it.id != evict?.id }
-                        sim = 1f
+                        sim = 1f; fresh = true
                     }
                     VoiceMatch.Decision.Unknown -> {}
                 }
@@ -97,9 +103,9 @@ class TranscriptCueWorker(private val ctx: Context, private val mem: AmbientMemo
         if (v != null) {
             wps?.let { CueTags.rate(v.rate, it) }?.let { lead += it }
             level?.let { CueTags.loudness(v.loud, it) }?.let { lead += it }
-            val (c, n) = if (emb != null && VoiceMatch.shouldUpdate(v, sim)) VoiceMatch.update(v.centroid, v.n, emb)
+            val (c, n) = if (!fresh && emb != null && VoiceMatch.shouldUpdate(v, sim)) VoiceMatch.update(v.centroid, v.n, emb)
                 else v.centroid to v.n
-            mem.updateVoice(v.id, c, n, now,
+            mem.updateVoice(v, c, n, now,
                 wps?.let { v.rate.add(it) } ?: v.rate, level?.let { v.loud.add(it) } ?: v.loud)
         }
 
