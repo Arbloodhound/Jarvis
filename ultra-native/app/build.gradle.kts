@@ -66,6 +66,18 @@ android {
             }
         }
 
+        // GitHub's test builds (debug-apk.yml sets JARVIS_TEST_KEYSTORE to ci/test-debug.keystore):
+        // one fixed test key, so each test APK installs over the last and keeps the downloaded
+        // model. Debug builds only; see ci/README.md for why it is in the repo.
+        System.getenv("JARVIS_TEST_KEYSTORE")?.takeIf { file(it).exists() }?.let { path ->
+            create("ciTestDebug") {
+                storeFile = file(path)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+
         // The real signing key, for anything that leaves this machine.
         //
         // 2.0.0 and 2.1.0 went out signed with the DEBUG key, whose password is
@@ -98,6 +110,7 @@ android {
     buildTypes {
         debug {
             signingConfig = signingConfigs.findByName("legacyDebug")
+                ?: signingConfigs.findByName("ciTestDebug")
                 ?: signingConfigs.getByName("debug")
         }
         release {

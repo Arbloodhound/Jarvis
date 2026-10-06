@@ -1,7 +1,7 @@
 # ci/test-debug.keystore
 
-Signs the DEBUG APKs GitHub builds (`.github/workflows/debug-apk.yml` copies it to
-`~/.android/debug.keystore`). Without it every run got a fresh random debug key, so a new test
+Signs the DEBUG APKs GitHub builds (`.github/workflows/debug-apk.yml` points the
+`JARVIS_TEST_KEYSTORE` variable at it; app/build.gradle.kts then signs debug builds with it). Without it every run got a fresh random debug key, so a new test
 build couldn't install over the previous one, and uninstalling wiped the downloaded 10 GB model.
 
 It is a test-only key with the standard debug passwords (`android`). It deliberately lives in

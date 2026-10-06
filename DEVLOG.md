@@ -9,8 +9,12 @@ Found: every CI debug build was signed with the runner's fresh random debug key,
 could not install over the last one and the only way forward (uninstall) wiped the 10 GB model. Added
 `ultra-native/ci/test-debug.keystore` (test-only key, standard debug passwords, committed on purpose,
 see ci/README.md; NOT the release key) — debug-apk.yml copies it to ~/.android/debug.keystore and
-then checks the APK's signer is "CN=Jarvis CI test build". PROVEN locally: assembleDebug with it →
-apksigner shows that DN. Builds before this one (runs ≤19) still have random keys: the first switch
+then checks the APK's signer is "CN=Jarvis CI test build". First attempt (copy to ~/.android/debug.keystore) worked
+locally but CI run #20 still signed with "CN=Android Debug" (the runner keeps its debug key
+elsewhere) — the new signer check caught it and failed the run. Fix: build.gradle.kts creates a
+`ciTestDebug` signing config from the JARVIS_TEST_KEYSTORE env var (set by debug-apk.yml) and the
+debug build type uses it. PROVEN locally both ways: no env → CN=Android Debug, env → CN=Jarvis CI
+test build. CI proof pending (run after this push). Builds before this one (runs ≤19) still have random keys: the first switch
 needs one uninstall; after that, updates keep data.
 
 ## 2026-10-06 (night, latest) — No-laptop path: on-phone "Jarvis Tests" + Colab key notebook

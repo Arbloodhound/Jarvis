@@ -49,7 +49,7 @@ jobs:
           bash ultra-native/ondevice-brain/fetch-sherpa.sh
 
       - name: Fixed test signing key (so each test build installs over the last)
-        run: mkdir -p ~/.android && cp ultra-native/ci/test-debug.keystore ~/.android/debug.keystore
+        run: echo "JARVIS_TEST_KEYSTORE=$GITHUB_WORKSPACE/ultra-native/ci/test-debug.keystore" >> "$GITHUB_ENV"
 
       - name: local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > ultra-native/local.properties
