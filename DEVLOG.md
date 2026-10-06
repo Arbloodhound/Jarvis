@@ -3,6 +3,20 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-08 — "Keep the whole brain in memory" (resident load)
+
+Dafarus: "shouldn't the model always be loaded?" Phones have no separate VRAM (unified memory); the
+mapped file lets the kernel drop weight pages, which the 42k-fault evidence shows happening.
+`nativeLoad` gained a `resident` flag: llama.cpp 8345f33 `load_mode = LLAMA_LOAD_MODE_NONE` +
+`lazy_mode = OFF` (it has no use_mmap bool; checked llama.h/llama-model-loader.cpp — AUTO lazy only
+applies to tensors > 4 GiB, so lazy reads were NOT the fault cause). Kotlin: pure
+`LocalModelEngine.residentLoad(setting, avail, file)` (resident only if avail ≥ file + 1 GB; unknown →
+mapped) + 6 tests; UltraPrefs.keepBrainInMemory (default on) + Settings switch; logs
+`load resident=… availMB=… fileMB=…`; the page-cache warm only runs in mapped mode. Host harness
+updated to the new signature (passes false). Tests + assembleDebug pass. RUNTIME-UNPROVEN: on 16 GB
+with ~10.2 GB of weights the phone may often not have file+1 GB available → it maps; the log line
+will say which. Risk to watch: a resident 10 GB app is a bigger LMK target in the background.
+
 ## 2026-10-07 (late night) — First Pixel speed number: 1.6 tok/s, 42k major faults → warm the page cache
 
 **Evidence (user, Jarvis Tests quick test, Q1 "hi"):** `1.6 tok/s · 193 tokens · majfaults 42299 ·

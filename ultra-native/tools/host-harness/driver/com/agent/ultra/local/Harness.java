@@ -53,7 +53,7 @@ public final class Harness {
     interface TokenCallback { String onToken(String piece); }
 
     static long load(int threads) {
-        long h = LlmNative.nativeLoad(MODEL, threads, CTX, CPUS);
+        long h = LlmNative.nativeLoad(MODEL, threads, CTX, CPUS, false);
         if (h == 0) throw new RuntimeException("load failed");
         return h;
     }

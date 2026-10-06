@@ -247,6 +247,30 @@ fun SettingsScreen(
             }
         }
 
+        run {
+            var resident by remember { mutableStateOf(UltraPrefs.keepBrainInMemory(context)) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Keep the whole brain in memory", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Copies the model into Jarvis's own memory so Android can't quietly drop " +
+                            "parts of it (which makes answers very slow). Takes effect on the next " +
+                            "load: tap Free memory, then ask something. Falls back automatically " +
+                            "when the phone is short on memory.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = resident, onCheckedChange = { on ->
+                    resident = on
+                    UltraPrefs.setKeepBrainInMemory(context, on)
+                })
+            }
+        }
+
         // Model chooser
         var showModels by remember { mutableStateOf(false) }
         var customUrl by remember { mutableStateOf("") }

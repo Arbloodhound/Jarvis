@@ -231,7 +231,7 @@ class LocalModelEngine(private val context: Context) {
      * asked meanwhile simply waits for this same load (ensureLoaded holds one lock).
      */
     fun preloadInBackground(reason: String) {
-        if (loaded) { warmPageCache(reason); return }
+        if (loaded) { if (!residentLoaded) warmPageCache(reason); return }
         if (!modelPresent || !LlmNative.available || downloadProgress.value != null) return
         preloadScope.launch {
             val t0 = System.currentTimeMillis()
@@ -241,6 +241,7 @@ class LocalModelEngine(private val context: Context) {
     }
 
     @Volatile private var lastWarmMs = 0L
+    @Volatile private var residentLoaded = false
 
     /**
      * Read the whole model file once, sequentially, in the background. The weights are mmap'd, so
@@ -292,9 +293,15 @@ class LocalModelEngine(private val context: Context) {
             val t0 = System.currentTimeMillis()
             val topo = CpuTopology.current
             android.util.Log.i("UltraLlm", "cpus llm=${topo.llmCpus} whisper=${topo.whisperCpus} threads=${topo.llmThreads}")
-            handle = LlmNative.nativeLoad(modelFile.absolutePath, topo.llmThreads, CTX_SIZE, topo.llmCpus.toIntArray())
+            val resident = residentLoad(
+                com.agent.ultra.ui.UltraPrefs.keepBrainInMemory(context), avail, modelFileSizeBytes)
+            android.util.Log.i("UltraLlm", "load resident=$resident availMB=${avail / 1_048_576} " +
+                "fileMB=${modelFileSizeBytes / 1_048_576}")
+            handle = LlmNative.nativeLoad(modelFile.absolutePath, topo.llmThreads, CTX_SIZE, topo.llmCpus.toIntArray(), resident)
             android.util.Log.i("UltraLlm", "nativeLoad -> handle=$handle in ${System.currentTimeMillis() - t0}ms")
-            if (handle != 0L) warmPageCache("after load")
+            residentLoaded = resident && handle != 0L
+            // A resident copy can't be dropped, so only the mapped mode needs the page cache warmed.
+            if (handle != 0L && !resident) warmPageCache("after load")
             return handle != 0L
         }
     }
@@ -424,6 +431,16 @@ class LocalModelEngine(private val context: Context) {
         /** Over a 10 GB download: 5, 10, 20, 40, then 60 s apart — about 25 minutes of trying. */
         const val MAX_DOWNLOAD_ATTEMPTS = 30
         const val MIN_AVAIL_BYTES = 500L * 1024 * 1024
+        /** Free memory a resident load must leave behind, beyond the model file itself. */
+        const val RESIDENT_HEADROOM_BYTES = 1_024L * 1024 * 1024
+
+        /**
+         * Load the weights into the app's own memory (true) or map the file (false). Resident
+         * only when the setting is on and memory now holds the whole file plus headroom; an
+         * unknown reading (<= 0) maps, the safe choice. Pure, JVM-tested.
+         */
+        fun residentLoad(settingOn: Boolean, availBytes: Long, fileBytes: Long): Boolean =
+            settingOn && availBytes > 0 && fileBytes > 0 && availBytes >= fileBytes + RESIDENT_HEADROOM_BYTES
         const val FAST_PATH_MAX_BYTES = 2_500L * 1024 * 1024
         private const val K_URL = "model_url"
         private const val K_FILE = "model_file"

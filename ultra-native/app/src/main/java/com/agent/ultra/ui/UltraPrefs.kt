@@ -46,6 +46,17 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_PRELOAD, on).apply()
     }
 
+    private const val K_RESIDENT = "keep_brain_in_memory"
+
+    /** Load the on-device brain fully into Jarvis's own memory (no mapped file Android can drop
+     * pages of). On by default; the engine still maps the file when memory is short. */
+    fun keepBrainInMemory(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_RESIDENT, true)
+
+    fun setKeepBrainInMemory(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_RESIDENT, on).apply()
+    }
+
     private const val K_NOTIF = "capture_notifications"
     private const val K_PERSONAL = "allow_personal_data"
 

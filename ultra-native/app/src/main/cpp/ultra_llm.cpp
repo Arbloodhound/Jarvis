@@ -172,13 +172,23 @@ extern "C" {
 
 JNIEXPORT jlong JNICALL
 Java_com_agent_ultra_local_LlmNative_nativeLoad(
-        JNIEnv *env, jobject, jstring jpath, jint threads, jint ctxSize, jintArray jcpus) {
+        JNIEnv *env, jobject, jstring jpath, jint threads, jint ctxSize, jintArray jcpus, jboolean resident) {
     if (!backendReady) { llama_backend_init(); backendReady = true; }
 
     const char *path = env->GetStringUTFChars(jpath, nullptr);
 
     llama_model_params mparams = llama_model_default_params();
     mparams.n_gpu_layers = 0; // CPU path — measured winner on the A15 bench
+    // resident: read the weights into this process's own memory instead of mapping the file.
+    // A mapped file's pages can be dropped by the kernel at any time and are then read back one
+    // fault at a time mid-generation (Pixel 10 Pro, 2026-10-07: 42,299 major faults, 1.6 tok/s,
+    // 8.6 GB free). Owned memory can't be silently dropped. Android apps can't mlock 10 GB.
+    // (llama.cpp 8345f33 replaced the use_mmap bool with load_mode; lazy reads need a mapping.)
+    if (resident) {
+        mparams.load_mode = LLAMA_LOAD_MODE_NONE;
+        mparams.lazy_mode = LLAMA_LAZY_MODE_OFF;
+    }
+    LOGI("load resident=%d load_mode=%d", (int) resident, (int) mparams.load_mode);
 
     llama_model *model = llama_model_load_from_file(path, mparams);
     env->ReleaseStringUTFChars(jpath, path);

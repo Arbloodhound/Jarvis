@@ -42,7 +42,7 @@ object LlmNative {
      * workers pinned to those cores (see [CpuTopology]), and the generating thread is pinned
      * to them for the duration of each [nativeGenerate]; empty = unpinned, workers per decode.
      */
-    external fun nativeLoad(path: String, threads: Int, ctxSize: Int, cpus: IntArray): Long
+    external fun nativeLoad(path: String, threads: Int, ctxSize: Int, cpus: IntArray, resident: Boolean): Long
 
     /**
      * Runs the prompt synchronously on the calling thread, streaming tokens
