@@ -13,6 +13,17 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(K_SPEAK, false)
 
+    private const val K_OWN_SPEECH = "own_speech"
+
+    /** Recognise speech with Jarvis's own on-phone whisper model instead of Android's recognizer
+     * (Google's, on a Pixel). On by default: works offline and on a de-Googled phone. */
+    fun ownSpeech(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_OWN_SPEECH, true)
+
+    fun setOwnSpeech(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OWN_SPEECH, on).apply()
+    }
+
     private const val K_NOTIF = "capture_notifications"
     private const val K_PERSONAL = "allow_personal_data"
 

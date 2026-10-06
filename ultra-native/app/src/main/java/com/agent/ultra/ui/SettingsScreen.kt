@@ -583,6 +583,28 @@ fun SettingsScreen(
         // ── Voice ─────────────────────────────────────────────────────
         SectionTitle("VOICE")
         run {
+            var ownSpeech by remember { mutableStateOf(UltraPrefs.ownSpeech(context)) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Jarvis's own speech recognition", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Understands what you say with the speech model on this phone: no Google, " +
+                            "works offline. Downloads about 60 MB the first time. Off uses Android's " +
+                            "built-in recognizer (Google's, on most phones).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = ownSpeech, onCheckedChange = { on ->
+                    ownSpeech = on
+                    UltraPrefs.setOwnSpeech(context, on)
+                })
+            }
+        }
+        run {
             val ambientCfg = remember { com.agent.ultra.listen.AmbientConfig(context) }
             var ambient by remember { mutableStateOf(ambientCfg.enabled) }
             var wakeName by remember { mutableStateOf(ambientCfg.wakeName) }

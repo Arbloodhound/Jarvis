@@ -3,6 +3,35 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-06 — Google-free speech for the voice screen; wake models on the accelerator when it wins
+
+**Subsystems:** D (`listen/`: LocalSpeech, WakeGate, Segmenter), G (Settings → Voice), UI (VoiceInput,
+VoiceActivity). Dafarus asked to use the phone's GPU/TPU where it helps, without Google services
+(de-Googled phone).
+
+**Found:** the voice screen and chat mic used Android's `SpeechRecognizer` — Google's recognizer on a
+Pixel, usually absent on a de-Googled phone, so both would just say "not available". Ambient listening
+and "Hey Jarvis" were already Google-free (whisper.cpp + ONNX). Text-to-speech still needs a TTS engine
+on the phone (not bundled).
+
+**Built:**
+- `LocalSpeech`: one-shot speech-to-text with the app's own whisper (records until the speaker pauses
+  via `Segmenter`, transcribes on the fast cores, 8 s no-speech timeout); `LocalWhisper` keeps one
+  context, freed after 60 s idle. `VoiceInput` uses it when Settings → "Jarvis's own speech
+  recognition" is on (default) or when the phone has no recognizer.
+- `WakeGate`: each of the three openWakeWord models is built on the CPU and on Android's NNAPI
+  (part of Android, no Google; `CPU_DISABLED` so NNAPI's reference CPU path is never used), timed on
+  the same input at start-up, and kept on the accelerator only if ≥20% faster AND its output matches
+  the CPU's (≤1e-3 relative). Logged as `wake model <m>: cpu=… nnapi=… diff=… -> …`.
+
+**Status:** 594 unit tests, 0 failures (+9: placement rule, result filter); `assembleDebug` passes.
+On-device: **SOURCE-FIXED BUT RUNTIME-UNPROVEN** — whether the Pixel 10 / G15 still ship an NNAPI
+accelerator driver (NNAPI is deprecated since Android 15) is unknown; if not, everything stays on the
+CPU exactly as before. Whisper itself still runs on the CPU (no Google-free accelerator path for it yet).
+
+**Open:** a TTS engine for a de-Googled phone (install an open-source one, or bundle Piper via
+sherpa-onnx); the G15/Pixel logs for the placement lines.
+
 ## 2026-10-05 (late night) — Pixel 10 Pro optimization batch merged (units 1-6 + llama.cpp CPU variants)
 
 **Subsystems:** B (model/engine: `cpp/ultra_llm.cpp`, `cpp/ultra_whisper.cpp`, `local/`), D (ambient:

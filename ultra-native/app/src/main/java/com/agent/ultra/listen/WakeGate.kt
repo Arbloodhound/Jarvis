@@ -14,6 +14,7 @@ import android.content.Context
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import ai.onnxruntime.providers.NNAPIFlags
 import java.io.File
 import java.nio.FloatBuffer
 
@@ -49,6 +50,9 @@ class WakeGate(
     private val embFrames = ArrayDeque<FloatArray>()
     private var lastFire = 0L
 
+    /** Where each model runs, e.g. "mel=nnapi emb=cpu cls=cpu" (see [placed]). Logged at load. */
+    var placement = ""; private set
+
     /** Last classifier score, for a settings-screen meter / threshold tuning. */
     @Volatile var lastScore = 0f; private set
 
@@ -59,12 +63,60 @@ class WakeGate(
         val m = File(dir, MEL); val e = File(dir, EMB); val c = File(dir, cfgName(context))
         ready = if (m.exists() && e.exists() && c.exists()) {
             try {
-                mel = env.createSession(m.absolutePath).also { melIn = it.inputNames.first() }
-                emb = env.createSession(e.absolutePath).also { embIn = it.inputNames.first() }
-                cls = env.createSession(c.absolutePath).also { clsIn = it.inputNames.first() }
+                mel = placed("mel", m, longArrayOf(1, MEL_CTX.toLong())).also { melIn = it.inputNames.first() }
+                emb = placed("emb", e, longArrayOf(1, MEL_WIN.toLong(), MEL_BINS.toLong(), 1)).also { embIn = it.inputNames.first() }
+                cls = placed("cls", c, longArrayOf(1, EMB_WIN.toLong(), EMB_DIM.toLong())).also { clsIn = it.inputNames.first() }
+                android.util.Log.i("UltraAmbient", "wake gate on: $placement")
                 true
             } catch (_: Exception) { close(); false }
         } else false
+    }
+
+    /**
+     * One model's session, on the phone's own accelerator (GPU / NPU through Android's NNAPI —
+     * part of Android, no Google services) when that is measurably faster and gives the same
+     * numbers; otherwise on the CPU. Phones whose NNAPI has no accelerator driver, or whose
+     * driver can't run these ops, simply stay on the CPU. These models run every 80 ms all
+     * day, so the choice is worth a few milliseconds of timing at start-up.
+     */
+    private fun placed(tag: String, file: File, shape: LongArray): OrtSession {
+        val cpu = env.createSession(file.absolutePath)
+        val accel = try {
+            env.createSession(file.absolutePath, OrtSession.SessionOptions().apply {
+                // CPU_DISABLED: never NNAPI's slow reference CPU path; ops the accelerator
+                // can't take run on ONNX Runtime's own CPU kernels instead.
+                addNnapi(java.util.EnumSet.of(NNAPIFlags.CPU_DISABLED))
+            })
+        } catch (e: Exception) {
+            null
+        }
+        if (accel == null) { placement += "$tag=cpu "; return cpu }
+        return try {
+            val n = shape.fold(1L) { a, b -> a * b }.toInt()
+            val input = FloatArray(n) { ((it * 7919) % 2001 - 1000) / 10f }   // fixed, speech-scale values
+            val cpuIn = cpu.inputNames.first(); val accelIn = accel.inputNames.first()
+            val cpuOut = run1(cpu, cpuIn, shape, input)
+            val accelOut = run1(accel, accelIn, shape, input)
+            val cpuMs = timeMs { run1(cpu, cpuIn, shape, input) }
+            val accelMs = timeMs { run1(accel, accelIn, shape, input) }
+            val diff = maxAbsDiff(cpuOut, accelOut)
+            val scale = cpuOut.maxOfOrNull { kotlin.math.abs(it) } ?: 0f
+            val useAccel = useAccelerator(cpuMs, accelMs, diff, scale)
+            android.util.Log.i("UltraAmbient", "wake model $tag: cpu=%.2fms nnapi=%.2fms diff=%.1e -> %s"
+                .format(cpuMs, accelMs, diff, if (useAccel) "nnapi" else "cpu"))
+            placement += "$tag=${if (useAccel) "nnapi" else "cpu"} "
+            if (useAccel) { cpu.close(); accel } else { accel.close(); cpu }
+        } catch (e: Exception) {
+            android.util.Log.w("UltraAmbient", "wake model $tag: nnapi failed (${e.message}); cpu")
+            accel.close(); placement += "$tag=cpu "; cpu
+        }
+    }
+
+    private inline fun timeMs(run: () -> Unit): Double {
+        repeat(WARMUP) { run() }
+        val t0 = System.nanoTime()
+        repeat(TIMED) { run() }
+        return (System.nanoTime() - t0) / 1e6 / TIMED
     }
 
     /** Push PCM of any length. Returns true on the chunk where the wake word fires. */
@@ -158,6 +210,24 @@ class WakeGate(
         const val MEL_BINS = 32
         const val MEL_WIN = 76
         const val EMB_WIN = 16
+        const val EMB_DIM = 96              // embedding width (embedding_model.onnx output)
+        private const val WARMUP = 3
+        private const val TIMED = 10
+
+        /**
+         * Keep the accelerator only when it is clearly faster (at least 20%: timing noise and
+         * the cost of waking it must not flip the choice) and its numbers match the CPU's
+         * (an fp16-relaxed or buggy driver would move the wake score). Pure, JVM-tested.
+         */
+        fun useAccelerator(cpuMs: Double, accelMs: Double, maxDiff: Float, scale: Float): Boolean =
+            accelMs > 0 && accelMs <= cpuMs * 0.8 && maxDiff <= 1e-3f * maxOf(1f, scale)
+
+        fun maxAbsDiff(a: FloatArray, b: FloatArray): Float {
+            if (a.size != b.size) return Float.MAX_VALUE
+            var m = 0f
+            for (i in a.indices) m = maxOf(m, kotlin.math.abs(a[i] - b[i]))
+            return m
+        }
 
         const val MEL = "melspectrogram.onnx"
         const val EMB = "embedding_model.onnx"

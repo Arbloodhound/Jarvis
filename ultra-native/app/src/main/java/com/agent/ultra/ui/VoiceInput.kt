@@ -24,8 +24,15 @@ class VoiceInput(
     private val onResult: (String) -> Unit,
 ) {
     private var recognizer: SpeechRecognizer? = null
+    private val own by lazy { com.agent.ultra.listen.LocalSpeech(context, onState, onError, onResult) }
 
     fun start(): Boolean {
+        // Jarvis's own whisper when the user prefers it (default: no Google), or when the phone has
+        // no system recognizer at all (a de-Googled phone).
+        if (UltraPrefs.ownSpeech(context) || !SpeechRecognizer.isRecognitionAvailable(context)) {
+            stopInternal()
+            return own.start()
+        }
         return try {
             if (!SpeechRecognizer.isRecognitionAvailable(context)) {
                 Log.w(TAG, "speech recognition unavailable")
@@ -76,7 +83,10 @@ class VoiceInput(
         }
     }
 
-    fun stop() = stopInternal()
+    fun stop() {
+        own.stop()
+        stopInternal()
+    }
 
     private fun releaseIf(sr: SpeechRecognizer) {
         if (recognizer !== sr) return

@@ -192,6 +192,7 @@ class VoiceActivity : ComponentActivity() {
                     ) {
                         Text(
                             text = when (state) {
+                                "downloading" -> "Getting the speech model…"
                                 "listening" -> "🎙  Listening…"
                                 "hearing" -> "🎙  …"
                                 "thinking", "working" -> "Working…"

@@ -51,6 +51,13 @@ handling as the MoE, just small. Every bug fixed today that's not about size get
 - [ ] Ask two questions in a row in the same chat → the second one starts answering faster than the
       first (it reuses the shared start of the conversation instead of re-reading it).
 
+## 2b. Voice screen and chat mic (Jarvis's own speech recognition, no Google)
+
+- [ ] Settings → Voice → **Jarvis's own speech recognition** is ON (the default).
+- [ ] Chat screen → tap the mic → say **"what's the weather like"** → the text appears in the box.
+      The first time, it downloads the speech model (~60 MB, needs internet once).
+- [ ] Say nothing after tapping the mic → after ~8 s it says "I didn't hear anything".
+
 ## 3. Ambient listening ("Hey Jarvis")
 
 - [ ] Airplane mode **off** for the first start (it downloads the listening models once).
@@ -87,6 +94,8 @@ adb logcat -s UltraLlm UltraRoute UltraAmbient UltraThermal AndroidRuntime > log
 Extra checks if you have adb:
 - CPU build: `adb logcat -d -s UltraLlm | grep "cpu variant"` → shows which engine build loaded.
   The G15's cores (Cortex-A75 + A55) should get `ultra_llm_dotprod`; tell me what it says.
+- Wake-word models' placement: `adb logcat -d -s UltraAmbient | grep -E "wake model|wake gate on"` → for
+  each model, CPU vs accelerator (NNAPI) timing and which one it kept. Send me these lines.
 - Prompt reuse: `adb logcat -d -s UltraLlm | grep reused=` → after the second question in a chat,
   `reused=` should be well above 0.
 - Speed benchmark (needs the repo cloned on the laptop and the Qwen3 1.7B model downloaded in the
@@ -117,4 +126,6 @@ Extra checks if you have adb:
 | Locked phone: asks to unlock | | |
 | Second question starts faster | | |
 | CPU variant (adb) | | |
+| Own speech recognition (chat mic) | | |
+| Wake models placement (adb) | | |
 | Phone RAM / Android version | | |

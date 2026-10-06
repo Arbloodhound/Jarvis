@@ -28,6 +28,9 @@ class Segmenter(private val onUtterance: (ShortArray, Int) -> Unit) {
     private var quietMs = 0
     private var inSpeech = false
 
+    /** True while a segment is open (speech started, not yet closed by silence). */
+    val speaking: Boolean get() = inSpeech
+
     fun reset() {
         preRoll.clear(); current.clear()
         loudRun = 0; quietMs = 0; inSpeech = false
