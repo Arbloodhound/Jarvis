@@ -1,5 +1,23 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## CURRENT (session 01K5Mi, 2026-10-06 ~23:00 UTC) — read this first
+- All three fix branches from "STOPPED" are implemented and merged, plus fast CI/one-tap updates.
+  `claude/new-session-t3cy17` @ ce3896d. 1133 JVM tests, 0 failures; assembleDebug OK.
+  - download-all-impl: Settings DOWNLOADS + "Download all missing", first-run card, Jarvis Tests button 0.
+  - broken-fixes-impl: ambient hold cap 15 s (no thermal drops below CRITICAL), librarian when/todo
+    normaliser, model-aware verdict, thermal WARM 0.75 / HOT 0.87 / CRIT 0.95.
+  - fast-reasoning-impl: default thinker Qwen3-4B-Thinking-2507 Q4_0 (8B kept selectable), Thinking
+    depth Quick/Balanced/Deep + "Answer now", ctx sized from free memory.
+  - fast-updates: native-lib + gradle caches in both workflows; release-apk publishes each test_kit
+    run as pre-release `v2.6.<run>-test` (jarvis-test.apk, jarvis-release.apk; newest 5 kept);
+    versionCode 17+run, versionName 2.6.<run> on CI. Debug-apk/local builds stay versionCode 17 and
+    can no longer install over a CI build (owner must stick to Release APK runs).
+- Release APK run 6 (37543938421) started 22:59 → should publish `v2.6.6-test` (first run fills caches).
+- Owner set up Obtainium with a read-only fine-grained PAT. Once v2.6.6-test exists: Add App
+  https://github.com/Arbloodhound/Jarvis, Include prereleases ON, APK regex `jarvis-test\.apk`.
+  Then: pick 4B Thinking in ON-DEVICE MODEL → DOWNLOADS → Download all missing → Feature check → file.
+- All of the above: SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## STOPPED (session 01BUKa, 2026-10-06 ~23:00 UTC, session limit) — read this first
 The three workers below were told to STOP and push their work as "WIP (stopped, not fully tested): …"
 to their branches. Read each branch's last commit message for what's done, then finish, test, merge,
