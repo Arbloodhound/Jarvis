@@ -70,6 +70,15 @@ DEVLOG entry, commit with `[apk]`, push, send the owner the Actions run link whe
     - possessive names, "recall" and "earlier" start memory searches for general questions;
     - for referring-back requests the memory search query has no real content.
 
+- `claude/semantic-memory` @ e4fc27e: NOT compiled or tested (same sherpa stop).
+  - Has: `MemoryRecall.relevant`/`brief`, `RecallSource`, `Hit`, `extraSources`, a background embedding
+    indexer, and resumable model download.
+  - Hub sizes verified: model 23,026,053 B, vocab 231,508 B.
+  - 10 open review findings, all listed in that commit message. The worst three:
+    - erasing memory mid-index leaves stale vectors attached to new rows;
+    - the CPU fallback can close an ONNX session still in use;
+    - the indexer downloads 23 MB hourly even though nothing calls `MemoryRecall` yet.
+
 **Queued by the owner after that build:**
 - Pause/timing tags in transcripts: whisper.cpp word timestamps (today `no_timestamps`) + VAD gaps →
   `[pause 1.8s]`, speech-rate/loudness tags, so the models can see hesitation.
