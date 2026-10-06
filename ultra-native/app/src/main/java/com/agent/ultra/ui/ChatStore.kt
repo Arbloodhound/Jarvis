@@ -55,8 +55,8 @@ object ChatStore {
     val status = mutableStateOf<ChatStatus.Status?>(null)
 
     /** Start a status episode; returns it so the caller can clear exactly this one. */
-    fun setStatus(phase: ChatStatus.Phase): ChatStatus.Status =
-        ChatStatus.Status(phase, System.currentTimeMillis()).also { s -> onUi { status.value = s } }
+    fun setStatus(phase: ChatStatus.Phase, detail: String = ""): ChatStatus.Status =
+        ChatStatus.Status(phase, System.currentTimeMillis(), detail).also { s -> onUi { status.value = s } }
 
     /** Clear [s] if it is still the one showing (a newer episode is left alone). Any thread. */
     fun clearStatus(s: ChatStatus.Status) = onUi { if (status.value === s) status.value = null }
