@@ -77,7 +77,66 @@ class AmbientMemory private constructor(ctx: Context) :
         }
     }
 
-    fun wipe() { writableDatabase.execSQL("DELETE FROM heard") }
+    /** Rows stored after rowid [afterId], in stored order: the librarian's queue (see [Librarian]). */
+    fun heardAfter(afterId: Long, limit: Int): List<HeardLine> {
+        val out = ArrayList<HeardLine>()
+        readableDatabase.rawQuery(
+            "SELECT rowid,ts,text FROM heard WHERE rowid>CAST(? AS INTEGER) ORDER BY rowid ASC LIMIT ?",
+            arrayOf(afterId.toString(), limit.toString())
+        ).use { c -> while (c.moveToNext()) out += HeardLine(c.getLong(0), c.getLong(1), c.getString(2)) }
+        return out
+    }
+
+    /**
+     * The librarian's queue: up to [limit] rows after its mark, in stored order. The mark is the
+     * last organised rowid plus the newest ts among organised rows. Rowids start again at 1 once
+     * the table is emptied (wipe, or retention pruning every row), and a run that was mid-call
+     * during a wipe can write its old mark back afterwards; either way the newest row at or below
+     * the mark is then NEWER than anything organised, and the mark goes back to 0. One rowid
+     * lookup, no scan.
+     */
+    fun librarianQueue(limit: Int): List<HeardLine> {
+        val (mark, markTs) = librarianMark()
+        if (mark > 0) {
+            val topTs = readableDatabase.rawQuery(
+                "SELECT ts FROM heard WHERE rowid<=CAST(? AS INTEGER) ORDER BY rowid DESC LIMIT 1",
+                arrayOf(mark.toString())
+            ).use { if (it.moveToFirst()) it.getLong(0) else null }
+            if (topTs != null && topTs > markTs) {
+                markLibrarian(0L, 0L, reset = true)
+                return heardAfter(0L, limit)
+            }
+        }
+        return heardAfter(mark, limit)
+    }
+
+    /** Rows up to [id] are organised; [ts] is the newest ts among them. [reset] = overwrite. */
+    fun markLibrarian(id: Long, ts: Long, reset: Boolean = false) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val keepTs = if (reset) ts else maxOf(ts, librarianMark().second)
+            db.execSQL("INSERT OR REPLACE INTO meta(k,v) VALUES('librarian_mark',?)", arrayOf<Any>(id))
+            db.execSQL("INSERT OR REPLACE INTO meta(k,v) VALUES('librarian_mark_ts',?)", arrayOf<Any>(keepTs))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun librarianMark(): Pair<Long, Long> {
+        var mark = 0L; var ts = 0L
+        readableDatabase.rawQuery("SELECT k,v FROM meta WHERE k IN ('librarian_mark','librarian_mark_ts')", null).use { c ->
+            while (c.moveToNext()) if (c.getString(0) == "librarian_mark") mark = c.getLong(1) else ts = c.getLong(1)
+        }
+        return mark to ts
+    }
+
+    fun wipe() {
+        writableDatabase.execSQL("DELETE FROM heard")
+        // new rows start again at rowid 1: an old mark would skip them
+        writableDatabase.execSQL("DELETE FROM meta WHERE k IN ('librarian_mark','librarian_mark_ts')")
+    }
 
     companion object {
         @Volatile private var i: AmbientMemory? = null

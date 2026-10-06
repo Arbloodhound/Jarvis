@@ -1,0 +1,70 @@
+package com.agent.ultra.ui
+
+import android.content.Context
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.agent.ultra.listen.AmbientConfig
+import com.agent.ultra.listen.MemoryNotes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/** "Organise memory while charging": the librarian's switch, its note count, and a way to
+ *  forget the notes. Shown under ambient listening in Settings. */
+@Composable
+fun MemorySettings(context: Context) {
+    val cfg = remember { AmbientConfig(context) }
+    val scope = rememberCoroutineScope()
+    var on by remember { mutableStateOf(cfg.organiseMemory) }
+    var count by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(Unit) {
+        count = withContext(Dispatchers.IO) { runCatching { MemoryNotes.get(context).count() }.getOrDefault(-1) }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Organise memory while charging", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "While the phone charges with the screen off, a small model on the phone turns what " +
+                    "it heard into short notes (plans, to-dos, people, facts) that Jarvis can look up. " +
+                    if (count >= 0) "$count notes so far." else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+        }
+        Switch(checked = on, onCheckedChange = { on = it; cfg.organiseMemory = it })
+    }
+    OutlinedButton(
+        onClick = {
+            scope.launch {
+                count = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val notes = MemoryNotes.get(context)
+                        notes.wipe()
+                        notes.count()
+                    }.getOrDefault(-1)
+                }
+            }
+        },
+        modifier = Modifier.padding(top = 8.dp),
+    ) { Text("Erase notes") }
+}

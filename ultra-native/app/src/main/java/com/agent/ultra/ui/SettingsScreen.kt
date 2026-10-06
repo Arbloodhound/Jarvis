@@ -909,9 +909,14 @@ fun SettingsScreen(
             OutlinedButton(
                 onClick = {
                     com.agent.ultra.listen.AmbientMemory.get(context).wipe()
+                    // the notes were made from what was heard: forgetting it forgets them too
+                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching { com.agent.ultra.listen.MemoryNotes.get(context).wipe() }
+                    }
                 },
                 modifier = Modifier.padding(top = 8.dp),
             ) { Text("Erase ambient memory") }
+            MemorySettings(context)
             Spacer(modifier = Modifier.height(16.dp))
         }
 
