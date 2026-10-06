@@ -149,6 +149,9 @@ dependencies {
     implementation(libs.okhttp)
     // openWakeWord acoustic gate (ONNX Runtime). Verify latest version on Maven.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.30.0")   // 16KB-aligned natives; WakeGate verified against this API
+    // Unpacks the own-voice download (a .tar.bz2: Android has no public bzip2 or tar API).
+    // Apache-2.0, pure Java; only its bzip2 and tar readers are used, R8 drops the rest.
+    implementation("org.apache.commons:commons-compress:1.28.0")
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
@@ -164,6 +167,22 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
+
+// Jarvis's own voice (sherpa-onnx TTS) is a prebuilt library fetched outside Gradle, like the
+// llama/whisper static libs. Without it the APK would still build and quietly speak with the
+// platform engine only, so an arm64 build stops here instead. `-Pbench` (x86_64) skips it.
+val sherpaJni = file("src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so")
+val checkSherpaLib by tasks.registering {
+    val bench = project.hasProperty("bench")
+    doLast {
+        if (!bench && !sherpaJni.exists()) throw GradleException(
+            "Missing $sherpaJni (Jarvis's own voice). Run: bash ultra-native/ondevice-brain/fetch-sherpa.sh"
+        )
+    }
+}
+// Hooked to the JNI-library merge, not preBuild: the JVM unit tests don't need the library.
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }
+    .configureEach { dependsOn(checkSherpaLib) }
 
 // A release build without the release key must fail, not quietly produce a
 // debug-signed APK that looks publishable. 2.3.0 went out that way: signed
