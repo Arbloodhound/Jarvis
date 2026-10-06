@@ -46,6 +46,24 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
      * hears it too (on screen it is already its own message). */
     private var spokenWarning: String? = null
 
+    /**
+     * Runs [block] with [think] as the trace the chat's "Answer now" button ends ([answerNow]).
+     * [block] gets the onStart to hand to generate: [think] becomes the active trace only once
+     * decoding starts (engine lock held), so a request still queued behind another never takes
+     * the button from the trace that is really running.
+     */
+    private inline fun <T> thinkingNow(think: ThinkBudget, crossinline onStart: () -> Unit, block: (() -> Unit) -> T): T =
+        try {
+            block { activeThink = think; onStart() }
+        } finally {
+            if (activeThink === think) activeThink = null
+        }
+
+    /** Deepest Thinking depth this Brain uses, whatever Settings says. The voice brains set
+     *  [WaitBudget.Depth.QUICK]: a spoken request has no "Answer now" button, so minutes of
+     *  silence there could not be cut short. */
+    var maxThinkingDepth: WaitBudget.Depth = WaitBudget.Depth.DEEP
+
     /** Every spoken/answered ending goes through here: the run's warning first, once. */
     private fun speakOut(text: String) {
         val w = spokenWarning
@@ -580,7 +598,10 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 val route = IntentRouter.route(userInput)
                 // History only when the request refers back (HistoryPolicy); then the whole
                 // conversation, windowed append-only from a stable anchor so the KV prefix survives.
-                val historyChars = 3000 * local.contextSize / com.agent.ultra.local.LocalModelEngine.CTX_SIZE
+                // Read once: both callers load the model first (loadLocalShown), so this is the
+                // loaded ctx; read once anyway so history, clip and log can't disagree.
+                val nCtx = local.contextSize
+                val historyChars = 3000 * nCtx / com.agent.ultra.local.LocalModelEngine.CTX_SIZE
                 val needsHistory = HistoryPolicy.decide(userInput)
                 val wantsMemory = MemoryBrief.wants(userInput)
                 val past = if (!needsHistory.include && !wantsMemory.search) emptyList() else LocalPrompt.withoutCurrentTurn(
@@ -606,20 +627,28 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput, historyChars, memory)
                 val reserve = LocalPrompt.answerReserve(level)
                 val speed = local.decodeTokPerSec
+                val depth = com.agent.ultra.ui.UltraPrefs.thinkingDepth(appContext)
+                    .let { if (it > maxThinkingDepth) maxThinkingDepth else it }
+                val timed = WaitBudget.budget(route.tier, speed, depth)
                 val clipped = ThinkBudget.clipToContext(
-                    WaitBudget.budget(route.tier, speed), local.contextSize,
+                    timed, nCtx,
                     LocalPrompt.estimateTokens(prompt), reserve,
                 )
-                val budget = ThermalPolicy.scaleBudget(clipped, level)
+                val budget = WaitBudget.scaleForHeat(clipped, level, depth)
                 android.util.Log.d("UltraRoute", "tier=${route.tier} reason=${route.reason} level=$level budget=$budget " +
+                    "depth=$depth maxWaitS=${WaitBudget.maxSilentSeconds(route.tier, depth).toInt()} " +
+                    "ceiling=${WaitBudget.tokenCeiling(route.tier, depth)} timed=$timed clipped=$clipped ctx=$nCtx " +
                     "tierBudget=${route.thinkBudget} tokPerSec=${speed?.let { "%.2f".format(it) } ?: "unknown"}")
                 ThermalPolicy.coolingNote(level, route.tier)?.let { ChatStore.appendTo(msg.id, it + "\n\n") }
-                local.generate(
-                    prompt, maxTokens = budget + reserve + 32,
-                    thinkBudget = ThinkBudget(budget, startsInThink = true),
-                    // threads: the engine picks them from the level once it holds the generate lock
-                    onStart = onStart,
-                ) { piece -> onPiece(piece) }
+                val think = ThinkBudget(budget, startsInThink = true)
+                thinkingNow(think, onStart) { started ->
+                    local.generate(
+                        prompt, maxTokens = budget + reserve + 32,
+                        thinkBudget = think,
+                        // threads: the engine picks them from the level once it holds the generate lock
+                        onStart = started,
+                    ) { piece -> onPiece(piece) }
+                }
             } else {
                 val prompt = "You are Jarvis, a concise assistant on an offline Android phone. " +
                     "Answer briefly and honestly.\n\nUser: $userInput\nJarvis:"
@@ -734,12 +763,15 @@ JSON:"""
             level,
         )
         var shown: ChatStatus.Status? = null
+        val think = ThinkBudget(budget, startsInThink = true)
         val raw = try {
-            local.generate(
-                prompt, maxTokens = budget + reserve + 32,
-                thinkBudget = ThinkBudget(budget, startsInThink = true),
-                onStart = { shown = ChatStore.setStatus(ChatStatus.Phase.THINKING) },
-            ).getOrElse { return null }
+            thinkingNow(think, { shown = ChatStore.setStatus(ChatStatus.Phase.THINKING) }) { started ->
+                local.generate(
+                    prompt, maxTokens = budget + reserve + 32,
+                    thinkBudget = think,
+                    onStart = started,
+                )
+            }.getOrElse { return null }
         } finally {
             shown?.let { ChatStore.clearStatus(it) }
         }
@@ -1404,6 +1436,16 @@ RULES:
     }
 
     companion object {
+        /** The hidden trace being written now, by any Brain (chat or voice); null when none. */
+        @Volatile private var activeThink: ThinkBudget? = null
+
+        /** True while a hidden trace is being written ("Answer now" has something to end). */
+        val thinkingActive: Boolean get() = activeThink != null
+
+        /** "Answer now": end the on-device model's hidden thinking and let it answer with what it
+         *  has ([ThinkBudget.answerNow]). No effect when nothing is thinking. */
+        fun answerNow() { activeThink?.answerNow() }
+
         /** Successful calls from the most recent completed run, process-wide.
          * "save that as morning briefing" is its own request with its own empty
          * sequence, so the steps to save must come from the run before it. */

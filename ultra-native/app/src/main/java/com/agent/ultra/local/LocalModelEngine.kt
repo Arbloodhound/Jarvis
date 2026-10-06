@@ -88,10 +88,20 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
     private val totalRam: Long by lazy { totalRamBytes(context) }
     /** The ctx the loaded native context was created with (nativeContextSize); 0 while unloaded. */
     @Volatile private var loadedCtx = 0
-    /** What the next load will use: [contextFor] this phone's RAM and the selected file. The
-     *  librarian stays at [CTX_SIZE]: its prompts are short, and its KV must fit beside the thinker. */
-    private fun plannedContext(): Int =
-        if (role == Role.LIBRARIAN) CTX_SIZE else contextFor(totalRam, modelFileName, modelFileSizeBytes)
+    /** What the next load will use: for the thinker, [contextForRoom] the memory free beside the
+     *  other engine ([roomBytes], default: read now) and the selected file. The librarian stays at
+     *  [CTX_SIZE]: its prompts are short, and its KV must fit beside the thinker. */
+    private fun plannedContext(roomBytes: Long = roomNow()): Int =
+        if (role == Role.LIBRARIAN) CTX_SIZE
+        else contextForRoom(roomBytes, totalRam, modelFileName, modelFileSizeBytes)
+
+    /** availMem less the other engine's mapped weights ([otherMappedBytes]); <= 0 = unknown. */
+    private fun roomNow(): Long {
+        val other = otherEngine()
+        val otherMapped = if (other == null) 0L else otherMappedBytes(
+            other.loaded, other.residentLoaded, other.modelFilePath == modelFilePath, other.modelFileSizeBytes)
+        return roomBesideOther(availableRam(), otherMapped)
+    }
 
     /** Threads this engine generates with at full speed: [baseThreads] for the thinker, at most
      *  [LIBRARIAN_THREADS] for the librarian (on the fastest LLM cores: the two never generate at
@@ -315,7 +325,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
      * model, rather than putting both in a memory that holds one.
      */
     private suspend fun loadWithRoom(): Boolean {
-        repeat(MAX_YIELD_ROUNDS) {
+        repeat(MAX_YIELD_ROUNDS) { round ->
             val yielding = nativeMutex.withLock {
                 if (handle != 0L) return true
                 if (!LlmNative.available || !modelPresent) return loadBlocking()   // logs why
@@ -332,9 +342,17 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 val otherMappedBesideCopy = if (other == null) 0L else otherMappedBytes(
                     otherLoaded, other.residentLoaded, false, other.modelFileSizeBytes)
                 val avail = availableRam()
-                val need = residentNeedBytes(modelFileName, modelFileSizeBytes, plannedContext())
-                when (loadDecision(role, avail, need, otherLoaded, otherMapped)) {
-                    LoadDecision.LOAD -> return loadBlocking(otherMappedBesideCopy)
+                // One reading for both the ctx and the decision; the load uses this same ctx.
+                val ctx = plannedContext(roomBesideOther(avail, otherMapped))
+                val need = residentNeedBytes(modelFileName, modelFileSizeBytes, ctx)
+                // The thinker doesn't settle for a smaller window to sit beside the librarian:
+                // if the librarian's mapped weights are what shrinks it, the librarian gives way
+                // (not on the last round: a librarian that somehow stayed loaded then only costs ctx).
+                val decision = if (role == Role.THINKER && otherLoaded && round < MAX_YIELD_ROUNDS - 1 &&
+                    ctx < plannedContext(avail))
+                    LoadDecision.LIBRARIAN_YIELDS else loadDecision(role, avail, need, otherLoaded, otherMapped)
+                when (decision) {
+                    LoadDecision.LOAD -> return loadBlocking(otherMappedBesideCopy, ctx)
                     LoadDecision.REFUSE -> {
                         android.util.Log.w("UltraLlm", "$role refused: availMB=${avail / MIB} " +
                             "otherMappedMB=${otherMapped / MIB} needMB=${need / MIB} (+${MIN_AVAIL_BYTES / MIB} headroom)")
@@ -411,7 +429,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
      * [otherMappedBytes]: the other engine's mapped weights ([otherMappedBytes] in the companion,
      * same file included), which availMem counts as free but which must stay; a resident copy can't use them.
      */
-    private fun loadBlocking(otherMappedBytes: Long = 0L): Boolean {
+    private fun loadBlocking(otherMappedBytes: Long = 0L, plannedCtx: Int = 0): Boolean {
         if (loaded) return true
         if (!LlmNative.available) return false          // build without llama.cpp (emulator)
         if (!modelPresent) {
@@ -432,7 +450,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             val cpus = if (role == Role.LIBRARIAN) topo.fastestFirst.filter { it in topo.llmCpus }.take(threads).sorted()
                 else topo.llmCpus
             android.util.Log.i("UltraLlm", "$role cpus llm=$cpus whisper=${topo.whisperCpus} threads=$threads")
-            val ctx = plannedContext()
+            val ctx = if (plannedCtx > 0) plannedCtx else plannedContext()
             // A resident copy can't give pages back: what a ctx above 4096 adds (KV, mask) must
             // also fit beside it. At 4096 the check is unchanged (its headroom covered that size).
             // The librarian is always mapped: the setting is about the thinker, and availMem
@@ -861,6 +879,36 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 .maxOrNull() ?: CTX_SIZE
         }
 
+        /**
+         * Free memory the thinker's load must leave behind. Pixel 10 Pro XL: the 8B loaded
+         * resident at 16384 (ctx from [contextFor], i.e. from TOTAL RAM) left ~2.4 GB free and
+         * paged; 3 GiB is more than that, and also leaves the librarian room to load later
+         * (Qwen3 1.7B Q4_0 needs ~1.7 GB at 4096 plus [MIN_AVAIL_BYTES]). A planning figure,
+         * not a measured no-paging threshold.
+         */
+        const val THINKER_FREE_AFTER_LOAD_BYTES = 3_072L * MIB
+
+        /**
+         * Context window for the thinker from the memory free NOW: the largest of [CTX_STEPS]
+         * whose [residentNeedBytes] leaves [THINKER_FREE_AFTER_LOAD_BYTES] of [roomBytes], never
+         * above [contextFor] (total RAM, training context) and never below [CTX_SIZE].
+         * [roomBytes]: availMem less the weights a loaded librarian maps ([roomBesideOther]),
+         * which availMem counts as free but which must stay. Unknown (<= 0) -> [contextFor], as
+         * before. Pure, JVM-tested (ContextSizeTest).
+         *
+         * Pixel 10 Pro XL, 15,081 MiB total, ~8.6e9 B free: Qwen3-8B Q4_K_S (4,802,012,992 B)
+         * needs ~5.58e9 at 4096, 5.91e9 at 8192, 6.56e9 at 16384 -> 4096 (8192 would leave 2.69e9).
+         * Qwen3-4B Q4_0 (2,375,773,312 B): 3.48e9 at 8192, 4.14e9 at 16384 -> 16384, also beside
+         * a loaded 1.7B librarian (room 8.6e9 - 1.06e9 mapped = 7.54e9).
+         */
+        fun contextForRoom(roomBytes: Long, totalRamBytes: Long, fileName: String, modelBytes: Long): Int {
+            val upper = contextFor(totalRamBytes, fileName, modelBytes)
+            if (roomBytes <= 0 || modelBytes <= 0) return upper
+            return CTX_STEPS.filter {
+                it <= upper && residentNeedBytes(fileName, modelBytes, it) + THINKER_FREE_AFTER_LOAD_BYTES <= roomBytes
+            }.maxOrNull() ?: CTX_SIZE
+        }
+
         /** [contextFor] a preset by its listed size (before the file is on disk). */
         fun contextFor(totalRamBytes: Long, model: ModelChoice): Int =
             contextFor(totalRamBytes, model.fileName, model.approxMb * MIB)
@@ -897,7 +945,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             // checked on the Hub listing, 2026-10-06 (unsloth has no Q4_0 for the 8B: Q4_K_S,
             // also repacked).
             ModelChoice(
-                "Qwen3-4B Thinking 2507 (Q4_0) — fast thinker, best fit for 16 GB",
+                "Qwen3-4B Thinking 2507 (Q4_0) — default: fast, strongest reasoning",
                 "https://huggingface.co/unsloth/Qwen3-4B-Thinking-2507-GGUF/resolve/main/Qwen3-4B-Thinking-2507-Q4_0.gguf",
                 "qwen3-4b-thinking-2507-q4_0.gguf", 2266,
                 "Reasoning model small enough to stay fully in memory with room to spare, on the phone CPU's fast path. Strong maths/reasoning for its size and good at tool calls.",
@@ -909,10 +957,10 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 "The same 4B with refusals removed (Q4_K_M, also on the fast path).",
             ),
             ModelChoice(
-                "Qwen3-8B (Q4_K_S) — stronger, still on the fast path",
+                "Qwen3-8B (Q4_K_S) — bigger, slower",
                 "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_S.gguf",
                 "qwen3-8b-q4ks.gguf", 4580,
-                "Twice the 4B's size: better answers, roughly half its speed. Fits in memory on a 16 GB phone.",
+                "Twice the 4B's size, roughly half its speed. On Qwen's published reasoning, maths and tool-call tests the 4B Thinking 2507 scores higher; the 8B knows slightly more general facts.",
             ),
             // The fine-tune from Qwen3_30B_A3B_LoRA_Colab.ipynb (its REPO / OUT_M / OUT_S). These 404
             // until that notebook has run and uploaded. Own file names, so a phone holding the stock
@@ -1115,41 +1163,50 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         /** What a phone with room for it defaults to: Qwen3-4B Thinking 2507 Q4_0. */
         val FAST_DEFAULT = PRESETS.first { it.fileName == "qwen3-4b-thinking-2507-q4_0.gguf" }
 
-        /** The thinker on a phone with [BIG_THINKER_MIN_RAM_BYTES]: Qwen3-8B Q4_K_S. */
+        /** Qwen3-8B Q4_K_S: the 14 GB+ default before Qwen3-4B Thinking 2507 replaced it. Still
+         *  selectable, and kept by an install that already has it on disk ([defaultFor]). */
         val BIG_DEFAULT = PRESETS.first { it.fileName == "qwen3-8b-q4ks.gguf" }
 
         /** The librarian's model until the user chooses one: Qwen3 1.7B Q4_0. */
         val LIBRARIAN_DEFAULT = PRESETS.first { it.fileName == "qwen3-1.7b-q4_0.gguf" }
 
-        /** Total RAM from which the thinker defaults to [BIG_DEFAULT] (a "16 GB" phone reports
-         *  15.0-17.2e9; the Pixel 10 Pro XL 15,081 MiB). */
-        const val BIG_THINKER_MIN_RAM_BYTES = 14_000_000_000L
-
         /**
          * The model used before the user has chosen one. Pure, JVM-tested (DefaultModelTest).
          *
-         * Qwen3-8B Q4_K_S from [BIG_THINKER_MIN_RAM_BYTES] (14 GB) where [fitFor] says it fits;
-         * below that, Qwen3-4B Thinking Q4_0 where it fits (8 GB and up); everywhere else, and
-         * when RAM is unknown (<= 0, where fitFor answers COMFORTABLE for anything), the small
-         * Gemma. Only names the model — nothing is downloaded; the user still presses Download
-         * in Settings. A choice the user made (prefs set) always wins over this.
+         * Qwen3-4B Thinking 2507 Q4_0 wherever [fitFor] says it fits (8 GB and up), 16 GB phones
+         * included. In Qwen's published thinking-mode results it scores above Qwen3-8B on
+         * reasoning (GPQA 65.8 vs 62.0, AIME25 81.3 vs 67.3, LiveBench 71.8 vs 67.1), instruction
+         * following (IFEval 87.4 vs 85.0) and tool calls (BFCL-v3 71.2 vs 68.1); the 8B is ahead
+         * only on MMLU-Redux (87.5 vs 86.1). 4B figures re-checked on the Qwen3-4B-Thinking-2507
+         * model card; the 8B's are from the Qwen3 Tech Report (arXiv 2505.09388, Table 17) as
+         * noted in HANDOFF.md, not re-checked. Speed on the owner's Pixel 10 Pro XL, from his
+         * earlier runs as recorded in HANDOFF.md: 8-11 tok/s, against 2-4 for the 8B (paging).
+         * Everywhere else, and when RAM is unknown (<= 0, where fitFor answers COMFORTABLE for
+         * anything), the small Gemma. Only names the model; nothing is downloaded. A choice the
+         * user made (prefs set) always wins over this.
          *
-         * [downloaded] (file names in models/): an install from before a default existed
-         * downloaded an earlier default without saving any prefs. If the chosen default is not
-         * on disk, stay on the earlier one that is (the 4B on a 14 GB+ phone, then Gemma), so an
-         * update never points a working install at a missing multi-GB file.
+         * [downloaded] (file names in models/): an install from before this default may have
+         * downloaded an earlier default without saving any prefs (the 8B on a 14 GB+ phone, or
+         * Gemma). If the 4B is not on disk, stay on the earlier one that is, so an update never
+         * points a working install at a missing multi-GB file; Settings suggests the 4B instead
+         * ([fasterThinkerHint]).
          */
         fun defaultFor(totalRamBytes: Long, downloaded: Set<String> = emptySet()): ModelChoice {
             // Not the MoE any more: on the 16 GB Pixel it can't stay in memory (see PRESETS).
-            val byRam = when {
-                totalRamBytes >= BIG_THINKER_MIN_RAM_BYTES && fitFor(BIG_DEFAULT, totalRamBytes) != Fit.TOO_BIG -> BIG_DEFAULT
-                totalRamBytes > 0 && fitFor(FAST_DEFAULT, totalRamBytes) != Fit.TOO_BIG -> FAST_DEFAULT
-                else -> DEFAULT
-            }
+            val byRam = if (totalRamBytes > 0 && fitFor(FAST_DEFAULT, totalRamBytes) != Fit.TOO_BIG) FAST_DEFAULT else DEFAULT
             if (byRam.fileName in downloaded) return byRam
-            val earlier = if (byRam == BIG_DEFAULT) listOf(FAST_DEFAULT, DEFAULT) else listOf(DEFAULT)
+            val earlier = listOf(BIG_DEFAULT, DEFAULT).filter {
+                it == DEFAULT || (totalRamBytes > 0 && fitFor(it, totalRamBytes) != Fit.TOO_BIG)
+            }
             return earlier.firstOrNull { it.fileName in downloaded } ?: byRam
         }
+
+        /** One line for the model picker while the thinker is the 8B; null for any other file.
+         *  Pure, JVM-tested (DefaultModelTest). */
+        fun fasterThinkerHint(currentFileName: String): String? =
+            if (currentFileName == BIG_DEFAULT.fileName)
+                "4B-Thinking is faster and scores higher on reasoning benchmarks."
+            else null
     }
 }
 

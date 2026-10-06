@@ -26,11 +26,12 @@ You need: the Pixel, Wi‑Fi, a charger, and about 1½ hours the first time (mos
 Stay on Wi‑Fi and keep the phone plugged in for this part.
 
 ### 2a. Download everything
-1. Jarvis → ⚙ **Settings** → **DOWNLOADS** (at the top) → **Download all missing**.
-   - It lists every model with its size. The two brains are the big ones (about 6 GB together); the rest are small.
+1. Pick the brain first: Jarvis → ⚙ **Settings** → **ON-DEVICE MODEL** → **Change model** → **Qwen3-4B Thinking 2507 (Q4_0)**. It's faster than the 8B and scores higher on Qwen's reasoning tests. (Already have the 8B? Pick the 4B anyway; the 8B stays on the phone.)
+2. Then ⚙ **Settings** → **DOWNLOADS** (at the top) → **Download all missing**.
+   - It lists every model with its size. The two brains are the big ones (about 3.5 GB together); the rest are small.
    - The chat screen's **Download all** card does the same thing.
-2. Keep the screen on and Wi‑Fi on. Leaving Settings doesn't stop it.
-3. Done when every line shows **✓**. If a line says **failed**, tap **Download all missing** again (big files carry on where they stopped).
+3. Keep the screen on and Wi‑Fi on. Leaving Settings doesn't stop it.
+4. Done when every line shows **✓**. If a line says **failed**, tap **Download all missing** again (big files carry on where they stopped).
 
 ### 2b. Listening and voice
 1. Settings → **VOICE** → turn on **Ambient listening**. Allow the microphone when asked.
