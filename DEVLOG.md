@@ -3,6 +3,47 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-06 (later) — Accelerator research + probe, XNNPACK placement, Jarvis's own voice (batch)
+
+**Subsystems:** D (`listen/WakeGate`, `listen/LocalVoice`, `ui/Speaker`), F (debug accelerator probe),
+G (Settings → Voice), H (sherpa-onnx fetch script, Gradle check, both workflows). Request: "research if
+there's an accelerator driver, and whatever else is needed to build this" (GPU/TPU + Google-free voice
+on a de-Googled phone). Three parallel units, PRs #9, #10, #11 merged into this branch.
+
+**Research (accelerator drivers):** Tensor G1–G4 ship an NNAPI TPU HAL (darwinn/edgetpu) in the vendor
+image — CONFIRMED from Google's device trees; GrapheneOS keeps it, no Google services needed. Pixel 10
+(Tensor G5): UNKNOWN (trees unpublished; Google's Tensor ML SDK needs Play delivery, unusable here).
+Moto G15 (Helio G81): likely no NPU. GPU: no usable NNAPI GPU driver expected; whisper.cpp Vulkan is
+fragile on PowerVR/Mali → speech recognition stays on CPU. Only the phone can answer → probe.
+
+**Built:**
+- #10 `tools/accel-probe.sh` + debug-only `AccelProbeReceiver` + pure `AccelReport` (17 tests): SoC,
+  NNAPI service lists (dumpsys/lshal), wake models timed on CPU / NNAPI / XNNPACK, OpenCL/Vulkan
+  presence/load, verdict "TPU via NNAPI: available / not available / unknown (reason)" using WakeGate's
+  own acceptance rule. Debug manifest only.
+- #9 `WakeGate`: XNNPACK added as a third placement candidate; pure `choosePlacement` (fastest candidate
+  passing the ≥20%-faster + output-match rule, else CPU); unchosen sessions closed; CPU re-timed to
+  avoid clock ramp bias.
+- #11 Google-free TTS: sherpa-onnx 1.13.8 static-link build (only `libsherpa-onnx-jni.so`, one ORT in
+  the APK), sha256-pinned `ondevice-brain/fetch-sherpa.sh` (16 KB alignment check, run in both
+  workflows; local builds must run it once), Gradle `checkSherpaLib`; vendored `Tts.kt` binding +
+  proguard keep; `LocalVoice` (voice download + safe tar.bz2 extraction, commons-compress 1.28.0);
+  `Speaker` speaks with the own voice sentence by sentence via AudioTrack, falls back to platform TTS on
+  any failure or while the voice downloads; Settings → "Jarvis's own voice" (default on). Voice:
+  `vits-piper-en_US-norman-medium-int8` (public-domain LibriVox data; libritts_r rejected because it is
+  fine-tuned from lessac, whose dataset licence isn't open). `stop()` now fires `whenDone`.
+
+**Status:** merged tree: 643 unit tests, 0 failures; `assembleDebug` passes; APK has
+`libsherpa-onnx-jni.so` and exactly one `libonnxruntime.so`; release build (throwaway key, in the unit)
+keeps the binding names. On-device: **SOURCE-FIXED BUT RUNTIME-UNPROVEN** (no phone): TPU presence,
+XNNPACK speed, own-voice playback/latency.
+
+**Open / next:** run `accel-probe.sh` on the G15 and at Pixel deployment; G15 guide sections 2c + probe
+added. Client PDF unchanged (the probe needs adb + the debug APK, not for the client). The own voice
+downloads ~21 MB on first speak without asking (same as the whisper model) — revisit if metered data
+matters. Still awaiting decisions: confirmation-skip principle (blocked by safety classifier), memory
+retention, cloud default, custom wake word.
+
 ## 2026-10-06 — Google-free speech for the voice screen; wake models on the accelerator when it wins
 
 **Subsystems:** D (`listen/`: LocalSpeech, WakeGate, Segmenter), G (Settings → Voice), UI (VoiceInput,

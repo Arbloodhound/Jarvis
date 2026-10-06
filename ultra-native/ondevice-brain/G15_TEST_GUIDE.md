@@ -58,6 +58,15 @@ handling as the MoE, just small. Every bug fixed today that's not about size get
       The first time, it downloads the speech model (~60 MB, needs internet once).
 - [ ] Say nothing after tapping the mic → after ~8 s it says "I didn't hear anything".
 
+## 2c. Jarvis's own voice (no Google text-to-speech)
+
+- [ ] Settings → Voice → **Jarvis's own voice** is ON (the default).
+- [ ] Ask something in the chat with speaking turned on (or use the voice screen). The very first
+      time, Jarvis answers in the phone's built-in voice while it downloads its own (~21 MB, needs
+      internet once). From the next answer on it speaks in its own male voice.
+- [ ] Ask for a long answer, then tap stop / start a new question → it stops talking at once.
+- [ ] Turn the switch OFF → it uses the phone's built-in voice again (if the phone has one).
+
 ## 3. Ambient listening ("Hey Jarvis")
 
 - [ ] Airplane mode **off** for the first start (it downloads the listening models once).
@@ -95,9 +104,13 @@ Extra checks if you have adb:
 - CPU build: `adb logcat -d -s UltraLlm | grep "cpu variant"` → shows which engine build loaded.
   The G15's cores (Cortex-A75 + A55) should get `ultra_llm_dotprod`; tell me what it says.
 - Wake-word models' placement: `adb logcat -d -s UltraAmbient | grep -E "wake model|wake gate on"` → for
-  each model, CPU vs accelerator (NNAPI) timing and which one it kept. Send me these lines.
+  each model, timing on the CPU, the fast CPU path (XNNPACK) and the accelerator (NNAPI), and which one it kept. Send me these lines.
 - Prompt reuse: `adb logcat -d -s UltraLlm | grep reused=` → after the second question in a chat,
   `reused=` should be well above 0.
+- **Accelerator check (run once, takes a minute):** with the app open and ambient listening turned on
+  at least once (so the wake models are downloaded), run `bash ultra-native/tools/accel-probe.sh`.
+  The last lines say `TPU via NNAPI: available / not available / unknown (why)` and whether OpenCL
+  (GPU) is there. Send me the whole output. Same command on the Pixel at deployment.
 - Speed benchmark (needs the repo cloned on the laptop and the Qwen3 1.7B model downloaded in the
   app): `bash ultra-native/tools/bench.sh` → prints the CPU layout the app sees and tokens/sec per
   thread count. Send me the whole output.
@@ -128,4 +141,6 @@ Extra checks if you have adb:
 | CPU variant (adb) | | |
 | Own speech recognition (chat mic) | | |
 | Wake models placement (adb) | | |
+| Own voice speaks after download | | |
+| Accelerator check output (adb) | | |
 | Phone RAM / Android version | | |
