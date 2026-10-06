@@ -164,6 +164,27 @@ class HistoryPolicyTest {
         assertFalse(include("summarize this one: " + "word ".repeat(30)))
     }
 
+    // ------------------------------------------------- review findings (this branch)
+
+    @Test fun multiLineFollowUpStillRefersBack() {
+        assertTrue(include("What did you mean by that?\nI don't understand the part about taxes"))
+        assertEquals("summarize this", HistoryPolicy.instructionPart("summarize this\n" + "a pasted line of text. ".repeat(3)))
+    }
+
+    @Test fun possessiveFollowUpsGetHistory() {
+        for (s in listOf("What's his best book?", "How old is its author?", "When did their band split?"))
+            assertTrue(s, include(s))
+    }
+
+    @Test fun definitionsWithOrdinalWordsAreSelfContained() {
+        for (s in listOf(
+            "What's the farthest a probe has travelled so far?", "Who was the first one to climb Everest?",
+            "What is element number 26?", "how do I continue a git rebase after fixing conflicts",
+        )) assertFalse(s, include(s))
+        for (s in listOf("tell me about number 2", "what have we covered so far", "continue the list"))
+            assertTrue(s, include(s))
+    }
+
     @Test fun dummyItIsNotAReference() {
         for (s in listOf("what time is it", "what day is it today", "is it going to rain", "is it raining",
             "it's cold, what should I wear", "how late is it in Tokyo")) assertFalse(s, include(s))

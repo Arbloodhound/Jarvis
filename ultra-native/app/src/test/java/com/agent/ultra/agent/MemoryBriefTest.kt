@@ -68,6 +68,10 @@ class MemoryBriefTest {
         assertNull(MemoryBrief.recall("q", timeoutMs = 50))
         MemoryBrief.provider = { _, _ -> kotlinx.coroutines.withTimeout(10) { delay(1000); "x" } }
         assertNull(MemoryBrief.recall("q"))                         // the provider's own timeout
+        MemoryBrief.provider = { _, _ -> Thread.sleep(2000); "blocking" }   // ignores cancellation
+        val t0 = System.currentTimeMillis()
+        assertNull(MemoryBrief.recall("q", timeoutMs = 50))
+        assertTrue(System.currentTimeMillis() - t0 < 1000)
     }
 
     /** The brief lands after the history and before the user turn, labelled, and only when non-blank. */
@@ -89,6 +93,8 @@ class MemoryBriefTest {
         for (s in listOf(
             "what is Newton's second law", "explain Ohm's law", "what is a product recall",
             "is the earlier train faster", "tell me more", "why is that", "make it shorter",
+            "Translate this from English to French", "Help me with Python decorators",
+            "What did Einstein think about God?",
         )) assertFalse(s, wants(s))
         for (s in listOf("do you recall the address", "what's Dana's number", "what did we decide earlier",
             "the meeting with Priya", "what did he say last time")) assertTrue(s, wants(s))

@@ -1,10 +1,12 @@
 package com.agent.ultra.agent
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -33,11 +35,14 @@ object MemoryBrief {
 
     data class Decision(val search: Boolean, val reason: String)
 
+    private val searchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private fun rx(vararg words: String) =
         Regex("\\b(" + words.joinToString("|") + ")\\b", RegexOption.IGNORE_CASE)
 
     private val whoSaid = rx(
-        "what did (i|he|she|they|we|you|\\w+) (say|mention|tell|ask|decide|agree|want|promise|think)",
+        "what did (i|he|she|they|we|you) (say|mention|tell|ask|decide|agree|want|promise|think)",
+        "what did \\w+ (say|mention|tell|ask|promise)",
         "who (said|mentioned|told|asked|called|texted|was talking)",
         "when (did|was|were) (i|he|she|they|we|\\w+) (say|said|mention|tell|told|ask|call|text|meet|met|talk)",
         "did (i|he|she|they|we|\\w+) (say|mention|tell|ask|call|text)",
@@ -56,10 +61,11 @@ object MemoryBrief {
         "the other day", "(a|an|\\d+|few|couple of) (minutes?|hours?|days?|weeks?) ago", "just now",
     )
     // A name (capitalised, not the first word) next to a speech or contact word:
-    // "what's Sarah's number", "call with Tom", "Dana said". "who was Napoleon" and
-    // "Newton's second law" are not: a possessive counts only before a contact word.
+    // "what's Sarah's number", "call with Tom", "Dana said". "who was Napoleon",
+    // "Newton's second law" and "help me with Python" are not: a possessive counts only
+    // before a contact word, "with/from" only after a call/meeting/message word.
     private val nameNearSpeech = Regex(
-        "(\\b(with|from|tell|ask|call|text|email|meet|met)\\s+[A-Z][a-z]+\\b)|" +
+        "(\\b(tell|ask|call|text|email|meet|met|(call|meeting|chat|talk|conversation|message|text|email|notes?) (with|from))\\s+[A-Z][a-z]+\\b)|" +
             "(\\b[A-Z][a-z]+['’]s\\s+(number|phone|address|email|birthday|wife|husband|kids?|plan|idea|news|message|text|call)\\b)|" +
             "(\\b[A-Z][a-z]+\\s+(said|says|told|asked|mentioned|wants|wanted|thinks|thought|called|texted|emailed)\\b)",
     )
@@ -113,13 +119,18 @@ object MemoryBrief {
      */
     suspend fun recall(query: String, nowMs: Long = System.currentTimeMillis(), timeoutMs: Long = TIMEOUT_MS): String? {
         val p = provider ?: return null
+        // Detached, so a provider that blocks without checking cancellation cannot hold the
+        // answer past the timeout; it finishes (and is dropped) in the background.
+        val job = searchScope.async { p(query, nowMs) }
         val text = try {
-            withTimeoutOrNull(timeoutMs) { withContext(Dispatchers.IO) { p(query, nowMs) } }
+            withTimeoutOrNull(timeoutMs) { job.await() }
         } catch (e: CancellationException) {
             currentCoroutineContext().ensureActive()   // the caller was cancelled: propagate
             null                                       // the provider's own timeout: no brief
         } catch (_: Exception) {
             null
+        } finally {
+            if (!job.isCompleted) job.cancel()
         }
         return text?.takeIf { it.isNotBlank() }?.let { cap(it) }
     }

@@ -554,9 +554,15 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 val history = if (needsHistory.include) HistoryPolicy.window(past, historyChars) else emptyList()
                 android.util.Log.d("UltraRoute", "history turns=${history.size} chars=${history.sumOf { it.text.length }} " +
                     "reason=${needsHistory.reason}")
-                val memory = if (!wantsMemory.search) null else MemoryBrief.recall(
-                    MemoryBrief.query(userInput, past.lastOrNull { it.fromUser }?.text),
-                )
+                val memory = if (!wantsMemory.search || MemoryBrief.provider == null) null else {
+                    // The search can take up to MemoryBrief.TIMEOUT_MS: show it, not an empty bubble.
+                    val searching = ChatStore.setStatus(ChatStatus.Phase.THINKING)
+                    try {
+                        MemoryBrief.recall(MemoryBrief.query(userInput, past.lastOrNull { it.fromUser }?.text))
+                    } finally {
+                        ChatStore.clearStatus(searching)
+                    }
+                }
                 android.util.Log.d("UltraRoute", "memory reason=${wantsMemory.reason} provider=${MemoryBrief.provider != null} " +
                     "briefChars=${memory?.length ?: 0}")
                 val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput, historyChars, memory)

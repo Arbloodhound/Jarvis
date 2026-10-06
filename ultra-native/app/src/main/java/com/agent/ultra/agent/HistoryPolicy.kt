@@ -27,21 +27,24 @@ object HistoryPolicy {
     private val conversationRef = rx(
         "we (talked|discussed|spoke|chatted|covered|went over|were (talking|discussing))",
         "(our|this) (conversation|chat|discussion|thread)",
-        "you (just )?(said|mentioned|told me|wrote|suggested|recommended|listed|gave|meant)",
+        "you (just )?(said|mentioned|told me|wrote|suggested|recommended|listed|gave|meant|mean)",
         "(what|when) (did )?i (say|said|ask|asked|tell you|told you)", "i (just )?(told you|asked you)",
         "what was my (last )?question", "i (said|mentioned|wrote|asked) (earlier|above|before)",
         "(your|my|the) (last|previous|earlier|first) (answer|reply|message|question|response|point)",
-        "so far", "(from|in) (your|the) (list|answer|reply)",
+        "(said|discussed|covered|talked about|told me|asked|got|have) so far", "(from|in) (your|the) (list|answer|reply)",
     )
     // Continuations: "continue", "tell me more", "say that again".
     private val continuation = rx(
-        "continue", "tell me more", "more (detail|details|on that|about (it|that|those))",
+        "^continue", "continue (that|it|this|the (list|story|answer|text))", "tell me more", "more (detail|details|on that|about (it|that|those))",
         "elaborate", "expand on", "(say|do|try|explain|tell me|read)( (it|that|this))? again", "(the )?rest of (it|that|the list)",
     )
     // Pointing at an item of an earlier answer: "the second one", "number 2", "option 3".
+    // Not a definition: "the first one to climb Everest", "element number 26".
     private val ordinal = rx(
-        "the (first|second|third|fourth|fifth|last|other|next|previous|same) (one|ones|option|idea|item|suggestion|recipe|dish)",
-        "(that|this|which) one", "(number|option|item) ?#?\\d+",
+        "the (first|second|third|fourth|fifth|last|other|next|previous|same) (one|ones|option|idea|item|suggestion|recipe|dish)" +
+            "(?!\\s+(to|who|that|which|of|in|on|at|from|by|ever)\\b)",
+        "(that|this|which) one(?!\\s+(to|who|that|of)\\b)",
+        "(^|(the|about|on|for|with|pick|take|try|choose|use|go with|explain|expand)\\s+)(number|option|item) ?#?\\d+",
     )
     // A command acting on something already on screen: "translate that", "make it shorter".
     private val pronounObject = Regex(
@@ -51,7 +54,9 @@ object HistoryPolicy {
     )
     // A referring pronoun ending the request: "what do you mean by that?", "why is that".
     private val pronounAtEnd = Regex("\\b(that|those|these|them|it)\\s*[?.!]*\\s*$", RegexOption.IGNORE_CASE)
-    private val referringPronoun = rx("that", "those", "these", "them", "it", "he", "she", "they", "him", "her")
+    private val referringPronoun = rx(
+        "that", "those", "these", "them", "it", "its", "he", "she", "they", "him", "her", "his", "their", "theirs",
+    )
     // Short follow-ups: "and the other one?", "what about pasta?"; bare "why?", "really?".
     private val followUpStart = Regex(
         "^(and|but|so|also|then|what about|how about|what else)\\b",
@@ -71,8 +76,13 @@ object HistoryPolicy {
     fun instructionPart(request: String): String {
         val t = IntentRouter.requestPart(request).trim()
         val cut = Regex(":\\s|\\n").find(t) ?: return t
+        val head = t.substring(0, cut.range.first).trim()
         val rest = t.substring(cut.range.last + 1).trim()
-        return if (rest.length > 20) t.substring(0, cut.range.first).trim() else t
+        // A line break after a question ("what did you mean by that?\nthe part about taxes") is
+        // still the request; only a long block after it counts as pasted material.
+        val isPaste = if (cut.value.startsWith(":")) rest.length > 20
+            else rest.length > 200 || (rest.length > 20 && !head.endsWith("?"))
+        return if (isPaste) head else t
     }
 
     // "it" that points at nothing: "what time is it", "is it going to rain", "it's cold".
