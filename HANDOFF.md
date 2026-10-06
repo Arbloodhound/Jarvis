@@ -44,6 +44,18 @@ DEVLOG entry, commit with `[apk]`, push, send the owner the Actions run link whe
   - `MemoryNotes.get(ctx).search(query, limit): List<NoteHit(text, ts, kind)>`.
   - If the small model sets `LocalModelEngine.busy`, also set `Librarian.brainBusy`, or the job cancels itself.
 
+- `claude/two-models` @ 6978796: NOT compiled or tested (same sherpa stop). API:
+  - `LocalModelEngine.librarian(context)`;
+  - `suspend fun complete(prompt, maxTokens): Result<String>`, with the prompt from `LocalPrompt.buildNoThink(system, user)`;
+  - `shared(ctx)` is still the thinker.
+  - 1.7B Q4_0 size confirmed on the Hub: 1,056,782,912 B.
+  - **Open code-review findings to fix:**
+    - the thinker can load next to a librarian that reloaded after being unloaded twice;
+    - the resident "keep in memory" check ignores the librarian's mapped weights;
+    - a file both engines use is counted twice;
+    - ambient only watches the thinker's `busy`;
+    - the new 8B default strands a half-downloaded 4B file.
+
 **Queued by the owner after that build:**
 - Pause/timing tags in transcripts: whisper.cpp word timestamps (today `no_timestamps`) + VAD gaps →
   `[pause 1.8s]`, speech-rate/loudness tags, so the models can see hesitation.
