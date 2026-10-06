@@ -3,6 +3,14 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (evening) — Jarvis Tests: quick 3-question test, Stop, live timer
+
+Pixel: "the brain test on airplane mode takes too long" (11 questions with silent thinking of up to
+160/512/1200 tokens each). Added "2 · Quick brain test" (hi / 17×23 / Napoleon: one per tier), kept
+the 11-question run as "2b", a Stop button, a live "Qn running: N s (loading / thinking)" line, and
+per-question saving to kit-results.txt so a stopped run keeps its numbers; Save works during a test.
+Build + tests pass. RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (later still) — Chat header said "Gemma 3 1B" with the MoE selected
 
 Pixel report: chat screen showed "Gemma 3 1B" while Settings showed Qwen IQ2_M in use. Cause

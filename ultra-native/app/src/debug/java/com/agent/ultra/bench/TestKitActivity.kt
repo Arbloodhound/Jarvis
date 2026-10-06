@@ -58,6 +58,9 @@ import java.util.Locale
 class TestKitActivity : ComponentActivity() {
     private val lines = mutableStateListOf<String>()
     private val busy = mutableStateOf(false)
+    /** Live "Q2 running: 35 s" line, so a long silent think doesn't look like a hang. */
+    private val status = mutableStateOf("")
+    private var job: kotlinx.coroutines.Job? = null
     private val results: File get() = File(filesDir, "kit-results.txt")
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,16 +82,26 @@ class TestKitActivity : ComponentActivity() {
                         Button(onClick = { start { hardwareCheck() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
                             Text("1 · Hardware check (1 min)")
                         }
-                        Button(onClick = { start { brainTest() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
-                            Text("2 · Brain test: 11 questions (airplane mode ON)")
+                        Button(onClick = { start { brainTest(QUICK_QUESTIONS) } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
+                            Text("2 · Quick brain test: 3 questions (airplane mode ON)")
+                        }
+                        OutlinedButton(onClick = { start { brainTest(QUESTIONS) } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
+                            Text("2b · Full brain test: 11 questions (long)")
                         }
                         Button(onClick = { start { speedTest() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
                             Text("3 · Speed test (optional, ~10 min)")
                         }
-                        Button(onClick = { start { saveAndShare() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
+                        // Not gated on busy: results so far can be saved while a long test runs.
+                        Button(onClick = { lifecycleScope.launch { runCatching { saveAndShare() } } }, modifier = Modifier.fillMaxWidth()) {
                             Text("4 · Save results to Downloads + share")
                         }
                         OutlinedButton(onClick = { start { phoneInfo() } }, enabled = idle) { Text("Refresh phone info") }
+                        if (busy.value) {
+                            OutlinedButton(onClick = { job?.cancel() }) { Text("Stop the test") }
+                        }
+                        if (status.value.isNotEmpty()) {
+                            Text(status.value, style = MaterialTheme.typography.bodyMedium)
+                        }
                         lines.forEach {
                             Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                         }
@@ -102,9 +115,15 @@ class TestKitActivity : ComponentActivity() {
     private fun start(block: suspend () -> Unit) {
         if (busy.value) return
         busy.value = true
-        lifecycleScope.launch {
-            try { block() } catch (t: Throwable) { say("ERROR: ${t.javaClass.simpleName}: ${t.message}") }
-            finally { busy.value = false }
+        job = lifecycleScope.launch {
+            try { block() }
+            catch (_: kotlinx.coroutines.CancellationException) {
+                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) {
+                    lines.add("Stopped. What finished so far is saved (button 4).")
+                }
+            }
+            catch (t: Throwable) { say("ERROR: ${t.javaClass.simpleName}: ${t.message}") }
+            finally { busy.value = false; status.value = "" }
         }
     }
 
@@ -166,7 +185,7 @@ class TestKitActivity : ComponentActivity() {
 
     // ---------------------------------------------------------------- 2. brain test
 
-    private suspend fun brainTest() {
+    private suspend fun brainTest(questions: List<String>) {
         say("— Brain test —")
         val engine = LocalModelEngine.shared(this)
         if (!engine.modelPresent) {
@@ -177,7 +196,9 @@ class TestKitActivity : ComponentActivity() {
             say("Turn ON airplane mode first (so the phone's own brain answers, not the cloud), then tap 2 again.")
             return
         }
-        say("Model: ${engine.modelLabel}. The answers also appear in a new chat in Jarvis.")
+        say("Model: ${engine.modelLabel}. The answers also appear in a new chat in Jarvis. " +
+            "The first answer also loads the model and the brain thinks silently before answering, " +
+            "so a minute or more per question can be normal.")
         withContext(Dispatchers.Main) {
             ChatStore.init(applicationContext)
             ChatStore.newChat()
@@ -185,18 +206,25 @@ class TestKitActivity : ComponentActivity() {
         val tps = mutableListOf<Double?>()
         var thinkLeak = 0
         val body = mutableListOf("model=${engine.modelLabel}")
-        for ((i, q) in QUESTIONS.withIndex()) {
+        for ((i, q) in questions.withIndex()) {
             while (withContext(Dispatchers.Main) { ChatStore.thinking.value }) delay(500)
             val shown = if (q.length > 60) q.take(57) + "…" else q
             say("Q${i + 1}: $shown")
             val t0 = System.currentTimeMillis()
-            val answer = withContext(Dispatchers.Main) {
+            val ticker = lifecycleScope.launch {
+                while (true) {
+                    status.value = "Q${i + 1} running: ${(System.currentTimeMillis() - t0) / 1000} s" +
+                        if (i == 0 && !engine.loaded) " (loading the model first)" else " (thinking / answering)"
+                    delay(1000)
+                }
+            }
+            val answer = try { withContext(Dispatchers.Main) {
                 val brain = ChatStore.chatBrain(applicationContext, engine, KIT_CONFIG_VERSION)
                 ChatStore.add(ChatMessage(fromUser = true, text = q))
                 ChatStore.thinking.value = true
                 try { brain.run(q) } finally { ChatStore.thinking.value = false }
                 ChatStore.messages.lastOrNull { !it.fromUser }?.text.orEmpty()
-            }
+            } } finally { ticker.cancel(); status.value = "" }
             val secs = (System.currentTimeMillis() - t0) / 1000
             val log = logcat(t0, listOf("UltraLlm", "UltraRoute", "AndroidRuntime"))
             val gen = KitReport.mainGen(log)
@@ -210,6 +238,8 @@ class TestKitActivity : ComponentActivity() {
             body += summary
             body += log
             body += "answer: ${answer.take(300).replace('\n', ' ')}"
+            // Per question, so a stopped test still leaves its numbers in the results file.
+            record("BRAIN TEST Q${i + 1}", listOf(summary, "answer: ${answer.take(300).replace('\n', ' ')}") + log)
         }
         val (verdict, why) = KitReport.modelVerdict(tps.take(10), crashed = false)
         val advice = when (verdict) {
@@ -217,14 +247,15 @@ class TestKitActivity : ComponentActivity() {
             KitReport.Model.TRY_SMALLER -> "TRY THE SMALLER ONE: Settings → ON-DEVICE MODEL → Change model → \"(IQ2_S) — roomier fallback\" → Download, then run test 2 again."
             KitReport.Model.NOT_ENOUGH_DATA -> "Not enough answers to judge — send me the results file."
         }
-        val tail = listOf(
+        val tail = listOfNotNull(
             "Verdict: $advice ($why)",
             "<think> text visible: ${if (thinkLeak == 0) "never (good)" else "$thinkLeak times (send me the file)"}",
             // Reaching this line means the app survived all of them, the long paste included.
-            "Long paste (Q11): app stayed open (good)" + (if (tps.last() == null) ", but no on-device answer was logged" else ""),
+            if (questions !== QUESTIONS) null
+            else "Long paste (Q11): app stayed open (good)" + (if (tps.last() == null) ", but no on-device answer was logged" else ""),
         )
         tail.forEach { say(it) }
-        record("BRAIN TEST", body + tail)
+        record("BRAIN TEST SUMMARY", listOf(body.first()) + tail)
         say("Done. Saved. You can turn airplane mode off now.")
     }
 
@@ -309,6 +340,8 @@ class TestKitActivity : ComponentActivity() {
             "Paragraph $it. The town council met on Tuesday to discuss the new library, the bus routes " +
                 "and the summer market, and agreed to publish the minutes next week."
         }
+        /** One per thinking tier the router uses: light, short maths, normal. */
+        val QUICK_QUESTIONS = listOf("hi", "what's 17 times 23", "who was Napoleon in two sentences")
         val QUESTIONS = listOf(
             "hi",
             "explain why the sky is blue",
