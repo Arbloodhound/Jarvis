@@ -147,4 +147,14 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putBoolean(K_SCAM, on).apply()
     }
+
+    private const val K_DOWNLOADS_CARD_DISMISSED = "downloads_card_dismissed"
+
+    /** The chat's "Jarvis needs X GB of downloads" card was closed; Settings → DOWNLOADS still lists it all. */
+    fun downloadsCardDismissed(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_DOWNLOADS_CARD_DISMISSED, false)
+
+    fun setDownloadsCardDismissed(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_DOWNLOADS_CARD_DISMISSED, on).apply()
+    }
 }

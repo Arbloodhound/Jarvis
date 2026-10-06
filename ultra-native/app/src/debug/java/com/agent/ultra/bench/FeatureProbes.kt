@@ -30,6 +30,7 @@ import com.agent.ultra.listen.ObservationText
 import com.agent.ultra.listen.ReadingPrompt
 import com.agent.ultra.listen.Segmenter
 import com.agent.ultra.listen.SentenceEmbedder
+import com.agent.ultra.local.DownloadPlan
 import com.agent.ultra.listen.TranscriptCueWorker
 import com.agent.ultra.listen.TurnGaps
 import com.agent.ultra.listen.WakeFilter
@@ -159,7 +160,7 @@ object FeatureProbes {
             !on -> Verdict.MISSING to "ambient listening is switched off in Settings"
             !mic -> Verdict.FAIL to "it is on, but the microphone permission is denied"
             !running -> Verdict.FAIL to "it is on, but the listening service is not running"
-            !asr || !wake -> Verdict.WARN to "listening, but a model is still missing (downloads on Wi-Fi)"
+            !asr || !wake -> Verdict.WARN to "listening, but a model is ${DownloadPlan.MISSING_HINT}"
             ageMin == null || ageMin > 24 * 60 -> Verdict.WARN to "listening, but nothing was stored in the last day"
             else -> Verdict.PASS to "listening, and storing what it hears"
         }
@@ -185,9 +186,10 @@ object FeatureProbes {
         val speaker = speakerTags(env)
         if (!ttsOk || !sttOk) {
             val why = "needs Jarvis's voice and the speech model (${if (!ttsOk) "voice" else "speech model"} missing)"
+            val fix = "can't make or hear the test audio: ${speechFix()}"
             return listOf(
-                Result("Transcript cues: pauses", Verdict.MISSING, why, "can't make or hear the test audio"),
-                Result("Transcript cues: word timing", Verdict.MISSING, why, "can't make or hear the test audio"),
+                Result("Transcript cues: pauses", Verdict.MISSING, why, fix),
+                Result("Transcript cues: word timing", Verdict.MISSING, why, fix),
             ) + speaker
         }
         // Two sentences in Jarvis's voice with 1.5 s of silence between them, as ambient would hear it.
@@ -335,7 +337,7 @@ object FeatureProbes {
         val model = com.agent.ultra.listen.VoicePrints.downloaded(ctx)
         val head = "setting ${if (on) "on" else "off"}, voiceprint model ${if (model) "present" else "missing"}"
         if (!model) return listOf(Result("Speaker tags", Verdict.MISSING, head,
-            "record your voice in Settings to download the voiceprint model and turn speaker tags on"))
+            "voiceprint model ${DownloadPlan.MISSING_HINT} (speaker tags stay off until you turn them on)"))
         if (!(LocalVoice.available && LocalVoice.voicePresent(ctx))) return listOf(Result("Speaker tags", Verdict.WARN,
             "$head; same-voice check not run", "needs Jarvis's voice to make test speech"))
         val a = speak16k(ctx, CUE_FIRST, 0, 0)?.first
@@ -430,7 +432,7 @@ object FeatureProbes {
         val search = Result("Memory search", searchVerdict,
             "top-1 $top1/$n, top-3 $top3/$n, $cosNumbers, ${avgMs} ms/query, embedder ${if (emb != null) "on" else "OFF"}",
             when {
-                emb == null && !downloaded -> "meaning search model not downloaded yet: words and day only"
+                emb == null && !downloaded -> "meaning search model ${DownloadPlan.MISSING_HINT}; words and day only"
                 emb == null -> "meaning search model would not load: words and day only"
                 searchVerdict == Verdict.PASS -> "finds what was said by meaning, by words and by day"
                 else -> "misses things that were said, or can't tell related from unrelated"
@@ -466,6 +468,12 @@ object FeatureProbes {
         return out to took
     }
 
+    /** The fix for a missing voice / speech model: a download, unless this build lacks the
+     *  native library itself (no download fixes that). */
+    private fun speechFix(): String =
+        if (!LocalVoice.available || !WhisperNative.available) "native library missing from this build"
+        else DownloadPlan.MISSING_HINT
+
     suspend fun voice(env: ProbeEnv): List<Result> {
         val ctx = env.ctx
         val ttsOk = LocalVoice.available && LocalVoice.voicePresent(ctx)
@@ -476,8 +484,8 @@ object FeatureProbes {
                 if (!sttOk) "speech model (${if (!WhisperNative.available) "library missing" else "not downloaded"})" else null,
             ).joinToString(" and ")
             return listOf(
-                Result("Voice round trip", Verdict.MISSING, "missing: $what", "can't test speaking and hearing without both models"),
-                Result("Wake phrase", Verdict.MISSING, "missing: $what", "can't test the wake phrase without both models"),
+                Result("Voice round trip", Verdict.MISSING, "missing: $what", speechFix()),
+                Result("Wake phrase", Verdict.MISSING, "missing: $what", speechFix()),
             )
         }
         // 1) Speak a known sentence, hear it back, count wrong words.
@@ -578,7 +586,7 @@ object FeatureProbes {
     private suspend fun librarianReady(env: ProbeEnv, feature: String): Pair<LocalModelEngine?, Result?> {
         val lib = LocalModelEngine.librarian(env.ctx)
         if (!lib.modelPresent) return null to Result(feature, Verdict.MISSING, "not downloaded",
-            "Settings → MEMORY MODEL → download it first")
+            DownloadPlan.MISSING_HINT)
         return lib to null
     }
 
@@ -691,7 +699,7 @@ object FeatureProbes {
     private fun thinker(env: ProbeEnv) = LocalModelEngine.shared(env.ctx)
 
     private fun missingThinker(feature: String) =
-        Result(feature, Verdict.MISSING, "not downloaded", "Settings → ON-DEVICE MODEL → download one first")
+        Result(feature, Verdict.MISSING, "not downloaded", DownloadPlan.MISSING_HINT)
 
     suspend fun thinkerSpeed(env: ProbeEnv): List<Result> {
         val engine = thinker(env)

@@ -25,14 +25,15 @@ You need: the Pixel, Wi‑Fi, a charger, and about 1½ hours the first time (mos
 
 Stay on Wi‑Fi and keep the phone plugged in for this part.
 
-### 2a. The two brains
-1. Jarvis → ⚙ **Settings** → **ON-DEVICE MODEL** → **Change model** → **Qwen3-8B (Q4_K_S)** → **Download & use**. About 4.8 GB.
-2. Same screen, **MEMORY MODEL** → pick **Qwen3 1.7B (Q4_0)** → **Download**. About 1 GB.
-3. Wait until both say they're downloaded. Don't close Jarvis while they download.
+### 2a. Download everything
+1. Jarvis → ⚙ **Settings** → **DOWNLOADS** (at the top) → **Download all missing**.
+   - It lists every model with its size. The two brains are the big ones (about 6 GB together); the rest are small.
+   - The chat screen's **Download all** card does the same thing.
+2. Keep the screen on and Wi‑Fi on. Leaving Settings doesn't stop it.
+3. Done when every line shows **✓**. If a line says **failed**, tap **Download all missing** again (big files carry on where they stopped).
 
 ### 2b. Listening and voice
 1. Settings → **VOICE** → turn on **Ambient listening**. Allow the microphone when asked.
-   - The first time, it downloads the listening models (a few MB). Keep Wi‑Fi on until it's done.
 2. Check that **Wake name** says **Jarvis**.
 3. Optional, for "who said what" tags: tap **Record my voice** and talk normally for 10 seconds. This turns speaker tags on.
    - Don't press it while Jarvis is talking.
@@ -44,7 +45,7 @@ Stay on Wi‑Fi and keep the phone plugged in for this part.
 1. On the main chat screen, if you see a red **"agent: a11y off"**, tap it and switch Jarvis **on** in Accessibility.
 2. Settings → **WHERE THE AGENT MAY GO**: tick the apps Jarvis may open and control.
 
-✅ Done when both models show as downloaded, ambient listening is on, and there's no red a11y warning.
+✅ Done when Settings → DOWNLOADS shows ✓ on every line, ambient listening is on, and there's no red a11y warning.
 
 ---
 
@@ -122,7 +123,7 @@ To test again later, install **app-test-realkey** from a newer build as an Updat
 | Problem | Do this |
 |---|---|
 | Android says "Jarvis isn't responding" | Tap **Wait**. If it keeps happening, Save results in Jarvis Tests and send them to me. |
-| A download fails or stops | Make sure Wi‑Fi is on and airplane mode is off, then tap Download again (it resumes). |
+| A download fails or stops | Make sure Wi‑Fi is on and airplane mode is off, then Settings → DOWNLOADS → **Download all missing** again. |
 | Install says "App not installed" | You probably have an old build signed with a different key. Tell me before uninstalling anything. |
 | The phone gets hot or slow | Normal under heavy load. Let it cool, keep it plugged in, then run the test again. |
 | A test is stuck | **Skip this part**. Still stuck → **Stop the test** → Save results anyway. |

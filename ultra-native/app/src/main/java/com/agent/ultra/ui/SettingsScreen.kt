@@ -108,6 +108,11 @@ fun SettingsScreen(
             )
         }
 
+        // ── Downloads ─────────────────────────────────────────────────
+        // First: until these are on the phone, the features below that need them can't work.
+        SectionTitle("DOWNLOADS")
+        DownloadsSection()
+
         // ── Cloud provider ────────────────────────────────────────────
         SectionTitle("AI PROVIDER (CLOUD)")
         Text(

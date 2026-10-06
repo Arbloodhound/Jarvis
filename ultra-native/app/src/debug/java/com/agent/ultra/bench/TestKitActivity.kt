@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.agent.ultra.listen.WakeGate
+import com.agent.ultra.local.DownloadPlan
+import com.agent.ultra.local.Downloads
 import com.agent.ultra.local.LocalModelEngine
 import com.agent.ultra.ui.ChatMessage
 import com.agent.ultra.ui.ChatStore
@@ -87,6 +89,9 @@ class TestKitActivity : ComponentActivity() {
                         Text("Tap the buttons in order. Keep this screen open while a test runs.",
                             style = MaterialTheme.typography.bodyMedium)
                         val idle = !busy.value
+                        Button(onClick = { start { downloadAll() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
+                            Text("0 · Download everything missing (Wi-Fi)")
+                        }
                         Button(onClick = { start { hardwareCheck() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
                             Text("1 · Hardware check (1 min)")
                         }
@@ -176,7 +181,7 @@ class TestKitActivity : ComponentActivity() {
             "RAM: ${mem.totalMem / 1_048_576} MB total, ${mem.availMem / 1_048_576} MB free now",
             "Storage free: ${free / 1_073_741_824} GB",
             "Network: ${if (online()) "ONLINE" else "offline (airplane mode)"}",
-            "Wake models downloaded: ${if (wakeModelsPresent()) "yes" else "NO — Jarvis → Settings → Ambient listening ON, wait 1 min"}",
+            "Wake models downloaded: ${if (wakeModelsPresent()) "yes" else "NO — tap 0 · Download everything missing"}",
             "Brain model: ${engine.modelLabel} — ${if (engine.modelPresent) "downloaded" else "NOT downloaded"}",
             "Crash in the last hour: ${if (recentCrash) "YES (it will be in the results file)" else "no"}",
         )
@@ -187,13 +192,46 @@ class TestKitActivity : ComponentActivity() {
     private fun wakeModelsPresent(): Boolean =
         listOf(WakeGate.MEL, WakeGate.EMB, WakeGate.cfgName(this)).all { File(filesDir, it).exists() }
 
+    // ---------------------------------------------------------------- 0. downloads
+
+    /** Settings → DOWNLOADS → Download all missing, shown here item by item. The download runs in
+     *  the app (Downloads), so "Stop the test" stops only this screen's watching, not the download. */
+    private suspend fun downloadAll() {
+        say("— Download everything missing —")
+        val before = withContext(Dispatchers.IO) { Downloads.assets(applicationContext) }
+        if (DownloadPlan.missing(before).isEmpty() && !Downloads.state.value.running) {
+            say("Everything is already downloaded."); return
+        }
+        if (!Downloads.downloadAllMissing(applicationContext) && !Downloads.state.value.running) {
+            say("Nothing to download."); return
+        }
+        say("Downloading ${DownloadPlan.size(DownloadPlan.missingBytes(before))}, smallest first. Keep this screen open.")
+        val reported = mutableSetOf<String>()
+        while (true) {
+            val run = Downloads.state.value
+            val assets = withContext(Dispatchers.IO) { Downloads.assets(applicationContext) }
+            for (a in assets) {
+                val st = run.items[a.id]
+                if (st is DownloadPlan.ItemState.Running) status.value = "${a.label}: ${DownloadPlan.status(a, st)}"
+                if ((st is DownloadPlan.ItemState.Done || st is DownloadPlan.ItemState.Failed) && reported.add(a.id))
+                    say("${a.label}: ${DownloadPlan.status(a, st)}")
+            }
+            if (!run.running) break
+            delay(1_000)
+        }
+        val after = withContext(Dispatchers.IO) { Downloads.assets(applicationContext) }
+        val items = Downloads.state.value.items
+        record("DOWNLOADS", after.map { "${it.label} (${DownloadPlan.size(it.bytes)}): ${DownloadPlan.status(it, items[it.id])}" })
+        val left = DownloadPlan.missing(after)
+        say(if (left.isEmpty()) "Done: everything is downloaded." else "Done, ${left.size} still missing — tap 0 again to retry.")
+    }
+
     // ---------------------------------------------------------------- 1. hardware check
 
     private suspend fun hardwareCheck() {
         say("— Hardware check —")
         if (!wakeModelsPresent()) {
-            say("The wake models aren't downloaded yet. Go to Jarvis → Settings → Ambient listening → ON, " +
-                "wait a minute, then come back and tap 1 again.")
+            say("The wake models aren't downloaded yet. Tap 0 · Download everything missing, then tap 1 again.")
             return
         }
         say("Running… (about a minute; the screen may stutter)")
@@ -212,7 +250,7 @@ class TestKitActivity : ComponentActivity() {
         say("— Brain test —")
         val engine = LocalModelEngine.shared(this)
         if (!engine.modelPresent) {
-            say("No brain model downloaded. Jarvis → Settings → ON-DEVICE MODEL → Change model → pick → Download first.")
+            say("No brain model downloaded. Tap 0 · Download everything missing first.")
             return
         }
         if (online()) {

@@ -22,7 +22,17 @@ object ModelFetcher {
      * True when [dir]/[name] is present. [minBytes]: anything smaller is incomplete.
      * [exactBytes] (> 0): the published size; a result of any other size is discarded.
      */
-    fun ensure(dir: File, name: String, url: String, minBytes: Long = 1_000L, exactBytes: Long = -1L): Boolean {
+    fun ensure(dir: File, name: String, url: String, minBytes: Long = 1_000L, exactBytes: Long = -1L): Boolean =
+        // One writer per file: Settings → DOWNLOADS, the ambient service and the chat mic can all
+        // ask for the same model; two of them appending to one .part would splice it. A second
+        // caller waits, then finds the finished file.
+        synchronized(locks.computeIfAbsent(File(dir, name).absolutePath) { Any() }) {
+            ensureLocked(dir, name, url, minBytes, exactBytes)
+        }
+
+    private val locks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    private fun ensureLocked(dir: File, name: String, url: String, minBytes: Long, exactBytes: Long): Boolean {
         val dest = File(dir, name)
         if (dest.exists() && complete(dest.length(), minBytes, exactBytes)) return true
         val part = File(dir, "$name.part")

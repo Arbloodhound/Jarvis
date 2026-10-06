@@ -263,6 +263,9 @@ fun ChatScreen(
             }) { Text("🎧") }
         }
 
+        // First run: one tap fetches every model that's missing (Settings → DOWNLOADS has the list).
+        DownloadsCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
+
         LazyColumn(
             state = listState,
             modifier = Modifier

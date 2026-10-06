@@ -74,8 +74,12 @@ object LocalVoice {
         }
     }
 
+    /** One install at a time: the speak-time background fetch and Settings → DOWNLOADS share the
+     *  archive, its .part and the unpack folder. A second caller waits, then finds the voice. */
+    private val fetchLock = Any()
+
     /** Download, check and unpack the voice. Blocking; call off main. */
-    fun fetch(context: Context): Boolean {
+    fun fetch(context: Context): Boolean = synchronized(fetchLock) {
         if (voicePresent(context)) return true
         val files = context.filesDir
         val name = "$VOICE.tar.bz2"
