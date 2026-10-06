@@ -12,7 +12,7 @@ import android.database.sqlite.SQLiteOpenHelper
  * as a tool; a capacity trigger so it can never grow without bound.
  */
 class AmbientMemory private constructor(ctx: Context) :
-    SQLiteOpenHelper(ctx.applicationContext, "ambient.db", null, 1) {
+    SQLiteOpenHelper(ctx.applicationContext, "ambient.db", null, 2) {
 
     override fun onConfigure(db: SQLiteDatabase) { db.enableWriteAheadLogging() }
 
@@ -22,9 +22,20 @@ class AmbientMemory private constructor(ctx: Context) :
                 "text, ts UNINDEXED, conf UNINDEXED, speaker UNINDEXED, notindexed=ts, notindexed=conf)"
         )
         db.execSQL("CREATE TABLE meta(k TEXT PRIMARY KEY, v INTEGER)")
+        createVectors(db)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {}
+    override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {
+        if (o < 2) createVectors(db)
+    }
+
+    /** v2: one sentence vector per heard row (same rowid), filled lazily by [MemoryIndexer].
+     * vec is [MemoryVectors.quantize]d (388 bytes); empty = failed to embed, skipped. ts is
+     * copied from heard so time windows use an index instead of scanning the FTS table. */
+    private fun createVectors(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS heard_vec(rowid INTEGER PRIMARY KEY, ts INTEGER NOT NULL, vec BLOB NOT NULL)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS heard_vec_ts ON heard_vec(ts)")
+    }
 
     fun record(text: String, ts: Long, conf: Float) {
         writableDatabase.insert("heard", null, ContentValues().apply {
@@ -62,6 +73,69 @@ class AmbientMemory private constructor(ctx: Context) :
         return out
     }
 
+    class Row(val rowid: Long, val ts: Long, val text: String)
+
+    /** Newest heard rows that have no vector yet (the indexer's work list). */
+    fun unembedded(limit: Int): List<Row> = rows(
+        "SELECT h.rowid,h.ts,h.text FROM heard h LEFT JOIN heard_vec v ON v.rowid=h.rowid " +
+            "WHERE v.rowid IS NULL ORDER BY h.rowid DESC LIMIT ?", arrayOf(limit.toString())
+    )
+
+    /** Stores [vecs] (same order as [rows]); an empty blob marks a row that failed to embed. */
+    fun putVectors(rows: List<Row>, vecs: List<ByteArray>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (i in rows.indices) db.insertWithOnConflict("heard_vec", null, ContentValues().apply {
+                put("rowid", rows[i].rowid); put("ts", rows[i].ts); put("vec", vecs[i])
+            }, SQLiteDatabase.CONFLICT_REPLACE)
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    /** Streams stored vectors, newest first: inside [fromMs, toMs) when given, else the newest
+     * [limit]. Brute force is fine at this size (20k × 388 B ≈ 8 MB, one pass). */
+    fun forEachVector(fromMs: Long?, toMs: Long?, limit: Int, each: (rowid: Long, vec: ByteArray) -> Unit) {
+        val (sql, args) = if (fromMs != null && toMs != null)
+            "SELECT rowid,vec FROM heard_vec WHERE ts>=? AND ts<? ORDER BY ts DESC LIMIT ?" to
+                arrayOf(fromMs.toString(), toMs.toString(), limit.toString())
+        else "SELECT rowid,vec FROM heard_vec ORDER BY rowid DESC LIMIT ?" to arrayOf(limit.toString())
+        readableDatabase.rawQuery(sql, args).use { c -> while (c.moveToNext()) each(c.getLong(0), c.getBlob(1)) }
+    }
+
+    /** Rows by id (texts for vector hits). */
+    fun byIds(ids: Collection<Long>): List<Row> = ids.chunked(500).flatMap { chunk ->
+        rows("SELECT rowid,ts,text FROM heard WHERE rowid IN (${chunk.joinToString(",")})", null)
+    }
+
+    /** Stored vectors by id (for keyword / time-window hits). */
+    fun vectorsFor(ids: Collection<Long>): Map<Long, ByteArray> {
+        val out = HashMap<Long, ByteArray>()
+        for (chunk in ids.chunked(500)) readableDatabase.rawQuery(
+            "SELECT rowid,vec FROM heard_vec WHERE rowid IN (${chunk.joinToString(",")})", null
+        ).use { c -> while (c.moveToNext()) out[c.getLong(0)] = c.getBlob(1) }
+        return out
+    }
+
+    /** FTS [match] (FTS4 query syntax), newest first. */
+    fun keywordRows(match: String, limit: Int): List<Row> =
+        if (match.isBlank()) emptyList()
+        else rows("SELECT rowid,ts,text FROM heard WHERE text MATCH ? ORDER BY ts DESC LIMIT ?", arrayOf(match, limit.toString()))
+
+    /** Everything heard in [fromMs, toMs), newest first. CAST: see [since]. */
+    fun windowRows(fromMs: Long, toMs: Long, limit: Int): List<Row> = rows(
+        "SELECT rowid,ts,text FROM heard WHERE ts>=CAST(? AS INTEGER) AND ts<CAST(? AS INTEGER) ORDER BY ts DESC LIMIT ?",
+        arrayOf(fromMs.toString(), toMs.toString(), limit.toString())
+    )
+
+    private fun rows(sql: String, args: Array<String>?): List<Row> {
+        val out = ArrayList<Row>()
+        readableDatabase.rawQuery(sql, args).use { c ->
+            while (c.moveToNext()) out += Row(c.getLong(0), c.getLong(1), c.getString(2))
+        }
+        return out
+    }
+
     /** Enforce retention + row cap. Call hourly, not per-insert. */
     fun prune(retentionDays: Int, maxRows: Int) {
         val db = writableDatabase
@@ -75,9 +149,14 @@ class AmbientMemory private constructor(ctx: Context) :
                 arrayOf((count - maxRows).toString())
             )
         }
+        // Vectors go with their rows.
+        db.execSQL("DELETE FROM heard_vec WHERE rowid NOT IN (SELECT rowid FROM heard)")
     }
 
-    fun wipe() { writableDatabase.execSQL("DELETE FROM heard") }
+    fun wipe() {
+        writableDatabase.execSQL("DELETE FROM heard")
+        writableDatabase.execSQL("DELETE FROM heard_vec")
+    }
 
     companion object {
         @Volatile private var i: AmbientMemory? = null
