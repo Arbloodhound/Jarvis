@@ -31,6 +31,13 @@ class AmbientConfig(context: Context) {
         get() = p.getBoolean("organise_memory", true)
         set(v) = p.edit().putBoolean("organise_memory", v).apply()
 
+    /** Speaker tags in the transcript: voiceprints made and kept on the phone (biometric data).
+     * Off = new lines are "[Unknown]" with pause and non-speech cues only (rate and loudness are
+     * judged against a known speaker's usual). */
+    var speakerTags: Boolean
+        get() = p.getBoolean("speaker_tags", true)
+        set(v) = p.edit().putBoolean("speaker_tags", v).apply()
+
     companion object {
         // Audio
         const val SAMPLE_RATE = 16_000

@@ -61,6 +61,8 @@ class AmbientListenService : Service() {
     private var consumedWindowId = 0L            // whisper worker only
     private val windowLock = Any()               // a new window vs. the worker holding one open
     private var lastMemoryAt = 0L          // thermal throttle: last memory-only transcription
+    @Volatile private var cues: TranscriptCueWorker? = null   // speaker/pause tags, after storing
+    private var lastSpeechEndAt = 0L       // whisper worker only: wall clock the last utterance's speech ended
     // The cores the LLM doesn't run on (the little ones on big.LITTLE); empty = unpinned.
     private val whisperCpus by lazy { com.agent.ultra.local.CpuTopology.current.whisperCpus.toIntArray() }
     private var wakeLock: PowerManager.WakeLock? = null
@@ -121,11 +123,14 @@ class AmbientListenService : Service() {
             // The worker moves these into its own bounded backlog before each transcription, so
             // this drop only matters if a single transcription outlasts 16 utterances.
             val utterances = Channel<Utterance>(16, BufferOverflow.DROP_OLDEST)
+            val cueWorker = TranscriptCueWorker(applicationContext, mem, cfg).also { cues = it }
             coroutineScope {
                 // whisper runs off the capture thread, so reading the mic (and feeding
                 // the wake gate) never stalls for the length of a transcription.
                 launch { transcribeWorker(utterances) }
-                try { capture(utterances) } finally { utterances.close() }
+                // Cues (voiceprints etc.) are added after a line is stored, never in its way.
+                launch { cueWorker.run() }
+                try { capture(utterances) } finally { utterances.close(); cueWorker.close() }
             }
             // Capture ended on its own (mic error), not by onDestroy: don't stay "listening".
             if (currentCoroutineContext().isActive) stopSelf()
@@ -140,7 +145,7 @@ class AmbientListenService : Service() {
         }
     }
 
-    private class Utterance(val pcm: ShortArray, val endedAt: Long, val windowId: Long)
+    private class Utterance(val pcm: ShortArray, val endedAt: Long, val windowId: Long, val floorDb: Float)
 
     /**
      * Transcribes utterances in the order they ended, but not while the on-device brain is
@@ -186,7 +191,7 @@ class AmbientListenService : Service() {
                 }
                 if (backlog.isNotEmpty() && ready()) {
                     val u = backlog.removeFirst()
-                    onUtterance(u.pcm, u.endedAt, u.windowId)
+                    onUtterance(u.pcm, u.endedAt, u.windowId, u.floorDb)
                     continue
                 }
                 if (backlog.isEmpty()) {
@@ -249,10 +254,11 @@ class AmbientListenService : Service() {
     /** Reads the mic until cancelled. A dead or failing AudioRecord (audioserver
      * restart) is rebuilt a few times; it never spins on an error code. */
     private suspend fun capture(out: Channel<Utterance>) {
-        val seg = Segmenter { pcm, _ ->
+        lateinit var seg: Segmenter
+        seg = Segmenter { pcm, _ ->
             val now = System.currentTimeMillis()
             val open = gate != null && now < cmdWindowUntil
-            out.trySend(Utterance(pcm, now, if (open) windowId else 0L))
+            out.trySend(Utterance(pcm, now, if (open) windowId else 0L, seg.noiseFloorDb))
         }
         var failures = 0
         while (currentCoroutineContext().isActive && failures < MAX_MIC_FAILURES) {
@@ -321,14 +327,21 @@ class AmbientListenService : Service() {
     /** [t] is when the utterance ended and [wid] the wake window open then (0 = none): the
      * command window is judged when the speech ended, not when the queued transcription runs.
      * A window is spent by one command, even if more of its speech is still queued. */
-    private fun onUtterance(pcm: ShortArray, t: Long, wid: Long) {
+    private fun onUtterance(pcm: ShortArray, t: Long, wid: Long, floorDb: Float) {
+        // Silence since the previous utterance's speech (every utterance counts, stored or not).
+        val gapBefore = CueAudio.speechSpan(CueAudio.frameDb(pcm), CueAudio.gateDb(floorDb))?.let { span ->
+            val audioStart = t - pcm.size * 1000L / AmbientConfig.SAMPLE_RATE
+            val gap = CueAudio.turnGap(lastSpeechEndAt, audioStart + span.startMs)
+            lastSpeechEndAt = audioStart + span.endMs
+            gap
+        }
         val windowOpen = gate != null && wid != 0L && wid != consumedWindowId
         val plan = AmbientThrottle.decide(
             com.agent.ultra.agent.ThermalGuard.level.ambient, windowOpen, gate != null, t, lastMemoryAt,
         )
         if (!plan.transcribe) return                       // hot: memory-only capture dropped
         if (!windowOpen) lastMemoryAt = t
-        val r = WhisperNative.transcribe(whisper, pcm, plan.threads, cfg.wakeName, whisperCpus)
+        val r = WhisperNative.transcribe(whisper, pcm, plan.threads, WhisperNative.verbatimPrompt(cfg.wakeName), whisperCpus)
             ?: return
         // Text filters: drop low-confidence (hallucinated) and trivially short lines.
         if (r.confidence < AmbientConfig.MIN_TOKEN_P) return
@@ -337,7 +350,8 @@ class AmbientListenService : Service() {
         if (isWhisperNoise(r.text)) return
 
         val now = System.currentTimeMillis()
-        mem.record(r.text, now, r.confidence)          // EVERYTHING kept as memory
+        val rowid = mem.record(r.text, now, r.confidence)          // EVERYTHING kept as memory
+        if (rowid > 0) cues?.offer(CueJob(rowid, now, r.text, pcm, floorDb, r.words, r.vad, gapBefore))
 
         // Acoustic gate fired within the window -> this utterance is the command,
         // no need for the spoken name in the text. Falls through to text-match

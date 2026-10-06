@@ -5,8 +5,16 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** One overheard line from AmbientMemory's `heard` table; [id] is its rowid. */
-data class HeardLine(val id: Long, val ts: Long, val text: String)
+/**
+ * One overheard line from AmbientMemory's `heard` table; [id] is its rowid.
+ *
+ * [text] is what the librarian reads: the TAGGED line ("[Sam] [pause 1.8s] um, okay", see
+ * [CueTags]) when the row has cues, else the plain words. [plain] is always the plain words (what
+ * keyword search and the sentence index see). [tagged] is [text], by its format's name.
+ */
+data class HeardLine(val id: Long, val ts: Long, val text: String, val plain: String = text) {
+    val tagged: String get() = text
+}
 
 /**
  * Cuts overheard lines into librarian-sized chunks. Pure, JVM-tested.
@@ -49,7 +57,8 @@ object LibrarianChunker {
      *  chunk's first line. "Tomorrow" said just after midnight must anchor on the new day. */
     fun anchorFor(chunk: List<HeardLine>, phrase: String?): Long {
         val p = phrase?.trim()?.lowercase(Locale.ROOT)
-        if (!p.isNullOrEmpty()) chunk.firstOrNull { it.text.lowercase(Locale.ROOT).contains(p) }?.let { return it.ts }
+        // the plain words: a cue tag between "tomorrow" and "at 3" must not hide the phrase
+        if (!p.isNullOrEmpty()) chunk.firstOrNull { it.plain.lowercase(Locale.ROOT).contains(p) }?.let { return it.ts }
         return chunk.first().ts
     }
 }

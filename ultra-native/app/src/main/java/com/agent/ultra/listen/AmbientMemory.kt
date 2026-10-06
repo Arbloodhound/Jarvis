@@ -12,7 +12,7 @@ import android.database.sqlite.SQLiteOpenHelper
  * as a tool; a capacity trigger so it can never grow without bound.
  */
 class AmbientMemory private constructor(ctx: Context) :
-    SQLiteOpenHelper(ctx.applicationContext, "ambient.db", null, 2) {
+    SQLiteOpenHelper(ctx.applicationContext, "ambient.db", null, 3) {
 
     override fun onConfigure(db: SQLiteDatabase) { db.enableWriteAheadLogging() }
 
@@ -23,10 +23,26 @@ class AmbientMemory private constructor(ctx: Context) :
         )
         db.execSQL("CREATE TABLE meta(k TEXT PRIMARY KEY, v INTEGER)")
         createVectors(db)
+        createCues(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {
         if (o < 2) createVectors(db)
+        if (o < 3) createCues(db)
+    }
+
+    /**
+     * v3: transcript cues, kept OUT of `heard` so keyword search and the sentence index only ever
+     * see the plain words. heard_tag: one tagged body per heard row (same rowid, ts copied so a
+     * reused rowid never matches), [TranscriptCueWorker] writes it; voice 0 = no voiceprint.
+     * voices: the voiceprints (biometric: on this phone only; [wipe] erases them).
+     */
+    private fun createCues(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS heard_tag(rowid INTEGER PRIMARY KEY, ts INTEGER NOT NULL, " +
+            "voice INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS voices(id INTEGER PRIMARY KEY AUTOINCREMENT, num INTEGER NOT NULL, " +
+            "name TEXT, owner INTEGER NOT NULL DEFAULT 0, centroid BLOB NOT NULL, n INTEGER NOT NULL, " +
+            "last_seen INTEGER NOT NULL, rate TEXT, loud TEXT)")
     }
 
     /** v2: one sentence vector per heard row (same rowid), filled by [MemoryIndexer].
@@ -37,10 +53,167 @@ class AmbientMemory private constructor(ctx: Context) :
         db.execSQL("CREATE INDEX IF NOT EXISTS heard_vec_ts ON heard_vec(ts)")
     }
 
-    fun record(text: String, ts: Long, conf: Float) {
+    /** Stores a plain heard line; returns its rowid (-1 on failure). */
+    fun record(text: String, ts: Long, conf: Float): Long =
         writableDatabase.insert("heard", null, ContentValues().apply {
             put("text", text); put("ts", ts); put("conf", conf); put("speaker", "")
         })
+
+    // ── Transcript cues + voiceprints ──────────────────────────────────────
+
+    /** Stores [body] (the tagged line without its label) for heard row [rowid], only if that row
+     * still exists with the same [ts] (it may have been erased or pruned meanwhile). */
+    fun putTag(rowid: Long, ts: Long, voiceId: Long, body: String) {
+        writableDatabase.execSQL(
+            "INSERT OR REPLACE INTO heard_tag(rowid,ts,voice,body) " +
+                "SELECT rowid,?,?,? FROM heard WHERE rowid=? AND ts=CAST(? AS INTEGER)",
+            arrayOf<Any>(ts, voiceId, body, rowid, ts.toString())
+        )
+    }
+
+    fun voices(): List<Voice> {
+        val out = ArrayList<Voice>()
+        readableDatabase.rawQuery(
+            "SELECT id,num,name,owner,centroid,n,last_seen,rate,loud FROM voices ORDER BY owner DESC, last_seen DESC", null
+        ).use { c ->
+            while (c.moveToNext()) out += Voice(
+                id = c.getLong(0), num = c.getInt(1), name = c.getString(2), owner = c.getInt(3) != 0,
+                centroid = floats(c.getBlob(4)), n = c.getInt(5), lastSeen = c.getLong(6),
+                rate = Baseline.decode(c.getString(7)), loud = Baseline.decode(c.getString(8)),
+            )
+        }
+        return out
+    }
+
+    /** Heard lines per voice id (for Settings). */
+    fun voiceLineCounts(): Map<Long, Int> {
+        val out = HashMap<Long, Int>()
+        readableDatabase.rawQuery("SELECT voice,COUNT(*) FROM heard_tag GROUP BY voice", null)
+            .use { c -> while (c.moveToNext()) out[c.getLong(0)] = c.getInt(1) }
+        return out
+    }
+
+    /** A new unnamed voice ("Speaker N", N counting up from 2: the owner is the first speaker).
+     * Forgets [evict] first, in the same transaction. Returns the new id. */
+    fun addVoice(centroid: FloatArray, now: Long, evict: Long? = null): Long {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (evict != null) deleteVoiceIn(db, evict)
+            val num = (metaGet(META_VOICE_NEXT) ?: 2L).toInt()
+            metaPut(META_VOICE_NEXT, num + 1L)
+            val id = db.insert("voices", null, ContentValues().apply {
+                put("num", num); put("owner", 0); put("centroid", bytes(centroid)); put("n", 1)
+                put("last_seen", now)
+            })
+            db.setTransactionSuccessful()
+            return id
+        } finally { db.endTransaction() }
+    }
+
+    /** What the cue worker learned about a voice. Name and owner are never touched here (the
+     * owner may be renaming it in Settings at the same moment). No-op if it was deleted. */
+    fun updateVoice(id: Long, centroid: FloatArray, n: Int, lastSeen: Long, rate: Baseline, loud: Baseline) {
+        writableDatabase.update("voices", ContentValues().apply {
+            put("centroid", bytes(centroid)); put("n", n); put("last_seen", lastSeen)
+            put("rate", rate.encode()); put("loud", loud.encode())
+        }, "id=?", arrayOf(id.toString()))
+    }
+
+    /**
+     * Gives voice [id] a name. A name another voice already has (any case) means they are the
+     * same person (clustering split them): the two are merged into that one, its lines included.
+     * A blank name clears it. Returns the id the voice now lives under.
+     */
+    fun renameVoice(id: Long, rawName: String): Long {
+        val name = CueTags.cleanName(rawName)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val all = voices()
+            val me = all.firstOrNull { it.id == id } ?: return id
+            val twin = name?.let { n -> all.firstOrNull { it.id != id && it.name?.equals(n, ignoreCase = true) == true } }
+            val result = if (twin != null) {
+                mergeIn(db, me, twin); twin.id
+            } else {
+                db.update("voices", ContentValues().apply { if (name == null) putNull("name") else put("name", name) },
+                    "id=?", arrayOf(id.toString()))
+                id
+            }
+            db.setTransactionSuccessful()
+            return result
+        } finally { db.endTransaction() }
+    }
+
+    /** Forgets voice [id]; its lines say "[Unknown]" from now on. */
+    fun deleteVoice(id: Long) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try { deleteVoiceIn(db, id); db.setTransactionSuccessful() } finally { db.endTransaction() }
+    }
+
+    private fun deleteVoiceIn(db: SQLiteDatabase, id: Long) {
+        db.execSQL("UPDATE heard_tag SET voice=0 WHERE voice=?", arrayOf<Any>(id))
+        db.execSQL("DELETE FROM voices WHERE id=?", arrayOf<Any>(id))
+    }
+
+    /** [from]'s lines and centroid go to [into]; [from] is deleted. Owner wins. */
+    private fun mergeIn(db: SQLiteDatabase, from: Voice, into: Voice) {
+        val c = VoiceMatch.merge(into.centroid, into.n, from.centroid, from.n)
+        db.update("voices", ContentValues().apply {
+            put("centroid", bytes(c)); put("n", minOf(VoiceMatch.CENTROID_CAP, into.n + from.n))
+            put("last_seen", maxOf(into.lastSeen, from.lastSeen))
+            if (from.owner) put("owner", 1)
+        }, "id=?", arrayOf(into.id.toString()))
+        db.execSQL("UPDATE heard_tag SET voice=? WHERE voice=?", arrayOf<Any>(into.id, from.id))
+        db.execSQL("DELETE FROM voices WHERE id=?", arrayOf<Any>(from.id))
+    }
+
+    /**
+     * The owner's enrolled voice ([emb], from ~10 s of them speaking). Replaces an earlier
+     * enrolment; otherwise a voice already heard that matches ([VoiceMatch.MATCH]) becomes the
+     * owner, so its earlier lines turn into "[Me]"; otherwise a new owner voice. Counts as
+     * [ENROL_WEIGHT] lines, so everyday audio moves it only slowly.
+     */
+    fun enrolOwner(emb: FloatArray, now: Long) {
+        val e = VoiceMatch.normalize(emb)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val all = voices()
+            val owner = all.firstOrNull { it.owner }
+            val match = VoiceMatch.best(all.filter { !it.owner && it.name.isNullOrBlank() }, e)
+                ?.takeIf { it.second >= VoiceMatch.MATCH }?.first
+            val target = owner ?: match
+            if (target != null) {
+                db.update("voices", ContentValues().apply {
+                    put("owner", 1); put("centroid", bytes(e)); put("n", ENROL_WEIGHT); put("last_seen", now)
+                }, "id=?", arrayOf(target.id.toString()))
+                // already enrolled, and the voice heard as "Speaker N" was the owner all along
+                if (owner != null && match != null) mergeIn(db, match, owner.copy(centroid = e, n = ENROL_WEIGHT))
+            } else {
+                db.insert("voices", null, ContentValues().apply {
+                    put("num", 1); put("owner", 1); put("centroid", bytes(e)); put("n", ENROL_WEIGHT)
+                    put("last_seen", now)
+                })
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    fun ownerEnrolled(): Boolean =
+        readableDatabase.rawQuery("SELECT 1 FROM voices WHERE owner=1 LIMIT 1", null).use { it.moveToFirst() }
+
+    /** Forgets every voiceprint (lines keep their tags, labelled "[Unknown]"). */
+    fun wipeVoices() {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL("UPDATE heard_tag SET voice=0")
+            db.execSQL("DELETE FROM voices")
+            db.execSQL("DELETE FROM meta WHERE k=?", arrayOf(META_VOICE_NEXT))
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
     }
 
     /** Verbatim lines in a time window, oldest first, char-budgeted from the NEWEST end:
@@ -212,19 +385,39 @@ class AmbientMemory private constructor(ctx: Context) :
         try {
             // Vectors go with their rows.
             db.execSQL("DELETE FROM heard_vec WHERE rowid NOT IN (SELECT rowid FROM heard)")
+            db.execSQL("DELETE FROM heard_tag WHERE rowid NOT IN (SELECT rowid FROM heard)")
             // Everything pruned: rowids restart from 1, so the indexer must too.
             if (maxRowid() == 0L) resetIndex(db)
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
     }
 
-    /** Rows stored after rowid [afterId], in stored order: the librarian's queue (see [Librarian]). */
+    /**
+     * Rows stored after rowid [afterId], in stored order: the librarian's queue (see [Librarian]).
+     * [HeardLine.text] (= [HeardLine.tagged]) is "[label] body" with the cues ([CueTags]), the
+     * label resolved now (so a rename covers old lines), or the plain line when the row has no
+     * cues (heard before this existed, or the cue worker hasn't reached it yet).
+     * [HeardLine.plain] is always the plain line.
+     */
     fun heardAfter(afterId: Long, limit: Int): List<HeardLine> {
         val out = ArrayList<HeardLine>()
         readableDatabase.rawQuery(
-            "SELECT rowid,ts,text FROM heard WHERE rowid>CAST(? AS INTEGER) ORDER BY rowid ASC LIMIT ?",
+            "SELECT h.rowid,h.ts,h.text,t.body,v.id,v.owner,v.name,v.num FROM heard h " +
+                "LEFT JOIN heard_tag t ON t.rowid=h.rowid AND t.ts=h.ts " +
+                "LEFT JOIN voices v ON v.id=t.voice " +
+                "WHERE h.rowid>CAST(? AS INTEGER) ORDER BY h.rowid ASC LIMIT ?",
             arrayOf(afterId.toString(), limit.toString())
-        ).use { c -> while (c.moveToNext()) out += HeardLine(c.getLong(0), c.getLong(1), c.getString(2)) }
+        ).use { c ->
+            while (c.moveToNext()) {
+                val plain = c.getString(2)
+                val tagged = if (c.isNull(3)) plain else CueTags.line(
+                    if (c.isNull(4)) CueTags.UNKNOWN
+                    else CueTags.label(c.getInt(5) != 0, c.getString(6), c.getInt(7)),
+                    c.getString(3),
+                )
+                out += HeardLine(c.getLong(0), c.getLong(1), text = tagged, plain = plain)
+            }
+        }
         return out
     }
 
@@ -280,6 +473,10 @@ class AmbientMemory private constructor(ctx: Context) :
         try {
             db.execSQL("DELETE FROM heard")
             db.execSQL("DELETE FROM heard_vec")
+            // cues and voiceprints go with what was heard
+            db.execSQL("DELETE FROM heard_tag")
+            db.execSQL("DELETE FROM voices")
+            db.execSQL("DELETE FROM meta WHERE k=?", arrayOf(META_VOICE_NEXT))
             resetIndex(db)
             // new rows start again at rowid 1: an old librarian mark would skip them
             db.execSQL("DELETE FROM meta WHERE k IN ('librarian_mark','librarian_mark_ts')")
@@ -293,6 +490,23 @@ class AmbientMemory private constructor(ctx: Context) :
     }
 
     companion object {
+        /** meta key: the number the next new voice gets ("Speaker N"). */
+        const val META_VOICE_NEXT = "voice_next"
+        /** An enrolment counts as this many heard lines in the owner's centroid. */
+        const val ENROL_WEIGHT = 20
+
+        /** Float32 little-endian, as stored in voices.centroid. */
+        fun bytes(v: FloatArray): ByteArray {
+            val b = java.nio.ByteBuffer.allocate(v.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            for (x in v) b.putFloat(x)
+            return b.array()
+        }
+
+        fun floats(b: ByteArray): FloatArray {
+            val buf = java.nio.ByteBuffer.wrap(b).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            return FloatArray(b.size / 4) { buf.getFloat() }
+        }
+
         /** meta key: every heard row with rowid ≤ this has been offered to the embedder. */
         const val META_VEC_HW = "vec_hw"
         /** meta key: see [generation]. */

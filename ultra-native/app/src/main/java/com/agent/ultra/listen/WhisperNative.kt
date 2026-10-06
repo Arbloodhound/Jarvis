@@ -35,21 +35,55 @@ object WhisperNative {
     /** Returns 0 on failure. vadPath may be empty to disable whisper's VAD. */
     external fun nativeInit(modelPath: String, vadPath: String): Long
 
-    /** UTF-8 bytes of "<meanTokenP>\t<text>"; empty when nothing was said. [cpus] non-empty:
-     *  the calling thread (and so whisper's workers) is pinned to them for the call. */
+    /** UTF-8 bytes of "<meanTokenP>\t<text>", a NUL, then timing lines (see [parse]); empty when
+     *  nothing was said. [cpus] non-empty: the calling thread (and so whisper's workers) is pinned
+     *  to them for the call. */
     external fun nativeTranscribe(handle: Long, pcm: FloatArray, threads: Int, prompt: String, cpus: IntArray): ByteArray
 
     external fun nativeFree(handle: Long)
 
-    data class Result(val text: String, val confidence: Float)
+    /** [words]: when whisper says each word was spoken, ms from the start of the audio (rough:
+     *  whisper's token timestamps). [vad]: the speech stretches whisper's VAD found, same clock. */
+    data class Result(
+        val text: String,
+        val confidence: Float,
+        val words: List<TimedWord> = emptyList(),
+        val vad: List<Span> = emptyList(),
+    )
+
+    /**
+     * Ambient prompt: a run of fillers, then the wake name (for its spelling). whisper tends to
+     * leave "um" and "uh" out unless its context shows them, and the transcript cues want them
+     * kept as said. It only biases the decoder: whisper has no verbatim switch. Pure, JVM-tested.
+     */
+    fun verbatimPrompt(wakeName: String): String = "Um, uh, so, like, you know, I mean, hmm. ${wakeName.trim()}."
 
     fun transcribe(handle: Long, pcm16: ShortArray, threads: Int, prompt: String, cpus: IntArray): Result? {
         val f = FloatArray(pcm16.size) { pcm16[it] / 32768f }
-        val raw = String(nativeTranscribe(handle, f, threads, prompt, cpus), Charsets.UTF_8)
-        val tab = raw.indexOf('\t')
+        return parse(String(nativeTranscribe(handle, f, threads, prompt, cpus), Charsets.UTF_8))
+    }
+
+    /** The native reply as a [Result]; null when nothing was said. Malformed timing lines are
+     *  skipped (the text still counts). Pure, JVM-tested. */
+    fun parse(raw: String): Result? {
+        val nul = raw.indexOf('\u0000')
+        val head = if (nul < 0) raw else raw.substring(0, nul)
+        val tab = head.indexOf('\t')
         if (tab < 0) return null
-        val text = raw.substring(tab + 1).trim()
+        val text = head.substring(tab + 1).trim()
         if (text.isEmpty()) return null
-        return Result(text, raw.substring(0, tab).toFloatOrNull() ?: 0f)
+        val words = ArrayList<TimedWord>()
+        val vad = ArrayList<Span>()
+        if (nul >= 0) for (line in raw.substring(nul + 1).split('\n')) {
+            val parts = line.split('\t', limit = 4)
+            val t0 = parts.getOrNull(1)?.toLongOrNull() ?: continue
+            val t1 = parts.getOrNull(2)?.toLongOrNull() ?: continue
+            if (t1 < t0) continue
+            when (parts[0]) {
+                "W" -> parts.getOrNull(3)?.trim()?.takeIf { it.isNotEmpty() }?.let { words += TimedWord(it, t0, t1) }
+                "V" -> vad += Span(t0, t1)
+            }
+        }
+        return Result(text, head.substring(0, tab).toFloatOrNull() ?: 0f, words, vad)
     }
 }

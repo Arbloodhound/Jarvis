@@ -55,11 +55,15 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
     p.print_realtime   = false;
     p.print_special    = false;
     p.single_segment   = false;
-    p.no_timestamps    = true;
+    // Timestamps on, per token: the transcript's pause/overlap cues are placed between words
+    // by when whisper says each word was spoken (mapped back to the original audio when VAD
+    // trimmed silence). The text itself is unchanged.
+    p.no_timestamps    = false;
+    p.token_timestamps = true;
     p.suppress_blank   = true;
     p.temperature      = 0.0f;
     p.language         = "en";
-    p.initial_prompt   = prompt;              // biases spelling of the wake name
+    p.initial_prompt   = prompt;              // wake-name spelling; fillers kept (see WhisperNative)
     if (!c->vadPath.empty()) {
         p.vad            = true;
         p.vad_model_path = c->vadPath.c_str();
@@ -78,6 +82,7 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
     }
 
     std::string text;
+    std::string timing;   // "W\t<t0 ms>\t<t1 ms>\t<word>\n" per word, "V\t<t0 ms>\t<t1 ms>\n" per VAD segment
     double logprobSum = 0.0; int tok = 0;
 
     bool ok;
@@ -87,6 +92,18 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
     }
     if (ok) {
         int segs = whisper_full_n_segments(c->w);
+        // Words = text tokens joined until the next one that starts with a space. Bytes are
+        // joined before anything leaves, so a character split across tokens stays whole.
+        std::string word; int64_t w0 = 0, w1 = 0;
+        auto flush = [&]{
+            size_t a = word.find_first_not_of(' ');
+            if (a != std::string::npos) {
+                std::string clean = word.substr(a);
+                for (auto& ch : clean) if (ch == '\t' || ch == '\n' || ch == '\0') ch = ' ';
+                timing += "W\t" + std::to_string(w0 * 10) + "\t" + std::to_string(w1 * 10) + "\t" + clean + "\n";
+            }
+            word.clear();
+        };
         for (int i = 0; i < segs; i++) {
             text += whisper_full_get_segment_text(c->w, i);
             int nt = whisper_full_n_tokens(c->w, i);
@@ -94,7 +111,19 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
                 auto d = whisper_full_get_token_data(c->w, i, j);
                 if (d.id >= whisper_token_eot(c->w)) continue;  // skip specials
                 logprobSum += d.plog; tok++;
+                const char* piece = whisper_full_get_token_text(c->w, i, j);
+                if (!piece || !*piece) continue;
+                int64_t t0 = whisper_full_get_token_t0(c->w, i, j);   // centiseconds, original audio
+                int64_t t1 = whisper_full_get_token_t1(c->w, i, j);
+                if (piece[0] == ' ' || word.empty()) { if (!word.empty()) flush(); w0 = t0; }
+                word += piece; w1 = t1;
             }
+        }
+        if (!word.empty()) flush();
+        int nv = whisper_full_n_vad_segments(c->w);
+        for (int i = 0; i < nv; i++) {
+            timing += "V\t" + std::to_string(whisper_full_get_vad_segment_t0(c->w, i) * 10) + "\t" +
+                      std::to_string(whisper_full_get_vad_segment_t1(c->w, i) * 10) + "\n";
         }
     }
     env->ReleaseStringUTFChars(jPrompt, prompt);
@@ -104,6 +133,9 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
     size_t s = text.find_first_not_of(" \t\n");
     if (s == std::string::npos) return empty();
     std::string out = std::to_string(meanP) + "\t" + text.substr(s);
+    // A NUL, then the timing lines (WhisperNative.parse splits on it).
+    out.push_back('\0');
+    out += timing;
 
     jbyteArray arr = env->NewByteArray((jsize)out.size());
     env->SetByteArrayRegion(arr, 0, (jsize)out.size(),
