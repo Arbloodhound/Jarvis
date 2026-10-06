@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -36,6 +38,7 @@ import com.agent.ultra.local.LocalModelEngine
 import com.agent.ultra.ui.ChatMessage
 import com.agent.ultra.ui.ChatStore
 import com.agent.ultra.ui.theme.AgentUltraTheme
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -61,6 +64,11 @@ class TestKitActivity : ComponentActivity() {
     /** Live "Q2 running: 35 s" line, so a long silent think doesn't look like a hang. */
     private val status = mutableStateOf("")
     private var job: kotlinx.coroutines.Job? = null
+    /** The feature check in progress ("Skip this part" goes to it). */
+    private val featureRunner = mutableStateOf<FeatureCheck.Runner?>(null)
+    /** A Yes/No question from a probe, and where its answer goes. */
+    private val confirmText = mutableStateOf<String?>(null)
+    private var confirmAnswer: CompletableDeferred<Boolean>? = null
     private val results: File get() = File(filesDir, "kit-results.txt")
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,6 +99,9 @@ class TestKitActivity : ComponentActivity() {
                         Button(onClick = { start { speedTest() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
                             Text("3 · Speed test (optional, ~10 min)")
                         }
+                        Button(onClick = { start { featureCheck() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
+                            Text("5 · Feature check: tests every feature and scores it (~20–40 min, airplane mode ON)")
+                        }
                         // Not gated on busy: results so far can be saved while a long test runs.
                         Button(onClick = { lifecycleScope.launch { runCatching { saveAndShare() } } }, modifier = Modifier.fillMaxWidth()) {
                             Text("4 · Save results to Downloads + share")
@@ -98,6 +109,18 @@ class TestKitActivity : ComponentActivity() {
                         OutlinedButton(onClick = { start { phoneInfo() } }, enabled = idle) { Text("Refresh phone info") }
                         if (busy.value) {
                             OutlinedButton(onClick = { job?.cancel() }) { Text("Stop the test") }
+                        }
+                        featureRunner.value?.let { r ->
+                            OutlinedButton(onClick = { r.skipCurrent() }) { Text("Skip this part") }
+                        }
+                        confirmText.value?.let { question ->
+                            AlertDialog(
+                                onDismissRequest = { answerConfirm(false) },
+                                title = { Text("Jarvis Tests") },
+                                text = { Text(question) },
+                                confirmButton = { TextButton(onClick = { answerConfirm(true) }) { Text("Yes, go ahead") } },
+                                dismissButton = { TextButton(onClick = { answerConfirm(false) }) { Text("No, skip it") } },
+                            )
                         }
                         if (status.value.isNotEmpty()) {
                             Text(status.value, style = MaterialTheme.typography.bodyMedium)
@@ -123,7 +146,7 @@ class TestKitActivity : ComponentActivity() {
                 }
             }
             catch (t: Throwable) { say("ERROR: ${t.javaClass.simpleName}: ${t.message}") }
-            finally { busy.value = false; status.value = "" }
+            finally { busy.value = false; status.value = ""; featureRunner.value = null; answerConfirm(false) }
         }
     }
 
@@ -199,10 +222,7 @@ class TestKitActivity : ComponentActivity() {
         say("Model: ${engine.modelLabel}. The answers also appear in a new chat in Jarvis. " +
             "The first answer also loads the model and the brain thinks silently before answering, " +
             "so a minute or more per question can be normal.")
-        withContext(Dispatchers.Main) {
-            ChatStore.init(applicationContext)
-            ChatStore.newChat()
-        }
+        newChat()
         val tps = mutableListOf<Double?>()
         var thinkLeak = 0
         val body = mutableListOf("model=${engine.modelLabel}")
@@ -218,13 +238,7 @@ class TestKitActivity : ComponentActivity() {
                     delay(1000)
                 }
             }
-            val answer = try { withContext(Dispatchers.Main) {
-                val brain = ChatStore.chatBrain(applicationContext, engine, KIT_CONFIG_VERSION)
-                ChatStore.add(ChatMessage(fromUser = true, text = q))
-                ChatStore.thinking.value = true
-                try { brain.run(q) } finally { ChatStore.thinking.value = false }
-                ChatStore.messages.lastOrNull { !it.fromUser }?.text.orEmpty()
-            } } finally { ticker.cancel(); status.value = "" }
+            val answer = try { askBrain(q) } finally { ticker.cancel(); status.value = "" }
             val secs = (System.currentTimeMillis() - t0) / 1000
             val log = logcat(t0, listOf("UltraLlm", "UltraRoute", "AndroidRuntime"))
             val gen = KitReport.mainGen(log)
@@ -259,6 +273,24 @@ class TestKitActivity : ComponentActivity() {
         say("Done. Saved. You can turn airplane mode off now.")
     }
 
+    /** A fresh chat in Jarvis, so earlier turns can't shape the next answers. */
+    private suspend fun newChat() = withContext(Dispatchers.Main) {
+        ChatStore.init(applicationContext)
+        ChatStore.newChat()
+    }
+
+    /** [q] through the real chat brain, in the current chat (it shows in Jarvis too); its answer. */
+    private suspend fun askBrain(q: String): String {
+        while (withContext(Dispatchers.Main) { ChatStore.thinking.value }) delay(500)
+        return withContext(Dispatchers.Main) {
+            val brain = ChatStore.chatBrain(applicationContext, LocalModelEngine.shared(this@TestKitActivity), KIT_CONFIG_VERSION)
+            ChatStore.add(ChatMessage(fromUser = true, text = q))
+            ChatStore.thinking.value = true
+            try { brain.run(q) } finally { ChatStore.thinking.value = false }
+            ChatStore.messages.lastOrNull { !it.fromUser }?.text.orEmpty()
+        }
+    }
+
     // ---------------------------------------------------------------- 3. speed test
 
     private suspend fun speedTest() {
@@ -272,6 +304,68 @@ class TestKitActivity : ComponentActivity() {
         record("SPEED TEST", log)
         log.filter { "threads=" in it && "warmup" !in it && "start" !in it }.forEach { say(it.substringAfter("): ")) }
         say("Done. Saved.")
+    }
+
+    // ---------------------------------------------------------------- 5. feature check
+
+    /** Every feature, tested and scored ([FeatureCheck]); each result goes to the results file as it ends. */
+    private suspend fun featureCheck() {
+        say("— Feature check —")
+        say("Tests every feature, one after another, and scores it: PASS, WARN, FAIL or MISSING (not installed). " +
+            "What Jarvis overheard and its notes are not changed (memory search uses a separate test file). " +
+            "The chat parts show up as a new chat in Jarvis, like the brain test. " +
+            "\"Skip this part\" moves on; \"Stop the test\" ends it.")
+        if (online()) say("Tip: airplane mode is OFF, so two parts use a stand-in for the offline chat or are skipped.")
+        val env = ProbeEnv(
+            ctx = applicationContext,
+            say = { say(it) },
+            status = { status.value = it },
+            confirm = { askConfirm(it) },
+            askBrain = { askBrain(it) },
+            newChat = { newChat() },
+            online = { online() },
+            logcat = { since, tags -> logcat(since, tags) },
+        )
+        val runner = FeatureCheck.Runner(env)
+        featureRunner.value = runner
+        val all = try {
+            runner.run(
+                onStart = { p, i ->
+                    status.value = "Part ${i + 1}/${FeatureCheck.PROBES.size}: ${p.title}"
+                    say("Part ${i + 1}/${FeatureCheck.PROBES.size}: ${p.title}…")
+                },
+                onResults = { _, results ->
+                    for (r in results) {
+                        val line = FeatureGrade.line(r)
+                        say(line)
+                        record("FEATURE ${r.feature}", listOf(line) + r.detail)
+                    }
+                },
+            )
+        } finally {
+            featureRunner.value = null
+        }
+        val table = FeatureGrade.summary(all)
+        record("FEATURE CHECK SUMMARY", table)
+        say("— Summary —")
+        table.forEach { say(it) }
+        say("Done. Saved. Tap 4 to save the results file and send it.")
+    }
+
+    private suspend fun askConfirm(question: String): Boolean {
+        val answer = CompletableDeferred<Boolean>()
+        withContext(Dispatchers.Main) {
+            confirmAnswer?.complete(false)
+            confirmAnswer = answer
+            confirmText.value = question
+        }
+        return answer.await()
+    }
+
+    private fun answerConfirm(yes: Boolean) {
+        confirmText.value = null
+        confirmAnswer?.complete(yes)
+        confirmAnswer = null
     }
 
     // ---------------------------------------------------------------- 4. save + share
@@ -334,26 +428,10 @@ class TestKitActivity : ComponentActivity() {
         private const val KIT_CONFIG_VERSION = -7001
         private val LOG_TAGS = listOf(
             "UltraLlm", "UltraRoute", "UltraBrain", "UltraAmbient", "UltraAccel", "UltraBench",
-            "UltraThermal", "AndroidRuntime",
+            "UltraThermal", "UltraMemory", "UltraSpeak", "UltraOfflineNav", "UltraLibrarian", "AndroidRuntime",
         )
-        private val LONG_TEXT = (1..40).joinToString(" ") {
-            "Paragraph $it. The town council met on Tuesday to discuss the new library, the bus routes " +
-                "and the summer market, and agreed to publish the minutes next week."
-        }
         /** One per thinking tier the router uses: light, short maths, normal. */
-        val QUICK_QUESTIONS = listOf("hi", "what's 17 times 23", "who was Napoleon in two sentences")
-        val QUESTIONS = listOf(
-            "hi",
-            "explain why the sky is blue",
-            "turn on the flashlight",
-            "reply with three emojis and the word café",
-            "what are three good dinners with chicken",
-            "who was Napoleon in two sentences",
-            "what's 17 times 23",
-            "give me a packing list for a weekend trip",
-            "explain what a mortgage is",
-            "summarize everything we talked about",
-            "summarize this: $LONG_TEXT",
-        )
+        val QUICK_QUESTIONS = FeatureCases.QUICK_QUESTIONS
+        val QUESTIONS = FeatureCases.KIT_QUESTIONS
     }
 }

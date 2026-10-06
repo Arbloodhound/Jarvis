@@ -11,8 +11,8 @@ import android.database.sqlite.SQLiteOpenHelper
  * complicate the agent's schema migrations. FTS4 so the agent can search it
  * as a tool; a capacity trigger so it can never grow without bound.
  */
-class AmbientMemory private constructor(ctx: Context) :
-    SQLiteOpenHelper(ctx.applicationContext, "ambient.db", null, 2) {
+class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db") :
+    SQLiteOpenHelper(ctx.applicationContext, name, null, 2) {
 
     override fun onConfigure(db: SQLiteDatabase) { db.enableWriteAheadLogging() }
 
@@ -305,6 +305,13 @@ class AmbientMemory private constructor(ctx: Context) :
         @Volatile private var i: AmbientMemory? = null
         fun get(c: Context) = i ?: synchronized(this) {
             i ?: AmbientMemory(c).also { i = it }
+        }
+
+        /** A separate store in its own file [name] (never the real "ambient.db"): the debug
+         * feature check fills one with test lines, then closes it and deletes the file. */
+        fun sandbox(c: Context, name: String): AmbientMemory {
+            require(name != "ambient.db") { "the sandbox must not be the real store" }
+            return AmbientMemory(c, name)
         }
     }
 }

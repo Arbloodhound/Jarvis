@@ -53,17 +53,21 @@ object MemoryRecall {
         }
 
     /** Up to [limit] hits, best first. Never throws (a failing source just contributes
-     * nothing). Runs on Dispatchers.IO. */
-    suspend fun relevant(context: Context, query: String, nowMs: Long, limit: Int = 5): List<RecallHit> =
+     * nothing). Runs on Dispatchers.IO. [store] and [sources] default to the real ones; the
+     * debug feature check passes a sandbox store ([AmbientMemory.sandbox]) and no sources. */
+    suspend fun relevant(
+        context: Context, query: String, nowMs: Long, limit: Int = 5,
+        store: AmbientMemory? = null, sources: List<RecallSource> = extraSources,
+    ): List<RecallHit> =
         withContext(Dispatchers.IO) {
             val ctx = context.applicationContext
             val window = TimeWindow.parse(query, nowMs)
             val stripped = TimeWindow.strip(query, window).trim()
             val all = ArrayList<RecallHit>()
-            try { all += heard(ctx, stripped, window, nowMs, limit) }
+            try { all += heard(ctx, store ?: AmbientMemory.get(ctx), stripped, window, nowMs, limit) }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) { android.util.Log.w(TAG, "recall (heard) failed: ${e.message}") }
-            for (s in extraSources) {
+            for (s in sources) {
                 try { all += s.search(stripped, window, nowMs, limit) }
                 catch (e: CancellationException) { throw e }
                 catch (e: Exception) { android.util.Log.w(TAG, "recall source ${s.javaClass.simpleName} failed: ${e.message}") }
@@ -74,8 +78,7 @@ object MemoryRecall {
     /** A compact dated "What I remember (with times…)" block for a prompt; "" for no hits. */
     fun brief(hits: List<RecallHit>, maxChars: Int = 600): String = RecallScore.brief(hits, maxChars)
 
-    private fun heard(ctx: Context, query: String, window: TimeWindow?, now: Long, limit: Int): List<RecallHit> {
-        val mem = AmbientMemory.get(ctx)
+    private fun heard(ctx: Context, mem: AmbientMemory, query: String, window: TimeWindow?, now: Long, limit: Int): List<RecallHit> {
         val terms = RecallScore.terms(query)
         val hasTerms = terms.isNotEmpty()
         val rows = LinkedHashMap<Long, AmbientMemory.Row>()
