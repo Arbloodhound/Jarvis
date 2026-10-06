@@ -1,5 +1,24 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## IN PROGRESS (session 01BUKa, 2026-10-06 ~22:40 UTC) — read this first
+Owner's Feature-check file: `/root/.claude/uploads/54f3fe27-91b3-59c8-8eda-5b26d60c8d8d/4a86451b-Jarvis-results-20261006-1528.txt`.
+Summary of it:
+- The Jarvis TTS voice and the MiniLM embedder were never downloaded.
+- Ambient "last heard=never", with "backlog full: dropped" all through the log.
+- Librarian notes 1/3 (the time was in the text not `when`; the to-do came back as fact).
+- The 8B ran at 2–4 tok/s with paging, against 8–11 tok/s for the 4B-Thinking-2507.
+- Think budgets were tiny (38–342 tokens).
+Three workers, each on its own branch from c852b73 (not merged):
+- `claude/download-all`: Settings "DOWNLOADS" section + "Download all missing" + a first-run card; root cause of the voice/embedder not downloading.
+- `claude/broken-fixes`: ambient holding/dropping speech, the librarian note normaliser, the model-aware brain-test verdict, thermal thresholds.
+- `claude/fast-reasoning`: Qwen model-card benchmarks (4B-Thinking-2507 vs 8B), default thinker choice, a "Thinking depth" Quick/Balanced/Deep setting, 8B ctx sizing so it doesn't page.
+To finish:
+1. Merge all three.
+2. Run the full build.
+3. Add a DEVLOG entry and push.
+4. Run Release APK (workflow_dispatch, test_kit=true).
+5. Send the owner the link, then have him: Update → Settings → DOWNLOADS → Download all → Feature check → send the file.
+
 ## NOW (session 01BUKa, 2026-10-06 21:45 UTC) — read this first; the sections below are history
 **State:** `claude/new-session-t3cy17` @ a1aaced. Everything is merged and pushed:
 - the two models (thinker Qwen3-8B Q4_K_S + librarian Qwen3-1.7B Q4_0);
