@@ -908,9 +908,9 @@ fun SettingsScreen(
             )
             OutlinedButton(
                 onClick = {
-                    com.agent.ultra.listen.AmbientMemory.get(context).wipe()
-                    // the notes were made from what was heard: forgetting it forgets them too
                     scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        com.agent.ultra.listen.AmbientMemory.get(context).wipe()
+                        // the notes were made from what was heard: forgetting it forgets them too
                         runCatching { com.agent.ultra.listen.MemoryNotes.get(context).wipe() }
                     }
                 },

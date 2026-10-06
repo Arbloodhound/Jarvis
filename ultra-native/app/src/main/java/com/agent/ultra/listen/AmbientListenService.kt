@@ -303,6 +303,7 @@ class AmbientListenService : Service() {
                 if (now - lastPrune > 3_600_000L) {
                     lastPrune = now
                     mem.prune(cfg.retentionDays, cfg.maxRows)
+                    MemoryIndexer.kick(this@AmbientListenService)   // background; skips while the brain is busy
                 }
             }
             return true
