@@ -22,7 +22,8 @@ import java.util.Locale
  *  - a weekday ("Friday", "this Friday", "next Friday", "on Friday") → the next such day after
  *    today (today's own name → a week ahead); "last Friday" → the most recent one before today;
  *  - a month-day without a year more than 60 days in the past → next year;
- *  - a day without a time → the whole day; a part of day without a time → that part's window.
+ *  - a day without a time → the whole day; a part of day without a time → that part's window
+ *    (with no day named and that window already over → the next day's).
  * Unrecognised words → null (the note is kept, just without a time).
  */
 object TimeResolver {
@@ -102,8 +103,10 @@ object TimeResolver {
             if (!dayExplicit && at.isBefore(anchor.minusHours(1))) at = at.plusDays(1)
             return point(at, zone)
         }
-        val day = date ?: if (part != null) today else return null
+        var day = date ?: if (part != null) today else return null
         if (part != null) {
+            // "in the evening" said at 23:00 is tomorrow's evening
+            if (!dayExplicit && day.atTime(part.to).isBefore(anchor)) day = day.plusDays(1)
             return Span(day.atTime(part.from).atZone(zone).toInstant().toEpochMilli(),
                 day.atTime(part.to).atZone(zone).toInstant().toEpochMilli())
         }

@@ -26,6 +26,11 @@ class AmbientConfig(context: Context) {
         get() = p.getInt("max_rows", 250_000)
         set(v) = p.edit().putInt("max_rows", v).apply()
 
+    /** The librarian turns what was heard into notes while the phone charges, screen off. */
+    var organiseMemory: Boolean
+        get() = p.getBoolean("organise_memory", true)
+        set(v) = p.edit().putBoolean("organise_memory", v).apply()
+
     companion object {
         // Audio
         const val SAMPLE_RATE = 16_000

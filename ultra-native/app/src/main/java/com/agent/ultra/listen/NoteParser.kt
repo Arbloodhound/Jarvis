@@ -8,7 +8,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /** A note as the model wrote it, before its time words are resolved. */
-data class NoteDraft(val kind: NoteKind, val text: String, val whenPhrase: String?, val people: List<String>)
+data class NoteDraft(val kind: NoteKind, val text: String, val whenPhrase: String?)
 
 /**
  * Tolerant parser for the librarian's "one JSON object per line" output. Pure, JVM-tested.
@@ -17,12 +17,12 @@ data class NoteDraft(val kind: NoteKind, val text: String, val whenPhrase: Strin
  * <think> to the end), code fences, bullets/numbering before an object, a whole JSON array
  * instead of lines, "NONE", and prose lines (ignored). Rejects — counts, never stores — any
  * object that doesn't parse strictly, has an unknown kind, an empty or over-long text, or
- * wrong-typed fields. At most [MAX_NOTES] notes per chunk.
+ * wrong-typed fields, and a line cut off mid-object (the token limit). At most [MAX_NOTES]
+ * notes per chunk.
  */
 object NoteParser {
     const val MAX_NOTES = 12
     const val MAX_TEXT = 300
-    const val MAX_PEOPLE = 8
 
     data class Result(val notes: List<NoteDraft>, val rejected: Int)
 
@@ -38,7 +38,7 @@ object NoteParser {
             if (d == null) rejected++ else if (notes.size < MAX_NOTES) notes += d
         }
 
-        val whole = body.trim()
+        val whole = body.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
         if (whole.startsWith("[")) {
             val arr = runCatching { json.parseToJsonElement(whole) }.getOrNull() as? JsonArray
             if (arr != null) { arr.forEach(::take); return Result(notes, rejected) }
@@ -74,13 +74,7 @@ object NoteParser {
             null, JsonNull -> null
             else -> string(whenEl) ?: return null
         }?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) && !it.equals("none", true) }
-        val people = when (val p = o["people"]) {
-            null, JsonNull -> emptyList()
-            is JsonArray -> p.map { string(it) ?: return null }
-            is JsonPrimitive -> if (p.isString) p.content.split(',') else return null
-            else -> return null
-        }.map { it.trim() }.filter { it.isNotEmpty() && it.length <= 60 }
-        return NoteDraft(kind, text, whenPhrase, NoteMerge.unionPeople(people, emptyList()).take(MAX_PEOPLE))
+        return NoteDraft(kind, text, whenPhrase)
     }
 
     private fun string(e: JsonElement?): String? = (e as? JsonPrimitive)?.takeIf { it.isString }?.content

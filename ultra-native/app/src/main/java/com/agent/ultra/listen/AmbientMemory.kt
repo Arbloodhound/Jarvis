@@ -77,7 +77,30 @@ class AmbientMemory private constructor(ctx: Context) :
         }
     }
 
-    fun wipe() { writableDatabase.execSQL("DELETE FROM heard") }
+    /** Rows stored after rowid [afterId], in stored order: the librarian's queue (see [Librarian]). */
+    fun heardAfter(afterId: Long, limit: Int): List<HeardLine> {
+        val out = ArrayList<HeardLine>()
+        readableDatabase.rawQuery(
+            "SELECT rowid,ts,text FROM heard WHERE rowid>CAST(? AS INTEGER) ORDER BY rowid ASC LIMIT ?",
+            arrayOf(afterId.toString(), limit.toString())
+        ).use { c -> while (c.moveToNext()) out += HeardLine(c.getLong(0), c.getLong(1), c.getString(2)) }
+        return out
+    }
+
+    fun maxRowId(): Long =
+        readableDatabase.rawQuery("SELECT COALESCE(MAX(rowid),0) FROM heard", null).use { it.moveToFirst(); it.getLong(0) }
+
+    /** Last heard rowid the librarian has organised (0 = none). */
+    var librarianMark: Long
+        get() = readableDatabase.rawQuery("SELECT v FROM meta WHERE k='librarian_mark'", null)
+            .use { if (it.moveToFirst()) it.getLong(0) else 0L }
+        set(v) = writableDatabase.execSQL("INSERT OR REPLACE INTO meta(k,v) VALUES('librarian_mark',?)", arrayOf<Any>(v))
+
+    fun wipe() {
+        writableDatabase.execSQL("DELETE FROM heard")
+        // new rows start again at rowid 1: an old mark would skip them
+        writableDatabase.execSQL("DELETE FROM meta WHERE k='librarian_mark'")
+    }
 
     companion object {
         @Volatile private var i: AmbientMemory? = null
