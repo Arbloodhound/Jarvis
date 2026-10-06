@@ -50,21 +50,23 @@ class MemoryBriefTest {
     @Test fun recallUsesProvider() = runBlocking {
         assertNull(MemoryBrief.recall("anything"))                  // no provider: no brief
         var asked: String? = null
-        MemoryBrief.provider = { q -> asked = q; "09:12 Sarah: the lease ends in March" }
-        assertEquals("09:12 Sarah: the lease ends in March", MemoryBrief.recall("what did Sarah say"))
+        var at = 0L
+        MemoryBrief.provider = { q, now -> asked = q; at = now; "09:12 Sarah: the lease ends in March" }
+        assertEquals("09:12 Sarah: the lease ends in March", MemoryBrief.recall("what did Sarah say", nowMs = 42L))
         assertEquals("what did Sarah say", asked)
-        MemoryBrief.provider = { "   " }
+        assertEquals(42L, at)
+        MemoryBrief.provider = { _, _ -> "   " }
         assertNull(MemoryBrief.recall("q"))                         // blank: no brief
-        MemoryBrief.provider = { "x".repeat(5000) }
+        MemoryBrief.provider = { _, _ -> "x".repeat(5000) }
         assertEquals(MemoryBrief.MAX_CHARS, MemoryBrief.recall("q")!!.length)
     }
 
     @Test fun recallSurvivesFailureAndSlowness() = runBlocking {
-        MemoryBrief.provider = { error("index missing") }
+        MemoryBrief.provider = { _, _ -> error("index missing") }
         assertNull(MemoryBrief.recall("q"))
-        MemoryBrief.provider = { delay(10_000); "late" }
+        MemoryBrief.provider = { _, _ -> delay(10_000); "late" }
         assertNull(MemoryBrief.recall("q", timeoutMs = 50))
-        MemoryBrief.provider = { kotlinx.coroutines.withTimeout(10) { delay(1000); "x" } }
+        MemoryBrief.provider = { _, _ -> kotlinx.coroutines.withTimeout(10) { delay(1000); "x" } }
         assertNull(MemoryBrief.recall("q"))                         // the provider's own timeout
     }
 
@@ -79,5 +81,26 @@ class MemoryBriefTest {
         val without = LocalPrompt.build("SYS", h, "what did Sarah say")
         assertTrue(p.startsWith(without.substringBefore("<|im_start|>user\nwhat did Sarah say")))
         assertTrue(LocalPrompt.build("S", emptyList(), "u", memory = "m".repeat(5000)).length < 1000)
+    }
+
+    // ------------------------------------------------- review findings (d4029d5)
+
+    @Test fun generalQuestionsWithNamesOrRecallWordsDoNot() {
+        for (s in listOf(
+            "what is Newton's second law", "explain Ohm's law", "what is a product recall",
+            "is the earlier train faster", "tell me more", "why is that", "make it shorter",
+        )) assertFalse(s, wants(s))
+        for (s in listOf("do you recall the address", "what's Dana's number", "what did we decide earlier",
+            "the meeting with Priya", "what did he say last time")) assertTrue(s, wants(s))
+        assertTrue(MemoryBrief.needsMemory("what did Sarah say"))
+        assertFalse(MemoryBrief.needsMemory("what's the capital of Peru"))
+    }
+
+    /** A pronoun-only request borrows content from the previous user turn. */
+    @Test fun queryHasContent() {
+        assertEquals("what did he say about that (about: the lease renewal with Tom)",
+            MemoryBrief.query("what did he say about that", "the lease renewal with Tom"))
+        assertEquals("what did Sarah say about the lease", MemoryBrief.query("what did Sarah say about the lease", "hi"))
+        assertEquals("what did he say", MemoryBrief.query("what did he say", null))
     }
 }

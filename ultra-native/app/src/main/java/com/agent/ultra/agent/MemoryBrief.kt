@@ -18,15 +18,16 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * Only requests that plausibly need memory search it ([wants]): who said what or when,
  * "remind me", "do you remember", past-time words, a person's name with a speech/contact
- * word, or a request that refers back. A fresh question gets no brief — unrelated text in
+ * word. A request that only refers back to the chat gets history instead. A fresh question gets no brief — unrelated text in
  * the prompt is what the small-quant model copies from (DEVLOG 2026-10-06).
  */
 object MemoryBrief {
 
-    @Volatile var provider: (suspend (query: String) -> String?)? = null
+    /** (query, nowMs) -> brief text; set by the memory search (MemoryRecall). Null: no brief. */
+    @Volatile var provider: (suspend (query: String, nowMs: Long) -> String?)? = null
 
     const val HEADER = "What I remember (from listening and notes) — may be incomplete:"
-    const val MAX_CHARS = 800
+    const val MAX_CHARS = 600
     /** A search that takes longer than this is skipped; the answer goes ahead without it. */
     const val TIMEOUT_MS = 4000L
 
@@ -42,20 +43,25 @@ object MemoryBrief {
         "did (i|he|she|they|we|\\w+) (say|mention|tell|ask|call|text)",
         "(said|mentioned|told me|talked|was talking) about",
         "what was (that|it|the \\w+) about", "do you remember", "remember (when|what|who|where|that|the|my)",
-        "recall", "remind me (what|who|when|where|about|of|how|which|why)",
+        "(do|can|could) you recall", "recall (when|what|who|where|that|my|the (name|time|place|day))",
+        "(the|my|our|that) (meeting|call|conversation) (with|about|on|at|this|yesterday|last|earlier)",
+        "remind me (what|who|when|where|about|of|how|which|why)",
         "where did i (put|leave|park)", "my notes?", "(the|a) note (about|on|for)",
     )
     private val remindMeBare = Regex("\\bremind me\\W*$", RegexOption.IGNORE_CASE)
     private val pastTime = rx(
-        "yesterday", "this (morning|afternoon|evening)", "earlier( today)?", "last (night|week|month|time|" +
+        "yesterday", "this (morning|afternoon|evening)", "earlier (today|this \\w+)",
+        "(said|mentioned|heard|told me|talked about|discussed|decided|agreed) earlier", "last (night|week|month|time|" +
             "monday|tuesday|wednesday|thursday|friday|saturday|sunday)",
         "the other day", "(a|an|\\d+|few|couple of) (minutes?|hours?|days?|weeks?) ago", "just now",
     )
     // A name (capitalised, not the first word) next to a speech or contact word:
-    // "what's Sarah's number", "call with Tom", "Dana said". "who was Napoleon" is not.
+    // "what's Sarah's number", "call with Tom", "Dana said". "who was Napoleon" and
+    // "Newton's second law" are not: a possessive counts only before a contact word.
     private val nameNearSpeech = Regex(
         "(\\b(with|from|tell|ask|call|text|email|meet|met)\\s+[A-Z][a-z]+\\b)|" +
-            "(\\b[A-Z][a-z]+(['’]s|\\s+(said|says|told|asked|mentioned|wants|wanted|thinks|thought|called|texted|emailed))\\b)",
+            "(\\b[A-Z][a-z]+['’]s\\s+(number|phone|address|email|birthday|wife|husband|kids?|plan|idea|news|message|text|call)\\b)|" +
+            "(\\b[A-Z][a-z]+\\s+(said|says|told|asked|mentioned|wants|wanted|thinks|thought|called|texted|emailed)\\b)",
     )
 
     fun wants(request: String): Decision {
@@ -69,9 +75,26 @@ object MemoryBrief {
             whoSaid.containsMatchIn(t) || remindMeBare.containsMatchIn(t) -> Decision(true, "asks what was said or noted")
             pastTime.containsMatchIn(t) -> Decision(true, "past time")
             nameNearSpeech.containsMatchIn(afterFirst) -> Decision(true, "a person's name")
-            HistoryPolicy.decide(request).include -> Decision(true, "refers back")
+            // A request that only refers back to the chat ("tell me more") gets history, not memory.
             else -> Decision(false, "no memory cue")
         }
+    }
+
+    /** True when the request plausibly needs memory search ([wants]). */
+    fun needsMemory(request: String): Boolean = wants(request).search
+
+    private val vaguePronoun = Regex("\\b(that|it|this|those|these|them|he|she|they|him|her)\\b", RegexOption.IGNORE_CASE)
+
+    /**
+     * The search text for [request]: its instruction part, plus [previousUserTurn] when the
+     * instruction leans on a pronoun ("what did he say about that") and so has little content
+     * of its own. The previous turn is capped so it cannot drown the request.
+     */
+    fun query(request: String, previousUserTurn: String?): String {
+        val t = HistoryPolicy.instructionPart(request)
+        val prev = previousUserTurn?.let { HistoryPolicy.instructionPart(it) }?.trim().orEmpty()
+        if (prev.isEmpty() || prev == t || !vaguePronoun.containsMatchIn(t)) return t
+        return "$t (about: ${prev.take(200)})"
     }
 
     /** At most [max] chars, cut at a line or word boundary when one is near. */
@@ -88,10 +111,10 @@ object MemoryBrief {
      * failed, or took longer than [timeoutMs] (the provider must be cancellable for the
      * timeout to cut it short). Never throws, except when the caller itself is cancelled.
      */
-    suspend fun recall(query: String, timeoutMs: Long = TIMEOUT_MS): String? {
+    suspend fun recall(query: String, nowMs: Long = System.currentTimeMillis(), timeoutMs: Long = TIMEOUT_MS): String? {
         val p = provider ?: return null
         val text = try {
-            withTimeoutOrNull(timeoutMs) { withContext(Dispatchers.IO) { p(query) } }
+            withTimeoutOrNull(timeoutMs) { withContext(Dispatchers.IO) { p(query, nowMs) } }
         } catch (e: CancellationException) {
             currentCoroutineContext().ensureActive()   // the caller was cancelled: propagate
             null                                       // the provider's own timeout: no brief

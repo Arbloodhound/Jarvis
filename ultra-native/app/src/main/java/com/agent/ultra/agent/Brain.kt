@@ -541,22 +541,24 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 val level = ThermalGuard.level
                 val route = IntentRouter.route(userInput)
                 // History only when the request refers back (HistoryPolicy); then the whole
-                // conversation, windowed from a block anchor so the KV prefix survives.
+                // conversation, windowed append-only from a stable anchor so the KV prefix survives.
                 val historyChars = 3000 * local.contextSize / com.agent.ultra.local.LocalModelEngine.CTX_SIZE
                 val needsHistory = HistoryPolicy.decide(userInput)
-                val history = if (!needsHistory.include) emptyList() else HistoryPolicy.window(
-                    LocalPrompt.withoutCurrentTurn(
-                        ChatStore.messages.toList()
-                            .filter { it.id != msg.id }
-                            .map { LocalPrompt.Turn(it.fromUser, it.text) },
-                        userInput,
-                    ),
-                    historyChars,
-                )
                 val wantsMemory = MemoryBrief.wants(userInput)
-                val memory = if (wantsMemory.search) MemoryBrief.recall(HistoryPolicy.instructionPart(userInput)) else null
-                android.util.Log.d("UltraRoute", "history=${needsHistory.reason} turns=${history.size} " +
-                    "memory=${wantsMemory.reason} briefChars=${memory?.length ?: 0}")
+                val past = if (!needsHistory.include && !wantsMemory.search) emptyList() else LocalPrompt.withoutCurrentTurn(
+                    ChatStore.messages.toList()
+                        .filter { it.id != msg.id }
+                        .map { LocalPrompt.Turn(it.fromUser, it.text) },
+                    userInput,
+                )
+                val history = if (needsHistory.include) HistoryPolicy.window(past, historyChars) else emptyList()
+                android.util.Log.d("UltraRoute", "history turns=${history.size} chars=${history.sumOf { it.text.length }} " +
+                    "reason=${needsHistory.reason}")
+                val memory = if (!wantsMemory.search) null else MemoryBrief.recall(
+                    MemoryBrief.query(userInput, past.lastOrNull { it.fromUser }?.text),
+                )
+                android.util.Log.d("UltraRoute", "memory reason=${wantsMemory.reason} provider=${MemoryBrief.provider != null} " +
+                    "briefChars=${memory?.length ?: 0}")
                 val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput, historyChars, memory)
                 val reserve = LocalPrompt.answerReserve(level)
                 val speed = local.decodeTokPerSec

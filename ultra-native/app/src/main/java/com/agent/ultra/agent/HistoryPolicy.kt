@@ -10,8 +10,8 @@ package com.agent.ultra.agent
  * request (a fresh topic, a long paste) gets none.
  *
  * When history IS included, [window] keeps it stable between turns so the engine's KV
- * prefix reuse covers it: old turns are dropped in whole blocks from a fixed anchor, never
- * one at a time from the front.
+ * prefix reuse covers it: the window is append-only from a fixed anchor and, when full,
+ * jumps forward a whole segment — never one turn at a time from the front.
  */
 object HistoryPolicy {
 
@@ -19,9 +19,6 @@ object HistoryPolicy {
 
     /** User text longer than this is treated as a self-contained paste. */
     const val LONG_PASTE_CHARS = 800
-
-    /** Turns per block: the anchor only ever sits on a multiple of this. */
-    const val BLOCK_TURNS = 4
 
     private fun rx(vararg words: String) =
         Regex("\\b(" + words.joinToString("|") + ")\\b", RegexOption.IGNORE_CASE)
@@ -78,6 +75,23 @@ object HistoryPolicy {
         return if (rest.length > 20) t.substring(0, cut.range.first).trim() else t
     }
 
+    // "it" that points at nothing: "what time is it", "is it going to rain", "it's cold".
+    // "how far is it?" / "is it safe?" stay references: after an answer they point back.
+    private val dummyIt = Regex(
+        "\\b(what (time|day|date|year|month)|how (late|early))\\b[^?.!]*?\\b(is|was) it\\b|" +
+            "\\b(is|was|will) it (be )?(going to )?(rain|raining|snow|snowing|sunny|cloudy|cold|hot|warm|windy|late|early|" +
+            "true that)\\b|" +
+            "\\bit('s| is| was) (raining|snowing|sunny|cloudy|cold|hot|warm|windy|late|early)\\b",
+        RegexOption.IGNORE_CASE,
+    )
+    // In "rewrite that in this style: <sample>" the "that" points back; in "translate that: hola"
+    // (pronoun right before the colon) and "translate it into French: hola" it is the paste.
+    private val backPronounBeforePaste = Regex(
+        "\\b(make|translate|rewrite|reword|shorten|summari[sz]e|explain|repeat|redo|fix|change|simplify|expand|" +
+            "clarify|check|improve|continue|finish|list|compare|convert|turn)\\s+(that|those)\\s+\\S",
+        RegexOption.IGNORE_CASE,
+    )
+
     fun decide(request: String): Decision {
         val full = IntentRouter.requestPart(request).trim()
         if (full.length > LONG_PASTE_CHARS) return Decision(false, "long paste: self-contained")
@@ -86,14 +100,19 @@ object HistoryPolicy {
         val words = t.split(Regex("\\s+")).count { it.isNotBlank() }
         // "summarize this: <text>" — the pronoun points at the paste, not back.
         val pasted = t.length < full.length
+        // Pronoun rules never see an "it" that refers to nothing.
+        val p = dummyIt.replace(t, " ").trim()
         return when {
             conversationRef.containsMatchIn(t) -> Decision(true, "refers to the conversation")
+            pasted && (ordinal.findAll(t).any { !it.value.startsWith("this", ignoreCase = true) } ||
+                backPronounBeforePaste.containsMatchIn(t)) ->
+                Decision(true, "paste with a reference back")
             pasted -> Decision(false, "paste: self-contained")
             continuation.containsMatchIn(t) -> Decision(true, "continuation")
             ordinal.containsMatchIn(t) -> Decision(true, "points at an earlier item")
-            pronounObject.containsMatchIn(t) -> Decision(true, "acts on something earlier")
-            pronounAtEnd.containsMatchIn(t) && words <= 10 -> Decision(true, "ends on a reference")
-            words <= SHORT_WORDS && referringPronoun.containsMatchIn(t) -> Decision(true, "short, with a reference")
+            pronounObject.containsMatchIn(p) -> Decision(true, "acts on something earlier")
+            pronounAtEnd.containsMatchIn(p) && words <= 10 -> Decision(true, "ends on a reference")
+            words <= SHORT_WORDS && referringPronoun.containsMatchIn(p) -> Decision(true, "short, with a reference")
             bareFollowUp.matches(t) -> Decision(true, "bare follow-up")
             words <= SHORT_WORDS && followUpStart.containsMatchIn(t) -> Decision(true, "short follow-up")
             else -> Decision(false, "self-contained")
@@ -104,34 +123,52 @@ object HistoryPolicy {
     fun textOf(t: LocalPrompt.Turn): String = if (t.fromUser) t.text.trim() else ThinkBudget.stripForHistory(t.text)
 
     /**
-     * The turns to include, stable across consecutive turns. [history] is the whole
-     * conversation in order, without the current request; indices must not shift between
-     * turns (turns are only appended), which ChatStore's list gives.
-     *
-     * The window starts at the earliest multiple of [block] whose turns fit [budgetChars].
-     * As turns are appended that anchor stays put, so the prompt grows only at its end and
-     * the previous prompt is a prefix of the next up to the last request. When the anchor
-     * moves it jumps a whole block. A leading assistant turn is dropped so the window opens
-     * on the user. If even the last block does not fit, the newest turns that fit are kept.
+     * Segment starts for [history]: greedy from the front, a new segment opens at a user turn
+     * once the current one holds [segmentChars]. Each start depends only on the turns before
+     * it, so appending turns never moves an existing start.
      */
-    fun window(history: List<LocalPrompt.Turn>, budgetChars: Int, block: Int = BLOCK_TURNS): List<LocalPrompt.Turn> {
-        if (history.isEmpty() || budgetChars <= 0) return emptyList()
-        val len = history.map { textOf(it).length }
-        val suffix = IntArray(history.size + 1)
-        for (i in history.indices.reversed()) suffix[i] = suffix[i + 1] + len[i]
-        val step = block.coerceAtLeast(1)
-        var start = -1
-        var s = 0
-        while (s < history.size) {
-            if (suffix[s] <= budgetChars) { start = s; break }
-            s += step
+    fun segmentStarts(len: List<Int>, fromUser: List<Boolean>, segmentChars: Int): List<Int> {
+        val starts = mutableListOf(0)
+        var acc = 0
+        for (i in len.indices) {
+            if (i > starts.last() && fromUser[i] && acc + len[i] > segmentChars) { starts += i; acc = 0 }
+            acc += len[i]
         }
-        if (start < 0) {
-            // Over budget even from the last anchor: newest-first, as before.
-            start = history.size
-            while (start > 0 && suffix[start - 1] <= budgetChars) start--
+        return starts
+    }
+
+    /**
+     * The turns to include, stable across consecutive turns. [history] is the whole
+     * conversation in order, without the current request; turns are only appended, which
+     * ChatStore's list gives.
+     *
+     * The conversation is cut from the front into segments of about 2/3 of [budgetChars]
+     * ([segmentStarts]). The window opens at the start of the previous segment when that fits,
+     * else at the start of the current one. So the window only grows at its end (the previous
+     * prompt is a prefix of the next up to the last request) and its start jumps forward by a
+     * whole segment about once per segment's worth of text: append-only, then reset. After a
+     * jump it still holds the current segment (at least the last exchange, ~1/3 of the budget).
+     * If even the current segment does not fit (one huge turn), the newest turns that fit are
+     * kept; when not even the last turn fits, its first [budgetChars] are kept, so a request that
+     * refers back always sees the answer it refers to.
+     */
+    fun window(history: List<LocalPrompt.Turn>, budgetChars: Int): List<LocalPrompt.Turn> {
+        if (budgetChars <= 0) return emptyList()
+        val turns = history
+            .map { LocalPrompt.Turn(it.fromUser, textOf(it)) }
+            .filter { it.text.isNotEmpty() }
+        if (turns.isEmpty()) return emptyList()
+        val len = turns.map { it.text.length }
+        val suffix = IntArray(turns.size + 1)
+        for (i in turns.indices.reversed()) suffix[i] = suffix[i + 1] + len[i]
+        val starts = segmentStarts(len, turns.map { it.fromUser }, budgetChars * 2 / 3)
+        val start = starts.takeLast(2).firstOrNull { suffix[it] <= budgetChars } ?: run {
+            var s = turns.size
+            while (s > 0 && suffix[s - 1] <= budgetChars) s--
+            s
         }
-        while (start < history.size && (!history[start].fromUser || len[start] == 0)) start++
-        return history.subList(start, history.size).filter { textOf(it).isNotEmpty() }
+        if (start < turns.size) return turns.subList(start, turns.size)
+        val last = turns.last()
+        return listOf(LocalPrompt.Turn(last.fromUser, last.text.take(budgetChars).trimEnd()))
     }
 }

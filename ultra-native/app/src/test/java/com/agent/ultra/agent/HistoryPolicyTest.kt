@@ -70,20 +70,32 @@ class HistoryPolicyTest {
         assertTrue(HistoryPolicy.window(emptyList(), 3000).isEmpty())
     }
 
-    /** The anchor stays put while turns are appended, then jumps a whole block. */
-    @Test fun anchorMovesInBlocks() {
+    /** The anchor stays put while turns are appended, then jumps a whole segment. */
+    @Test fun anchorHoldsThenJumps() {
         val budget = 3000                       // ~9 turns of ~305 chars
-        val starts = (2..30 step 2).map { n ->
+        val starts = (2..40 step 2).map { n ->
             val w = HistoryPolicy.window(convo(n), budget)
             assertTrue(w.sumOf { it.text.length } <= budget)
             assertTrue(w.first().fromUser)
-            w.first().text.substringBefore(' ')
+            w.first().text.substringBefore(' ').removePrefix("t").toInt()
         }
-        // Never one turn at a time: every anchor is a block start (t1, t5, t9, ...).
-        for (s in starts) assertEquals(s, 0, (s.removePrefix("t").toInt() - 1) % HistoryPolicy.BLOCK_TURNS)
-        // And each anchor holds across several consecutive turns.
-        val runs = starts.zipWithNext().count { (a, b) -> a == b }
-        assertTrue("anchor held only $runs times in ${starts.size}", runs >= starts.size / 2)
+        // The anchor never moves backwards, and each move is more than one exchange.
+        for ((a, b) in starts.zipWithNext()) {
+            assertTrue("$a -> $b", b >= a)
+            if (b != a) assertTrue("jump $a -> $b", b - a >= 4)
+        }
+        val held = starts.zipWithNext().count { (a, b) -> a == b }
+        assertTrue("anchor held only $held times in ${starts.size}", held * 5 >= (starts.size - 1) * 3)
+    }
+
+    /** Segment starts depend only on earlier turns: appending never moves one. */
+    @Test fun segmentStartsAreStableUnderAppend() {
+        val h = convo(30, size = 137)
+        val full = HistoryPolicy.segmentStarts(h.map { it.text.length }, h.map { it.fromUser }, 1500)
+        for (n in 1..30) {
+            val part = HistoryPolicy.segmentStarts(h.take(n).map { it.text.length }, h.take(n).map { it.fromUser }, 1500)
+            assertEquals(full.filter { it < n }, part)
+        }
     }
 
     /** The reason for the window: consecutive prompts share everything up to the previous request. */
@@ -119,12 +131,42 @@ class HistoryPolicyTest {
 
     @Test fun oversizedTurnFallsBackToNewestThatFit() {
         val h = listOf(Turn(true, "q1"), Turn(false, "y".repeat(5000)), Turn(true, "q2"), Turn(false, "short answer"))
-        val w = HistoryPolicy.window(h, 1000, block = 4)
+        val w = HistoryPolicy.window(h, 1000)
         assertEquals(listOf(Turn(true, "q2"), Turn(false, "short answer")), w)
+    }
+
+    /** "tell me more" after a long answer: the answer must not be dropped, even when only it fits. */
+    @Test fun neverDropsTheOnlyAnswerThatFits() {
+        val h = listOf(Turn(true, "q".repeat(900)), Turn(false, "the answer"))
+        assertEquals(listOf(Turn(false, "the answer")), HistoryPolicy.window(h, 500))
+        val huge = listOf(Turn(true, "q"), Turn(false, "a".repeat(5000)))
+        val w = HistoryPolicy.window(huge, 1000)
+        assertEquals(1, w.size)
+        assertFalse(w[0].fromUser)
+        assertEquals(1000, w[0].text.length)
+        // And LocalPrompt.build keeps it (same measure).
+        assertTrue(LocalPrompt.build("S", w, "tell me more", 1000).contains("a".repeat(1000)))
     }
 
     @Test fun windowMeasuresStrippedText() {
         val h = listOf(Turn(true, "q"), Turn(false, "<think>" + "z".repeat(5000) + "</think>\n\nA"))
-        assertEquals(2, HistoryPolicy.window(h, 100).size)
+        assertEquals(listOf(Turn(true, "q"), Turn(false, "A")), HistoryPolicy.window(h, 100))
+    }
+
+    // ------------------------------------------------- review findings (d4029d5)
+
+    @Test fun styleSampleAfterAReferenceGetsHistory() {
+        assertTrue(include("rewrite that in this style: short sentences, plain words, no jargon at all please"))
+        assertTrue(include("turn those into a poem like this: roses are red, violets are blue, and so on"))
+        // The pronoun right before the colon is the paste itself.
+        assertFalse(include("translate that: buenos días, ¿cómo estás hoy, amigo mío?"))
+        assertFalse(include("translate it into French: good morning, how are you today my friend"))
+        assertFalse(include("summarize this one: " + "word ".repeat(30)))
+    }
+
+    @Test fun dummyItIsNotAReference() {
+        for (s in listOf("what time is it", "what day is it today", "is it going to rain", "is it raining",
+            "it's cold, what should I wear", "how late is it in Tokyo")) assertFalse(s, include(s))
+        for (s in listOf("why is it", "is it safe?", "how far is it?", "make it shorter", "what is it")) assertTrue(s, include(s))
     }
 }
