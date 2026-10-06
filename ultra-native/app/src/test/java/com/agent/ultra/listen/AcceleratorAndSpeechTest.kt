@@ -17,6 +17,15 @@ class WakeGatePlacementTest {
         assertFalse(WakeGate.useAccelerator(cpuMs = 1.0, accelMs = 3.0, maxDiff = 0f, scale = 1f))
     @Test fun diffOfDifferentLengthsIsHuge() =
         assertEquals(Float.MAX_VALUE, WakeGate.maxAbsDiff(floatArrayOf(1f), floatArrayOf(1f, 2f)))
+    @Test fun fasterXnnpackWins() =
+        assertEquals("xnnpack", WakeGate.choosePlacement(2.0, mapOf("xnnpack" to (0.9 to 0f), "nnapi" to (1.9 to 0f)), 30f))
+    @Test fun fasterNnapiWins() =
+        assertEquals("nnapi", WakeGate.choosePlacement(2.0, mapOf("xnnpack" to (1.5 to 0f), "nnapi" to (0.6 to 1e-5f)), 30f))
+    @Test fun bothTooSlowStaysOnCpu() =
+        assertEquals("cpu", WakeGate.choosePlacement(2.0, mapOf("xnnpack" to (1.8 to 0f), "nnapi" to (3.0 to 0f)), 30f))
+    @Test fun fastestButWrongOutputIsRejected() =   // nnapi fastest but its numbers moved -> next valid one
+        assertEquals("xnnpack", WakeGate.choosePlacement(2.0, mapOf("xnnpack" to (1.2 to 0f), "nnapi" to (0.3 to 0.5f)), 30f))
+    @Test fun noCandidatesStaysOnCpu() = assertEquals("cpu", WakeGate.choosePlacement(2.0, emptyMap(), 30f))
 }
 
 class LocalSpeechTest {

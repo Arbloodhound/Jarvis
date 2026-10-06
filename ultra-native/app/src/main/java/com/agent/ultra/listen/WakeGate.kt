@@ -73,44 +73,74 @@ class WakeGate(
     }
 
     /**
-     * One model's session, on the phone's own accelerator (GPU / NPU through Android's NNAPI —
-     * part of Android, no Google services) when that is measurably faster and gives the same
-     * numbers; otherwise on the CPU. Phones whose NNAPI has no accelerator driver, or whose
-     * driver can't run these ops, simply stay on the CPU. These models run every 80 ms all
-     * day, so the choice is worth a few milliseconds of timing at start-up.
+     * One model's session, on whichever of three places is measurably faster and gives the
+     * same numbers: the CPU (ONNX Runtime's default kernels), the CPU through XNNPACK (ONNX
+     * Runtime's optimised small-model CPU kernels, bundled in the library — any phone), or the
+     * phone's own accelerator (GPU / NPU through Android's NNAPI — part of Android, no Google
+     * services). A phone whose NNAPI has no accelerator driver, or whose driver can't run these
+     * ops, just loses that candidate. These models run every 80 ms all day, so the choice is
+     * worth a few milliseconds of timing at start-up.
      */
     private fun placed(tag: String, file: File, shape: LongArray): OrtSession {
         val cpu = env.createSession(file.absolutePath)
-        val accel = try {
-            env.createSession(file.absolutePath, OrtSession.SessionOptions().apply {
-                // CPU_DISABLED: never NNAPI's slow reference CPU path; ops the accelerator
-                // can't take run on ONNX Runtime's own CPU kernels instead.
-                addNnapi(java.util.EnumSet.of(NNAPIFlags.CPU_DISABLED))
-            })
-        } catch (e: Exception) {
-            null
-        }
-        if (accel == null) { placement += "$tag=cpu "; return cpu }
-        return try {
+        val sessions = LinkedHashMap<String, OrtSession>()   // candidates that loaded
+        candidate(file, "xnnpack") {
+            // XNNPACK runs its own thread pool; ORT's intra-op pool stays at 1 so the two
+            // don't fight, and nothing spins between the 80 ms bursts (ORT's XNNPACK guidance).
+            setIntraOpNumThreads(1)
+            addConfigEntry("session.intra_op.allow_spinning", "0")
+            addXnnpack(mapOf("intra_op_num_threads" to XNNPACK_THREADS.toString()))
+        }?.let { sessions["xnnpack"] = it }
+        candidate(file, "nnapi") {
+            // CPU_DISABLED: never NNAPI's slow reference CPU path; ops the accelerator
+            // can't take run on ONNX Runtime's own CPU kernels instead.
+            addNnapi(java.util.EnumSet.of(NNAPIFlags.CPU_DISABLED))
+        }?.let { sessions["nnapi"] = it }
+        if (sessions.isEmpty()) { placement += "$tag=cpu "; return cpu }
+        val choice = try {
             val n = shape.fold(1L) { a, b -> a * b }.toInt()
             val input = FloatArray(n) { ((it * 7919) % 2001 - 1000) / 10f }   // fixed, speech-scale values
-            val cpuIn = cpu.inputNames.first(); val accelIn = accel.inputNames.first()
+            val cpuIn = cpu.inputNames.first()
             val cpuOut = run1(cpu, cpuIn, shape, input)
-            val accelOut = run1(accel, accelIn, shape, input)
-            val cpuMs = timeMs { run1(cpu, cpuIn, shape, input) }
-            val accelMs = timeMs { run1(accel, accelIn, shape, input) }
-            val diff = maxAbsDiff(cpuOut, accelOut)
+            val cpuMs0 = timeMs { run1(cpu, cpuIn, shape, input) }
+            val measured = LinkedHashMap<String, Pair<Double, Float>>()   // name -> (ms, maxDiff)
+            for ((name, s) in sessions) {
+                try {
+                    val sIn = s.inputNames.first()
+                    val out = run1(s, sIn, shape, input)
+                    measured[name] = timeMs { run1(s, sIn, shape, input) } to maxAbsDiff(cpuOut, out)
+                } catch (e: Exception) {
+                    android.util.Log.w("UltraAmbient", "wake model $tag: $name failed (${e.message})")
+                }
+            }
+            // CPU timed again after the candidates, best of two: clocks ramping up during the
+            // first timing must not make a later candidate look faster than it is.
+            val cpuMs = minOf(cpuMs0, timeMs { run1(cpu, cpuIn, shape, input) })
             val scale = cpuOut.maxOfOrNull { kotlin.math.abs(it) } ?: 0f
-            val useAccel = useAccelerator(cpuMs, accelMs, diff, scale)
-            android.util.Log.i("UltraAmbient", "wake model $tag: cpu=%.2fms nnapi=%.2fms diff=%.1e -> %s"
-                .format(cpuMs, accelMs, diff, if (useAccel) "nnapi" else "cpu"))
-            placement += "$tag=${if (useAccel) "nnapi" else "cpu"} "
-            if (useAccel) { cpu.close(); accel } else { accel.close(); cpu }
+            val c = choosePlacement(cpuMs, measured, scale)
+            fun ms(k: String) = measured[k]?.let { "%.2fms".format(it.first) } ?: "n/a"
+            fun df(k: String) = measured[k]?.let { "%.1e".format(it.second) } ?: "n/a"
+            // diff is xnnpack/nnapi, each vs the CPU output
+            android.util.Log.i("UltraAmbient", "wake model $tag: cpu=%.2fms xnnpack=%s nnapi=%s diff=%s/%s -> %s"
+                .format(cpuMs, ms("xnnpack"), ms("nnapi"), df("xnnpack"), df("nnapi"), c))
+            c
         } catch (e: Exception) {
-            android.util.Log.w("UltraAmbient", "wake model $tag: nnapi failed (${e.message}); cpu")
-            accel.close(); placement += "$tag=cpu "; cpu
+            android.util.Log.w("UltraAmbient", "wake model $tag: placement check failed (${e.message}); cpu")
+            "cpu"
         }
+        placement += "$tag=$choice "
+        for ((name, s) in sessions) if (name != choice) runCatching { s.close() }
+        return sessions[choice]?.also { runCatching { cpu.close() } } ?: cpu
     }
+
+    /** A session with [setup] applied, or null when this phone / build can't create it. */
+    private fun candidate(file: File, name: String, setup: OrtSession.SessionOptions.() -> Unit): OrtSession? =
+        try {
+            OrtSession.SessionOptions().use { o -> o.setup(); env.createSession(file.absolutePath, o) }
+        } catch (e: Exception) {
+            android.util.Log.i("UltraAmbient", "wake $name unavailable (${e.message})")
+            null
+        }
 
     private inline fun timeMs(run: () -> Unit): Double {
         repeat(WARMUP) { run() }
@@ -213,6 +243,7 @@ class WakeGate(
         const val EMB_DIM = 96              // embedding width (embedding_model.onnx output)
         private const val WARMUP = 3
         private const val TIMED = 10
+        private const val XNNPACK_THREADS = 2   // always-on service: keep the thread count modest
 
         /**
          * Keep the accelerator only when it is clearly faster (at least 20%: timing noise and
@@ -221,6 +252,15 @@ class WakeGate(
          */
         fun useAccelerator(cpuMs: Double, accelMs: Double, maxDiff: Float, scale: Float): Boolean =
             accelMs > 0 && accelMs <= cpuMs * 0.8 && maxDiff <= 1e-3f * maxOf(1f, scale)
+
+        /**
+         * Where a wake model runs: among [candidates] (name -> (ms, maxDiff vs the CPU output))
+         * that pass [useAccelerator], the fastest; otherwise "cpu". A candidate whose session
+         * failed to load or run is simply absent. Pure, JVM-tested.
+         */
+        fun choosePlacement(cpuMs: Double, candidates: Map<String, Pair<Double, Float>>, scale: Float): String =
+            candidates.filter { (_, r) -> useAccelerator(cpuMs, r.first, r.second, scale) }
+                .minByOrNull { it.value.first }?.key ?: "cpu"
 
         fun maxAbsDiff(a: FloatArray, b: FloatArray): Float {
             if (a.size != b.size) return Float.MAX_VALUE
