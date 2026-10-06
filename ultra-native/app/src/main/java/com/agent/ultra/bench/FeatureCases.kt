@@ -64,7 +64,7 @@ object FeatureCases {
         Question("What is the capital city of Australia? Reply with one word.", Check.Word("Canberra")),
         Question("Reply with exactly the word: banana", Check.Exact("banana")),
         Question("A train leaves at 3:40 pm and the trip takes 50 minutes. What time does it arrive? Reply with just the time.",
-            Check.Number("4:30")),
+            Check.AnyOf(listOf(Check.Number("4:30"), Check.Number("04:30"), Check.Number("16:30")))),
     )
 
     /** Q8/Q11 regression (DEVLOG 2026-10-06): earlier answers must not leak into later ones. */
@@ -155,11 +155,13 @@ object FeatureCases {
         Heard("The kids have football practice on Wednesday after school.", 5, 16),
     )
 
-    /** When [h] was "heard": its day and time in [zone], never later than ten minutes before [nowMs]. */
+    /** When [h] was "heard": its day and time in [zone]. A time still to come today moves to ten
+     *  minutes ago, but never before today's midnight (so a "today" line stays today). */
     fun heardTs(h: Heard, nowMs: Long, zone: java.time.ZoneId): Long {
-        val day = java.time.Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate().minusDays(h.daysAgo.toLong())
-        val ts = day.atTime(h.hour, h.minute).atZone(zone).toInstant().toEpochMilli()
-        return minOf(ts, nowMs - 10 * 60_000L)
+        val today = java.time.Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate()
+        val ts = today.minusDays(h.daysAgo.toLong()).atTime(h.hour, h.minute).atZone(zone).toInstant().toEpochMilli()
+        if (ts <= nowMs) return ts
+        return maxOf(nowMs - 10 * 60_000L, today.atStartOfDay(zone).toInstant().toEpochMilli())
     }
 
     /** [query] should find the line containing [expected]; [how] is what the query tests. */

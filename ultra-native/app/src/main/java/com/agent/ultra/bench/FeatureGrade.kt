@@ -75,13 +75,13 @@ object FeatureGrade {
         data class Exact(val word: String) : Check()
         /** [word] appears as a whole word and none of [not] do. */
         data class Word(val word: String, val not: List<String> = emptyList()) : Check()
+        /** Any one of [checks] passes (e.g. "4:30" or "16:30"). */
+        data class AnyOf(val checks: List<Check>) : Check()
     }
 
-    /** The visible answer: anything up to a closing think tag is dropped. */
-    fun visible(answer: String): String {
-        val c = answer.lastIndexOf("</think>")
-        return (if (c >= 0) answer.substring(c + "</think>".length) else answer).trim()
-    }
+    /** The visible answer: reasoning is removed the way chat history removes it (a closed
+     *  think block, everything up to a lone closing tag, and an unclosed think block to the end). */
+    fun visible(answer: String): String = com.agent.ultra.agent.ThinkBudget.stripForHistory(answer)
 
     private fun hasWord(text: String, word: String): Boolean =
         Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(word) + "(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE).containsMatchIn(text)
@@ -92,6 +92,7 @@ object FeatureGrade {
             is Check.Number -> Regex("(?<![\\d.,])" + Regex.escape(check.value) + "(?!\\d|[.,]\\d)").containsMatchIn(a)
             is Check.Exact -> a.lowercase(Locale.ROOT).trim { !it.isLetterOrDigit() } == check.word.lowercase(Locale.ROOT)
             is Check.Word -> hasWord(a, check.word) && check.not.none { hasWord(a, it) }
+            is Check.AnyOf -> check.checks.any { passes(a, it) }
         }
     }
 

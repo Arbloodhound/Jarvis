@@ -57,9 +57,7 @@ class TranscriptCueWorker(private val ctx: Context, private val mem: AmbientMemo
         val now = System.currentTimeMillis()
         val db = CueAudio.frameDb(j.pcm)
         val gate = CueAudio.gateDb(j.floorDb)
-        val pauses = CueAudio.union(
-            CueAudio.silences(db, gate, PART_MS), CueAudio.vadGaps(j.vad, PART_MS), CueTags.MIN_PAUSE_MS,
-        )
+        val pauses = pauses(db, gate, j.vad)
         val span = if (j.vad.isNotEmpty()) Span(j.vad.minOf { it.startMs }, j.vad.maxOf { it.endMs })
             else CueAudio.speechSpan(db, gate) ?: Span(0, j.pcm.size * 1000L / AmbientConfig.SAMPLE_RATE)
         val speechMs = (span.ms - pauses.filter { it.startMs >= span.startMs && it.endMs <= span.endMs }.sumOf { it.ms })
@@ -138,6 +136,13 @@ class TranscriptCueWorker(private val ctx: Context, private val mem: AmbientMemo
         /** Silences shorter than this aren't considered, even joined. */
         private const val PART_MS = 300L
         private const val OVERLAP_MIN_SPEECH_MS = 4_000L
+
+        /** The pauses in one utterance: quiet runs in [db] (frame dB, [gate] = speech threshold)
+         *  joined with gaps between whisper's [vad] stretches, at least [CueTags.MIN_PAUSE_MS].
+         *  Also called by the debug feature check, so it tests this exact step. */
+        internal fun pauses(db: FloatArray, gate: Float, vad: List<Span>): List<Span> = CueAudio.union(
+            CueAudio.silences(db, gate, PART_MS), CueAudio.vadGaps(vad, PART_MS), CueTags.MIN_PAUSE_MS,
+        )
         private const val WINDOW_MS = 2_000L
         private const val MAX_WINDOWS = 6
     }

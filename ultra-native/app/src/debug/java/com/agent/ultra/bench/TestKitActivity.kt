@@ -359,7 +359,12 @@ class TestKitActivity : ComponentActivity() {
             confirmAnswer = answer
             confirmText.value = question
         }
-        return answer.await()
+        return try { answer.await() } finally {
+            // Cancelled (Skip, Stop, a timeout) or answered: the dialog goes with the question.
+            withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) {
+                if (confirmAnswer === answer) { confirmText.value = null; confirmAnswer = null }
+            }
+        }
     }
 
     private fun answerConfirm(yes: Boolean) {

@@ -4,12 +4,14 @@ import android.content.Context
 import com.agent.ultra.bench.FeatureGrade.Result
 import com.agent.ultra.bench.FeatureGrade.Verdict
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -23,7 +25,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * [FeatureProbes].
  *
  * Every probe has a timeout, a crash in one never stops the rest, and "Skip this part" moves on
- * to the next one. Probes never write to the person's real memory: memory search uses its own
+ * to the next one (see [Runner] for what a skip can and can't interrupt). Probes never write to the person's real memory: memory search uses its own
  * sandbox database file, deleted afterwards; the librarian probes parse their notes but never
  * store them.
  *
@@ -55,10 +57,10 @@ object FeatureCheck {
 
     /** Runs [probes] in order; [onResults] gets each probe's results as soon as it ends. */
     class Runner(private val env: ProbeEnv, private val probes: List<Probe> = PROBES) {
-        @Volatile private var current: Deferred<List<Result>?>? = null
+        @Volatile private var skip: CompletableDeferred<Unit>? = null
 
-        /** "Skip this part": cancel the probe running now; the run goes on with the next one. */
-        fun skipCurrent() { current?.cancel(CancellationException("skipped")) }
+        /** "Skip this part": stop waiting for the probe running now and go on with the next one. */
+        fun skipCurrent() { skip?.complete(Unit) }
 
         suspend fun run(onStart: suspend (Probe, Int) -> Unit, onResults: suspend (Probe, List<Result>) -> Unit): List<Result> {
             val all = ArrayList<Result>()
@@ -75,25 +77,54 @@ object FeatureCheck {
             return all
         }
 
-        private suspend fun runOne(p: Probe): List<Result> = supervisorScope {
-            // IO: probes make blocking calls (SQLite, ONNX, whisper); the UI callbacks switch to Main.
-            val job = async(Dispatchers.IO) { withTimeoutOrNull(p.timeoutMs) { p.run(env) } }
-            current = job
+        private sealed class Outcome {
+            class Done(val results: List<Result>?) : Outcome()
+            object Skipped : Outcome()
+        }
+
+        /**
+         * The probe runs detached (on IO: SQLite, ONNX, whisper block), and this only WAITS for it,
+         * up to its timeout or a Skip. Waiting can always be cut short; the probe itself is then
+         * cancelled. A model generation stops at its next token; a blocking native call (a whisper
+         * transcription, a model load) can't be interrupted and finishes in the background while
+         * the next probe starts. Stop cancels the wait and the probe the same way.
+         */
+        private suspend fun runOne(p: Probe): List<Result> {
+            val skipped = CompletableDeferred<Unit>()
+            skip = skipped
+            val job = probeScope.async { p.run(env) }
             try {
-                job.await()?.takeIf { it.isNotEmpty() }
-                    ?: listOf(Result(p.title, Verdict.FAIL, "timed out after ${p.timeoutMs / 1000} s",
+                val outcome = withTimeoutOrNull(p.timeoutMs) {
+                    select<Outcome> {
+                        job.onAwait { Outcome.Done(it) }
+                        skipped.onAwait { Outcome.Skipped }
+                    }
+                }
+                return when (outcome) {
+                    null -> listOf(Result(p.title, Verdict.FAIL, "timed out after ${p.timeoutMs / 1000} s",
                         "did not finish in time; the rest of the check went on"))
+                    Outcome.Skipped -> listOf(Result(p.title, Verdict.WARN, "skipped", "you skipped it, so it was not measured"))
+                    is Outcome.Done -> outcome.results?.takeIf { it.isNotEmpty() }
+                        ?: listOf(Result(p.title, Verdict.FAIL, "no result", "the probe returned nothing"))
+                }
             } catch (e: CancellationException) {
-                currentCoroutineContext().ensureActive()           // Stop (not Skip): propagate
-                listOf(Result(p.title, Verdict.WARN, "skipped", "you skipped it, so it was not measured"))
+                currentCoroutineContext().ensureActive()           // Stop: propagate
+                // The probe itself was cancelled from inside (e.g. its own coroutine): not the person.
+                return crashed(p, e)
             } catch (e: Throwable) {
-                listOf(Result(p.title, Verdict.FAIL, "crashed: ${e.javaClass.simpleName}",
-                    "the test itself hit an error: ${e.message?.take(160)}",
-                    e.stackTrace.take(8).map { "  at $it" }))
+                return crashed(p, e)                                // the probe threw (await rethrows it)
             } finally {
-                current = null
+                skip = null
+                if (!job.isCompleted) job.cancel(CancellationException("skipped, timed out or stopped"))
             }
         }
+
+        private fun crashed(p: Probe, e: Throwable) = listOf(Result(p.title, Verdict.FAIL,
+            "crashed: ${e.javaClass.simpleName}", "the test itself hit an error: ${e.message?.take(160)}",
+            e.stackTrace.take(8).map { "  at $it" }))
+
+        /** Detached from the caller: a probe stuck in native code must not hold the run up. */
+        private val probeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 }
 

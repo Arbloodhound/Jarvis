@@ -107,6 +107,20 @@ class FeatureCasesTest {
         assertEquals(now - 600_000, FeatureCases.heardTs(FeatureCases.Heard("x", 0, 8), now, zone))
     }
 
+    @Test fun heardTsTodayStaysTodayJustAfterMidnight() {
+        val zone = java.time.ZoneId.of("Europe/London")
+        val now = java.time.ZonedDateTime.of(2026, 10, 6, 0, 5, 0, 0, zone).toInstant().toEpochMilli()
+        val midnight = java.time.ZonedDateTime.of(2026, 10, 6, 0, 0, 0, 0, zone).toInstant().toEpochMilli()
+        assertEquals(midnight, FeatureCases.heardTs(FeatureCases.Heard("x", 0, 8), now, zone))
+    }
+
+    @Test fun trainTimeAcceptsTwentyFourHour() {
+        val q = FeatureCases.THINKER_QUESTIONS.last()
+        assertTrue(FeatureGrade.passes("16:30", q.check))
+        assertTrue(FeatureGrade.passes("04:30 pm", q.check))
+        assertFalse(FeatureGrade.passes("14:30", q.check))
+    }
+
     @Test fun transcriptsAreTimeOrdered() {
         val t = FeatureCases.patternDialogue(0)
         assertEquals(t.sortedBy { it.ts }, t)

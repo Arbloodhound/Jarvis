@@ -3,6 +3,38 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-06 (cloud session 01BUKa, agent) — Jarvis Tests "Feature check": every feature probed and scored
+
+Branch `claude/feature-check` (not merged). New debug-only button **5 · Feature check** on the Jarvis
+Tests screen. Each probe prints `PASS | WARN | FAIL | MISSING  <feature>: <measured>  — <meaning>`,
+writes a detail block to the results file, and the run ends with a summary table (FEATURE CHECK SUMMARY).
+
+Probes, in run order (registry `FeatureCheck.PROBES`; adding one = one line + one function in `FeatureProbes`):
+native libs/CPU + thermal; history policy (11 kit questions, only Q10 gets history); safety gates
+(8 fixed approveTap decisions: refuse/ask/allow); offline-nav rules (parse, loop guard, routing);
+ambient listening (setting, service, mic, models, last line's age); memory search (sandbox DB
+`featurecheck-ambient.db`, 10 synthetic lines, 5 queries → top-1/top-3, embedder cosine sanity,
+MemoryBrief block yes/no); voice (Jarvis voice → whisper WER; "Hey Jarvis" acoustic gate + text
+match); transcript cues (1.5 s inserted pause → pause tag, whisper word timing, speaker-tag setting/
+model + same-voice match); librarian (load, latency, 3 expected notes from a 4-line transcript,
+nothing stored); pattern notes (observations, hedged readings, banned words "diagnos"/"narcissist"/
+"you are lying"); thinker (load, tok/s, majfaults; 6 auto-graded questions; Q8/Q11 no-copying via the
+real chat in airplane mode, else the chat's prompt assembly); live offline flashlight on/off behind a
+Yes/No dialog, verified with the camera torch callback, light restored to its prior state.
+
+Runner: each probe runs detached with a timeout; Skip/Stop/timeout stop waiting at once (a blocking
+native call finishes in the background). Pure parts in main/bench (`FeatureGrade`, `FeatureCases`,
+like KitReport) with 42 JVM tests. Main-code hooks (no behaviour change): `AmbientMemory.sandbox(name)`,
+`MemoryRecall.relevant(..., store, sources)`, `TranscriptCueWorker.pauses(...)` (extracted, same code).
+Merged claude/new-session-t3cy17 @ c8ed1ca (transcript cues) in. 1056 JVM tests pass, assembleDebug OK.
+
+Finding (not changed): `Disagreement.statedByUser` does not read "240 pounds" as an amount (needs £/GBP
+or a number right after "pay"), so a spoken "pay the bill of 240 pounds" gets no wrong-amount refusal.
+
+Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN — nothing has run on the Pixel. Thresholds (WER 10/25%,
+5 tok/s, pause 1.3–2.3 s, top-3 ≥ 80%) are first guesses to tune from the first results file.
+Speaker separation needs two real voices (Jarvis's TTS has one speaker): reported as WARN.
+
 ## 2026-10-08 (late) — Librarian + thinker build: two models, semantic recall, notes, history fix (3 parallel agents)
 
 Done (merged into claude/new-session-t3cy17):

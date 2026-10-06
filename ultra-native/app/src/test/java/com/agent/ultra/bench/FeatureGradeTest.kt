@@ -66,6 +66,9 @@ class FeatureGradeTest {
     @Test fun numberIgnoresThinkBlock() =
         assertFalse(FeatureGrade.passes("<think>maybe 391</think>\nI am not sure", Check.Number("391")))
 
+    @Test fun unclosedThinkBlockIsNotTheAnswer() =
+        assertFalse(FeatureGrade.passes("<think>17x23 is 391, let me double check", Check.Number("391")))
+
     @Test fun exactWord() {
         assertTrue(FeatureGrade.passes("banana", Check.Exact("banana")))
         assertTrue(FeatureGrade.passes("  Banana.\n", Check.Exact("banana")))

@@ -172,8 +172,6 @@ object FeatureProbes {
     const val CUE_FIRST = "I was thinking we could go to the market on Saturday."
     const val CUE_SECOND = "Or maybe we should just stay home and rest instead."
     const val CUE_PAUSE_MS = 1_500
-    /** TranscriptCueWorker's PART_MS (private there): the shortest quiet run that is joined into a pause. */
-    private const val CUE_PART_MS = 300L
 
     suspend fun transcriptCues(env: ProbeEnv): List<Result> {
         val ctx = env.ctx
@@ -231,14 +229,11 @@ object FeatureProbes {
                 "words: " + words.take(24).joinToString(" ") { "${it.text}@${it.t0Ms}" },
                 "vad: " + r?.vad.orEmpty().joinToString(" ") { "${it.startMs}-${it.endMs}" }))
 
-        // The same pause measurement and tagging as TranscriptCueWorker.process.
+        // TranscriptCueWorker's own pause step and tagging. The one difference: the worker's noise
+        // floor comes from the live microphone; here it is the test clip's quietest frame.
         val db = com.agent.ultra.listen.CueAudio.frameDb(pcm)
         val gate = com.agent.ultra.listen.CueAudio.gateDb(db.minOrNull() ?: -90f)
-        val pauses = com.agent.ultra.listen.CueAudio.union(
-            com.agent.ultra.listen.CueAudio.silences(db, gate, CUE_PART_MS),
-            com.agent.ultra.listen.CueAudio.vadGaps(r?.vad.orEmpty(), CUE_PART_MS),
-            com.agent.ultra.listen.CueTags.MIN_PAUSE_MS,
-        )
+        val pauses = com.agent.ultra.listen.TranscriptCueWorker.pauses(db, gate, r?.vad.orEmpty())
         val body = com.agent.ultra.listen.CueTags.body(r?.text.orEmpty(), words, pauses, null, emptyList())
         val tagged = FeatureGrade.pausesIn(body)
         val longest = tagged.maxOrNull()
@@ -648,6 +643,9 @@ object FeatureProbes {
     private const val THINK = 192
     private const val ANSWER = 160
     private const val QUESTION_TIMEOUT_MS = 150_000L
+    /** One request through the real chat brain (routing, history, memory search, tools included). */
+    private const val ASK_TIMEOUT_MS = 240_000L
+    private const val CONFIRM_TIMEOUT_MS = 2 * 60_000L
 
     /** One question straight to the engine, the way the offline chat prompts it; null = timed out. */
     private suspend fun ask(engine: LocalModelEngine, question: String, history: List<LocalPrompt.Turn> = emptyList(), mirrored: Boolean = false): String? =
@@ -701,7 +699,7 @@ object FeatureProbes {
         val history = mutableListOf<LocalPrompt.Turn>()
         suspend fun turn(q: String): String? {
             env.status("Thinker no-copying: \"${q.take(40)}\"")
-            val a = if (real) env.askBrain(q) else ask(engine, q, history, mirrored = true)
+            val a = if (real) withTimeoutOrNull(ASK_TIMEOUT_MS) { env.askBrain(q) } else ask(engine, q, history, mirrored = true)
             history += LocalPrompt.Turn(true, q)
             history += LocalPrompt.Turn(false, a.orEmpty())
             detail += "Q: ${q.take(60)} → ${a?.let { oneLine(FeatureGrade.visible(it), 160) } ?: "(timed out)"}"
@@ -742,10 +740,12 @@ object FeatureProbes {
         } ?: return listOf(Result(feature, Verdict.MISSING, "no flashlight", "this phone has no flashlight to test with"))
         if (env.online()) return listOf(Result(feature, Verdict.WARN, "skipped: phone is online",
             "turn on airplane mode and run the check again to test this"))
-        if (!env.confirm("Last part: Jarvis's offline brain will turn your FLASHLIGHT ON and then OFF, " +
-                "through the real chat, to check that it can control the phone. Go ahead?")) {
-            return listOf(Result(feature, Verdict.WARN, "skipped by you", "not measured"))
+        val yes = withTimeoutOrNull(CONFIRM_TIMEOUT_MS) {
+            env.confirm("Last part: Jarvis's offline brain will turn your FLASHLIGHT ON and then OFF, " +
+                "through the real chat, to check that it can control the phone. Go ahead?")
         }
+        if (yes != true) return listOf(Result(feature, Verdict.WARN,
+            if (yes == null) "skipped: no answer in ${CONFIRM_TIMEOUT_MS / 60_000} min" else "skipped by you", "not measured"))
         val torch = MutableStateFlow<Boolean?>(null)
         val cb = object : CameraManager.TorchCallback() {
             override fun onTorchModeChanged(cameraId: String, enabled: Boolean) { if (cameraId == torchId) torch.value = enabled }
@@ -753,10 +753,11 @@ object FeatureProbes {
         }
         cam.registerTorchCallback(cb, Handler(Looper.getMainLooper()))
         val detail = mutableListOf<String>()
-        var leftOn = false
+        var startedOn = false
         try {
             delay(300)                                         // the callback reports the current state
-            if (torch.value == true) {
+            startedOn = torch.value == true
+            if (startedOn) {
                 // Start from off, or "turn on" would look verified without doing anything.
                 detail += "flashlight was on before the test: switched off first"
                 runCatching { cam.setTorchMode(torchId, false) }
@@ -767,23 +768,23 @@ object FeatureProbes {
             suspend fun step(request: String, want: Boolean): Pair<Boolean, String> {
                 env.status("Live: \"$request\"")
                 val t0 = System.currentTimeMillis()
-                val answer = env.askBrain(request)
-                val reached = withTimeoutOrNull(5_000) { torch.first { it == want } } != null
+                // Already in the wanted state (the step before failed): nothing this step does can show.
+                val already = torch.value == want
+                val answer = withTimeoutOrNull(ASK_TIMEOUT_MS) { env.askBrain(request) } ?: "(no answer in ${ASK_TIMEOUT_MS / 1000} s)"
+                val reached = !already && withTimeoutOrNull(5_000) { torch.first { it == want } } != null
                 val took = ms(t0)
                 val log = env.logcat(t0, listOf("UltraBrain", "UltraOfflineNav"))
                 val tools = log.count { "LOCAL TOOL:" in it }
                 val navSteps = log.count { Regex("step \\d+:").containsMatchIn(it) }
                 val steps = tools + navSteps
-                detail += "\"$request\": ${if (reached) "VERIFIED" else "NOT verified"} (flashlight ${if (torch.value == true) "on" else "off"}), " +
+                detail += "\"$request\": ${if (reached) "VERIFIED" else if (already) "NOT verified (it was already ${if (want) "on" else "off"})" else "NOT verified"} (flashlight ${if (torch.value == true) "on" else "off"}), " +
                     "$steps action(s) ($tools tool, $navSteps screen steps), ${secs(took)}"
                 detail += "  answer: ${oneLine(answer, 160)}"
                 log.filter { "LOCAL" in it || "OFFLINE NAV" in it || "step" in it }.take(6).forEach { detail += "  log: ${it.substringAfter("): ")}" }
                 return reached to "${secs(took)}, $steps action(s)"
             }
             val (on, onNum) = step("turn on the flashlight", true)
-            if (torch.value == true) leftOn = true
             val (off, offNum) = step("turn off the flashlight", false)
-            if (torch.value != true) leftOn = false
             val ok = listOf(on, off).count { it }
             return listOf(Result(feature, when (ok) { 2 -> Verdict.PASS; 1 -> Verdict.WARN; else -> Verdict.FAIL },
                 "on: ${if (on) "verified" else "NOT verified"} ($onNum) · off: ${if (off) "verified" else "NOT verified"} ($offNum)",
@@ -793,9 +794,10 @@ object FeatureProbes {
                     else -> "the offline brain did not change the flashlight"
                 }, detail))
         } finally {
+            // Leave the light as it was before the test (also after a Skip, Stop or timeout).
+            val nowOn = torch.value == true
             cam.unregisterTorchCallback(cb)
-            // Never leave the light on because of this test.
-            if (leftOn) runCatching { cam.setTorchMode(torchId, false) }
+            if (nowOn != startedOn) runCatching { cam.setTorchMode(torchId, startedOn) }
         }
     }
 
