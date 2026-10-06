@@ -1,6 +1,7 @@
 package com.agent.ultra.bench
 
 import com.agent.ultra.agent.LocalPrompt
+import com.agent.ultra.listen.LibrarianPrompt
 import com.agent.ultra.listen.NoteDraft
 import com.agent.ultra.listen.NoteKind
 import com.agent.ultra.listen.NoteParser
@@ -125,5 +126,30 @@ class FeatureCasesTest {
         val t = FeatureCases.patternDialogue(0)
         assertEquals(t.sortedBy { it.ts }, t)
         assertEquals(6, t.size)
+    }
+
+    /** The Pixel's 1/3 (2026-10-06): the time only in the text, the to-do filed as a fact. The
+     *  parser's repairs make the same output count, as it is then stored with its time and kind. */
+    @Test fun notesFoundWhenTheModelSlipsAsOnThePixel() {
+        val chunk = FeatureCases.notesTranscript(1_700_000_000_000)
+        val raw = """
+            {"kind":"person","text":"Priya is the speaker's sister-in-law and moved to Leeds"}
+            {"kind":"plan","text":"Dentist appointment with Dr Lee tomorrow at 3pm"}
+            {"kind":"fact","text":"You need to renew your passport before the Lisbon trip"}
+        """.trimIndent()
+        val drafts = NoteParser.parse(raw, chunk).notes
+        assertAllOk(FeatureCases.notesFound(drafts))
+        assertEquals("tomorrow at 3pm", drafts[1].whenPhrase)
+    }
+
+    /** The librarian prompt's examples must not be the probe's own test case, or the probe grades
+     *  a copied example: no name, place or key word of the test conversations in the prompt. */
+    @Test fun librarianPromptDoesNotContainTheProbeCases() {
+        for (prompt in listOf(LibrarianPrompt.SYSTEM, LibrarianPrompt.SYSTEM_PLAIN)) {
+            for (w in listOf("Priya", "Leeds", "Dentist", "Dr Lee", "passport", "Lisbon", "tomorrow at 3pm",
+                    "Sam", "maybe Friday", "dinner", "book the table")) {
+                assertFalse(w, prompt.contains(w, ignoreCase = true))
+            }
+        }
     }
 }

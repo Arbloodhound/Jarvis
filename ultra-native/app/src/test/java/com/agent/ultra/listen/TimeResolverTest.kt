@@ -95,4 +95,43 @@ class TimeResolverTest {
         assertNull(TimeResolver.resolve("", at(14), zone))
         assertNull(TimeResolver.resolve(null, at(14), zone))
     }
+
+    @Test fun phraseInFindsTheTimeWordsInText() {
+        assertEquals("tomorrow at 3pm", TimeResolver.phraseIn("Dentist appointment with Dr Lee tomorrow at 3pm"))
+        assertEquals("next Tuesday at 9am", TimeResolver.phraseIn("Car service next Tuesday at 9am."))
+        assertEquals("in 2 hours", TimeResolver.phraseIn("Call Jo back in 2 hours"))
+        assertEquals("tonight at 8", TimeResolver.phraseIn("Pick up Sam tonight at 8"))
+        assertEquals("March 5th", TimeResolver.phraseIn("Anna's birthday party on March 5th"))
+        assertEquals("this weekend", TimeResolver.phraseIn("Paint the fence this weekend"))
+        assertEquals("at noon", TimeResolver.phraseIn("Lunch with the team at noon"))
+    }
+
+    @Test fun phraseInIgnoresTextWithoutTimes() {
+        assertEquals(null, TimeResolver.phraseIn("Renew the passport before the Lisbon trip"))
+        assertEquals(null, TimeResolver.phraseIn("Jo lives at 12 Baker Street"))
+        assertEquals(null, TimeResolver.phraseIn("Meet at 3 Station Road"))
+        assertEquals(null, TimeResolver.phraseIn("Party at Jo's"))
+        assertEquals(null, TimeResolver.phraseIn(""))
+        assertEquals(null, TimeResolver.phraseIn(null))
+    }
+
+    @Test fun phraseInResolvesLikeTheModelsOwnWhen() {
+        val anchor = java.time.ZonedDateTime.of(2026, 10, 6, 10, 0, 0, 0, zone).toInstant().toEpochMilli()
+        val p = TimeResolver.phraseIn("Dentist appointment with Dr Lee tomorrow at 3pm")
+        assertEquals(TimeResolver.resolve("tomorrow at 3pm", anchor, zone), TimeResolver.resolve(p, anchor, zone))
+    }
+
+    @Test fun phraseInSkipsNonTimes() {
+        assertNull(TimeResolver.phraseIn("Need to look at two flats in Leeds"))
+        assertNull(TimeResolver.phraseIn("At one point we should repaint the hall"))
+        assertNull(TimeResolver.phraseIn("Party at Sam's, maybe 2 may come along"))
+        assertEquals("the 5th of May", TimeResolver.phraseIn("Anna's party on the 5th of May"))
+        assertEquals("at 7", TimeResolver.phraseIn("Dinner at 7, bring wine"))
+        assertEquals("at 3 tomorrow", TimeResolver.phraseIn("Meet Jo at 3 tomorrow"))
+    }
+
+    @Test fun twoSeparateTimesAreNotGuessed() {
+        assertNull(TimeResolver.phraseIn("Lost the card yesterday, need to call the bank next Friday"))
+        assertEquals("on Friday, at 9", TimeResolver.phraseIn("Call the bank on Friday, at 9"))
+    }
 }

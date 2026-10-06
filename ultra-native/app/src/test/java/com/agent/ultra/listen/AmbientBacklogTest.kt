@@ -81,4 +81,34 @@ class AmbientBacklogTest {
         assertTrue(AmbientBacklog.mayTranscribe(false, 100_000L, 98_000L, 2_000L))   // idle 2 s
         assertTrue(AmbientBacklog.mayTranscribe(false, 100_000L, 0L, 2_000L))        // long idle
     }
+
+    /** Pixel Feature check: the brain stayed busy for minutes, nothing was transcribed and the
+     *  backlog kept dropping. Past the cap the backlog drains while the brain is still busy. */
+    @Test fun holdIsCapped() {
+        val cap = AmbientBacklog.MAX_HOLD_MS
+        assertFalse(AmbientBacklog.shouldDrain(true, 100_000L, 0L, 100_000L - cap + 1))   // not yet
+        assertTrue(AmbientBacklog.shouldDrain(true, 100_000L, 0L, 100_000L - cap))        // waited the cap
+        assertTrue(AmbientBacklog.shouldDrain(false, 100_000L, 0L, 99_000L))              // idle: at once
+        assertFalse(AmbientBacklog.shouldDrain(true, 100_000L, 0L, null))                  // nothing queued
+        assertFalse(AmbientBacklog.shouldDrain(false, 100_000L, 99_500L, 99_000L))        // settling, under cap
+    }
+
+    @Test fun unpinnedWhisperWaitsLongerButStillBounded() {
+        assertEquals(AmbientBacklog.MAX_HOLD_MS, AmbientBacklog.maxHoldMs(true))
+        assertTrue(AmbientBacklog.maxHoldMs(false) > AmbientBacklog.MAX_HOLD_MS)
+        val cap = AmbientBacklog.maxHoldMs(false)
+        assertTrue(AmbientBacklog.shouldDrain(true, 200_000L, 0L, 200_000L - cap, cap))
+        assertFalse(AmbientBacklog.shouldDrain(true, 200_000L, 0L, 200_000L - AmbientBacklog.MAX_HOLD_MS, cap))
+    }
+
+    @Test fun waitsUntilTheCapOrTheSettleGap() {
+        // busy: until the oldest utterance reaches the cap
+        assertEquals(5_000L, AmbientBacklog.waitMs(true, 100_000L, 0L, 90_000L, 15_000L))
+        // idle but settling: the settle gap is sooner
+        assertEquals(1_500L, AmbientBacklog.waitMs(false, 100_000L, 99_500L, 90_000L, 15_000L))
+        // cap already passed: never 0 or negative
+        assertEquals(1L, AmbientBacklog.waitMs(true, 100_000L, 0L, 0L, 15_000L))
+        // nothing queued and busy: bounded, not forever
+        assertEquals(15_000L, AmbientBacklog.waitMs(true, 100_000L, 0L, null, 15_000L))
+    }
 }

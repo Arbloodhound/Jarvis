@@ -90,4 +90,44 @@ class NoteParserTest {
         val raw = (1..20).joinToString("\n") { "{\"kind\":\"fact\",\"text\":\"fact $it\"}" }
         assertEquals(NoteParser.MAX_NOTES, NoteParser.parse(raw).notes.size)
     }
+
+    @Test fun aTimeLeftInTheTextFillsWhen() {
+        val r = NoteParser.parse("""
+            {"kind":"plan","text":"Dentist appointment with Dr Lee tomorrow at 3pm"}
+            {"kind":"todo","text":"Call the plumber on Friday morning"}
+            {"kind":"plan","text":"Lunch with Jo","when":"next Monday"}
+            {"kind":"plan","text":"Holiday in Spain"}
+            {"kind":"fact","text":"Jo lives at 12 Baker Street"}
+        """.trimIndent())
+        assertEquals(listOf("tomorrow at 3pm", "on Friday morning", "next Monday", null, null), r.notes.map { it.whenPhrase })
+    }
+
+    @Test fun aFactWordedAsADutyIsATodo() {
+        val texts = listOf(
+            "You need to renew your passport", "Sam has to pick up the kids", "We must pay the gas bill",
+            "Remind me to call the vet", "Don't forget to water the plants",
+        )
+        val raw = texts.joinToString("\n") { "{\"kind\":\"fact\",\"text\":\"$it\"}" }
+        assertEquals(texts.map { NoteKind.TODO }, NoteParser.parse(raw).notes.map { it.kind })
+    }
+
+    @Test fun otherFactsAndKindsAreKept() {
+        assertEquals(NoteKind.FACT, NoteParser.normaliseKind(NoteKind.FACT, "Anna hates olives"))
+        assertEquals(NoteKind.FACT, NoteParser.normaliseKind(NoteKind.FACT, "Sam must be tired after the flight"))
+        assertEquals(NoteKind.PERSON, NoteParser.normaliseKind(NoteKind.PERSON, "Sam needs to rest, he is Anna's brother"))
+        assertEquals(NoteKind.PLAN, NoteParser.normaliseKind(NoteKind.PLAN, "We have to be at the airport by 6am"))
+    }
+
+    @Test fun aTodoFromAFactAlsoGetsItsTime() {
+        val n = NoteParser.parse("{\"kind\":\"fact\",\"text\":\"Need to pay Dan back by Friday\"}").notes.single()
+        assertEquals(NoteKind.TODO, n.kind)
+        assertEquals("Friday", n.whenPhrase)
+    }
+
+    @Test fun negatedOrPastDutiesStayFacts() {
+        for (t in listOf("Sam doesn't need to come on Friday anymore", "Anna got to meet the band",
+                "Tom has to have been there", "Jo no longer has to work weekends", "We didn't have to pay")) {
+            assertEquals(t, NoteKind.FACT, NoteParser.normaliseKind(NoteKind.FACT, t))
+        }
+    }
 }

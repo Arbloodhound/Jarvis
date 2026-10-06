@@ -46,6 +46,10 @@ data class NoteDraft(val kind: NoteKind, val text: String, val whenPhrase: Strin
  * own line's speaker when that line names one. A reading is dropped (the observation kept, the
  * drop counted as rejected) when its id is unknown, its hedge has no hedge word, confidence or
  * alt is missing, or it contains a verdict word.
+ *
+ * Two repairs for what a small model gets wrong (plan/todo/person/fact only, never observations):
+ * a fact worded as a duty ("need to", "must", "remind me to" …) becomes a todo ([normaliseKind]);
+ * a plan or todo with no "when" takes the time words from its own text ([whenFromText]).
  */
 object NoteParser {
     const val MAX_NOTES = 12
@@ -146,8 +150,42 @@ object NoteParser {
             null, JsonNull -> null
             else -> string(whenEl)   // a number or object: keep the note, just without a time
         }?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) && !it.equals("none", true) }
-        return NoteDraft(kind, text, whenPhrase)
+        val k = normaliseKind(kind, text)
+        return NoteDraft(k, text, whenPhrase ?: whenFromText(k, text))
     }
+
+    /** Something someone has to do, said as such ("need to", "have to", "must", "remind me to",
+     *  "don't forget to" …). "must be" / "must have been" are guesses, not duties. */
+    private val TODO_WORDS = Regex(
+        "\\b(?:needs? to|ha(?:ve|s) to(?! have been\\b)|had better|must(?! (?:be|have been)\\b)|" +
+            "remind (?:me|him|her|us|them|you) to|(?:don'?t|do not) forget to|remember to|gotta)\\b",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** A negation just before the duty words ("doesn't need to", "no longer has to", "never
+     *  have to"): then it is not a duty. */
+    private val NEGATED = Regex(
+        "\\b(?:not|no|never|no longer|don'?t|doesn'?t|didn'?t|won'?t|wouldn'?t|shouldn'?t|isn'?t|aren'?t)\\s+(?:\\w+\\s+)?$",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * A small model often files a to-do as a fact (Pixel Feature check: "You need to renew your
+     * passport" came back as fact). A fact worded as something someone has to do becomes a
+     * [NoteKind.TODO]; every other kind is kept as the model chose it.
+     */
+    fun normaliseKind(kind: NoteKind, text: String): NoteKind =
+        if (kind == NoteKind.FACT && TODO_WORDS.findAll(text).any { !NEGATED.containsMatchIn(text.substring(0, it.range.first)) })
+            NoteKind.TODO else kind
+
+    /**
+     * The `when` of a plan or to-do whose model left it out but wrote the time into the text
+     * ("Dentist with Dr Lee tomorrow at 3pm", no "when"): the time words found there
+     * ([TimeResolver.phraseIn]), or null. Other kinds never get a time from their text: a fact
+     * like "lives at 12 Baker Street" is not about a time.
+     */
+    fun whenFromText(kind: NoteKind, text: String): String? =
+        if (kind.timed) TimeResolver.phraseIn(text) else null
 
     private fun observation(o: JsonObject, text: String, source: Source, droppedReading: () -> Unit): Observation? {
         val pattern = CuePattern.parse(string(o["pattern"])) ?: return null
