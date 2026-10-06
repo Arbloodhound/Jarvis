@@ -185,6 +185,10 @@ object Librarian {
      */
     @Volatile var brainBusy: (() -> Boolean)? = null
 
+    /** Is the small model actually usable right now (e.g. its file downloaded)? Null = yes. Checked
+     *  before every run so a missing model never turns into chunk failures that get skipped. */
+    @Volatile var modelReady: (() -> Boolean)? = null
+
     const val FIRST_CHECK_MS = 60_000L
     const val IDLE_CHECK_MS = 10 * 60_000L
     const val MORE_CHECK_MS = 60_000L
@@ -224,7 +228,7 @@ object Librarian {
     /** [mayRun] on the live state, cheapest checks first and short-circuited: the usual answer
      *  (no model, not charging, screen on) costs no engine lookup. */
     fun allowed(ctx: Context): Boolean {
-        if (model == null || !AmbientConfig(ctx).organiseMemory || !charging(ctx)) return false
+        if (model == null || modelReady?.invoke() == false || !AmbientConfig(ctx).organiseMemory || !charging(ctx)) return false
         if (ctx.getSystemService(PowerManager::class.java)?.isInteractive != false) return false
         val busy = brainBusy?.invoke() ?: com.agent.ultra.local.LocalModelEngine.shared(ctx).busy.value
         return mayRun(enabled = true, hasModel = true, charging = true, screenOn = false, brainBusy = busy)

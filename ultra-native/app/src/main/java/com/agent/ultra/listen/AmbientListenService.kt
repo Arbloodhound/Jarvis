@@ -97,6 +97,13 @@ class AmbientListenService : Service() {
         }
         acquireWake()
         if (captureJob == null) captureJob = scope.launch { runPipeline() }
+        // The librarian's small model: Settings → MEMORY MODEL (Qwen3-1.7B). It runs only once that
+        // file is downloaded, and yields to the main brain (LocalModelEngine.complete).
+        if (Librarian.model == null) {
+            val small = com.agent.ultra.local.LocalModelEngine.librarian(applicationContext)
+            Librarian.modelReady = { small.modelPresent }
+            Librarian.model = SmallModel { prompt, maxTokens -> small.complete(prompt, maxTokens) }
+        }
         Librarian.start(this, scope)   // organises what was heard while charging, screen off
         // "Hey Jarvis" shouldn't have to wait for the brain to load either.
         if (com.agent.ultra.ui.UltraPrefs.preloadBrain(this)) {

@@ -547,8 +547,13 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 var tFirst = 0L
                 var tLast = 0L
                 var stopped = false
+                var cancelled = false
+                // A cancelled caller (the librarian when the phone is picked up, a stopped test)
+                // stops at the next token instead of holding the cores until maxTokens.
+                val callerJob = kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
                 val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, nThreads) cb@{ piece ->
                     if (yields && thinkerDemand.get() > 0) { stopped = true; return@cb LlmNative.STOP }
+                    if (callerJob?.isActive == false) { cancelled = true; return@cb LlmNative.STOP }
                     tLast = System.currentTimeMillis()
                     if (pieces++ == 0) tFirst = tLast
                     if (thinkBudget == null) {
@@ -572,6 +577,10 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 }
                 when {
                     n < 0 -> Result.failure(IllegalStateException("native generate failed ($n)"))
+                    cancelled -> {
+                        android.util.Log.i("UltraLlm", "$role stopped after $pieces tokens: caller cancelled")
+                        Result.failure(kotlinx.coroutines.CancellationException("caller cancelled"))
+                    }
                     stopped -> {
                         android.util.Log.i("UltraLlm", "$role stopped after $pieces tokens: the thinker asked for the engine")
                         Result.failure(YieldedToThinker())
