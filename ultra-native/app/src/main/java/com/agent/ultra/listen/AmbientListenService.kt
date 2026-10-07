@@ -317,6 +317,13 @@ class AmbientListenService : Service() {
             AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuf, AmbientConfig.FRAME * 2 * 16)
         )
         if (rec.state != AudioRecord.STATE_INITIALIZED) { rec.release(); return false }
+        // The phone's own automatic gain control where it has one: far speech comes up before the gate.
+        val agcEffect = try {
+            if (android.media.audiofx.AutomaticGainControl.isAvailable())
+                android.media.audiofx.AutomaticGainControl.create(rec.audioSessionId)?.also { it.enabled = true }
+            else null
+        } catch (_: Exception) { null }
+        val gateAgc = MicGain.Agc()
 
         val frame = ShortArray(AmbientConfig.FRAME)
         var lastPrune = 0L
@@ -335,7 +342,7 @@ class AmbientListenService : Service() {
                 val fr = if (n == frame.size) frame else frame.copyOf(n)
                 // Acoustic gate: when present, it decides when we're addressed.
                 // whisper then runs only for the command window + throttled memory.
-                if (gate?.accept(fr) == true) {
+                if (gate?.accept(gateAgc.process(fr, CueAudio.gateDb(seg.noiseFloorDb))) == true) {
                     synchronized(windowLock) {
                         windowId++
                         cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS
@@ -361,6 +368,7 @@ class AmbientListenService : Service() {
             return false
         } finally {
             capturing = false
+            try { agcEffect?.release() } catch (_: Exception) {}
             try { rec.stop() } catch (_: Exception) {}
             rec.release()
         }
@@ -386,7 +394,7 @@ class AmbientListenService : Service() {
             level == com.agent.ultra.agent.ThermalPolicy.Level.NORMAL, llmCpus, whisperCpus)
         val t0 = System.currentTimeMillis()
         val r = WhisperNative.transcribe(
-            whisper, pcm, threads, WhisperNative.verbatimPrompt(cfg.wakeName), cpus, timing = true,
+            whisper, MicGain.normalize(pcm), threads, WhisperNative.verbatimPrompt(cfg.wakeName), cpus, timing = true,
         )
         // Whether whisper keeps up with speech: ms > audioMs means slower than real time.
         android.util.Log.d("UltraAmbient", "whisper audioMs=$audioMs ms=${System.currentTimeMillis() - t0} " +

@@ -152,7 +152,7 @@ object LocalWhisper {
         val topo = com.agent.ultra.local.CpuTopology.current
         val threads = if (topo.llmCpus.isEmpty()) 4 else minOf(4, topo.llmCpus.size)
         val r = try {
-            WhisperNative.transcribe(handle, pcm, threads, "Jarvis", topo.llmCpus.toIntArray())
+            WhisperNative.transcribe(handle, MicGain.normalize(pcm), threads, "Jarvis", topo.llmCpus.toIntArray())   // far speech brought up
         } catch (e: Exception) {
             android.util.Log.w("UltraAmbient", "local speech failed: ${e.message}"); null
         }

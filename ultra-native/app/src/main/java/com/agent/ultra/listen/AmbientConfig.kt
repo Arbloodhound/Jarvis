@@ -64,8 +64,9 @@ class AmbientConfig(context: Context) {
         const val FRAME_MS = FRAME * 1000 / SAMPLE_RATE
 
         // Stage 1: energy gate (cheap, runs on every frame)
-        const val GATE_ABOVE_FLOOR_DB = 10f   // speech must be this far above the room's noise floor
-        const val GATE_ABS_MIN_DB = -50f      // and never quieter than this (dBFS)
+        // Speech from across the room (owner, 2026-10-07) sat under the old -50 dBFS / +10 dB gate.
+        const val GATE_ABOVE_FLOOR_DB = 8f    // speech must be this far above the room's noise floor
+        const val GATE_ABS_MIN_DB = -58f      // and never quieter than this (dBFS)
         const val START_FRAMES = 3            // ~96 ms of loud audio to open a segment
         const val PRE_ROLL_FRAMES = 10        // keep ~320 ms before onset so first syllable isn't clipped
         const val HANGOVER_MS = 700           // silence that closes a segment

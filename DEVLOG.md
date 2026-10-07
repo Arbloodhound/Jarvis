@@ -3,6 +3,13 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — listening hears speech from further away
+Owner: words missed from a little further from the phone though speaking loudly. Ambient speech gate
+-50 dBFS / +10 dB over the noise floor → -58 dBFS / +8 dB; Android's AutomaticGainControl effect on the capture
+session where available; `MicGain`: each utterance normalised toward -22 dBFS (loud frames, ≤ +18 dB, never past
+its peak) before whisper (ambient and the chat's 🎙), and a slow AGC on the frames the "Hey Jarvis" detector gets.
+1208 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN (may also pick up more distant chatter / TV).
+
 ## 2026-10-07 (session 01BUKa) — speaking to Jarvis runs the request
 Owner: speaking to it should make it do the task. The chat's 🎙 only filled the text box, so a spoken request did
 nothing until Send. Now the recognised words are sent at once (`ChatScreen.sendNow`, shared with Send; held in the
