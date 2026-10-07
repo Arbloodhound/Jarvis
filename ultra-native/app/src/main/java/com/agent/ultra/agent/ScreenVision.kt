@@ -90,7 +90,13 @@ object ScreenVision {
     suspend fun ocr(bitmap: Bitmap): String? {
         val t0 = System.currentTimeMillis()
         val text = suspendCancellableCoroutine<com.google.mlkit.vision.text.Text?> { cont ->
-            recognizer.process(InputImage.fromBitmap(bitmap, 0))
+            // A phone where ML Kit can't start (e.g. a ROM missing something it expects) reads as
+            // "no text", never as a crash of the tool or the navigation run.
+            val task = try { recognizer.process(InputImage.fromBitmap(bitmap, 0)) } catch (e: Throwable) {
+                android.util.Log.w(TAG, "ocr unavailable: $e")
+                cont.resume(null); return@suspendCancellableCoroutine
+            }
+            task
                 .addOnSuccessListener { if (cont.isActive) cont.resume(it) }
                 .addOnFailureListener { e ->
                     android.util.Log.w(TAG, "ocr failed: ${e.message}")
