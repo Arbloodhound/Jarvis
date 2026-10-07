@@ -1,5 +1,12 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## LATEST+5 (session 01BUKa, 2026-10-07 ~08:00 UTC) — read this first
+`v2.6.17-test` (run 17, b81193e) is Latest. Since v2.6.15: notes on their own (summaries, who + tags, follow-up
+links, re-read of old memory, off-charger at ≥50%, Organise now, chat turns remembered, "make a note of what Sam
+said…"), "Hey Jarvis" speaks back ("Yes?", "On it."), locked-phone policy, full device-control tools offline,
+PEOPLE (owner name, voices) and SYSTEM PROMPT settings, voice names inferred/told. See DEVLOG. All
+SOURCE-FIXED BUT RUNTIME-UNPROVEN. Next: owner installs 2.6.17 → Jarvis Tests 1 shows "App: 2.6.17" → 3 → 5 → file.
+
 ## LATEST+4 (session 01BUKa, 2026-10-07 ~07:00 UTC) — read this first
 `v2.6.15-test` (run 15, 05abe67) is Latest. Since v2.6.13: the offline brain is told what it can do (memory,
 notes, phone actions, Now line); "what do you remember?" overview brief; nothing-found brief; REAL feature-check
