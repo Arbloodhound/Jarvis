@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
             AgentUltraTheme {
                 // Saveable: rotating inside Settings must not bounce back to chat.
                 var screen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("chat") }
+                var guideFrom by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("chat") }
                 // Shared engine — one JNI handle, never two 800MB loads.
                 // Process-wide, so the voice session reuses this same context.
                 val engine = remember { LocalModelEngine.shared(applicationContext) }
@@ -46,15 +47,16 @@ class MainActivity : ComponentActivity() {
                         onOpenSettings = { screen = "settings" },
                         onOpenNotes = { screen = "notes" },
                         onOpenMemory = { screen = "memory" },
+                        onOpenGuide = { guideFrom = "chat"; screen = "guide" },
                     )
-                    "guide" -> com.agent.ultra.ui.GuideScreen(onBack = { screen = "settings" })
+                    "guide" -> com.agent.ultra.ui.GuideScreen(onBack = { screen = guideFrom })
                     "notes" -> com.agent.ultra.ui.NotesScreen(onBack = { screen = "chat" }, onAsk = { screen = "chat" })
                     "memory" -> com.agent.ultra.ui.MemoryScreen(onBack = { screen = "chat" }, onAsk = { screen = "chat" })
                     "settings" -> SettingsScreen(
                         localEngine = engine,
                         onConfigSaved = { configVersion++ },
                         onBack = { screen = "chat" },
-                        onOpenGuide = { screen = "guide" },
+                        onOpenGuide = { guideFrom = "settings"; screen = "guide" },
                     )
                 }
             }

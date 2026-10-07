@@ -67,4 +67,15 @@ class ThinkBudgetTest {
         assertEquals("Answer.", ThinkBudget.stripForHistory("template trace</think>Answer."))
         assertEquals("Answer.", ThinkBudget.stripForHistory("Answer.<think>cut off"))
     }
+
+    @Test fun thePreviewSeesTheTraceButNeverTheAnswer() {
+        val seen = StringBuilder()
+        val t = ThinkBudget(100, startsInThink = true).also { it.onThought = { p -> seen.append(p) } }
+        val out = StringBuilder()
+        for (p in listOf("Let me ", "check the ", "time.</th", "ink>\n\nIt is ", "3 pm.")) out.append(t.onToken(p).visible)
+        out.append(t.flush())
+        assert(seen.toString().startsWith("Let me check the")) { seen.toString() }
+        assert(!seen.contains("3 pm")) { seen.toString() }
+        org.junit.Assert.assertEquals("It is 3 pm.", out.toString())
+    }
 }

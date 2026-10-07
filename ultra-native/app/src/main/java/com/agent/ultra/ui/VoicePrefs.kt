@@ -75,7 +75,7 @@ object VoicePrefs {
 
     /** How long a spoken request may think before answering. */
     fun spokenThink(c: Context): TalkStyle.SpokenThink =
-        TalkStyle.SpokenThink.values().firstOrNull { it.name == p(c).getString("spoken_think", null) } ?: TalkStyle.SpokenThink.QUICK
+        TalkStyle.SpokenThink.values().firstOrNull { it.name == p(c).getString("spoken_think", null) } ?: TalkStyle.SpokenThink.INSTANT
     fun setSpokenThink(c: Context, v: TalkStyle.SpokenThink) { p(c).edit().putString("spoken_think", v.name).apply() }
 
     /** Speak an answer sentence by sentence while it's written (else all at the end). */
@@ -85,6 +85,10 @@ object VoicePrefs {
     /** A bare "stop" (no "Hey Jarvis") stops a task in progress. */
     fun bareStop(c: Context): Boolean = p(c).getBoolean("bare_stop", true)
     fun setBareStop(c: Context, on: Boolean) { p(c).edit().putBoolean("bare_stop", on).apply() }
+
+    /** Phone actions happen at once (the tool is picked without a hidden think); the result is said after. */
+    fun actFirst(c: Context): Boolean = p(c).getBoolean("act_first", true)
+    fun setActFirst(c: Context, on: Boolean) { p(c).edit().putBoolean("act_first", on).apply() }
 
     /** "Hey Jarvis" said while Jarvis talks cuts it off. */
     fun bargeIn(c: Context): Boolean = p(c).getBoolean("barge_in", true)

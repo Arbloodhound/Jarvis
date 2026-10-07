@@ -126,6 +126,28 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         }
     }
 
+    /**
+     * The live preview of the hidden thinking for a typed request: the "Thinking…" line under the
+     * chat shows its latest words (owner: "a preview of what it's thinking when I text it").
+     * [current] is the status being shown; the returned function takes trace text and gives back
+     * the new status when it replaced it (at most ~3 times a second), else null.
+     */
+    private fun thoughtPreview(current: () -> ChatStatus.Status?): ((String) -> ChatStatus.Status?)? {
+        val sb = StringBuilder()
+        var last = 0L
+        return { piece ->
+            sb.append(piece)
+            if (sb.length > 600) sb.delete(0, sb.length - 300)
+            val now = System.currentTimeMillis()
+            val cur = current()
+            if (cur == null || now - last < 300) null else {
+                last = now
+                val tail = sb.toString().replace(Regex("\\s+"), " ").trim().takeLast(110)
+                ChatStore.setStatus(ChatStatus.Phase.THINKING, "💭 …$tail").also { ChatStore.clearStatus(cur) }
+            }
+        }
+    }
+
     private fun speakOut(text: String) {
         if (stopRequested) return
         val w = spokenWarning
@@ -836,6 +858,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                     "tierBudget=${route.thinkBudget} tokPerSec=${speed?.let { "%.2f".format(it) } ?: "unknown"}")
                 ThermalPolicy.coolingNote(level, route.tier)?.let { ChatStore.appendTo(msg.id, it + "\n\n") }
                 val think = ThinkBudget(budget, startsInThink = true)
+                if (!runSpoken) think.onThought = thoughtPreview { shown } ?.let { p -> { t: String -> p(t)?.let { shown = it } } }
                 thinkingNow(think, onStart) { started ->
                     local.generate(
                         prompt, maxTokens = budget + reserve + 32,
@@ -968,7 +991,9 @@ JSON:"""
         val level = ThermalGuard.level
         val prompt = LocalToolCall.prompt(userInput, recalled)
         val reserve = LocalToolCall.ANSWER_RESERVE
-        val budget = ThermalPolicy.scaleBudget(
+        // Act first (Settings → HOW JARVIS TALKS, on by default): the tool is picked without a
+        // hidden think, so the action happens at once; the result is said after it.
+        val budget = if (com.agent.ultra.ui.VoicePrefs.actFirst(appContext)) 0 else ThermalPolicy.scaleBudget(
             ThinkBudget.clipToContext(
                 LocalToolCall.thinkBudget, com.agent.ultra.local.LocalModelEngine.CTX_SIZE,
                 LocalPrompt.estimateTokens(prompt), reserve,
@@ -977,6 +1002,7 @@ JSON:"""
         )
         var shown: ChatStatus.Status? = null
         val think = ThinkBudget(budget, startsInThink = true)
+        if (!runSpoken) think.onThought = thoughtPreview { shown }?.let { p -> { t: String -> p(t)?.let { shown = it } } }
         val raw = try {
             thinkingNow(think, { shown = ChatStore.setStatus(ChatStatus.Phase.THINKING) }) { started ->
                 local.generate(
@@ -1623,7 +1649,7 @@ JSON:"""
 
         val owner = LocalPrompt.ownerSection(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
             TalkStyle.combine(com.agent.ultra.ui.VoicePrefs.styleInstructions(appContext), com.agent.ultra.ui.UltraPrefs.customInstructions(appContext))).let { if (it.isEmpty()) "" else "\n$it\n" }
-        return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have unrestricted access to it and everything on it through its accessibility service: you can see and use the screen (read, tap, type, scroll), every app, messages, contacts, notifications, settings, screenshots. Never say you can't see the screen or can't access or control the phone.
+        return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have unrestricted access to it and everything on it through its accessibility service: you can see and use the screen (read, tap, type, scroll), every app (any browser, Tor Browser and .onion sites included), messages, contacts, notifications, settings, screenshots. Never say you can't see the screen or can't access or control the phone.
 PHONE STATE: $env
 TODAY: $date at $time
 $owner

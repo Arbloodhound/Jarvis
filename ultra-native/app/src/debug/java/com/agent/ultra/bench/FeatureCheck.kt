@@ -59,6 +59,17 @@ object FeatureCheck {
         Probe("Offline phone control (live)", 6 * 60_000, FeatureProbes::offlineNavLive),
     )
 
+    /** The Real-use check: hands-free, ~5 minutes, every part using the real feature (RealUseProbes). */
+    val REAL_USE: List<Probe> = listOf(
+        Probe("Real room listening", 2 * 60_000, RealUseProbes::room),
+        Probe("Jarvis's voice", 2 * 60_000, RealUseProbes::voiceOut),
+        Probe("Hey Jarvis out loud", 4 * 60_000, RealUseProbes::loopback),
+        Probe("Spoken answer speed", 4 * 60_000, RealUseProbes::spokenAnswer),
+        Probe("Stop mid-answer", 2 * 60_000, RealUseProbes::stop),
+        Probe("Notes from your real speech", 30_000, FeatureProbes::realNotes),
+        Probe("Model download speed", 2 * 60_000, RealUseProbes::download),
+    )
+
     /** Runs [probes] in order; [onResults] gets each probe's results as soon as it ends. */
     class Runner(private val env: ProbeEnv, private val probes: List<Probe> = PROBES) {
         @Volatile private var skip: CompletableDeferred<Unit>? = null

@@ -40,6 +40,9 @@ class ThinkBudget(
      */
     fun answerNow() { answerNowRequested = true }
 
+    /** The hidden trace as it is written (the chat's live "thinking" preview); never the answer. */
+    @Volatile var onThought: ((String) -> Unit)? = null
+
     private val carry = StringBuilder()   // holds text that might be the start of a tag
     private var skipNewlines = false      // drop the blank line(s) right after a trace ends
 
@@ -59,7 +62,8 @@ class ThinkBudget(
                     continue@loop
                 }
                 if (!countedThisToken) { thinkTokens++; countedThisToken = true }
-                // drop trace text, but keep a possible partial "</think>" at the tail
+                // drop trace text (shown only to the preview), but keep a possible partial "</think>" at the tail
+                onThought?.let { cb -> val n = carry.length - (CLOSE.length - 1); if (n > 0) cb(carry.substring(0, n)) }
                 keepTail(CLOSE.length - 1)
                 if (!forced && (thinkTokens >= budgetTokens || answerNowRequested)) {
                     forced = true

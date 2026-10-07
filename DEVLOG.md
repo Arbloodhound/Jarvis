@@ -3,6 +3,19 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — Real-use check, screen tests, act first, thinking preview
+- Jarvis Tests → "★ Real-use check" (one tap, ~5 min, then saves + shares): 60 s of the real room (lines stored, whisper
+  speed, speaker labels, model), the chosen voice's synthesis speed + playback, "Hey Jarvis, what time is it?" said by the
+  phone's own speaker and heard by the real listener (woke? command? first spoken word / total), a spoken request through
+  the real brain (first sentence time, right?), "stop" mid-answer (release time), 1 vs 4-connection download speed.
+- Screen tests (Robolectric + Compose, `ScreensTest`, run with the unit tests in CI): Guide, voice picker, How Jarvis
+  talks, Notes, Memory, Settings (every section, Guide button), Chat (controls, 📝 🧠 📖).
+- Act first (default on): the on-device tool call is picked with no hidden think (budget 0), result said after.
+  Live thinking preview for typed requests: the "Thinking…" line shows the trace's latest words (ThinkBudget.onThought).
+  Spoken think time default Instant (~3 s). Spoken commands carry the overheard transcript only when they refer to it
+  (`TranscriptNeed`). 📖 Guide button in the chat. Both prompts: any browser incl. Tor Browser / .onion.
+1265 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN (the Real-use check is how the phone proves it).
+
 ## 2026-10-07 (session 01BUKa) — abliterated 4B default; downloads over 4 connections; accurate speech fixes
 - Default thinker = Qwen3-4B Thinking 2507 abliterated Q4_K_M (owner's choice over Qwen3.5: same base as the measured
   default, speed boost kept). `STOCK_4B` (Q4_0) stays in use where it's downloaded and the abliterated isn't (never points

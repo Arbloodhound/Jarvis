@@ -49,6 +49,7 @@ fun ChatScreen(
     onOpenSettings: () -> Unit,
     onOpenNotes: () -> Unit = {},
     onOpenMemory: () -> Unit = {},
+    onOpenGuide: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -316,6 +317,7 @@ fun ChatScreen(
             }) { Text("📍") }
             TextButton(onClick = onOpenNotes) { Text("📝") }
             TextButton(onClick = onOpenMemory) { Text("🧠") }
+            TextButton(onClick = onOpenGuide) { Text("📖") }   // the complete guide
             // Hands-free session. Reachable here too, so it works before the
             // user has made Ultra their assistant app.
             TextButton(onClick = {

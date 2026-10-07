@@ -31,6 +31,8 @@ android {
         // fallback ran. android.util.Log throws in a JVM unit test unless
         // stubs return defaults.
         unitTests.isReturnDefaultValues = true
+        // The screen tests (ui/ScreensTest): Compose screens rendered and tapped on the JVM (Robolectric).
+        unitTests.isIncludeAndroidResources = true
     }
 
     namespace = "com.agent.ultra"
@@ -182,6 +184,9 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     // org.json on the JVM test classpath (Android ships it; unit tests need it)
     testImplementation("org.json:json:20240303")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.ui.test.junit4)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

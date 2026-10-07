@@ -92,6 +92,11 @@ class TestKitActivity : ComponentActivity() {
                         Text("Tap the buttons in order. Keep this screen open while a test runs.",
                             style = MaterialTheme.typography.bodyMedium)
                         val idle = !busy.value
+                        // One tap, hands-free: every part uses the real feature, then the file is saved and shared.
+                        Button(onClick = { start { featureCheck(FeatureCheck.REAL_USE, "Real-use check"); saveAndShare() } },
+                            enabled = idle, modifier = Modifier.fillMaxWidth()) {
+                            Text("★ Real-use check: one tap, ~5 min, real features (Wi-Fi on, listening on)")
+                        }
                         Button(onClick = { start { downloadAll() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
                             Text("0 · Download everything missing (Wi-Fi)")
                         }
@@ -360,8 +365,8 @@ class TestKitActivity : ComponentActivity() {
     // ---------------------------------------------------------------- 5. feature check
 
     /** Every feature, tested and scored ([FeatureCheck]); each result goes to the results file as it ends. */
-    private suspend fun featureCheck() {
-        say("— Feature check —")
+    private suspend fun featureCheck(probes: List<FeatureCheck.Probe> = FeatureCheck.PROBES, title: String = "Feature check") {
+        say("— $title —")
         say("Tests every feature, one after another, and scores it: PASS, WARN, FAIL or MISSING (not installed). " +
             "What Jarvis overheard and its notes are not changed (memory search uses a separate test file). " +
             "The chat parts show up as a new chat in Jarvis, like the brain test. " +
@@ -377,13 +382,13 @@ class TestKitActivity : ComponentActivity() {
             online = { online() },
             logcat = { since, tags -> logcat(since, tags) },
         )
-        val runner = FeatureCheck.Runner(env)
+        val runner = FeatureCheck.Runner(env, probes)
         featureRunner.value = runner
         val all = try {
             runner.run(
                 onStart = { p, i ->
-                    status.value = "Part ${i + 1}/${FeatureCheck.PROBES.size}: ${p.title}"
-                    say("Part ${i + 1}/${FeatureCheck.PROBES.size}: ${p.title}…")
+                    status.value = "Part ${i + 1}/${probes.size}: ${p.title}"
+                    say("Part ${i + 1}/${probes.size}: ${p.title}…")
                 },
                 onResults = { _, results ->
                     for (r in results) {
@@ -397,7 +402,7 @@ class TestKitActivity : ComponentActivity() {
             featureRunner.value = null
         }
         val table = FeatureGrade.summary(all)
-        record("FEATURE CHECK SUMMARY", table)
+        record("${title.uppercase()} SUMMARY", table)
         say("— Summary —")
         table.forEach { say(it) }
         say("Done. Saved. Tap 4 to save the results file and send it.")

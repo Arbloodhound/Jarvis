@@ -224,6 +224,8 @@ fun HowJarvisTalksSettings(context: Context) {
         singleLine = true,
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
     )
+    TalkSwitch("Act first", "Phone actions (flashlight, alarms, opening apps…) happen at once, without thinking first; it says what it did after.",
+        VoicePrefs.actFirst(context)) { VoicePrefs.setActFirst(context, it) }
     TalkSwitch("Wake chime", "A short beep the moment \"Hey Jarvis\" is heard.",
         VoicePrefs.wakeChime(context)) { VoicePrefs.setWakeChime(context, it) }
     TalkSwitch("Say \"On it.\"", "When an answer takes more than a couple of seconds, so you know it heard you.",

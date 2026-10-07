@@ -280,6 +280,7 @@ class AmbientListenService : Service() {
         if (whisper == 0L && asrName != AmbientConfig.ASR_MODEL) { asrName = AmbientConfig.ASR_MODEL; whisper = loadAsr(asrName) }
         if (whisper == 0L) return false
         android.util.Log.i("UltraAmbient", "speech model: $asrName")
+        asrModelName = asrName
         // The larger model downloads in the background; the transcriber switches to it once it's here.
         if (cfg.accurateSpeech && !cfg.smallTooSlow && !AmbientConfig.smallReady(modelDir)) scope.launch(Dispatchers.IO) {
             if (AmbientConfig.fetchSmall(modelDir)) { wantAsr = AmbientConfig.ASR_SMALL_MODEL; android.util.Log.i("UltraAmbient", "small speech model downloaded") }
@@ -316,7 +317,7 @@ class AmbientListenService : Service() {
         val h = loadAsr(want)
         if (h == 0L) { android.util.Log.w("UltraAmbient", "couldn't load speech model $want; keeping $asrName"); return }
         val old = whisper
-        whisper = h; asrName = want
+        whisper = h; asrName = want; asrModelName = want
         if (old != 0L) WhisperNative.nativeFree(old)
         android.util.Log.i("UltraAmbient", "speech model now: $want")
     }
@@ -686,6 +687,7 @@ class AmbientListenService : Service() {
             b.recordTurns = false   // what it is asked was heard, so it is in memory already
             b.onAnswer = { answeredAt = System.currentTimeMillis() }
             b.onSpeak = { text ->
+                if (lastAnswerStartAt < lastCommandAt) lastAnswerStartAt = System.currentTimeMillis()
                 answeredAt = System.currentTimeMillis()
                 mutedUntil = System.currentTimeMillis() + EchoGuard.muteMsFor(text)
                 speech.add(text)
@@ -696,6 +698,10 @@ class AmbientListenService : Service() {
 
     /** Prepend recent verbatim transcript so the agent answers with what it overheard. */
     private fun buildContextualRequest(command: String, now: Long): String {
+        // Only when the words need it: the transcript was in every spoken command, and reading
+        // ~400 extra tokens before thinking is seconds of silence on the phone (owner: "answer
+        // me right away").
+        if (!TranscriptNeed.needed(command)) return command
         val recent = mem.since(now - AmbientConfig.RECENT_WINDOW_MS, AmbientConfig.CONTEXT_BUDGET_CHARS)
         return if (recent.isBlank()) command
         else "[Ambient transcript, last 15 min — context only, may be noisy]\n$recent\n\n" +
@@ -772,6 +778,12 @@ class AmbientListenService : Service() {
             private set
 
         private fun woke(by: String) { lastWakeBy = by; lastWakeAt = System.currentTimeMillis() }
+
+        /** When the first spoken words of an answer to [lastCommand] went out (the Real-use check). */
+        @Volatile var lastAnswerStartAt = 0L
+        /** The speech model the listener is running now (file name), "" before it starts. */
+        @Volatile var asrModelName = ""
+            private set
 
         /** The "Hey Jarvis" sound model loaded (else only the transcript's words wake it). */
         @Volatile var gateLoaded = false
