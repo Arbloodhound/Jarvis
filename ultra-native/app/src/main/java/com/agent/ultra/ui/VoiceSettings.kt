@@ -127,6 +127,36 @@ fun VoiceSettings(context: Context) {
         Switch(checked = on, onCheckedChange = { on = it; cfg.speakerTags = it })
     }
 
+    // The speech model: small hears quiet and distant speech better than base.
+    var accurate by remember { mutableStateOf(cfg.accurateSpeech) }
+    val modelState = remember(accurate) {
+        val dir = context.filesDir
+        val part = java.io.File(dir, AmbientConfig.ASR_SMALL_MODEL + ".part").length()
+        when {
+            !accurate -> "Using the fast model (base)."
+            cfg.smallTooSlow -> "Too slow on this phone, so the fast model (base) is used. Switch off and on to try again."
+            AmbientConfig.smallReady(dir) -> "Using the accurate model (small)."
+            part > 0 -> "Downloading the accurate model: ${part / 1_048_576} of 181 MB. Base is used until then."
+            else -> "The accurate model (181 MB) downloads when listening starts. Base is used until then."
+        }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Accurate speech recognition", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "A larger speech model that picks up quieter and more distant speech. It takes more " +
+                    "of the phone's power; if it can't keep up here, the fast one takes over by itself. " +
+                    "Applies when listening next starts. $modelState",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+        }
+        Switch(checked = accurate, onCheckedChange = { accurate = it; cfg.accurateSpeech = it })
+    }
+
     val askMic = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { granted -> if (!granted) status = "Microphone permission is needed to record your voice." }

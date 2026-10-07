@@ -69,6 +69,12 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
     if (!c->vadPath.empty()) {
         p.vad            = true;
         p.vad_model_path = c->vadPath.c_str();
+        // Quiet and distant speech (owner, 2026-10-07: "it's not picking up quieter inputs"): the
+        // default 0.5 speech probability let Silero cut soft words out before whisper saw them.
+        // Silence and noise are still dropped by the level gate before this and the confidence
+        // filter after it.
+        p.vad_params.threshold = 0.35f;
+        p.vad_params.speech_pad_ms = 100;
     }
 
     // CPU list (the cores the LLM doesn't use, from CpuTopology): pin this thread for the

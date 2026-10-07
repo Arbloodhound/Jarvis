@@ -3,6 +3,21 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — quieter speech heard; speaker labels on memories by default
+Owner: still misses quieter speech ("maybe change the model for the voice recognition"); memories have times but no
+speaker indicators.
+- Speech model: whisper small.en q5_1 (190,098,681 B, size checked on Hugging Face) replaces base.en when "Accurate
+  speech recognition" is on (Settings → VOICE, default ON). Downloaded in the background (resumable); base is used until
+  it's there, then the transcriber switches live. `AsrSpeed`: small timed while the brain is idle; if most of the last 8
+  utterances took longer than they lasted, base takes over (`small_too_slow`, shown in Settings). Chat 🎙 uses the same.
+- Quiet speech filters loosened: Silero VAD threshold 0.5 → 0.35 (+100 ms pad, `ultra_whisper.cpp`), gate +8 → +6 dB over
+  the noise floor and -58 → -62 dBFS minimum, confidence floor 0.45 → 0.38, MicGain boost cap +18 → +24 dB.
+- "Who's speaking" defaults ON (was off), so heard lines are stored as [Me] / [name] / [Speaker N] / [Unknown]. Needs the
+  40 MB voiceprint model (fetched on Wi-Fi); [Me] needs "Record my voice" once. Lines already stored stay unlabelled
+  (their audio isn't kept).
+1233 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN (small's speed on the Pixel unmeasured; looser filters may
+keep more background chatter / TV).
+
 ## 2026-10-07 (session 01BUKa) — spoken answers start at once; "stop" and mid-task changes
 Owner: answer right away, out loud, when spoken to; stop when told to stop; a new instruction mid-action should add
 to, change or stop the current task.

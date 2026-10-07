@@ -126,6 +126,7 @@ class LocalSpeech(
 object LocalWhisper {
     private val lock = Mutex()
     private var handle = 0L
+    private var loadedName = ""
     private var idle: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private const val IDLE_MS = 60_000L
@@ -137,15 +138,26 @@ object LocalWhisper {
         val dir = context.filesDir
         val ok = ModelFetcher.ensure(dir, AmbientConfig.ASR_MODEL, AmbientConfig.ASR_URL, 10_000_000L)
         ModelFetcher.ensure(dir, AmbientConfig.VAD_MODEL, AmbientConfig.VAD_URL, 100_000L)   // optional
+        // The larger model for next time, in the background (base answers meanwhile).
+        val cfg = AmbientConfig(context)
+        if (ok && cfg.accurateSpeech && !cfg.smallTooSlow && !AmbientConfig.smallReady(dir))
+            scope.launch(Dispatchers.IO) { AmbientConfig.fetchSmall(dir) }
         return ok
     }
 
     suspend fun transcribe(context: Context, pcm: ShortArray): WhisperNative.Result? = lock.withLock {
         idle?.cancel()
+        val dir = context.filesDir
+        // small when it's downloaded and wanted (quiet speech), else base.
+        val name = AmbientConfig(context).asrModel(dir)
+        if (handle != 0L && name != loadedName) { WhisperNative.nativeFree(handle); handle = 0L }
         if (handle == 0L) {
-            val dir = context.filesDir
             val vad = File(dir, AmbientConfig.VAD_MODEL).let { if (it.exists()) it.absolutePath else "" }
-            handle = WhisperNative.nativeInit(File(dir, AmbientConfig.ASR_MODEL).absolutePath, vad)
+            handle = WhisperNative.nativeInit(File(dir, name).absolutePath, vad)
+            if (handle == 0L && name != AmbientConfig.ASR_MODEL) {
+                handle = WhisperNative.nativeInit(File(dir, AmbientConfig.ASR_MODEL).absolutePath, vad)
+                loadedName = AmbientConfig.ASR_MODEL
+            } else loadedName = name
             if (handle == 0L) return@withLock null
         }
         // The user is waiting and the LLM is idle while they talk: use the fast cores.

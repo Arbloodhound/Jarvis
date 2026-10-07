@@ -16,7 +16,7 @@ object MicGain {
     /** Where speech is brought to (dBFS RMS of its loud frames): ordinary close-up speech. */
     const val TARGET_DB = -22f
     /** At most this much boost: past it, the room's noise comes up with the speech. */
-    const val MAX_GAIN_DB = 18f
+    const val MAX_GAIN_DB = 24f
 
     fun rmsDb(pcm: ShortArray, from: Int = 0, to: Int = pcm.size): Float {
         if (to <= from) return -120f

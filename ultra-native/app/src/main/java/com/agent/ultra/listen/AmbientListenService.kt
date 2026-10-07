@@ -275,18 +275,44 @@ class AmbientListenService : Service() {
             ModelFetcher.ensure(modelDir, WakeGate.DEFAULT_CLASSIFIER, WakeGate.JARVIS_URL, 500_000L)
         }
         currentCoroutineContext().ensureActive()
-        whisper = WhisperNative.nativeInit(
-            java.io.File(modelDir, AmbientConfig.ASR_MODEL).absolutePath,
-            java.io.File(modelDir, AmbientConfig.VAD_MODEL).absolutePath.let {
-                if (java.io.File(it).exists()) it else ""
-            }
-        )
+        asrName = cfg.asrModel(modelDir)
+        whisper = loadAsr(asrName)
+        if (whisper == 0L && asrName != AmbientConfig.ASR_MODEL) { asrName = AmbientConfig.ASR_MODEL; whisper = loadAsr(asrName) }
         if (whisper == 0L) return false
+        android.util.Log.i("UltraAmbient", "speech model: $asrName")
+        // The larger model downloads in the background; the transcriber switches to it once it's here.
+        if (cfg.accurateSpeech && !cfg.smallTooSlow && !AmbientConfig.smallReady(modelDir)) scope.launch(Dispatchers.IO) {
+            if (AmbientConfig.fetchSmall(modelDir)) { wantAsr = AmbientConfig.ASR_SMALL_MODEL; android.util.Log.i("UltraAmbient", "small speech model downloaded") }
+        }
         currentCoroutineContext().ensureActive()
         gate = WakeGate(this@AmbientListenService,
             threshold = 0.5f).takeIf { it.ready }   // null => fall back to text-match wake
         gateLoaded = gate != null
         return true
+    }
+
+    /** The speech model loaded ([AmbientConfig.asrModel]), and the one the transcriber should switch
+     *  to before its next utterance (null = stay). Transcriber thread only, apart from [wantAsr]. */
+    private var asrName = AmbientConfig.ASR_MODEL
+    @Volatile private var wantAsr: String? = null
+    private val asrSpeed = AsrSpeed()
+
+    private fun loadAsr(name: String): Long = WhisperNative.nativeInit(
+        java.io.File(filesDir, name).absolutePath,
+        java.io.File(filesDir, AmbientConfig.VAD_MODEL).absolutePath.let { if (java.io.File(it).exists()) it else "" },
+    )
+
+    /** On the transcriber thread, between utterances: load [wantAsr] in place of the current model. */
+    private fun switchAsrIfWanted() {
+        val want = wantAsr ?: return
+        wantAsr = null
+        if (want == asrName) return
+        val h = loadAsr(want)
+        if (h == 0L) { android.util.Log.w("UltraAmbient", "couldn't load speech model $want; keeping $asrName"); return }
+        val old = whisper
+        whisper = h; asrName = want
+        if (old != 0L) WhisperNative.nativeFree(old)
+        android.util.Log.i("UltraAmbient", "speech model now: $want")
     }
 
     /** Reads the mic until cancelled. A dead or failing AudioRecord (audioserver
@@ -416,13 +442,24 @@ class AmbientListenService : Service() {
         val (threads, cpus) = AmbientThrottle.placement(
             plan, com.agent.ultra.local.LocalModelEngine.anyBusy.value,
             level == com.agent.ultra.agent.ThermalPolicy.Level.NORMAL, llmCpus, whisperCpus)
+        switchAsrIfWanted()
         val t0 = System.currentTimeMillis()
         val r = WhisperNative.transcribe(
             whisper, MicGain.normalize(pcm), threads, WhisperNative.verbatimPrompt(cfg.wakeName), cpus, timing = true,
         )
         // Whether whisper keeps up with speech: ms > audioMs means slower than real time.
-        android.util.Log.d("UltraAmbient", "whisper audioMs=$audioMs ms=${System.currentTimeMillis() - t0} " +
+        val took = System.currentTimeMillis() - t0
+        android.util.Log.d("UltraAmbient", "whisper model=$asrName audioMs=$audioMs ms=$took " +
             "threads=$threads cpus=${cpus.toList()}")
+        // small timed on the fast cores (brain idle): if it can't keep up with speech, base takes over.
+        if (asrName == AmbientConfig.ASR_SMALL_MODEL && !com.agent.ultra.local.LocalModelEngine.anyBusy.value) {
+            asrSpeed.record(audioMs, took)
+            if (asrSpeed.tooSlow()) {
+                android.util.Log.w("UltraAmbient", "small speech model slower than speech here: back to base")
+                cfg.smallTooSlow = true
+                wantAsr = AmbientConfig.ASR_MODEL
+            }
+        }
         if (r == null) return
         lastTranscribedAt = System.currentTimeMillis()
         lastHeardText = r.text.take(120)

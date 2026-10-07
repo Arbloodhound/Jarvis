@@ -12,8 +12,10 @@ class MicGainTest {
 
     @Test fun farSpeechIsBroughtUp() {
         val quiet = tone(0.01)                     // ~ -43 dBFS RMS: speech from across a room
-        val out = MicGain.normalize(quiet)
-        assertEquals(MicGain.MAX_GAIN_DB, MicGain.rmsDb(out) - MicGain.rmsDb(quiet), 0.3f)   // capped at +18 dB
+        assertEquals(MicGain.TARGET_DB, MicGain.rmsDb(MicGain.normalize(quiet)), 0.3f)       // up to ordinary speech
+        val faint = tone(0.002)                    // ~ -57 dBFS: needs more than the cap
+        val out = MicGain.normalize(faint)
+        assertEquals(MicGain.MAX_GAIN_DB, MicGain.rmsDb(out) - MicGain.rmsDb(faint), 0.3f)   // capped at +24 dB
     }
 
     @Test fun loudSpeechIsLeftAlone() {

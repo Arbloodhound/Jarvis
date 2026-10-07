@@ -54,8 +54,24 @@ class AmbientConfig(context: Context) {
      * Off = new lines carry no speaker label, only pause and non-speech cues (rate and loudness
      * are judged against a known speaker's usual), and the 40 MB model is never downloaded. */
     var speakerTags: Boolean
-        get() = p.getBoolean("speaker_tags", false)
+        get() = p.getBoolean("speaker_tags", true)
         set(v) = p.edit().putBoolean("speaker_tags", v).apply()
+
+    /** The larger speech model ([ASR_SMALL_MODEL], 190 MB) for quieter and more distant speech
+     *  (owner, 2026-10-07: "it's not picking up quieter inputs … maybe change the model"). On by
+     *  default; base is used until small has downloaded, and again if small can't keep up. */
+    var accurateSpeech: Boolean
+        get() = p.getBoolean("accurate_speech", true)
+        set(v) = p.edit().putBoolean("accurate_speech", v).putBoolean("small_too_slow", false).apply()
+
+    /** Small was measured slower than speech on this phone ([AsrSpeed]); base is used instead
+     *  until "Accurate speech recognition" is switched on again. */
+    var smallTooSlow: Boolean
+        get() = p.getBoolean("small_too_slow", false)
+        set(v) = p.edit().putBoolean("small_too_slow", v).apply()
+
+    /** The speech model file to load now ([AsrSpeed.pick]). */
+    fun asrModel(dir: java.io.File): String = AsrSpeed.pick(accurateSpeech, smallReady(dir), smallTooSlow)
 
     companion object {
         // Audio
@@ -65,8 +81,8 @@ class AmbientConfig(context: Context) {
 
         // Stage 1: energy gate (cheap, runs on every frame)
         // Speech from across the room (owner, 2026-10-07) sat under the old -50 dBFS / +10 dB gate.
-        const val GATE_ABOVE_FLOOR_DB = 8f    // speech must be this far above the room's noise floor
-        const val GATE_ABS_MIN_DB = -58f      // and never quieter than this (dBFS)
+        const val GATE_ABOVE_FLOOR_DB = 6f    // speech must be this far above the room's noise floor
+        const val GATE_ABS_MIN_DB = -62f      // and never quieter than this (dBFS)
         const val START_FRAMES = 3            // ~96 ms of loud audio to open a segment
         const val PRE_ROLL_FRAMES = 10        // keep ~320 ms before onset so first syllable isn't clipped
         const val HANGOVER_MS = 700           // silence that closes a segment
@@ -75,7 +91,7 @@ class AmbientConfig(context: Context) {
 
         // Stage 2: whisper.cpp built-in Silero VAD drops non-speech inside segments.
         // Stage 3: text filters before anything is stored
-        const val MIN_TOKEN_P = 0.45f         // mean token probability; below = likely hallucination
+        const val MIN_TOKEN_P = 0.38f         // mean token probability; below = likely hallucination
         const val MIN_WORDS = 2
 
         // Wake / response
@@ -92,6 +108,15 @@ class AmbientConfig(context: Context) {
         // Models (verify URLs/versions before release)
         const val ASR_MODEL = "ggml-base.en-q5_1.bin"
         const val ASR_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-q5_1.bin"
+        /** whisper small.en, 5-bit: better than base on quiet, distant and accented speech, about 3x
+         *  the compute. Size checked on Hugging Face 2026-10-07 (190,098,681 bytes). */
+        const val ASR_SMALL_MODEL = "ggml-small.en-q5_1.bin"
+        const val ASR_SMALL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin"
+        const val ASR_SMALL_BYTES = 190_098_681L
+        fun smallReady(dir: java.io.File) = java.io.File(dir, ASR_SMALL_MODEL).length() == ASR_SMALL_BYTES
+        /** Fetches small (resumable); blocking, so call it off the main thread. */
+        fun fetchSmall(dir: java.io.File) =
+            ModelFetcher.ensure(dir, ASR_SMALL_MODEL, ASR_SMALL_URL, ASR_SMALL_BYTES, exactBytes = ASR_SMALL_BYTES)
         const val VAD_MODEL = "ggml-silero-v5.1.2.bin"
         const val VAD_URL = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin"
     }
