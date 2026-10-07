@@ -1,6 +1,14 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
-## LATEST+6 (session 01BUKa, 2026-10-07 ~09:00 UTC) — read this first
+## LATEST+7 (session 01BUKa, 2026-10-07 ~11:00 UTC) — read this first
+Release run 23 (from 5dcfa52 + guide) is the next Latest. Since v2.6.20: answers spoken sentence by sentence, spoken
+requests think ≤5 s, stop / add-on / change mid-task (chat, voice screen, Hey Jarvis barge-in), whisper small.en +
+speed fallback + looser quiet-speech filters, speaker labels on by default, voice picker (Kokoro George default + 10
+Piper voices + phone voice; speed, pitch), HOW JARVIS TALKS settings, in-app Guide (assets/guide.md = GUIDE.md).
+All SOURCE-FIXED BUT RUNTIME-UNPROVEN. Next: owner installs, Settings → JARVIS'S VOICE (Kokoro downloads ~100 MB),
+Preview; Guide button; results file.
+
+## LATEST+6 (session 01BUKa, 2026-10-07 ~09:00 UTC)
 `v2.6.20-test` (run 20, 5eedc70) is Latest; runs 18 and 19 were cancelled because 20 contains them. Since v2.6.17:
 Hey Jarvis no longer waits for the memory model (it stops it), live "Hey Jarvis status" + "Test Jarvis's voice"
 in Settings, speech plays as media with audio focus and speak-answers on by default, on-device brain searches the
