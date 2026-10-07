@@ -428,6 +428,13 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             val t0 = System.currentTimeMillis()
             val ok = ensureLoaded()
             android.util.Log.i("UltraLlm", "preload ($reason) ok=$ok in ${System.currentTimeMillis() - t0}ms")
+            // Read the brain's own system prompt once now, so the first real question reuses it from
+            // the cache instead of reading ~750 tokens first (Real-use check 2.6.28: ~25 s of 32).
+            if (ok && role == Role.THINKER) warmPrompt?.let { build ->
+                val t1 = System.currentTimeMillis()
+                val r = generate(build(), maxTokens = 1)
+                android.util.Log.i("UltraLlm", "prompt warm-up ok=${r.isSuccess} in ${System.currentTimeMillis() - t1}ms")
+            }
         }
     }
 
@@ -771,6 +778,8 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
     } catch (_: Exception) { -1 }
 
     companion object {
+        /** The thinker's usual prompt start (set by Brain), read once after a preload: see [preloadInBackground]. */
+        @Volatile var warmPrompt: (() -> String)? = null
         /** One engine per role per process. The weights are mmap'd against a
          * single native context — a second instance would load them twice. */
         @Volatile private var sharedInstance: LocalModelEngine? = null

@@ -43,11 +43,13 @@ object VoiceCatalog {
     /** The voice before 2026-10-07; the first one, and what a phone already has downloaded. */
     const val NORMAN = "vits-piper-en_US-norman-medium-int8"
 
-    const val DEFAULT = KOKORO
-    const val DEFAULT_SPEAKER = 9   // George (British male)
+    /** Ryan: natural and fast. Kokoro is more natural still but slower than speech on the Pixel 10
+     *  Pro XL (Real-use check 2026-10-07: 1.3-1.5x real time), so answers lagged. */
+    const val DEFAULT = "vits-piper-en_US-ryan-high-int8"
+    const val DEFAULT_SPEAKER = 9   // George (British male), Kokoro's own default
 
     val all: List<Model> = listOf(
-        Model(KOKORO, "Kokoro", "The most natural voice. 11 voices, American and British.", Kind.KOKORO,
+        Model(KOKORO, "Kokoro", "The most natural voice, 11 voices, American and British. Slower than speech on some phones, so long answers can lag.", Kind.KOKORO,
             103_248_205L, "c9f0dd393615805b0bab050c340834d5e684e732aec91c0e860cd30e982c08bd", "model.int8.onnx",
             speakers = listOf(
                 "American female (mix)", "Bella (American female)", "Nicole (American female)",

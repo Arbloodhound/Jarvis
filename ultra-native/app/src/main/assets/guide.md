@@ -30,7 +30,7 @@ Around the two brains sit several small, specialised models, all running on the 
 - **A wake-word detector**: the open-source "openWakeWord" model trained on the phrase "hey jarvis".
 - **Memory search**: a sentence-meaning model called **MiniLM** (about 23 MB) that lets Jarvis find things by meaning, not just exact words.
 - **Voiceprints**: a speaker-recognition model called **TitaNet small** (about 40 MB) that lets Jarvis tell voices apart and label who said what.
-- **Jarvis's voice**: a text-to-speech model — by default **Kokoro** speaking as "George", a British male voice — or any of a dozen other voices, or the phone's own voice.
+- **Jarvis's voice**: a text-to-speech model — by default **Ryan**, a clear American male voice that keeps up with speech; **Kokoro** ("George", British male) is the most natural but slower than speech on some phones — or any of a dozen other voices, or the phone's own voice.
 - **Speed boost**: a tiny 0.6-billion-parameter "draft" model (about 0.4 GB) that helps the thinker write faster.
 
 ### What it is not
@@ -536,7 +536,7 @@ Settings → **JARVIS'S VOICE**. Three families:
 - American female: **Bella**, **Nicole**, **Sarah**, **Sky**, and a default American female mix.
 - American male: **Adam**, **Michael**.
 - British female: **Emma**, **Isabella**.
-- British male: **George** (the default voice for Jarvis) and **Lewis**.
+- British male: **George** (Kokoro's default) and **Lewis**.
 
 **Piper voices** — smaller (about 20 to 35 MB each) and faster:
 

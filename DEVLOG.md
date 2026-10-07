@@ -3,6 +3,19 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — fixes from the second Real-use check (app 2.6.28)
+Results 13:03 (PROVEN from log unless said): room listening now PASS (whisper on cpus [2..7], 0.4x real time, segments
+1-9 s after the first). Still failing:
+- Hey Jarvis woke (sound) but no command: the command segment, capped at 9 s, could end after the 8 s window closed and
+  was filed as memory. Now a segment that STARTED in a window keeps that window (`segStartWindow`).
+- Spoken answer 32 s and cut to "The capital of": the draft model attached for the first time (decode 6.3 tok/s with
+  it vs 9.3 without; answer truncated — truncation PARTIALLY PROVEN, only seen with draft on) and ~25 s was the first
+  read of the 745-token prompt. Speed boost now defaults OFF; after a preload the thinker reads its system prompt once
+  (`LocalModelEngine.warmPrompt`, set by Brain) so the first question reuses it.
+- Kokoro 1.3x real time even with the librarian yielding: default voice now Piper Ryan (high); Kokoro stays, labelled
+  "slower than speech on some phones". Guide updated.
+1274 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (session 01BUKa) — fixes from the first Real-use check (app 2.6.27)
 Results file 2026-10-07 12:40 (PROVEN from its log):
 - Every ambient utterance was 28000 ms (the cap), whisper base took 67-148 s each on cpus [0,1] threads 2 (2.5-5x

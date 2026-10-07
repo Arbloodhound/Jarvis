@@ -59,6 +59,8 @@ class AmbientListenService : Service() {
     // as it ends, with the window open at that moment (0 = none). Judging it later, when the
     // queued transcription runs, let speech that ended BEFORE the wake word count as the command.
     @Volatile private var windowId = 0L
+    /** The wake window open when the current segment started (0 = none). Capture thread only. */
+    private var segStartWindow = 0L
     private var consumedWindowId = 0L            // whisper worker only
     private val windowLock = Any()               // a new window vs. the worker holding one open
     @Volatile private var cues: TranscriptCueWorker? = null   // speaker/pause tags, after storing
@@ -328,9 +330,13 @@ class AmbientListenService : Service() {
         lateinit var seg: Segmenter
         seg = Segmenter { pcm, _ ->
             val now = System.currentTimeMillis()
-            val open = gate != null && now < cmdWindowUntil
+            // A command counts if it STARTED in the window: in a noisy room it can end after the
+            // window closes (Real-use check 2.6.28: woke, then the command went to memory).
+            val open = gate != null && (now < cmdWindowUntil || segStartWindow != 0L)
+            val wid = if (now < cmdWindowUntil) windowId else segStartWindow
+            segStartWindow = 0L
             lastSpeechAt = now
-            out.trySend(Utterance(pcm, now, if (open) windowId else 0L, seg.noiseFloorDb))
+            out.trySend(Utterance(pcm, now, if (open) wid else 0L, seg.noiseFloorDb))
         }
         var failures = 0
         while (currentCoroutineContext().isActive && failures < MAX_MIC_FAILURES) {
@@ -412,7 +418,10 @@ class AmbientListenService : Service() {
                 }
                 // A command window keeps segments short; otherwise the room-length cap.
                 seg.maxMs = if (System.currentTimeMillis() < cmdWindowUntil) AmbientConfig.COMMAND_MAX_MS else AmbientConfig.MAX_UTTER_MS
+                val wasSpeaking = seg.speaking
                 seg.push(fr)
+                if (seg.speaking && !wasSpeaking)
+                    segStartWindow = if (gate != null && System.currentTimeMillis() < cmdWindowUntil) windowId else 0L
 
                 val now = System.currentTimeMillis()
                 if (now - lastPrune > 3_600_000L) {

@@ -17,8 +17,9 @@ class VoiceCatalogTest {
         }
     }
 
-    @Test fun defaultIsKokoroGeorge() {
-        val k = VoiceCatalog.byId(VoiceCatalog.DEFAULT)!!
+    @Test fun defaultIsRyanAndKokoroDefaultsToGeorge() {
+        assertEquals("vits-piper-en_US-ryan-high-int8", VoiceCatalog.DEFAULT)
+        val k = VoiceCatalog.byId(VoiceCatalog.KOKORO)!!
         assertEquals(VoiceCatalog.Kind.KOKORO, k.kind)
         assertEquals("George (British male)", VoiceCatalog.speakerName(k, VoiceCatalog.DEFAULT_SPEAKER))
         assertEquals(11, k.speakers.size)
@@ -43,6 +44,7 @@ class VoiceCatalogTest {
     @Test fun aStandInSpeaksWhileTheChoiceDownloads() {
         val have = setOf(VoiceCatalog.NORMAN)
         assertEquals(VoiceCatalog.NORMAN, VoiceCatalog.speaking(VoiceCatalog.KOKORO) { it.id in have }?.id)
+        assertEquals(VoiceCatalog.KOKORO, VoiceCatalog.speaking(VoiceCatalog.DEFAULT) { it.id == VoiceCatalog.KOKORO }?.id)
         assertEquals(VoiceCatalog.KOKORO, VoiceCatalog.speaking(VoiceCatalog.KOKORO) { true }?.id)
         assertNull(VoiceCatalog.speaking(VoiceCatalog.KOKORO) { false })
         assertNull(VoiceCatalog.speaking(VoiceCatalog.PHONE) { true })

@@ -51,12 +51,12 @@ class ScreensTest {
     @Test fun voicePickerListsEveryVoiceAndSavesTheChoice() {
         VoicePrefs.setVoiceId(ctx, VoiceCatalog.DEFAULT)
         rule.setContent { Column(Modifier.verticalScroll(rememberScrollState())) { JarvisVoiceSettings(ctx) } }
-        rule.onNodeWithText("Kokoro (recommended)").assertExists()
+        rule.onNodeWithText("Ryan (recommended)").assertExists()
         for (m in VoiceCatalog.all.filter { it.id != VoiceCatalog.DEFAULT }) rule.onNodeWithText(m.label).assertExists()
-        // Kokoro is chosen and has several voices: its speaker menu shows George.
+        // Kokoro chosen: it has several voices, and its speaker menu shows George.
+        rule.onNodeWithText("Kokoro").performScrollTo().performClick()
+        assertEquals(VoiceCatalog.KOKORO, VoicePrefs.voiceId(ctx))
         rule.onNodeWithText("George (British male)").assertExists()
-        rule.onNodeWithText("Ryan").performScrollTo().performClick()
-        assertEquals("vits-piper-en_US-ryan-high-int8", VoicePrefs.voiceId(ctx))
         rule.onNodeWithText("Phone's voice").performScrollTo().performClick()
         assertEquals(VoiceCatalog.PHONE, VoicePrefs.voiceId(ctx))
         rule.onNodeWithText("Pitch", substring = true).assertExists()        // phone voice only

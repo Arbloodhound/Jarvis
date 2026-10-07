@@ -182,6 +182,12 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     }
 
     init {
+        // What the preload reads ahead: the on-device system prompt as every request starts it.
+        com.agent.ultra.local.LocalModelEngine.warmPrompt = {
+            LocalPrompt.build(LocalPrompt.offlineSystem(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
+                TalkStyle.combine(com.agent.ultra.ui.VoicePrefs.styleInstructions(appContext),
+                    com.agent.ultra.ui.UltraPrefs.customInstructions(appContext))), emptyList(), "hi")
+        }
         val cfg = ProviderConfig.load(appContext)
         client = if (cfg.isUsable) OpenAiClient(cfg) else null
         tools = Tools(appContext, controller)
