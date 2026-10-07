@@ -36,8 +36,39 @@ import kotlinx.coroutines.withContext
  * (owner enrolment), and the voices heard so far, to name ("that was Sam") or forget.
  * Voiceprints are biometric data and never leave the phone.
  */
+/**
+ * Live "Hey Jarvis" status, refreshed every second: is listening running, is the "Hey Jarvis" sound
+ * model loaded, when it last heard speech and what, when it last woke and how, the last command.
+ * Shows where a missed "Hey Jarvis" stopped (owner, 2026-10-07: "it doesn't respond").
+ */
+@Composable
+fun HeyJarvisStatus() {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
+    val S = com.agent.ultra.listen.AmbientListenService
+    fun ago(t: Long) = if (t <= 0) "not yet" else "${(now - t) / 1000} s ago"
+    val running = S.instance?.capturing == true
+    Text(
+        buildString {
+            append("Hey Jarvis status: ")
+            append(if (running) "listening" else "NOT listening (open Jarvis to start it)")
+            if (running) append(if (S.gateLoaded) " · sound model on" else " · sound model off (words only)")
+            append("\nLast speech: ").append(ago(S.lastSpeechAt))
+            if (S.lastHeardText.isNotBlank()) append(" · heard \"").append(S.lastHeardText).append('"')
+            append("\nLast wake: ").append(ago(S.lastWakeAt))
+            if (S.lastWakeAt > 0) append(" (by ").append(S.lastWakeBy).append(')')
+            append("\nLast command: ").append(ago(S.lastCommandAt))
+            if (S.lastCommandAt > 0) append(" · \"").append(com.agent.ultra.agent.IntentRouter.requestPart(S.lastCommand).take(60)).append('"')
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = if (running) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f) else MaterialTheme.colorScheme.error,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
 @Composable
 fun VoiceSettings(context: Context) {
+    HeyJarvisStatus()
     val cfg = remember { AmbientConfig(context) }
     val mem = remember { AmbientMemory.get(context) }
     val scope = rememberCoroutineScope()

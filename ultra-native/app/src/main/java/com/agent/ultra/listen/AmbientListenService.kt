@@ -170,8 +170,9 @@ class AmbientListenService : Service() {
      * current answer.
      */
     private suspend fun transcribeWorker(utterances: Channel<Utterance>) = coroutineScope {
-        // Either model: the thinker answering, or the librarian sorting memory.
-        val busy = com.agent.ultra.local.LocalModelEngine.anyBusy
+        // The thinker only: the librarian runs on the LLM cores, not whisper's, and stops for a wake
+        // (Librarian.yieldNow). Holding speech for it delayed "Hey Jarvis" by up to the hold cap.
+        val busy = com.agent.ultra.local.LocalModelEngine.shared(applicationContext).busy
         val busyChangedAt = java.util.concurrent.atomic.AtomicLong(0L)
         val watcher = launch { busy.collect { busyChangedAt.set(System.currentTimeMillis()) } }
         val backlog = ArrayDeque<Utterance>()
@@ -279,6 +280,7 @@ class AmbientListenService : Service() {
         currentCoroutineContext().ensureActive()
         gate = WakeGate(this@AmbientListenService,
             threshold = 0.5f).takeIf { it.ready }   // null => fall back to text-match wake
+        gateLoaded = gate != null
         return true
     }
 
@@ -339,6 +341,7 @@ class AmbientListenService : Service() {
                         cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS
                     }
                     woke("sound")
+                    Librarian.yieldNow()   // the answer needs the brain: the memory model stops now
                     WakeChime.play()
                 }
                 seg.push(fr)
@@ -390,6 +393,7 @@ class AmbientListenService : Service() {
             "threads=$threads cpus=${cpus.toList()}")
         if (r == null) return
         lastTranscribedAt = System.currentTimeMillis()
+        lastHeardText = r.text.take(120)
         if (!kept(r)) return
 
         val now = System.currentTimeMillis()
@@ -423,7 +427,7 @@ class AmbientListenService : Service() {
             is WakeFilter.Verdict.Addressed -> {
                 // Woken by the words (the acoustic gate missed, or there is none): chime now. Not
                 // for the follow-up utterance after a bare name, which has no wake phrase of its own.
-                if (WakeFilter.addressedCommand(r.text, cfg.wakeName) != null) { woke("words"); WakeChime.play() }
+                if (WakeFilter.addressedCommand(r.text, cfg.wakeName) != null) { woke("words"); Librarian.yieldNow(); WakeChime.play() }
                 if (v.command.isBlank()) {               // bare name; follow-up will carry the command
                     say(WAKE_REPLY) { wake.holdFollowUp(System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS) }
                     return
@@ -452,13 +456,21 @@ class AmbientListenService : Service() {
      * the current answer (as when transcription itself waited) instead of beside it.
      */
     @Synchronized private fun dispatch(request: String) {
-        val busy = com.agent.ultra.local.LocalModelEngine.anyBusy
+        // The memory model stops for a command; only an answer already being given makes it wait.
+        Librarian.yieldNow()
+        val busy = com.agent.ultra.local.LocalModelEngine.shared(applicationContext).busy
         if (commandRunner == null) commandRunner = scope.launch {
             for (r in pendingCommands) {
                 if (busy.value) android.util.Log.i("UltraAmbient", "command heard while the brain is busy: runs after it")
                 busy.first { !it }
                 dispatchNow(r)
             }
+        }
+        // "On it." from when the command was heard, not from when it got its turn: a wait counts.
+        val heard = System.currentTimeMillis()
+        scope.launch {
+            kotlinx.coroutines.delay(ACK_AFTER_MS)
+            if (answeredAt < heard) say(WORKING_REPLY)
         }
         pendingCommands.trySend(request)
     }
@@ -467,7 +479,10 @@ class AmbientListenService : Service() {
      * this service does, so a command is never dropped because no Activity is alive. */
     private fun dispatchNow(request: String) {
         lastCommand = request; lastCommandAt = System.currentTimeMillis()
-        AmbientBridge.onCommand?.let { it(request); lastCommandDoneAt = System.currentTimeMillis(); return }
+        AmbientBridge.onCommand?.let {
+            answeredAt = System.currentTimeMillis()   // the voice screen answers it: no "On it." from here
+            it(request); lastCommandDoneAt = System.currentTimeMillis(); return
+        }
         // Main, as VoiceActivity's lifecycleScope runs it.
         scope.launch(Dispatchers.Main) {
             // Anyone can talk to a locked phone: only harmless requests run then (LockedPolicy),
@@ -477,23 +492,17 @@ class AmbientListenService : Service() {
             var run = request
             if (km != null && km.isKeyguardLocked) {
                 if (!com.agent.ultra.agent.LockedPolicy.allowed(request)) {
+                    answeredAt = System.currentTimeMillis()
                     say(com.agent.ultra.agent.LockedPolicy.REFUSAL)
                     lastCommandDoneAt = System.currentTimeMillis()
                     return@launch
                 }
                 run = com.agent.ultra.agent.IntentRouter.requestPart(request)
             }
-            // A thinking answer takes seconds: say so if it hasn't come within ACK_AFTER_MS.
-            answeredAt = 0L
-            val started = System.currentTimeMillis()
-            val ack = scope.launch {
-                kotlinx.coroutines.delay(ACK_AFTER_MS)
-                if (answeredAt < started) say(WORKING_REPLY)
-            }
             try { fallbackBrain().run(run) }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { android.util.Log.w("UltraAmbient", "command failed: ${e.message}") }
-            finally { ack.cancel(); lastCommandDoneAt = System.currentTimeMillis() }
+            finally { lastCommandDoneAt = System.currentTimeMillis() }
         }
     }
 
@@ -610,6 +619,13 @@ class AmbientListenService : Service() {
             private set
 
         private fun woke(by: String) { lastWakeBy = by; lastWakeAt = System.currentTimeMillis() }
+
+        /** The "Hey Jarvis" sound model loaded (else only the transcript's words wake it). */
+        @Volatile var gateLoaded = false
+            private set
+        /** The last line whisper wrote, for Settings → VOICE's live status. */
+        @Volatile var lastHeardText = ""
+            private set
 
         /** Starts listening if it can. A service started with startForegroundService must call
          * startForeground, and without the mic permission it can't (microphone type): Android

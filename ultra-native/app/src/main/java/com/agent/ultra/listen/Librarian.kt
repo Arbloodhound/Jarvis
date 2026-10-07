@@ -264,6 +264,22 @@ object Librarian {
     private const val TAG = "UltraLibrarian"
     private val failures = LibrarianRun.Failures()
     private var job: Job? = null
+    /** The run in progress, so a "Hey Jarvis" can stop it at once ([yieldNow]). */
+    @Volatile private var current: Job? = null
+    /** No runs before this (epoch ms): the owner is talking to Jarvis. */
+    @Volatile private var holdUntil = 0L
+    /** How long a wake keeps the librarian off: a command, its answer, a follow-up. */
+    const val YIELD_MS = 3 * 60_000L
+
+    /**
+     * Jarvis was woken: stop the run in progress now (its generation ends at the next token) and
+     * start none for [YIELD_MS]. A command waited for the librarian's whole chunk before, up to a
+     * couple of minutes of silence after "Hey Jarvis" (2026-10-07, once it ran off the charger too).
+     */
+    fun yieldNow() {
+        holdUntil = System.currentTimeMillis() + YIELD_MS
+        current?.cancel()
+    }
 
     /** Below this battery level, off the charger, it waits for the charger. */
     const val MIN_BATTERY_UNPLUGGED = 50
@@ -305,6 +321,7 @@ object Librarian {
     /** [mayRun] on the live state, cheapest checks first and short-circuited: the usual answer
      *  (no model, not charging, screen on) costs no engine lookup. */
     fun allowed(ctx: Context): Boolean {
+        if (System.currentTimeMillis() < holdUntil) return false
         if (model == null || modelReady?.invoke() == false || !AmbientConfig(ctx).organiseMemory) return false
         val pm = ctx.getSystemService(PowerManager::class.java)
         if (pm?.isInteractive != false) return false
@@ -358,6 +375,7 @@ object Librarian {
                 passes(ctx, m, source, keepGoing = { allowed(ctx) }, minAgeMs = LibrarianRun.MIN_AGE_MS,
                     patterns = cfg.notePatterns, readings = cfg.patternReadings)
             }
+            current = work
             val watch = launch {
                 while (true) {
                     delay(WATCH_MS)
@@ -372,6 +390,7 @@ object Librarian {
                 null
             } finally {
                 watch.cancel()
+                current = null
             }
         } ?: return false
         return result.more

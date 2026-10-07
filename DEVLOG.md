@@ -3,6 +3,27 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — "Hey Jarvis" no longer waits for the memory model; the on-device brain searches the web
+Owner (2.6.17): "Hey Jarvis" doesn't respond; the AI keeps saying it can't browse the internet though it has the
+phone and its screen.
+- Likely cause of the silence (source, not proven on the phone — no log): ambient transcription and command dispatch
+  waited on `LocalModelEngine.anyBusy`, which includes the librarian's generation — up to a 960-token chunk (~2 min
+  at ~8 tok/s) — and 2.6.16 made the librarian run far more often (off the charger at ≥50%). The "On it." timer only
+  started after that wait. Now: the transcriber holds only for the thinker (whisper and the librarian use different
+  cores); a gate fire, a text wake or a command calls `Librarian.yieldNow()` (cancels the run in progress — generation
+  stops at the next token — and starts none for 3 min); dispatch waits only for the thinker; "On it." is timed from
+  when the command was heard (not after a refusal or a voice-screen answer).
+- Settings → VOICE shows a live "Hey Jarvis status" (listening? sound model on? last speech + text, last wake and how,
+  last command) so a miss shows where it stopped.
+- Web (PROVEN cause from source): OFFLINE_RULES said "You cannot browse the web in this mode" and the on-device path
+  never called the existing `web_search` (DuckDuckGo instant answer / Wikipedia / DDG HTML), which only the cloud loop
+  used. `WebNeed.query`: asked ("search the web for", "google", "look up") or current-info cues (news, weather, price,
+  score, who won, latest, open now …), not memory/notes questions (a bare time word doesn't count as memory). When
+  online, Brain.emitLocal runs web_search and passes "Web results, searched just now for …" in the late block (with the
+  memory brief when both apply). OFFLINE_RULES: the app searches the web when online, can open sites on the screen,
+  "never say you can't browse the internet or use the screen"; the "offline" wording is gone.
+1204 JVM tests, 0 failures. Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (session 01BUKa) — PEOPLE and SYSTEM PROMPT settings, voices named from what is heard and told
 Owner: a system-prompt section; a section to name people, and to give his own name; names inferred from what it
 hears and what he tells it. (G settings, A prompts, C voices.)

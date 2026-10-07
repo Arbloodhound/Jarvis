@@ -715,12 +715,29 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 }
                 android.util.Log.d("UltraRoute", "memory reason=${wantsMemory.reason} provider=${MemoryBrief.provider != null} " +
                     "briefChars=${memory?.length ?: 0}")
+                // The web, when the phone is online and the question needs it (WebNeed): the app
+                // searches, the brain reads the results. Not for a memory / notes question.
+                val webQuery = if (focus == null) WebNeed.query(userInput) else null
+                val web = webQuery?.let { q ->
+                    val searching = ChatStore.setStatus(ChatStatus.Phase.THINKING, "searching the web")
+                    try {
+                        tools.execute("web_search", org.json.JSONObject().put("query", q))
+                            .takeIf { !it.startsWith("OFFLINE") && !it.startsWith("Error") && it.isNotBlank() }
+                            ?.let { WebNeed.brief(q, it) }
+                    } catch (e: Exception) { null } finally { ChatStore.clearStatus(searching) }
+                }
+                android.util.Log.d("UltraRoute", "web query=${webQuery?.take(60)} found=${web != null}")
                 val system = LocalPrompt.offlineSystem(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
                     com.agent.ultra.ui.UltraPrefs.customInstructions(appContext))
-                val prompt = LocalPrompt.build(system, history, userInput, historyChars, memory,
+                val prompt = LocalPrompt.build(system, history, userInput, historyChars,
+                    memory = listOfNotNull(memory, web).joinToString("\n\n").ifBlank { null },
                     now = LocalPrompt.nowLine(),
-                    memoryCap = if (focus != null) MemoryFocus.MAX_CHARS else MemoryBrief.MAX_CHARS,
-                    memoryHeader = if (focus != null) "Focus: ${focus.focus.label}" else MemoryBrief.HEADER)
+                    memoryCap = if (focus != null || web != null) MemoryFocus.MAX_CHARS else MemoryBrief.MAX_CHARS,
+                    memoryHeader = when {
+                        focus != null -> "Focus: ${focus.focus.label}"
+                        memory == null && web != null -> "Found for this question:"
+                        else -> MemoryBrief.HEADER
+                    })
                 val reserve = LocalPrompt.answerReserve(level)
                 val speed = local.decodeTokPerSec
                 val depth = com.agent.ultra.ui.UltraPrefs.thinkingDepth(appContext)
