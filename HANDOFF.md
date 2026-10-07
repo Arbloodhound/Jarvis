@@ -1,6 +1,15 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
-## LATEST+5 (session 01BUKa, 2026-10-07 ~08:00 UTC) — read this first
+## LATEST+6 (session 01BUKa, 2026-10-07 ~09:00 UTC) — read this first
+`v2.6.20-test` (run 20, 5eedc70) is Latest; runs 18 and 19 were cancelled because 20 contains them. Since v2.6.17:
+Hey Jarvis no longer waits for the memory model (it stops it), live "Hey Jarvis status" + "Test Jarvis's voice"
+in Settings, speech plays as media with audio focus and speak-answers on by default, on-device brain searches the
+web ("Web results" block) and is told it can see and use the screen, unrestricted access switch (default on),
+spoken chat requests send at once, far speech: gate 8 dB above floor / -58 dB min, AGC effect, MicGain boost
+before whisper and the wake detector. All SOURCE-FIXED BUT RUNTIME-UNPROVEN. Next: owner installs 2.6.20 →
+Jarvis Tests 1 shows "App: 2.6.20" → voice test, Hey Jarvis status, Hey Jarvis screen-off, web search, far speech.
+
+## LATEST+5 (session 01BUKa, 2026-10-07 ~08:00 UTC)
 `v2.6.17-test` (run 17, b81193e) is Latest. Since v2.6.15: notes on their own (summaries, who + tags, follow-up
 links, re-read of old memory, off-charger at ≥50%, Organise now, chat turns remembered, "make a note of what Sam
 said…"), "Hey Jarvis" speaks back ("Yes?", "On it."), locked-phone policy, full device-control tools offline,
