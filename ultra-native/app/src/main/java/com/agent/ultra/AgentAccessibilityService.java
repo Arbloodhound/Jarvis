@@ -159,13 +159,17 @@ public class AgentAccessibilityService extends AccessibilityService {
     // own taps pass: element clicks don't use touch at all, and each injected gesture opens the overlay
     // for just its own duration (dispatchThrough). The system's back/home gestures still work, and the
     // Stop button ends the run at once.
-    private android.view.View takeoverOverlay;
-    private android.view.WindowManager.LayoutParams takeoverLp;
+    // Written on the main looper, read from gesture threads too.
+    private volatile android.view.View takeoverOverlay;
+    private volatile android.view.WindowManager.LayoutParams takeoverLp;
+    /** Runs holding the takeover (chat, voice and ambient Brains can overlap); main looper only. */
+    private int takeoverHolds = 0;
     private final Handler takeoverHandler = new Handler(Looper.getMainLooper());
     private volatile long passUntil = 0L;
 
     public void showTakeover() {
         takeoverHandler.post(() -> {
+            takeoverHolds++;
             if (takeoverOverlay != null) return;
             try {
                 float dp = getResources().getDisplayMetrics().density;
@@ -216,20 +220,22 @@ public class AgentAccessibilityService extends AccessibilityService {
         });
     }
 
-    public void hideTakeover() {
-        takeoverHandler.post(() -> {
-            if (takeoverOverlay == null) return;
-            try { ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).removeView(takeoverOverlay); }
-            catch (Exception ignored) {}
-            takeoverOverlay = null;
-            Log.i(TAG, "TAKEOVER hidden");
-        });
+    /** One run is done with the takeover; the screen is the person's again when no run holds it. */
+    public void hideTakeover() { takeoverHandler.post(() -> removeTakeover(false)); }
+
+    private void removeTakeover(boolean all) {
+        takeoverHolds = all ? 0 : Math.max(0, takeoverHolds - 1);
+        if (takeoverHolds > 0 || takeoverOverlay == null) return;
+        try { ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).removeView(takeoverOverlay); }
+        catch (Exception ignored) {}
+        takeoverOverlay = null;
+        Log.i(TAG, "TAKEOVER hidden");
     }
 
     /** The overlay's Stop: every run, the screen task and speech end now. */
     private void stopFromTakeover() {
         Log.i(TAG, "TAKEOVER stop pressed");
-        hideTakeover();
+        takeoverHandler.post(() -> removeTakeover(true));
         try { com.agent.ultra.agent.Brain.Companion.stopAll(); } catch (Throwable ignored) {}
         try { com.agent.ultra.agent.OfflineNavigator.Companion.stopActive(); } catch (Throwable ignored) {}
         try { com.agent.ultra.ui.SpeechQueue.Companion.stopAll(); } catch (Throwable ignored) {}
@@ -257,14 +263,25 @@ public class AgentAccessibilityService extends AccessibilityService {
                 open.countDown();
                 takeoverHandler.postDelayed(this::blockAgainIfDue, gestureMs + 320);
             };
-            if (Looper.myLooper() == Looper.getMainLooper()) letThrough.run();
-            else {
-                takeoverHandler.post(letThrough);
-                try { open.await(500, TimeUnit.MILLISECONDS); } catch (InterruptedException ignored) {}
+            // The window change reaches input dispatch asynchronously: the gesture starts a couple of
+            // frames later, so its touch-down does not land on the overlay.
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                letThrough.run();
+                takeoverHandler.postDelayed(() -> {
+                    if (!super.dispatchGesture(g, cb, h) && cb != null) cb.onCancelled(g);
+                }, PASS_SETTLE_MS);
+                return true;
             }
+            takeoverHandler.post(letThrough);
+            try {
+                open.await(500, TimeUnit.MILLISECONDS);
+                Thread.sleep(PASS_SETTLE_MS);
+            } catch (InterruptedException ignored) {}
         }
         return super.dispatchGesture(g, cb, h);
     }
+
+    private static final long PASS_SETTLE_MS = 50;
 
     private void blockAgainIfDue() {
         if (takeoverOverlay == null || System.currentTimeMillis() < passUntil) return;

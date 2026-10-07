@@ -93,6 +93,7 @@ class OfflineNavigator(
         val t0 = System.currentTimeMillis()
         val history = mutableListOf<String>()
         val guard = OfflineNav.LoopGuard()
+        var looked = false
         var flat = actor.perceive()
         while (true) {
             OfflineNav.budgetStop(stepsTaken, System.currentTimeMillis() - t0)?.let {
@@ -107,7 +108,9 @@ class OfflineNavigator(
                 ScreenVision.unavailable() == null) {
                 // A game, map or canvas page: the tree has next to nothing, the picture has the words.
                 val words = ScreenVision.readScreen(controller)
-                val seen = if (words.isNullOrBlank()) ScreenVision.look(controller, "") else words
+                // The vision model at most once a run: it is slow, can't be stopped mid-answer, and
+                // loads 2.8 GB next to the thinker.
+                val seen = if (words.isNullOrBlank() && !looked) { looked = true; ScreenVision.look(controller, "") } else words
                 screen = OfflineNav.withPicture(screen, seen)
             }
             val here = controller.activePackage().ifBlank { pkg }

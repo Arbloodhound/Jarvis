@@ -46,14 +46,13 @@ object VisionModel {
         if (f.exists()) f.length() else ParallelDownload.bytesSoFar(File(f.path + LocalModelEngine.PART_SUFFIX))
     }
 
-    @Volatile var downloading = false
-        private set
+    private val fetching = java.util.concurrent.atomic.AtomicBoolean(false)
+    val downloading: Boolean get() = fetching.get()
 
     /** Download both files (4 connections each, resumable). Blocking work on IO; true when both are in. */
     suspend fun fetch(c: Context): Boolean = withContext(Dispatchers.IO) {
         if (present(c)) return@withContext true
-        if (downloading) return@withContext false
-        downloading = true
+        if (!fetching.compareAndSet(false, true)) return@withContext false
         try {
             val client = okhttp3.OkHttpClient.Builder().connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS).followRedirects(true).build()
@@ -71,7 +70,7 @@ object VisionModel {
                 if (!ok || !part.renameTo(file)) return@withContext false
             }
             present(c)
-        } finally { downloading = false }
+        } finally { fetching.set(false) }
     }
 
     /** [fetch] in the background, so leaving Settings does not stop it. [done] gets the result. */
@@ -119,9 +118,11 @@ object VisionModel {
             }
             val scaled = scale(bitmap, MAX_SIDE)
             val rgb = rgbBytes(scaled)
+            val w = scaled.width; val h = scaled.height
+            if (scaled !== bitmap) scaled.recycle()
             val t1 = System.currentTimeMillis()
-            val out = VisionNative.nativeVlmDescribe(handle, rgb, scaled.width, scaled.height, prompt, maxTokens, THREADS)
-            android.util.Log.i("UltraVlm", "describe ${scaled.width}x${scaled.height} in ${System.currentTimeMillis() - t1} ms: ${out?.take(80)}")
+            val out = VisionNative.nativeVlmDescribe(handle, rgb, w, h, prompt, maxTokens, THREADS)
+            android.util.Log.i("UltraVlm", "describe ${w}x$h in ${System.currentTimeMillis() - t1} ms: ${out?.take(80)}")
             idle = scope.launch { delay(IDLE_MS); lock.withLock { if (handle != 0L) { VisionNative.nativeVlmFree(handle); handle = 0L } } }
             out?.trim()?.takeIf { it.isNotEmpty() }
         } }

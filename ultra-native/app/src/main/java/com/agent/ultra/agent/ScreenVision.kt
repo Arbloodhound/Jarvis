@@ -66,10 +66,13 @@ object ScreenVision {
                 object : android.accessibilityservice.AccessibilityService.TakeScreenshotCallback {
                     override fun onSuccess(result: android.accessibilityservice.AccessibilityService.ScreenshotResult) {
                         val buffer = result.hardwareBuffer
+                        var wrapped: Bitmap? = null
                         val bmp = try {
-                            Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)?.copy(Bitmap.Config.ARGB_8888, false)
-                        } catch (e: Throwable) { null } finally { buffer.close() }
-                        if (cont.isActive) cont.resume(bmp ?: AccessibilityServiceError.OTHER)
+                            wrapped = Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)
+                            wrapped?.copy(Bitmap.Config.ARGB_8888, false)
+                        } catch (e: Throwable) { null } finally { wrapped?.recycle(); buffer.close() }
+                        // Too late (timed out or cancelled): nobody will use it.
+                        if (cont.isActive) cont.resume(bmp ?: AccessibilityServiceError.OTHER) else bmp?.recycle()
                     }
                     override fun onFailure(errorCode: Int) {
                         val e = if (errorCode == android.accessibilityservice.AccessibilityService.ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT)
@@ -86,23 +89,32 @@ object ScreenVision {
 
     private val recognizer by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
 
-    /** The words in [bitmap], in reading order ([OcrLayout]), or null when recognition failed. */
-    suspend fun ocr(bitmap: Bitmap): String? {
+    /** ML Kit takes ~0.1-0.5 s on a phone; past this the read is given up. */
+    private const val OCR_TIMEOUT_MS = 8000L
+
+    /**
+     * The words in [bitmap], in reading order ([OcrLayout]), or null when recognition failed or took
+     * too long. [recycle]: free [bitmap] when ML Kit is done with it — not before, even when this
+     * call is cancelled or times out while the recognizer is still reading it.
+     */
+    suspend fun ocr(bitmap: Bitmap, recycle: Boolean = false): String? {
         val t0 = System.currentTimeMillis()
-        val text = suspendCancellableCoroutine<com.google.mlkit.vision.text.Text?> { cont ->
+        val text = withTimeoutOrNull(OCR_TIMEOUT_MS) { suspendCancellableCoroutine<com.google.mlkit.vision.text.Text?> { cont ->
             // A phone where ML Kit can't start (e.g. a ROM missing something it expects) reads as
             // "no text", never as a crash of the tool or the navigation run.
             val task = try { recognizer.process(InputImage.fromBitmap(bitmap, 0)) } catch (e: Throwable) {
                 android.util.Log.w(TAG, "ocr unavailable: $e")
+                if (recycle) bitmap.recycle()
                 cont.resume(null); return@suspendCancellableCoroutine
             }
+            if (recycle) task.addOnCompleteListener { bitmap.recycle() }
             task
                 .addOnSuccessListener { if (cont.isActive) cont.resume(it) }
                 .addOnFailureListener { e ->
                     android.util.Log.w(TAG, "ocr failed: ${e.message}")
                     if (cont.isActive) cont.resume(null)
                 }
-        } ?: return null
+        } } ?: return null
         val lines = text.textBlocks.flatMap { b -> b.lines }.mapNotNull { l ->
             val r = l.boundingBox ?: return@mapNotNull null
             OcrLayout.Line(l.text, r.left, r.top, r.right, r.bottom)
@@ -112,12 +124,14 @@ object ScreenVision {
         return out
     }
 
+    /** Jarvis's own window is never "the screen": its tree read is withheld on purpose. */
+    private fun ownAppInFront(controller: AgentController) = controller.activePackage() == "com.agent.ultra"
+
     /** A screenshot read by OCR, with any secret on it noted; null when no picture could be had. */
     suspend fun readScreen(controller: AgentController): String? {
+        if (ownAppInFront(controller)) return null
         val bmp = screenshot() ?: return null
-        return try {
-            ocr(bmp)?.also { controller.noteScreenSecrets(it) }
-        } finally { bmp.recycle() }
+        return ocr(bmp, recycle = true)?.also { controller.noteScreenSecrets(it) }
     }
 
     /**
@@ -126,7 +140,7 @@ object ScreenVision {
      */
     suspend fun look(controller: AgentController, question: String): String? {
         val ctx = AgentAccessibilityService.getInstance()?.applicationContext ?: return null
-        if (!VisionModel.ready(ctx)) return null
+        if (!VisionModel.ready(ctx) || ownAppInFront(controller)) return null
         val bmp = screenshot() ?: return null
         return try {
             val prompt = question.trim().ifBlank {

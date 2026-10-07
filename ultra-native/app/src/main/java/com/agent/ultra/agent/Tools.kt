@@ -227,7 +227,7 @@ class Tools(
                 }
 
                 // ── Information ──────────────────────────────────────
-                "web_search" -> webSearch(params.optString("query"))
+                "web_search" -> webSearch(params.optString("query"), params.optBoolean("skipResearch"))
                 "ambient_recall" -> {
                     // Meaning + keywords + recency + "yesterday"-style windows (keyword-only
                     // until the embedder is downloaded). Same "[time] line" format as before, best
@@ -355,6 +355,8 @@ class Tools(
 
                 else -> "Error: unknown tool '$tool'"
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e   // Stop / a timeout is not a tool error
         } catch (e: Exception) {
             "Error: ${e.message}"
         }
@@ -694,14 +696,18 @@ class Tools(
             c.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     } catch (_: Exception) { false }
 
-    private suspend fun webSearch(query: String): String = withContext(Dispatchers.IO) {
+    private suspend fun webSearch(query: String, skipResearch: Boolean = false): String = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext "Error: missing query"
         // Grounding is a tool, not a leash: offline, tell the model to use its own knowledge
         // rather than stalling. (See system-prompt rules 13-15.)
         if (!isOnline()) return@withContext "OFFLINE: no network. " +
             "Answer from your own knowledge; do not treat this as the fact being unavailable."
         // Several targeted searches with the best pages read (WebResearch); the quick sources if it finds nothing.
-        runCatching { WebResearchRun.run(query, ::readPageOnScreen) }.getOrNull()?.let { return@withContext it }
+        // [skipResearch]: the caller already ran the research and it found nothing.
+        if (!skipResearch) try {
+            WebResearchRun.run(query, ::readPageOnScreen)?.let { return@withContext it }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e   // Stop must reach the caller
+        } catch (e: Exception) { android.util.Log.w("UltraWeb", "research failed: ${e.message}") }
         instantAnswer(query)?.let { return@withContext it }
         wikipedia(query)?.let { return@withContext it }
         scrapeDdg(query)
@@ -732,7 +738,8 @@ class Tools(
             text.takeIf { it.isNotBlank() }
         } finally {
             svc?.hideTakeover()
-            controller.globalAction("back")
+            // Even when cancelled (Stop, or the 15 s limit): the browser must not be left in front.
+            withContext(kotlinx.coroutines.NonCancellable) { controller.globalAction("back") }
         }
     }
 
