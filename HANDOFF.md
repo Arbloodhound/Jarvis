@@ -1,5 +1,14 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## LATEST+1 (session 01BUKa, 2026-10-07 ~01:30 UTC) — read this first
+Owner's results `Jarvis-results-20261006-1758.txt`: Feature check PASS 17 / WARN 2 / FAIL 1. Commit 229dfb0
+(1167 JVM tests, 0 failures; assembleDebug OK) fixes from it: LLM decodes with 4 threads (speed test 4=8.96,
+5=7.23, 6=4.79 tok/s; pool still 6 workers), "I hate/hi/hay Jarvis" wakes, new probe "Wake phrase (your
+voice)", observation without "text" kept with a plain summary. Merged `claude/qwen35-preset` (host-harness
+PASS on a tiny qwen35 model, see DEVLOG). Release APK run 9 started for 229dfb0 → `v2.6.9-test`.
+Next: owner updates via Obtainium → Jarvis Tests 3 (speed) + 5 (Feature check, says "Hey Jarvis" when asked)
+→ sends file. Check: tok/s ≈ 9 at 4 threads; own-voice wake result; pattern notes now PASS.
+
 ## LATEST (session 01K5Mi, 2026-10-07 ~00:45 UTC) — read this first
 **Owner status:** on the Pixel via **Obtainium** (works: fine-grained read-only PAT; app source
 github.com/Arbloodhound/Jarvis; APK regex `jarvis-test\.apk`). Installed 2.6.7 (test build), all
