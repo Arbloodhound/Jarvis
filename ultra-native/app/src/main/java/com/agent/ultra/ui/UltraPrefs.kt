@@ -53,9 +53,11 @@ object UltraPrefs {
     /** Speak with Jarvis's own on-phone voice instead of Android's TextToSpeech (Google's, on a
      * Pixel). On by default: works offline and on a de-Googled phone. */
     fun ownVoice(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_OWN_VOICE, true)
+        VoicePrefs.voiceId(context) != com.agent.ultra.listen.VoiceCatalog.PHONE   // Settings → JARVIS'S VOICE
 
     fun setOwnVoice(context: Context, on: Boolean) {
+        if (!on) VoicePrefs.setVoiceId(context, com.agent.ultra.listen.VoiceCatalog.PHONE)
+        else if (!ownVoice(context)) VoicePrefs.setVoiceId(context, com.agent.ultra.listen.VoiceCatalog.DEFAULT)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OWN_VOICE, on).apply()
     }
 

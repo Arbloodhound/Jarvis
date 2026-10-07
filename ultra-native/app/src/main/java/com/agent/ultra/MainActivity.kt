@@ -47,12 +47,14 @@ class MainActivity : ComponentActivity() {
                         onOpenNotes = { screen = "notes" },
                         onOpenMemory = { screen = "memory" },
                     )
+                    "guide" -> com.agent.ultra.ui.GuideScreen(onBack = { screen = "settings" })
                     "notes" -> com.agent.ultra.ui.NotesScreen(onBack = { screen = "chat" }, onAsk = { screen = "chat" })
                     "memory" -> com.agent.ultra.ui.MemoryScreen(onBack = { screen = "chat" }, onAsk = { screen = "chat" })
                     "settings" -> SettingsScreen(
                         localEngine = engine,
                         onConfigSaved = { configVersion++ },
                         onBack = { screen = "chat" },
+                        onOpenGuide = { screen = "guide" },
                     )
                 }
             }

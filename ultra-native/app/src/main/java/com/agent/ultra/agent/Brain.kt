@@ -747,7 +747,8 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         var shown: ChatStatus.Status? = null
         val onStart: () -> Unit = { shown = ChatStore.setStatus(ChatStatus.Phase.THINKING) }
         // Spoken as it is written, a sentence at a time. Not a note: its text is replaced at the end.
-        val chunker = if (speaksThisRun && onSpeak != null && !noteMode) SpeechChunker() else null
+        val chunker = if (speaksThisRun && onSpeak != null && !noteMode &&
+            com.agent.ultra.ui.VoicePrefs.speakAsWritten(appContext)) SpeechChunker() else null
         val onPiece: (String) -> Unit = { piece ->
             if (piece.isNotEmpty()) shown?.let { ChatStore.clearStatus(it); shown = null }
             ChatStore.appendTo(msg.id, piece)
@@ -806,7 +807,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 }
                 android.util.Log.d("UltraRoute", "web query=${webQuery?.take(60)} found=${web != null}")
                 val system = LocalPrompt.offlineSystem(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
-                    com.agent.ultra.ui.UltraPrefs.customInstructions(appContext))
+                    TalkStyle.combine(com.agent.ultra.ui.VoicePrefs.styleInstructions(appContext), com.agent.ultra.ui.UltraPrefs.customInstructions(appContext)))
                 val prompt = LocalPrompt.build(system, history, userInput, historyChars,
                     memory = listOfNotNull(memory, web).joinToString("\n\n").ifBlank { null },
                     now = LocalPrompt.nowLine(),
@@ -822,7 +823,8 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                     .let { if (it > maxThinkingDepth) maxThinkingDepth else it }
                 // Spoken: answer within seconds, whatever the tier (WaitBudget.spoken).
                 val timed = WaitBudget.budget(route.tier, speed, depth)
-                    .let { if (runSpoken) WaitBudget.spoken(it, speed) else it }
+                    .let { if (runSpoken) WaitBudget.spoken(it, speed,
+                        com.agent.ultra.ui.VoicePrefs.spokenThink(appContext).seconds) else it }
                 val clipped = ThinkBudget.clipToContext(
                     timed, nCtx,
                     LocalPrompt.estimateTokens(prompt), reserve,
@@ -1620,7 +1622,7 @@ JSON:"""
         }.joinToString(" | ")
 
         val owner = LocalPrompt.ownerSection(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
-            com.agent.ultra.ui.UltraPrefs.customInstructions(appContext)).let { if (it.isEmpty()) "" else "\n$it\n" }
+            TalkStyle.combine(com.agent.ultra.ui.VoicePrefs.styleInstructions(appContext), com.agent.ultra.ui.UltraPrefs.customInstructions(appContext))).let { if (it.isEmpty()) "" else "\n$it\n" }
         return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have unrestricted access to it and everything on it through its accessibility service: you can see and use the screen (read, tap, type, scroll), every app, messages, contacts, notifications, settings, screenshots. Never say you can't see the screen or can't access or control the phone.
 PHONE STATE: $env
 TODAY: $date at $time

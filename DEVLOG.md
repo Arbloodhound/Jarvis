@@ -3,6 +3,19 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — voice picker, "How Jarvis talks" settings, in-app Guide
+Owner: the voice sounds bad, let me choose; more settings, still compatible; a complete guide, also inside the app.
+- `VoiceCatalog`: 12 own voices (sherpa-onnx tts-models, sha256 + size pinned 2026-10-07): Kokoro int8 (11 speakers, default
+  "George" = sid 9 per sherpa's v0.19 id map), Piper Ryan/Lessac/Cori (high), Alan, Northern English, Jenny, Amy, Joe,
+  LibriTTS (904), VCTK (109), Norman (old default). `LocalVoice` loads any of them (Kokoro config, 3 threads); while the
+  chosen one downloads a downloaded one stands in. "Phone's voice" = Android TTS with any installed voice, speed, pitch.
+  Old "own voice" switch maps onto the picker (off → phone's voice).
+- `VoicePrefs` + Settings → JARVIS'S VOICE (picker, speaker, speed, pitch, preview, remove) and HOW JARVIS TALKS
+  (personality, answer length → `TalkStyle` prompt lines; spoken think time 3/5/12 s; wake reply text; chime; "On it.";
+  speak as it writes; bare "stop"; barge-in). Defaults = previous behaviour (plus the Butler personality line).
+- Guide: `GuideScreen` (contents, search) renders assets/guide.md via `GuideText`; "📖 Guide" at the top of Settings.
+JVM tests 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN (Kokoro's speed on the Pixel unmeasured).
+
 ## 2026-10-07 (session 01BUKa) — quieter speech heard; speaker labels on memories by default
 Owner: still misses quieter speech ("maybe change the model for the voice recognition"); memories have times but no
 speaker indicators.

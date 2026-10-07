@@ -76,9 +76,11 @@ fun VoiceTest(context: Context) {
         val am = context.getSystemService(android.media.AudioManager::class.java)
         val vol = am?.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) ?: -1
         val max = am?.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) ?: 0
-        val own = UltraPrefs.ownVoice(context) && com.agent.ultra.listen.LocalVoice.available &&
-            com.agent.ultra.listen.LocalVoice.voicePresent(context)
-        status = (if (own) "Speaking with Jarvis's own voice…" else "Speaking with the phone's voice (Jarvis's own isn't downloaded)…") +
+        val own = if (UltraPrefs.ownVoice(context) && com.agent.ultra.listen.LocalVoice.available)
+            com.agent.ultra.listen.LocalVoice.speakingModel(context) else null
+        status = (if (own != null) "Speaking with Jarvis's own voice (${own.label})…"
+            else if (!UltraPrefs.ownVoice(context)) "Speaking with the phone's voice…"
+            else "Speaking with the phone's voice (Jarvis's own isn't downloaded yet)…") +
             if (vol == 0) "\nMedia volume is at 0: turn it up with the volume buttons." else " (media volume $vol/$max)"
         speaker.speak("Hello, I'm Jarvis. If you can hear me, my voice works.") {
             status = "Done. Didn't hear it? Turn up the media volume (press a volume button and raise the top bar), " +

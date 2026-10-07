@@ -114,8 +114,10 @@ object Downloads {
                 len(File(dir, AmbientConfig.VAD_MODEL)) >= VAD_MIN, partBytes = part(dir, AmbientConfig.VAD_MODEL)),
             DownloadPlan.Asset(WAKE, "Wake word \"Hey Jarvis\"", wake.sumOf { it.third },
                 wake.all { len(File(dir, it.first)) >= WAKE_MIN }, partBytes = wake.sumOf { part(dir, it.first) }),
-            DownloadPlan.Asset(VOICE, "Jarvis's voice", VOICE_BYTES,
-                LocalVoice.voicePresent(ctx), partBytes = part(dir, "${LocalVoice.VOICE}.tar.bz2")),
+            // The voice chosen in Settings → JARVIS'S VOICE (none to fetch for the phone's voice).
+            LocalVoice.chosenModel(ctx).let { m -> DownloadPlan.Asset(VOICE, "Jarvis's voice${m?.let { " (${it.label})" } ?: ""}",
+                m?.bytes ?: VOICE_BYTES, m == null || LocalVoice.voicePresent(ctx, m),
+                partBytes = part(dir, "${m?.id ?: LocalVoice.VOICE}.tar.bz2")) },
             DownloadPlan.Asset(EMBEDDER, "Memory search (meaning)",
                 SentenceEmbedder.MODEL_BYTES + SentenceEmbedder.VOCAB_BYTES, SentenceEmbedder.downloaded(ctx),
                 partBytes = part(dir, SentenceEmbedder.MODEL) + part(dir, SentenceEmbedder.VOCAB)),
@@ -181,7 +183,8 @@ object Downloads {
             WHISPER -> DownloadPlan.fraction(part(dir, AmbientConfig.ASR_MODEL), WHISPER_BYTES)
             VAD -> DownloadPlan.fraction(part(dir, AmbientConfig.VAD_MODEL), VAD_BYTES)
             WAKE -> wakeFiles(ctx).let { w -> DownloadPlan.fraction(w.sumOf { part(dir, it.first) }, w.sumOf { it.third }) }
-            VOICE -> DownloadPlan.fraction(part(dir, "${LocalVoice.VOICE}.tar.bz2"), VOICE_BYTES)
+            VOICE -> LocalVoice.chosenModel(ctx).let { m ->
+                DownloadPlan.fraction(part(dir, "${m?.id ?: LocalVoice.VOICE}.tar.bz2"), m?.bytes ?: VOICE_BYTES) }
             EMBEDDER -> DownloadPlan.fraction(part(dir, SentenceEmbedder.MODEL) + part(dir, SentenceEmbedder.VOCAB),
                 SentenceEmbedder.MODEL_BYTES + SentenceEmbedder.VOCAB_BYTES)
             SPEAKER -> DownloadPlan.fraction(part(dir, VoicePrints.MODEL), VoicePrints.MODEL_BYTES)

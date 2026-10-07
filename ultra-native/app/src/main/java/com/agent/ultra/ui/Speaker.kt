@@ -300,6 +300,7 @@ class Speaker(context: Context) {
                 }
                 else -> {
                     Log.i(TAG, "SPEAK QUEUE (${clean.length} chars) id=ultra-$g")
+                    tts?.let { applyVoice(it) }
                     val r = tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "ultra-$g")
                     if (r != TextToSpeech.SUCCESS) unavailable = true
                 }
@@ -307,6 +308,19 @@ class Speaker(context: Context) {
         }
         if (create) main.post { createEngine() }
         if (unavailable) { Log.w(TAG, "cannot speak — engine unavailable"); finish(g) }
+    }
+
+    /** Settings → JARVIS'S VOICE on the phone's engine: the chosen installed voice, speed, pitch.
+     *  Read on every speak, so a change applies to the next sentence. */
+    private fun applyVoice(engine: TextToSpeech) {
+        try {
+            engine.setSpeechRate(VoicePrefs.speed(app))
+            engine.setPitch(VoicePrefs.pitch(app))
+            val want = VoicePrefs.phoneVoice(app)
+            if (want.isNotEmpty() && engine.voice?.name != want) {
+                engine.voices?.firstOrNull { it.name == want }?.let { engine.voice = it }
+            }
+        } catch (e: Exception) { Log.w(TAG, "couldn't apply the phone voice settings: ${e.message}") }
     }
 
     private fun createEngine() {

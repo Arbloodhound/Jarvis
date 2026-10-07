@@ -100,11 +100,12 @@ object WaitBudget {
     /** Tokens of thought for a spoken request when the speed isn't known yet. */
     const val SPOKEN_UNKNOWN_SPEED_TOKENS = 48
 
-    /** [budget] cut to about [SPOKEN_SILENT_S] of thinking at [tokPerSec]; never below the
+    /** [budget] cut to about [seconds] (Settings → HOW JARVIS TALKS, default [SPOKEN_SILENT_S]) of thinking at [tokPerSec]; never below the
      *  DEVICE floor, never above [budget]. */
-    fun spoken(budget: Int, tokPerSec: Double?): Int {
-        val cap = if (tokPerSec == null || !tokPerSec.isFinite() || tokPerSec <= 0.0) SPOKEN_UNKNOWN_SPEED_TOKENS
-            else maxOf(floorTokens(IntentRouter.Tier.DEVICE), kotlin.math.floor(tokPerSec * SPOKEN_SILENT_S).toInt())
+    fun spoken(budget: Int, tokPerSec: Double?, seconds: Double = SPOKEN_SILENT_S): Int {
+        val cap = if (tokPerSec == null || !tokPerSec.isFinite() || tokPerSec <= 0.0)
+                (SPOKEN_UNKNOWN_SPEED_TOKENS * seconds / SPOKEN_SILENT_S).toInt()
+            else maxOf(floorTokens(IntentRouter.Tier.DEVICE), kotlin.math.floor(tokPerSec * seconds).toInt())
         return minOf(budget, cap)
     }
 

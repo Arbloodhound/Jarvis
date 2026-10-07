@@ -384,7 +384,7 @@ class AmbientListenService : Service() {
                     // opens a command window, so "Hey Jarvis, stop" works mid-sentence. Only while
                     // Jarvis is really speaking: the voice-print recorder mutes the mic too.
                     val g = gate
-                    if (g != null && com.agent.ultra.ui.SpeechQueue.anyBusy) {
+                    if (g != null && com.agent.ultra.ui.SpeechQueue.anyBusy && com.agent.ultra.ui.VoicePrefs.bargeIn(this)) {
                         if (g.accept(gateAgc.process(fr, CueAudio.gateDb(seg.noiseFloorDb)))) bargeIn()
                     } else g?.reset()
                     continue
@@ -398,7 +398,7 @@ class AmbientListenService : Service() {
                     }
                     woke("sound")
                     Librarian.yieldNow()   // the answer needs the brain: the memory model stops now
-                    WakeChime.play()
+                    chime()
                 }
                 seg.push(fr)
 
@@ -465,7 +465,7 @@ class AmbientListenService : Service() {
         lastHeardText = r.text.take(120)
         // While Jarvis is working or talking, "stop" on its own needs no "Hey Jarvis" (one word, so
         // before the two-word filter below).
-        if ((com.agent.ultra.agent.Brain.anyRunning || com.agent.ultra.ui.SpeechQueue.anyBusy) &&
+        if ((com.agent.ultra.agent.Brain.anyRunning || com.agent.ultra.ui.SpeechQueue.anyBusy) && com.agent.ultra.ui.VoicePrefs.bareStop(this) &&
             r.confidence >= AmbientConfig.MIN_TOKEN_P && com.agent.ultra.agent.Interrupt.isStop(r.text)) {
             stopEverything()
             return
@@ -488,7 +488,7 @@ class AmbientListenService : Service() {
                 // "Hey Jarvis." and a pause: answer, then keep listening for the request (the
                 // window reopens after the reply, while the mic was muted for it).
                 if (windowId == wid) cmdWindowUntil = now + AmbientConfig.FOLLOWUP_MS
-                say(WAKE_REPLY) { if (windowId == wid) cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS }
+                say(com.agent.ultra.ui.VoicePrefs.wakeReply(this)) { if (windowId == wid) cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS }
                 return
             }
             consumedWindowId = wid
@@ -503,9 +503,9 @@ class AmbientListenService : Service() {
             is WakeFilter.Verdict.Addressed -> {
                 // Woken by the words (the acoustic gate missed, or there is none): chime now. Not
                 // for the follow-up utterance after a bare name, which has no wake phrase of its own.
-                if (WakeFilter.addressedCommand(r.text, cfg.wakeName) != null) { woke("words"); Librarian.yieldNow(); WakeChime.play() }
+                if (WakeFilter.addressedCommand(r.text, cfg.wakeName) != null) { woke("words"); Librarian.yieldNow(); chime() }
                 if (v.command.isBlank()) {               // bare name; follow-up will carry the command
-                    say(WAKE_REPLY) { wake.holdFollowUp(System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS) }
+                    say(com.agent.ultra.ui.VoicePrefs.wakeReply(this)) { wake.holdFollowUp(System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS) }
                     return
                 }
                 dispatch(buildContextualRequest(v.command, now))
@@ -564,7 +564,7 @@ class AmbientListenService : Service() {
         val heard = System.currentTimeMillis()
         scope.launch {
             kotlinx.coroutines.delay(ACK_AFTER_MS)
-            if (answeredAt < heard) say(WORKING_REPLY)
+            if (answeredAt < heard && com.agent.ultra.ui.VoicePrefs.sayOnIt(this@AmbientListenService)) say(WORKING_REPLY)
         }
         pendingCommands.trySend(commandSeq.incrementAndGet() to request)
     }
@@ -638,6 +638,9 @@ class AmbientListenService : Service() {
         speech().add(msg, after)
     }
 
+    /** The wake beep, unless switched off (Settings → HOW JARVIS TALKS). */
+    private fun chime() { if (com.agent.ultra.ui.VoicePrefs.wakeChime(this)) WakeChime.play() }
+
     /** "Hey Jarvis" heard over Jarvis's own speech: silence it, chime, and take the next words as a
      *  command (stop, change, or a new request: [dispatch]). */
     private fun bargeIn() {
@@ -649,7 +652,7 @@ class AmbientListenService : Service() {
             cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS
         }
         woke("barge-in")
-        WakeChime.play()
+        chime()
         android.util.Log.i("UltraAmbient", "barge-in: speech stopped by the wake word")
     }
 
@@ -728,7 +731,8 @@ class AmbientListenService : Service() {
     }
 
     companion object {
-        /** What Jarvis says to a bare "Hey Jarvis", and when an answer is still being thought out. */
+        /** What Jarvis says to a bare "Hey Jarvis" by default (Settings → HOW JARVIS TALKS changes
+         *  it), and when an answer is still being thought out. */
         const val WAKE_REPLY = "Yes?"
         const val WORKING_REPLY = "On it."
         private const val ACK_AFTER_MS = 2_500L
