@@ -1,5 +1,40 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## LATEST (session 01K5Mi, 2026-10-07 ~00:45 UTC) — read this first
+**Owner status:** on the Pixel via **Obtainium** (works: fine-grained read-only PAT; app source
+github.com/Arbloodhound/Jarvis; APK regex `jarvis-test\.apk`). Installed 2.6.7 (test build), all
+downloads done, brain = Qwen3-4B-Thinking-2507 Q4_0. Brain test: 6.0 tok/s steady, majfaults 0
+(a first run gave 3.4 tok/s with majfaults 19/108 = model still paging in after load; Thinking depth
+does not affect tok/s). Owner wants DEPLOYMENT + high reasoning; no new features unless asked.
+To deploy: in Obtainium change the regex to `jarvis-release\.apk` (installs over, models stay).
+
+**Branch `claude/new-session-t3cy17` @ 20ee531** (1156 JVM tests, 0 failures):
+- Speed boost = speculative decoding with Qwen3-0.6B Q4_0 draft (382,156,480 B), Settings switch
+  "Speed boost (draft model)" default on, DOWNLOADS item; host-proven identical token streams;
+  phone speed-up UNMEASURED (estimate 1.0–1.6×, Leviathan et al.). Bench (Jarvis Tests 3) now sweeps
+  4/5/6 threads × draft off/on → gives best thread count.
+- Brain-test verdict never recommends a weaker model for the 4B Thinking.
+- Release APK run 8 (37552322105) building → publishes `v2.6.8-test` as GitHub **Latest** (test builds
+  are now normal releases marked Latest, tag v2.6.<run>-test, newest 5 kept). CI caches natives:
+  builds ~6–15 min.
+
+**In progress:** branch `claude/qwen35-preset` (agent; may be WIP): adds selectable (NOT default)
+preset Huihui-Qwen3.5-4B-abliterated Q4_K_M (mradermacher repo, 2,707,514,688 B). Official Qwen3.5-4B
+card: GPQA-D 76.2 vs 65.8 for the current 4B Thinking. Hybrid (Gated DeltaNet) → the native KV
+prefix reuse must fall back to a full re-read when partial seq_rm is unsupported; Qwen3-0.6B draft
+won't match its vocab (must fall back cleanly). Finish, review, merge, build, run Release APK
+(workflow_dispatch, ref claude/new-session-t3cy17, test_kit=true), tell the owner.
+
+**Next for the owner:** update via Obtainium to 2.6.8 (or later) → DOWNLOADS → Download all missing
+(gets the draft) → airplane on, plugged in → Jarvis Tests 3 (speed test, ~15 min) and 5 (Feature check)
+→ Save results → send both files. Then: lock the best thread count; compare Qwen3.5-4B vs 4B Thinking
+on the Feature check; keep the better as default.
+
+**Known small:** DOWNLOADS shows 0% for the voice while it downloads (no progress callback); an old
+saved label for the 1.7B preset may still say "MoE stand-in". Debug-apk/local builds (versionCode 17)
+can no longer install over CI builds (versionCode 17+run).
+Postponed by the owner: GPU (Vulkan), LoRA fine-tune.
+
 ## CURRENT (session 01K5Mi, 2026-10-06 ~23:00 UTC) — read this first
 - All three fix branches from "STOPPED" are implemented and merged, plus fast CI/one-tap updates.
   `claude/new-session-t3cy17` @ ce3896d. 1133 JVM tests, 0 failures; assembleDebug OK.

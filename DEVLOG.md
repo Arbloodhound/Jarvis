@@ -3,6 +3,16 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01K5Mi) — Feature-check fixes, one-tap updates, speed boost
+- Merged (agents): DOWNLOADS + "Download all missing"; ambient hold cap/thermal drops fix, librarian
+  when/todo normaliser, model-aware verdict, thermal 0.75/0.87/0.95; default thinker Qwen3-4B-Thinking-2507
+  + Thinking depth + "Answer now" + ctx from free memory; CI native/gradle caches + per-build GitHub
+  releases for Obtainium (versionCode 17+run); speculative decoding (Qwen3-0.6B draft).
+- PROVEN on the phone (owner screenshots): all downloads complete; 4B Thinking 6.0 tok/s steady,
+  majfaults 0, ~5.2 GB free. CI with warm caches: 6 min (was ~25).
+- SOURCE-FIXED BUT RUNTIME-UNPROVEN: everything else above (speed boost gain, ambient, librarian).
+- Open: qwen35-preset branch (see HANDOFF LATEST); owner's speed test + Feature check files.
+
 ## 2026-10-06 (cloud session 01BUKa, agent) — transcript cues: enrolment mic, no "[Unknown]" with tags off, smaller cue queue, probes
 
 Branch `claude/cue-fixes` from claude/new-session-t3cy17 @ 3880bb2 (not merged). Subsystems C (memory/listen) and F (debug probes).
