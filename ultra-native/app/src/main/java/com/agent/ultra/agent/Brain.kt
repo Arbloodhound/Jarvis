@@ -38,9 +38,33 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     @Volatile private var servedThisRun: List<String> = emptyList()
     private val recipes = Recipes(com.agent.ultra.data.UltraDatabase.get(appContext).recipes())
 
-    /** Called with the final user-facing answer of a run. The voice session
-     * speaks it; the chat screen speaks it when speak-back is enabled. */
+    /** Called with the final user-facing answer of a run (shown by the voice screen; the
+     * ambient service's "On it." check). Speaking goes through [onSpeak]. */
     var onAnswer: ((String) -> Unit)? = null
+
+    /** Says a piece of an answer out loud, queued after anything already being said
+     *  ([com.agent.ultra.ui.SpeechQueue]). A run's answer is spoken sentence by sentence while it is
+     *  written when it comes from the on-device model, else in one piece at the end. */
+    var onSpeak: ((String) -> Unit)? = null
+
+    /** Whether a TYPED request's answer is spoken (the chat's "Speak answers" setting). A spoken
+     *  request is always answered out loud. */
+    var speakTyped: () -> Boolean = { true }
+
+    /** Every request to this brain is spoken (the voice screen, ambient listening). */
+    var spokenAlways: Boolean = false
+
+    // The run in progress: its job (what [stop] cancels), whether [stop] was asked, and how its
+    // answer is spoken.
+    @Volatile private var runJob: kotlinx.coroutines.Job? = null
+    @Volatile private var stopRequested = false
+    @Volatile private var runSpoken = false
+    @Volatile private var speaksThisRun = false
+    @Volatile private var streamedThisRun = false
+    /** Talked over ([hushAll]): the run goes on, but says nothing more. */
+    @Volatile private var hushed = false
+    /** The end of a streamed answer not yet said (set just before [speakOut]). */
+    private var streamTail: String? = null
 
     /** A scam warning raised this run. It is spoken ahead of the answer, so a voice user
      * hears it too (on screen it is already its own message). */
@@ -103,9 +127,36 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     }
 
     private fun speakOut(text: String) {
+        if (stopRequested) return
         val w = spokenWarning
         spokenWarning = null
-        onAnswer?.invoke(if (w != null) "$w\n\n$text" else text)
+        val full = if (w != null) "$w\n\n$text" else text
+        onAnswer?.invoke(full)
+        if (!speaksThisRun || hushed) return
+        // Streamed: only what hasn't been said yet (blank is fine: the speaker skips it).
+        onSpeak?.invoke(if (streamedThisRun) streamTail.orEmpty() else full)
+        streamTail = null
+    }
+
+    /** One finished sentence of an answer still being written: said now (the run's warning first). */
+    private fun speakPart(text: String) {
+        if (stopRequested || !speaksThisRun || hushed) return
+        val w = spokenWarning
+        spokenWarning = null
+        streamedThisRun = true
+        onSpeak?.invoke(if (w != null) "$w $text" else text)
+    }
+
+    /**
+     * Stop this brain's run now (owner: "stop doing something when I tell it to stop"): the run's
+     * coroutine is cancelled, so generation ends at the next token; a screen task stops and any
+     * open confirmation is denied. Nothing more is said or shown for it.
+     */
+    fun stop() {
+        stopRequested = true
+        OfflineNavigator.stopActive()
+        ActionGate.cancelOutstanding()
+        runJob?.cancel()
     }
 
     init {
@@ -180,7 +231,30 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         )
     }
 
-    suspend fun run(userInput: String) = runLock.withLock { runUnlocked(userInput) }
+    /** Runs one request. [spoken]: it was said, not typed, so it is answered out loud and quickly. */
+    suspend fun run(userInput: String, spoken: Boolean = false) = runLock.withLock {
+        stopRequested = false
+        hushed = false
+        runSpoken = spoken || spokenAlways
+        speaksThisRun = runSpoken || speakTyped()
+        streamedThisRun = false
+        streamTail = null
+        running[this] = IntentRouter.requestPart(userInput).trim()
+        try {
+            kotlinx.coroutines.coroutineScope {
+                runJob = coroutineContext[kotlinx.coroutines.Job]
+                runUnlocked(userInput)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Our own stop cancelled the run's scope: the caller goes on. Anything else is the
+            // caller's own cancellation and goes up.
+            if (!stopRequested || kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.isActive == false) throw e
+            android.util.Log.i("UltraBrain", "RUN STOPPED")
+        } finally {
+            runJob = null
+            running.remove(this)
+        }
+    }
 
     private suspend fun runUnlocked(userInput: String) {
         // A paused action belongs to the request that paused it. Left in place it
@@ -608,6 +682,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     /** A run's final, user-facing answer: shown, persisted, and announced to
      * whoever is listening (the voice session, or chat speak-back). */
     private fun answer(text: String) {
+        if (stopRequested) return
         emit(text)
         speakOut(text)
     }
@@ -671,9 +746,12 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         // the finally reads it after generate() has returned.
         var shown: ChatStatus.Status? = null
         val onStart: () -> Unit = { shown = ChatStore.setStatus(ChatStatus.Phase.THINKING) }
+        // Spoken as it is written, a sentence at a time. Not a note: its text is replaced at the end.
+        val chunker = if (speaksThisRun && onSpeak != null && !noteMode) SpeechChunker() else null
         val onPiece: (String) -> Unit = { piece ->
             if (piece.isNotEmpty()) shown?.let { ChatStore.clearStatus(it); shown = null }
             ChatStore.appendTo(msg.id, piece)
+            chunker?.push(piece)?.forEach { speakPart(it) }
         }
         val result = try {
             if (local.isThinkingModel) {
@@ -742,7 +820,9 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 val speed = local.decodeTokPerSec
                 val depth = com.agent.ultra.ui.UltraPrefs.thinkingDepth(appContext)
                     .let { if (it > maxThinkingDepth) maxThinkingDepth else it }
+                // Spoken: answer within seconds, whatever the tier (WaitBudget.spoken).
                 val timed = WaitBudget.budget(route.tier, speed, depth)
+                    .let { if (runSpoken) WaitBudget.spoken(it, speed) else it }
                 val clipped = ThinkBudget.clipToContext(
                     timed, nCtx,
                     LocalPrompt.estimateTokens(prompt), reserve,
@@ -767,12 +847,18 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                     "Answer briefly and honestly.\n\nUser: $userInput\nJarvis:"
                 local.generate(prompt, 400, onStart = onStart) { piece -> onPiece(piece) }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Stopped part-way: keep what was written, marked, and say nothing more.
+            ChatStore.appendTo(msg.id, " … (stopped)")
+            ChatStore.messageById(msg.id)?.let { ChatStore.persist(it) }
+            throw e
         } finally {
             shown?.let { ChatStore.clearStatus(it) }
         }
         result.onFailure {
             ChatStore.setText(msg.id, "Error: on-device model failed — ${it.message}")
         }
+        streamTail = if (result.isFailure) ChatStore.messageById(msg.id)?.text else chunker?.flush()
         var finalMsg = ChatStore.messageById(msg.id) ?: msg
         if (noteMode && result.isSuccess) {
             // "Make a note of what Sam said …": the model wrote the note; the app files it.
@@ -1563,6 +1649,26 @@ RULES:
     }
 
     companion object {
+        /** Brains with a run in progress, and that run's request (its request part). */
+        private val running = java.util.concurrent.ConcurrentHashMap<Brain, String>()
+
+        /** The request being worked on right now in any brain (chat, voice screen, ambient), or null. */
+        val runningRequest: String? get() = running.values.firstOrNull()
+
+        val anyRunning: Boolean get() = running.isNotEmpty()
+
+        /** The runs in progress say nothing more (they go on, shown in the chat): someone is talking
+         *  to Jarvis over its answer, and the rest of it must not talk over them. */
+        fun hushAll() { for (b in running.keys) b.hushed = true }
+
+        /** Stop every run in progress. True when something was running. */
+        fun stopAll(): Boolean {
+            val any = running.isNotEmpty()
+            for (b in running.keys) b.stop()
+            OfflineNavigator.stopActive()
+            return any
+        }
+
         /** The hidden trace being written now, by any Brain (chat or voice); null when none. */
         @Volatile private var activeThink: ThinkBudget? = null
 

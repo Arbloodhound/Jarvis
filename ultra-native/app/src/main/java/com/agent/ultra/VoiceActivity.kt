@@ -38,6 +38,7 @@ import com.agent.ultra.ui.Speaker
 import com.agent.ultra.ui.VoiceInput
 import com.agent.ultra.ui.theme.AgentUltraTheme
 import kotlinx.coroutines.launch
+import com.agent.ultra.ui.queue
 
 /**
  * The ear — a hands-free session.
@@ -53,6 +54,7 @@ import kotlinx.coroutines.launch
 class VoiceActivity : ComponentActivity() {
 
     private lateinit var speaker: Speaker
+    private lateinit var speech: com.agent.ultra.ui.SpeechQueue
     private var micPermission by mutableStateOf(false)
 
     /** Bumped every time the assist gesture arrives. The activity is
@@ -66,6 +68,7 @@ class VoiceActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         showOverLockScreen()
         speaker = Speaker(this)
+        speech = speaker.queue()
 
         micPermission = ContextCompat.checkSelfPermission(
             this, Manifest.permission.RECORD_AUDIO
@@ -82,36 +85,39 @@ class VoiceActivity : ComponentActivity() {
                 var reply by remember { mutableStateOf("") }
 
                 val engine = remember { LocalModelEngine.shared(applicationContext) }
-                val brain = remember {
-                    Brain(applicationContext, engine).also { b ->
-                        // Spoken: no "Answer now" button, so keep thinking short.
-                        b.maxThinkingDepth = com.agent.ultra.agent.WaitBudget.Depth.QUICK
-                        b.onAnswer = { text ->
-                            reply = text
-                            state = "speaking"
-                            // Mute the ambient mic while we speak, so TTS isn't re-heard.
-                            // Bounded: if TTS never calls back (error/interrupt) the mic still returns.
-                            com.agent.ultra.listen.AmbientListenService.instance?.let {
-                                it.mutedUntil = System.currentTimeMillis() +
-                                    com.agent.ultra.listen.EchoGuard.muteMsFor(text)
-                            }
-                            speaker.speak(text) {
-                                state = "done"
-                                com.agent.ultra.listen.AmbientListenService.instance?.let {
-                                    it.mutedUntil = System.currentTimeMillis() +
-                                        com.agent.ultra.listen.AmbientConfig.ECHO_GUARD_MS
-                                }
-                            }
+                /** True while a run is in flight. */
+                var running by remember { mutableStateOf(false) }
+                remember {
+                    // Mute the ambient mic while we speak, so TTS isn't re-heard. Bounded: if TTS
+                    // never calls back (error/interrupt) the mic still returns.
+                    speech.onStart = { text ->
+                        runOnUiThread { state = "speaking" }
+                        com.agent.ultra.listen.AmbientListenService.instance?.let {
+                            it.mutedUntil = System.currentTimeMillis() + com.agent.ultra.listen.EchoGuard.muteMsFor(text)
                         }
                     }
+                    speech.onIdle = {
+                        runOnUiThread { if (state == "speaking") state = if (running) "working" else "done" }
+                        com.agent.ultra.listen.AmbientListenService.instance?.let {
+                            it.mutedUntil = System.currentTimeMillis() + com.agent.ultra.listen.AmbientConfig.ECHO_GUARD_MS
+                        }
+                    }
+                    true
                 }
-                /** True while a run is in flight; "Speak again" waits for it. */
-                var running by remember { mutableStateOf(false) }
+                val brain = remember {
+                    Brain(applicationContext, engine).also { b ->
+                        // Spoken: no "Answer now" button, so keep thinking short; every answer is
+                        // said out loud, sentence by sentence as it is written.
+                        b.maxThinkingDepth = com.agent.ultra.agent.WaitBudget.Depth.QUICK
+                        b.spokenAlways = true
+                        b.onAnswer = { text -> reply = text }
+                        b.onSpeak = { text -> speech.add(text) }
+                    }
+                }
 
                 fun say(msg: String) {
                     reply = msg
-                    state = "speaking"
-                    speaker.speak(msg) { state = "done" }
+                    speech.add(msg)
                 }
 
                 /**
@@ -133,7 +139,35 @@ class VoiceActivity : ComponentActivity() {
                                 say("Something went wrong: ${e.message}")
                             } finally {
                                 running = false
+                                if (!speech.busy && state == "working") state = "done"
                             }
+                        }
+                    }
+                }
+
+                /** Runs [request] once the run in progress has ended (or stopped). */
+                fun runAfter(request: String) {
+                    ChatStore.agentScope.launch {
+                        while (com.agent.ultra.agent.Brain.anyRunning) kotlinx.coroutines.delay(150)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { runBrain { brain.run(request) } }
+                    }
+                }
+
+                /** What was said: a request, or, mid-run, a change to the run ([com.agent.ultra.agent.Interrupt]). */
+                fun heardRequest(spoken: String) {
+                    val running = com.agent.ultra.agent.Brain.runningRequest
+                    when (val d = com.agent.ultra.agent.Interrupt.decide(spoken, running)) {
+                        com.agent.ultra.agent.Interrupt.Decision.Stop -> {
+                            com.agent.ultra.agent.Brain.stopAll()
+                            com.agent.ultra.ui.SpeechQueue.stopAll()
+                            say("Stopped.")
+                        }
+                        is com.agent.ultra.agent.Interrupt.Decision.Run -> runBrain { brain.run(d.request) }
+                        is com.agent.ultra.agent.Interrupt.Decision.After -> { say("Okay, after this."); runAfter(d.request) }
+                        is com.agent.ultra.agent.Interrupt.Decision.Replace -> {
+                            com.agent.ultra.agent.Brain.stopAll()
+                            com.agent.ultra.ui.SpeechQueue.stopAll()
+                            runAfter(d.request)
                         }
                     }
                 }
@@ -153,13 +187,13 @@ class VoiceActivity : ComponentActivity() {
                         onError = { msg ->
                             state = "error"
                             reply = msg
-                            speaker.speak(msg) { state = "done" }
+                            speech.add(msg)
                         },
                     ) { spoken ->
                         heard = spoken
                         state = "working"
                         ChatStore.add(ChatMessage(fromUser = true, text = spoken))
-                        runBrain { brain.run(spoken) }
+                        heardRequest(spoken)
                     }
                 }
                 // The recognizer is a system service binding; let it go with the session.
@@ -171,7 +205,10 @@ class VoiceActivity : ComponentActivity() {
 
                 fun listen() {
                     heard = ""; reply = ""
-                    speaker.stop()
+                    // Jarvis stops talking when you go to speak (the mic must not hear it); a run
+                    // goes on quietly, and what you say next can stop or change it.
+                    com.agent.ultra.agent.Brain.hushAll()
+                    com.agent.ultra.ui.SpeechQueue.stopAll()
                     state = if (listener.start()) "listening" else "error"
                 }
 
@@ -228,11 +265,11 @@ class VoiceActivity : ComponentActivity() {
                                 horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                             ) {
                                 Button(enabled = !running, onClick = {
-                                    speaker.stop()
+                                    speech.stop()
                                     runBrain { brain.resolvePending(true) }
                                 }) { Text("Confirm") }
                                 TextButton(enabled = !running, onClick = {
-                                    speaker.stop()
+                                    speech.stop()
                                     runBrain { brain.resolvePending(false) }
                                 }) { Text("Cancel") }
                             }
@@ -241,7 +278,12 @@ class VoiceActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                         ) {
-                            Button(enabled = !running, onClick = { listen() }) { Text("Speak again") }
+                            // Mid-run too: speak to stop or change what it is doing.
+                            Button(onClick = { listen() }) { Text("Speak again") }
+                            if (running) TextButton(onClick = {
+                                com.agent.ultra.agent.Brain.stopAll()
+                                com.agent.ultra.ui.SpeechQueue.stopAll()
+                            }) { Text("Stop") }
                             TextButton(onClick = { finish() }) { Text("Done") }
                         }
                     }
@@ -293,6 +335,7 @@ class VoiceActivity : ComponentActivity() {
         if (com.agent.ultra.listen.AmbientBridge.onCommand === ambientHandler) {
             com.agent.ultra.listen.AmbientBridge.onCommand = null
         }
+        com.agent.ultra.ui.SpeechQueue.unregister(speech)
         speaker.shutdown()
         super.onDestroy()
     }

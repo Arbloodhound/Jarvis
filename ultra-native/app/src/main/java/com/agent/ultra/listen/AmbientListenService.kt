@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.agent.ultra.MainActivity
+import com.agent.ultra.ui.queue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -178,7 +179,11 @@ class AmbientListenService : Service() {
         val backlog = ArrayDeque<Utterance>()
         val maxHold = AmbientBacklog.maxHoldMs(whisperPinned = whisperCpus.isNotEmpty())
         fun idleNow() = AmbientBacklog.mayTranscribe(busy.value, System.currentTimeMillis(), busyChangedAt.get())
-        fun ready() = AmbientBacklog.shouldDrain(busy.value, System.currentTimeMillis(), busyChangedAt.get(),
+        // Speech to Jarvis (a wake window) is transcribed at once, and, with whisper on its own cores,
+        // everything heard while a run is going: it may be "stop" or a change to the run.
+        fun urgent() = backlog.any { it.windowId != 0L } ||
+            (whisperCpus.isNotEmpty() && com.agent.ultra.agent.Brain.anyRunning)
+        fun ready() = urgent() || AmbientBacklog.shouldDrain(busy.value, System.currentTimeMillis(), busyChangedAt.get(),
             backlog.firstOrNull()?.endedAt, maxHold)
         var heldWindow = 0L
         var capLogged = false
@@ -323,6 +328,13 @@ class AmbientListenService : Service() {
                 android.media.audiofx.AutomaticGainControl.create(rec.audioSessionId)?.also { it.enabled = true }
             else null
         } catch (_: Exception) { null }
+        // And its echo canceller: Jarvis's own voice is taken out of the mic, so "Hey Jarvis" said
+        // over it (barge-in, below) is heard and its speech doesn't wake it.
+        val aecEffect = try {
+            if (android.media.audiofx.AcousticEchoCanceler.isAvailable())
+                android.media.audiofx.AcousticEchoCanceler.create(rec.audioSessionId)?.also { it.enabled = true }
+            else null
+        } catch (_: Exception) { null }
         val gateAgc = MicGain.Agc()
 
         val frame = ShortArray(AmbientConfig.FRAME)
@@ -338,8 +350,19 @@ class AmbientListenService : Service() {
                 }
                 if (n == 0) continue
                 tap?.offer(frame, n)
-                if (System.currentTimeMillis() < mutedUntil) { seg.reset(); gate?.reset(); continue }
                 val fr = if (n == frame.size) frame else frame.copyOf(n)
+                if (System.currentTimeMillis() < mutedUntil) {
+                    seg.reset()
+                    // Barge-in (owner: "stop doing something when I tell it to"): while Jarvis talks,
+                    // only the "Hey Jarvis" sound model listens. It firing cuts the speech off and
+                    // opens a command window, so "Hey Jarvis, stop" works mid-sentence. Only while
+                    // Jarvis is really speaking: the voice-print recorder mutes the mic too.
+                    val g = gate
+                    if (g != null && com.agent.ultra.ui.SpeechQueue.anyBusy) {
+                        if (g.accept(gateAgc.process(fr, CueAudio.gateDb(seg.noiseFloorDb)))) bargeIn()
+                    } else g?.reset()
+                    continue
+                }
                 // Acoustic gate: when present, it decides when we're addressed.
                 // whisper then runs only for the command window + throttled memory.
                 if (gate?.accept(gateAgc.process(fr, CueAudio.gateDb(seg.noiseFloorDb))) == true) {
@@ -369,6 +392,7 @@ class AmbientListenService : Service() {
         } finally {
             capturing = false
             try { agcEffect?.release() } catch (_: Exception) {}
+            try { aecEffect?.release() } catch (_: Exception) {}
             try { rec.stop() } catch (_: Exception) {}
             rec.release()
         }
@@ -402,6 +426,13 @@ class AmbientListenService : Service() {
         if (r == null) return
         lastTranscribedAt = System.currentTimeMillis()
         lastHeardText = r.text.take(120)
+        // While Jarvis is working or talking, "stop" on its own needs no "Hey Jarvis" (one word, so
+        // before the two-word filter below).
+        if ((com.agent.ultra.agent.Brain.anyRunning || com.agent.ultra.ui.SpeechQueue.anyBusy) &&
+            r.confidence >= AmbientConfig.MIN_TOKEN_P && com.agent.ultra.agent.Interrupt.isStop(r.text)) {
+            stopEverything()
+            return
+        }
         if (!kept(r)) return
 
         val now = System.currentTimeMillis()
@@ -454,33 +485,66 @@ class AmbientListenService : Service() {
         return (listOf(cfg.wakeName) + fromModel).filter { it.isNotBlank() }
     }
 
-    /** Commands heard while the brain was busy (transcribed past the hold cap), in order. */
-    private val pendingCommands = Channel<String>(Channel.UNLIMITED)
+    /** Commands heard while the brain was busy (transcribed past the hold cap), in order, numbered:
+     *  a "stop" drops every one numbered up to [clearedUpTo]. */
+    private val pendingCommands = Channel<Pair<Long, String>>(Channel.UNLIMITED)
     private var commandRunner: Job? = null
+    private val commandSeq = java.util.concurrent.atomic.AtomicLong(0)
+    private val clearedUpTo = java.util.concurrent.atomic.AtomicLong(0)
 
     /**
      * Runs [request] once the on-device brain is idle. Past the hold cap whisper transcribes
      * while the brain is still answering; a command it hears then waits here, so it runs after
      * the current answer (as when transcription itself waited) instead of beside it.
      */
-    @Synchronized private fun dispatch(request: String) {
+    @Synchronized private fun dispatch(heardRequest: String) {
         // The memory model stops for a command; only an answer already being given makes it wait.
         Librarian.yieldNow()
-        val busy = com.agent.ultra.local.LocalModelEngine.shared(applicationContext).busy
-        if (commandRunner == null) commandRunner = scope.launch {
-            for (r in pendingCommands) {
-                if (busy.value) android.util.Log.i("UltraAmbient", "command heard while the brain is busy: runs after it")
-                busy.first { !it }
-                dispatchNow(r)
+        // Mid-run, what is said changes the run (owner, 2026-10-07): "stop" stops everything,
+        // "also …" runs after it, anything else stops it and runs instead (Interrupt).
+        val request = when (val d = com.agent.ultra.agent.Interrupt.decide(heardRequest, com.agent.ultra.agent.Brain.runningRequest)) {
+            com.agent.ultra.agent.Interrupt.Decision.Stop -> { stopEverything(); return }
+            is com.agent.ultra.agent.Interrupt.Decision.Run -> d.request
+            is com.agent.ultra.agent.Interrupt.Decision.After -> {
+                android.util.Log.i("UltraAmbient", "add-on heard mid-run: runs after it")
+                answeredAt = System.currentTimeMillis()
+                say("Okay, after this.")
+                pendingCommands.trySend(commandSeq.incrementAndGet() to d.request)
+                ensureCommandRunner()
+                return
+            }
+            is com.agent.ultra.agent.Interrupt.Decision.Replace -> {
+                android.util.Log.i("UltraAmbient", "change heard mid-run: the run stops, the new request runs")
+                clearedUpTo.set(commandSeq.get())
+                com.agent.ultra.agent.Brain.stopAll()
+                com.agent.ultra.ui.SpeechQueue.stopAll()
+                mutedUntil = 0L
+                d.request
             }
         }
+        ensureCommandRunner()
         // "On it." from when the command was heard, not from when it got its turn: a wait counts.
         val heard = System.currentTimeMillis()
         scope.launch {
             kotlinx.coroutines.delay(ACK_AFTER_MS)
             if (answeredAt < heard) say(WORKING_REPLY)
         }
-        pendingCommands.trySend(request)
+        pendingCommands.trySend(commandSeq.incrementAndGet() to request)
+    }
+
+    @Synchronized private fun ensureCommandRunner() {
+        val busy = com.agent.ultra.local.LocalModelEngine.shared(applicationContext).busy
+        if (commandRunner == null) commandRunner = scope.launch {
+            for ((seq, r) in pendingCommands) {
+                if (seq <= clearedUpTo.get()) continue          // stopped before its turn
+                if (busy.value) android.util.Log.i("UltraAmbient", "command heard while the brain is busy: runs after it")
+                busy.first { !it }
+                // A stopped run lets go of the engine at its next token but may still be unwinding.
+                while (com.agent.ultra.agent.Brain.anyRunning) delay(100)
+                if (seq <= clearedUpTo.get()) continue
+                dispatchNow(r)
+            }
+        }
     }
 
     /** The voice screen's brain answers when it is open; otherwise a brain owned by
@@ -519,33 +583,66 @@ class AmbientListenService : Service() {
     /** When the service's brain last spoke an answer (the "On it." check). */
     @Volatile private var answeredAt = 0L
 
+    /** Everything this service says, in order: replies, then answers sentence by sentence. The mic
+     *  is muted for each piece (echo guard), and unmuted shortly after the last. */
+    @Synchronized private fun speech(): com.agent.ultra.ui.SpeechQueue = speechRef ?: run {
+        val speaker = speakerRef ?: com.agent.ultra.ui.Speaker(this).also { speakerRef = it }
+        speaker.queue().also { q ->
+            q.onStart = { text -> mutedUntil = System.currentTimeMillis() + EchoGuard.muteMsFor(text) }
+            q.onIdle = { mutedUntil = System.currentTimeMillis() + AmbientConfig.ECHO_GUARD_MS }
+            speechRef = q
+        }
+    }
+    private var speechRef: com.agent.ultra.ui.SpeechQueue? = null
+
     /** Speaks [msg] in Jarvis's voice with the mic muted for it (echo guard), then [after]. */
     private fun say(msg: String, after: () -> Unit = {}) {
         mutedUntil = System.currentTimeMillis() + EchoGuard.muteMsFor(msg)
-        scope.launch(Dispatchers.Main) {   // as the brain's answers are spoken (the transcriber calls this too)
-            val speaker = speakerRef ?: com.agent.ultra.ui.Speaker(this@AmbientListenService).also { speakerRef = it }
-            speaker.speak(msg) {
-                mutedUntil = System.currentTimeMillis() + AmbientConfig.ECHO_GUARD_MS
-                after()
-            }
+        speech().add(msg, after)
+    }
+
+    /** "Hey Jarvis" heard over Jarvis's own speech: silence it, chime, and take the next words as a
+     *  command (stop, change, or a new request: [dispatch]). */
+    private fun bargeIn() {
+        com.agent.ultra.agent.Brain.hushAll()
+        com.agent.ultra.ui.SpeechQueue.stopAll()
+        mutedUntil = 0L                      // after stopAll: its idle callback re-mutes briefly
+        synchronized(windowLock) {
+            windowId++
+            cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS
         }
+        woke("barge-in")
+        WakeChime.play()
+        android.util.Log.i("UltraAmbient", "barge-in: speech stopped by the wake word")
+    }
+
+    /** "Stop": every run, every queued command and all speech, then a short "Stopped." */
+    private fun stopEverything() {
+        clearedUpTo.set(commandSeq.get())
+        val ran = com.agent.ultra.agent.Brain.stopAll()
+        val spoke = com.agent.ultra.ui.SpeechQueue.stopAll()
+        mutedUntil = 0L
+        answeredAt = System.currentTimeMillis()
+        lastCommandDoneAt = System.currentTimeMillis()
+        android.util.Log.i("UltraAmbient", "STOP heard: run=$ran speech=$spoke")
+        say(if (ran || spoke) "Stopped." else "Okay.")
     }
 
     @Synchronized private fun fallbackBrain(): com.agent.ultra.agent.Brain = brainRef ?: run {
-        val speaker = speakerRef ?: com.agent.ultra.ui.Speaker(this).also { speakerRef = it }
+        val speech = speech()
         com.agent.ultra.agent.Brain(
             applicationContext, com.agent.ultra.local.LocalModelEngine.shared(applicationContext)
         ).also { b ->
-            // Spoken: no "Answer now" button, so keep thinking short.
+            // Spoken: no "Answer now" button, so keep thinking short, and say the answer as it is
+            // written (sentence by sentence) instead of after the whole of it.
             b.maxThinkingDepth = com.agent.ultra.agent.WaitBudget.Depth.QUICK
+            b.spokenAlways = true
             b.recordTurns = false   // what it is asked was heard, so it is in memory already
-            b.onAnswer = { text ->
+            b.onAnswer = { answeredAt = System.currentTimeMillis() }
+            b.onSpeak = { text ->
                 answeredAt = System.currentTimeMillis()
-                // Same echo guard as VoiceActivity: mute while speaking, bounded.
                 mutedUntil = System.currentTimeMillis() + EchoGuard.muteMsFor(text)
-                speaker.speak(text) {
-                    mutedUntil = System.currentTimeMillis() + AmbientConfig.ECHO_GUARD_MS
-                }
+                speech.add(text)
             }
             brainRef = b
         }
@@ -586,6 +683,7 @@ class AmbientListenService : Service() {
     override fun onDestroy() {
         // Native handles are freed by runPipeline's finally once in-flight calls return.
         captureJob?.cancel(); scope.cancel()
+        speechRef?.let { com.agent.ultra.ui.SpeechQueue.unregister(it) }
         try { speakerRef?.shutdown() } catch (_: Exception) {}
         wakeLock?.let { if (it.isHeld) it.release() }
         instance = null

@@ -58,4 +58,13 @@ class WaitBudgetTest {
     }
 
     @Test fun lightBudgetLowered() = assertTrue(Tier.LIGHT.thinkBudget < 160)
+
+    @Test fun spokenRequestsThinkOnlySeconds() {
+        // 9 tok/s: 5 s = 45 tokens, under every tier's budget.
+        assertEquals(45, WaitBudget.spoken(512, 9.0))
+        assertEquals(30, WaitBudget.spoken(30, 9.0))                    // never above the budget
+        assertEquals(16, WaitBudget.spoken(512, 1.0))                   // the DEVICE floor on a slow phone
+        assertEquals(WaitBudget.SPOKEN_UNKNOWN_SPEED_TOKENS, WaitBudget.spoken(512, null))
+        assertEquals(WaitBudget.SPOKEN_UNKNOWN_SPEED_TOKENS, WaitBudget.spoken(512, Double.NaN))
+    }
 }

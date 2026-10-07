@@ -3,6 +3,25 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — spoken answers start at once; "stop" and mid-task changes
+Owner: answer right away, out loud, when spoken to; stop when told to stop; a new instruction mid-action should add
+to, change or stop the current task.
+- Speaking as it writes: `SpeechChunker` cuts the on-device answer into sentences as they are generated
+  (`Brain.emitLocal`); each is said at once through a `SpeechQueue` (sequential, no more cut-offs; queued pieces go out
+  together). Before, nothing was said until the whole answer was done. Cloud/tool answers are still said at the end.
+- Spoken requests (ambient, voice screen, chat 🎙) think ~5 s at most (`WaitBudget.spoken`; was up to 20 s) and are
+  always answered out loud, even with "Speak answers" off (typed ones follow that setting).
+- Stop / change: `Interrupt.decide` — "stop", "cancel that", "never mind", "shut up"… stops every run (`Brain.stopAll`:
+  the run's scope is cancelled, generation ends at the next token, screen tasks stop, confirmations denied) and all
+  speech; "also …/and then …/… too" runs after the current task; anything else stops it and runs instead, with the
+  earlier request in front when the new words refer back ("make it 7am" → "set an alarm for 6am — change: make it 7am").
+  Chat: Send and 🎙 work mid-run, Stop button whenever something runs. Voice screen: "Speak again" + Stop mid-run.
+- Hands-free: "Hey Jarvis" over Jarvis's own speech cuts it off (the wake model keeps listening while the mic is muted
+  for speech; Android's echo canceller added to the capture); the run then stays quiet (`Brain.hushAll`). While a task
+  runs, a bare "stop" needs no wake word, and speech is transcribed at once (whisper on its own cores) instead of held.
+1229 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN (barge-in depends on the wake model not firing on
+Jarvis's own voice; the "refers back" rule is a word list, so some changes may run as fresh requests).
+
 ## 2026-10-07 (session 01BUKa) — listening hears speech from further away
 Owner: words missed from a little further from the phone though speaking loudly. Ambient speech gate
 -50 dBFS / +10 dB over the noise floor → -58 dBFS / +8 dB; Android's AutomaticGainControl effect on the capture

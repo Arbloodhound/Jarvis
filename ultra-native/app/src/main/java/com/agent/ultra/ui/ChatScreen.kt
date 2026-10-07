@@ -63,8 +63,8 @@ fun ChatScreen(
 
     /** Every agent run from this screen: one at a time, marked as thinking,
      * owned by the app scope, and a fault becomes a message instead of a crash. */
-    fun launchRun(block: suspend () -> Unit) {
-        if (ChatStore.thinking.value) return
+    fun launchRun(block: suspend () -> Unit): Boolean {
+        if (ChatStore.thinking.value) return false
         ChatStore.thinking.value = true
         ChatStore.agentScope.launch {
             try {
@@ -77,12 +77,13 @@ fun ChatScreen(
                 ChatStore.thinking.value = false
             }
         }
+        return true
     }
 
-    /** One request from this screen, typed or spoken: shown, then run. "/local …" is the raw-model dev path. */
-    fun sendNow(text: String) {
-        ChatStore.add(ChatMessage(fromUser = true, text = text))
-        launchRun {
+    /** Runs [request] now; false when another run holds the screen. "/local …" is the raw-model dev path. */
+    fun start(request: String, spoken: Boolean): Boolean {
+        val text = request
+        return launchRun {
             if (text.startsWith("/local ")) {
                 val prompt = text.removePrefix("/local ").trim()
                 val msg = ChatMessage(false, "")
@@ -91,7 +92,47 @@ fun ChatScreen(
                 r.onFailure { ChatStore.setText(msg.id, "Error: ${it.message}") }
                 ChatStore.messageById(msg.id)?.let { ChatStore.persist(it) }
             } else {
-                brain.run(text)
+                brain.run(text, spoken)
+            }
+        }
+    }
+
+    /** Runs [request] once the run in progress has ended (or stopped). */
+    fun startAfter(request: String, spoken: Boolean) {
+        ChatStore.agentScope.launch {
+            while (true) {
+                while (ChatStore.thinking.value) kotlinx.coroutines.delay(150)
+                if (kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { start(request, spoken) }) break
+            }
+        }
+    }
+
+    /**
+     * One request from this screen, typed or spoken ([spoken]: answered out loud): shown, then run.
+     * While a run is going it changes that run instead (owner: "stop … or modify its current task"):
+     * "stop" stops it and any speech, "also …" runs after it, anything else stops it and runs in its
+     * place ([com.agent.ultra.agent.Interrupt]).
+     */
+    fun sendNow(text: String, spoken: Boolean = false) {
+        ChatStore.add(ChatMessage(fromUser = true, text = text))
+        val busy = ChatStore.thinking.value
+        val running = if (busy) com.agent.ultra.agent.Brain.runningRequest.orEmpty() else null
+        when (val d = com.agent.ultra.agent.Interrupt.decide(text, running)) {
+            com.agent.ultra.agent.Interrupt.Decision.Stop -> {
+                val ran = com.agent.ultra.agent.Brain.stopAll()
+                val spoke = SpeechQueue.stopAll()
+                ChatStore.add(ChatMessage(false, if (ran || spoke) "Stopped." else "Nothing to stop."))
+            }
+            is com.agent.ultra.agent.Interrupt.Decision.Run ->
+                if (!start(d.request, spoken)) startAfter(d.request, spoken)
+            is com.agent.ultra.agent.Interrupt.Decision.After -> {
+                ChatStore.add(ChatMessage(false, "Okay — after this."))
+                startAfter(d.request, spoken)
+            }
+            is com.agent.ultra.agent.Interrupt.Decision.Replace -> {
+                com.agent.ultra.agent.Brain.stopAll()
+                SpeechQueue.stopAll()
+                startAfter(d.request, spoken)
             }
         }
     }
@@ -486,9 +527,10 @@ fun ChatScreen(
                 ) { spoken ->
                     listening = false
                     // Speaking is asking: what was said runs at once, like Send (owner, 2026-10-07: it only
-                    // filled the box, so a spoken request did nothing until Send was pressed).
+                    // filled the box, so a spoken request did nothing until Send was pressed), and is
+                    // answered out loud. Said mid-run, it stops or changes that run (sendNow).
                     val text = (input + " " + spoken).trim()
-                    if (text.isNotEmpty() && !ChatStore.thinking.value) { input = ""; sendNow(text) } else input = text
+                    if (text.isNotEmpty()) { input = ""; sendNow(text, spoken = true) }
                 }
             }
             DisposableEffect(speechHelper) { onDispose { speechHelper.stop() } }
@@ -505,15 +547,22 @@ fun ChatScreen(
                 ) {
                     askMic.launch(android.Manifest.permission.RECORD_AUDIO)
                 } else {
+                    // Jarvis stops talking when you go to speak (the mic must not hear it), and a run
+                    // still answering stays quiet; what you say can then stop or change it.
+                    com.agent.ultra.agent.Brain.hushAll()
+                    SpeechQueue.stopAll()
                     listening = speechHelper.start()
                 }
             }) {
                 Text(if (listening) "🎙…" else "🎙")
             }
-            // While the on-device model drives another app: stop it (generation stops at the next
-            // token; any open confirmation is denied).
-            if (status?.phase == ChatStatus.Phase.NAVIGATING) {
-                TextButton(onClick = { com.agent.ultra.agent.OfflineNavigator.stopActive() }) { Text("Stop") }
+            // While anything runs (thinking, answering, driving another app): stop it and any
+            // speech. Generation stops at the next token; any open confirmation is denied.
+            if (thinking) {
+                TextButton(onClick = {
+                    com.agent.ultra.agent.Brain.stopAll()
+                    SpeechQueue.stopAll()
+                }) { Text("Stop") }
             }
             // While the on-device model thinks silently (up to minutes at Thinking depth: Deep):
             // end the thinking and get the answer from what it has so far. Not while "Thinking…"
@@ -522,8 +571,8 @@ fun ChatScreen(
             if (status?.phase == ChatStatus.Phase.THINKING && com.agent.ultra.agent.Brain.thinkingActive) {
                 TextButton(onClick = { com.agent.ultra.agent.Brain.answerNow() }) { Text("Answer now") }
             }
+            // Enabled mid-run too: what is sent then stops or changes the run (sendNow).
             Button(
-                enabled = !thinking,
                 onClick = {
                     val text = input.trim()
                     if (text.isEmpty()) return@Button

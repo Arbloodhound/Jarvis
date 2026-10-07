@@ -184,6 +184,7 @@ object ChatStore {
     private var chatBrain: com.agent.ultra.agent.Brain? = null
     private var chatBrainVersion = 0
     private var chatSpeaker: Speaker? = null
+    private var chatSpeech: SpeechQueue? = null
 
     fun chatBrain(
         context: Context,
@@ -196,8 +197,11 @@ object ChatStore {
         ) return current
         val app = context.applicationContext
         val speaker = chatSpeaker ?: Speaker(app).also { chatSpeaker = it }
+        val speech = chatSpeech ?: speaker.queue().also { chatSpeech = it }
         return com.agent.ultra.agent.Brain(app, engine).also { b ->
-            b.onAnswer = { text -> if (UltraPrefs.speakAnswers(app)) speaker.speak(text) }
+            // A spoken request is always answered out loud; a typed one when "Speak answers" is on.
+            b.speakTyped = { UltraPrefs.speakAnswers(app) }
+            b.onSpeak = { text -> speech.add(text) }
             chatBrain = b
             chatBrainVersion = configVersion
         }

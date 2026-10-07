@@ -89,6 +89,25 @@ object WaitBudget {
         return maxOf(timed, floorTokens(tier)).coerceAtMost(ceiling)
     }
 
+    /**
+     * Silent thinking allowed before a SPOKEN request is answered (owner, 2026-10-07: "answer right
+     * away … vocally"). A voice reply that starts after 20 s of silence sounds broken; this is the
+     * LIGHT tier's wait, for every tier. The answer is then spoken sentence by sentence as it is
+     * written ([SpeechChunker]).
+     */
+    const val SPOKEN_SILENT_S = 5.0
+
+    /** Tokens of thought for a spoken request when the speed isn't known yet. */
+    const val SPOKEN_UNKNOWN_SPEED_TOKENS = 48
+
+    /** [budget] cut to about [SPOKEN_SILENT_S] of thinking at [tokPerSec]; never below the
+     *  DEVICE floor, never above [budget]. */
+    fun spoken(budget: Int, tokPerSec: Double?): Int {
+        val cap = if (tokPerSec == null || !tokPerSec.isFinite() || tokPerSec <= 0.0) SPOKEN_UNKNOWN_SPEED_TOKENS
+            else maxOf(floorTokens(IntentRouter.Tier.DEVICE), kotlin.math.floor(tokPerSec * SPOKEN_SILENT_S).toInt())
+        return minOf(budget, cap)
+    }
+
     /** Settings value → [Depth]; anything unknown → [Depth.BALANCED] (the default). */
     fun depthOf(name: String?): Depth = Depth.values().firstOrNull { it.name == name } ?: Depth.BALANCED
 }
