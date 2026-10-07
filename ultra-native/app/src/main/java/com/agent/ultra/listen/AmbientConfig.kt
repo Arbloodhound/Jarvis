@@ -81,13 +81,14 @@ class AmbientConfig(context: Context) {
 
         // Stage 1: energy gate (cheap, runs on every frame)
         // Speech from across the room (owner, 2026-10-07) sat under the old -50 dBFS / +10 dB gate.
-        const val GATE_ABOVE_FLOOR_DB = 6f    // speech must be this far above the room's noise floor
+        const val GATE_ABOVE_FLOOR_DB = 8f    // speech must be this far above the room's noise floor
         const val GATE_ABS_MIN_DB = -62f      // and never quieter than this (dBFS)
         const val START_FRAMES = 3            // ~96 ms of loud audio to open a segment
         const val PRE_ROLL_FRAMES = 10        // keep ~320 ms before onset so first syllable isn't clipped
         const val HANGOVER_MS = 700           // silence that closes a segment
         const val MIN_UTTER_MS = 400          // shorter = cough/click, dropped
         const val MAX_UTTER_MS = 28_000       // whisper window is 30 s
+        const val COMMAND_MAX_MS = 9_000      // a spoken command after the wake word
 
         // Stage 2: whisper.cpp built-in Silero VAD drops non-speech inside segments.
         // Stage 3: text filters before anything is stored

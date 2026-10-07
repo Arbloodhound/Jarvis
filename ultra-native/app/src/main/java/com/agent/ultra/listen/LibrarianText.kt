@@ -77,6 +77,23 @@ object LibrarianChunker {
  * model sorting notes gains little from reasoning and the tokens cost battery.
  */
 object LibrarianPrompt {
+    /**
+     * The example notes in the prompt below. A small model reading noise copies them as real notes
+     * (Pixel, 2026-10-07: "Car service at the Kwik Fit garage", "Call the bank about the new card"
+     * stored as the owner's own); [NoteParser] drops any note this close to one of them.
+     */
+    val EXAMPLE_TEXTS = listOf(
+        "Me and Maria planned the weekend: the car service, the bank card and her cousin Tom",
+        "Car service at the Kwik Fit garage",
+        "Call the bank about the new card",
+        "Tom is Maria's cousin and works at the hospital",
+        "Alex hedged about the new budget",
+        "I guess it could sort of work, we'll see",
+    )
+
+    /** [text] is (nearly) one of the prompt's own examples. */
+    fun copiesExample(text: String): Boolean = EXAMPLE_TEXTS.any { NoteMerge.similarity(it, text) >= 0.8 }
+
     /** Room for a summary and ~15 notes; an observation line (quote + fields) is ~60-70 tokens. */
     const val MAX_TOKENS = 1100
 

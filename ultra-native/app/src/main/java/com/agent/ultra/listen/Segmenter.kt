@@ -31,6 +31,16 @@ class Segmenter(private val onUtterance: (ShortArray, Int) -> Unit) {
     /** True while a segment is open (speech started, not yet closed by silence). */
     val speaking: Boolean get() = inSpeech
 
+    /** Length of the open segment so far, ms (0 when none). */
+    val openMs: Int get() = if (inSpeech) current.size * FRAME_MS else 0
+
+    /** Longest segment before it is cut ([MAX_UTTER_MS]; the listener shortens it while a command
+     *  window is open, so a command isn't held behind half a minute of room noise). */
+    var maxMs: Int = MAX_UTTER_MS
+
+    /** Close the open segment now (the wake word was heard in the middle of other sound). */
+    fun cut() { if (inSpeech) flush() }
+
     /** The room's noise floor (dBFS) as the gate sees it; frozen while a segment is open, so
      * read in the utterance callback it is the floor that utterance was cut against. */
     val noiseFloorDb: Float get() = floorDb
@@ -65,7 +75,15 @@ class Segmenter(private val onUtterance: (ShortArray, Int) -> Unit) {
 
         current.add(frame)
         quietMs = if (loud) 0 else quietMs + FRAME_MS
-        if (quietMs >= HANGOVER_MS || current.size * FRAME_MS >= MAX_UTTER_MS) flush()
+        if (quietMs >= HANGOVER_MS) flush()
+        else if (current.size * FRAME_MS >= maxMs) {
+            // Never quiet for the whole segment: the floor is below the room's steady sound (a TV,
+            // a fan), so every frame looks like speech and segments run back to back at the cap
+            // (Pixel log 2026-10-07: every utterance 28000 ms, whisper 2.5-5x behind, 129 dropped).
+            // The quieter frames of such a segment are the room: raise the floor to them.
+            if (maxMs >= MAX_UTTER_MS) floorDb = maxOf(floorDb, roomLevel(current))
+            flush()
+        }
     }
 
     private fun flush() {
@@ -81,6 +99,13 @@ class Segmenter(private val onUtterance: (ShortArray, Int) -> Unit) {
     }
 
     companion object {
+        /** The 20th-percentile frame level of [frames]: the room under the speech. */
+        fun roomLevel(frames: List<ShortArray>): Float {
+            if (frames.isEmpty()) return -120f
+            val dbs = frames.map { dbfs(it) }.sorted()
+            return dbs[dbs.size / 5]
+        }
+
         fun dbfs(f: ShortArray): Float {
             var s = 0.0
             for (x in f) { val v = x / 32768.0; s += v * v }

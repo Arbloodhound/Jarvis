@@ -90,6 +90,13 @@ class MemoryNotes private constructor(ctx: Context) :
             else fresh.copy(id = insert(fresh))
     }
 
+    /** Notes the memory model copied from its prompt's examples instead of from speech: removed
+     *  once per open (cheap: one scan of the newest notes). */
+    fun dropCopiedExamples() = runCatching {
+        notes("SELECT $COLS FROM notes ORDER BY id DESC LIMIT 2000").filter { LibrarianPrompt.copiesExample(it.text) }
+            .forEach { delete(it.id) }
+    }
+
     /** A conversation-insights note ([ConversationInsights.noteText]), tagged "insights". */
     fun addInsight(text: String, now: Long = System.currentTimeMillis()): Note {
         val n = Note(kind = NoteKind.SUMMARY, text = text, whenTs = null, whenEnd = null, heardTs = now,
@@ -243,7 +250,7 @@ class MemoryNotes private constructor(ctx: Context) :
 
         @Volatile private var i: MemoryNotes? = null
         fun get(c: Context) = i ?: synchronized(this) {
-            i ?: MemoryNotes(c).also { i = it }
+            i ?: MemoryNotes(c).also { i = it; it.dropCopiedExamples() }
         }
     }
 }

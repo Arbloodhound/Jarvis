@@ -42,7 +42,7 @@ object LocalVoice {
     private const val IDLE_MS = 60_000L
     private const val PIPER_THREADS = 2
     /** Kokoro is about 4x a Piper medium voice; its sentences are made while the next is said. */
-    private const val KOKORO_THREADS = 3
+    private const val KOKORO_THREADS = 4
     private const val RETRY_MS = 10 * 60_000L
 
     /** libsherpa-onnx-jni.so loaded. False on a build without it (e.g. the x86_64 bench build). */

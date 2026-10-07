@@ -167,6 +167,9 @@ class Speaker(context: Context) {
             platformSpeak(clean, g)
             return
         }
+        // The memory model gives way while Jarvis talks: synthesis is slower than speech when they share
+        // the fast cores (Real-use check, Pixel 2026-10-07: Kokoro 1.4-1.5x real time beside it).
+        com.agent.ultra.listen.Librarian.yieldNow()
         val parts = LocalVoice.chunks(clean)
         Log.i(TAG, "SPEAK OWN (${clean.length} chars, ${parts.size} parts) id=ultra-$g")
         var fallbackFrom = -1

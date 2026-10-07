@@ -399,6 +399,9 @@ class AmbientListenService : Service() {
                 // Acoustic gate: when present, it decides when we're addressed.
                 // whisper then runs only for the command window + throttled memory.
                 if (gate?.accept(gateAgc.process(fr, CueAudio.gateDb(seg.noiseFloorDb))) == true) {
+                    // Heard in the middle of other sound: what came before is memory, not the command.
+                    // A short segment is the wake phrase itself and stays (a bare "Hey Jarvis" gets "Yes?").
+                    if (seg.openMs > WAKE_CUT_MS) seg.cut()
                     synchronized(windowLock) {
                         windowId++
                         cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS
@@ -407,6 +410,8 @@ class AmbientListenService : Service() {
                     Librarian.yieldNow()   // the answer needs the brain: the memory model stops now
                     chime()
                 }
+                // A command window keeps segments short; otherwise the room-length cap.
+                seg.maxMs = if (System.currentTimeMillis() < cmdWindowUntil) AmbientConfig.COMMAND_MAX_MS else AmbientConfig.MAX_UTTER_MS
                 seg.push(fr)
 
                 val now = System.currentTimeMillis()
@@ -446,8 +451,12 @@ class AmbientListenService : Service() {
             logDropped("thermal $level", pcm.size, false)
             return
         }
+        // The fast cores whenever the thinker isn't answering: the memory model is background work and
+        // stops for speech waiting to be heard (Pixel log 2026-10-07: whisper sat on the 2 slow cores
+        // at 2.5-5x real time while the librarian sorted 263 lines, and 129 utterances were dropped).
+        if (com.agent.ultra.local.LocalModelEngine.librarian(applicationContext).busy.value) Librarian.yieldNow()
         val (threads, cpus) = AmbientThrottle.placement(
-            plan, com.agent.ultra.local.LocalModelEngine.anyBusy.value,
+            plan, com.agent.ultra.local.LocalModelEngine.shared(applicationContext).busy.value,
             level == com.agent.ultra.agent.ThermalPolicy.Level.NORMAL, llmCpus, whisperCpus)
         switchAsrIfWanted()
         val t0 = System.currentTimeMillis()
@@ -746,6 +755,8 @@ class AmbientListenService : Service() {
         /** What Jarvis says to a bare "Hey Jarvis" by default (Settings → HOW JARVIS TALKS changes
          *  it), and when an answer is still being thought out. */
         const val WAKE_REPLY = "Yes?"
+        /** An open segment longer than this when the wake model fires holds other sound: cut it first. */
+        private const val WAKE_CUT_MS = 2_500
         const val WORKING_REPLY = "On it."
         private const val ACK_AFTER_MS = 2_500L
         private const val CHANNEL = "ambient_listen"

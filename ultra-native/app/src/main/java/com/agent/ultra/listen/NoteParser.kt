@@ -149,6 +149,7 @@ object NoteParser {
         val kind = NoteKind.parse(string(o["kind"]) ?: return null) ?: return null
         val given = string(o["text"])?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.isNotEmpty() }
         if (given != null && given.length > MAX_TEXT) return null
+        if (given != null && LibrarianPrompt.copiesExample(given)) return null   // the prompt's example, not something heard
         if (kind == NoteKind.OBSERVATION) {
             val (summary, obs) = observation(o, given, source, droppedReading) ?: return null
             return NoteDraft(kind, summary, null, obs)

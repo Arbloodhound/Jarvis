@@ -3,6 +3,22 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — fixes from the first Real-use check (app 2.6.27)
+Results file 2026-10-07 12:40 (PROVEN from its log):
+- Every ambient utterance was 28000 ms (the cap), whisper base took 67-148 s each on cpus [0,1] threads 2 (2.5-5x
+  slower than speech), 129 dropped; "Hey Jarvis" woke (sound) but its command never reached the brain. Cause: the
+  Segmenter froze its noise floor during "speech", so with the floor under steady room sound (gate +6 dB / -62 dBFS)
+  segments ran back to back at the cap; and whisper went to the slow cores whenever ANY engine was busy (the librarian
+  was sorting 263 lines). Fixes: a capped segment raises the floor to its 20th-percentile frame level (the room); gate
+  back to +8 dB; the wake model firing cuts an open segment longer than 2.5 s (memory) so the command starts clean;
+  segments in a command window cap at 9 s; whisper placement uses the THINKER's busy, and a busy librarian yields.
+- The librarian stored the prompt's own examples as real notes ("Car service at the Kwik Fit garage", "Call the bank
+  about the new card"). NoteParser drops notes ≥0.8 similar to `LibrarianPrompt.EXAMPLE_TEXTS`; MemoryNotes removes
+  existing ones on open.
+- Kokoro 4.9-5.4 s for 3.5 s of speech (1.4-1.5x): 4 threads (was 3) and the librarian yields while Jarvis speaks.
+Worked: spoken answer 7.0 s and right, stop 0.0 s, 4 connections 15.7 MB/s vs 7.3.
+1274 JVM tests, 0 failures (Segmenter cases reproduce the runaway). SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (session 01BUKa) — Insights, literature-based patterns, Algospeak, tips; notes QoL
 Owner: lean into note-taking, pattern noticing and sociolinguistics, grounded in real literature (incl. Aleksic's
 Algospeak), spot manipulation (people and algorithms), tell me what I could do, more notes.
