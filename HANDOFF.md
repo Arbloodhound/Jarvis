@@ -1,5 +1,14 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## LATEST+4 (session 01BUKa, 2026-10-07 ~07:00 UTC) — read this first
+`v2.6.15-test` (run 15, 05abe67) is Latest. Since v2.6.13: the offline brain is told what it can do (memory,
+notes, phone actions, Now line); "what do you remember?" overview brief; nothing-found brief; REAL feature-check
+probes (memory in the real chat, notes from real speech, live wake through the running service); Notes and Memory
+screens, Focus menu (Normal/Memory/Notes/Both), notes/memory tools by voice or text ("note: …", "search my notes
+for …", "open my notes"), one notes store (old note files imported). All SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+The owner had still not installed anything newer than ≤2.6.8 at the last results file (21:02). First check
+"App: 2.6.15" in Jarvis Tests 1.
+
 ## LATEST+3 (session 01BUKa, 2026-10-07 ~04:45 UTC) — read this first
 `v2.6.13-test` (run 13, 40d4479) is Latest: + listening resumes after restart/update (ResumeNotice, Jarvis Tests
 starts it), misspelt name after a wake word wakes ("Hey Joris"). The owner's 21:02 file was STILL an old build
