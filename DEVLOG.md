@@ -3,6 +3,25 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — searching first: research engine, product finding, screen takeover
+Owner: the project is a general assistant with a big emphasis on SEARCHING (intelligent web search, product finding
+with seller checks, forums/consensus, cross-referencing, best price), driven by voice and the screen, with a Stop
+button and the owner's input frozen while Jarvis drives. No special dark-web skills (general browser use, Tor Browser
+included, stays as it was).
+- `WebResearch` (pure, tested) + `WebResearchRun`: 2–4 queries per request with operators by kind (product: "exact"
+  price -used -refurbished, site:reddit.com reviews, best <item> <year>; fact: site:wikipedia/reuters/apnews/bbc; how-to:
+  site:reddit/stackexchange), DuckDuckGo HTML parsed WITH real links (uddg redirect decoded), merged and ranked by
+  consensus (found by N searches) + site trust (known retailer / community / reference / official), top 3 pages read,
+  prices extracted, numbered brief with rules (cite [n], agree across sources, shortlist with price/seller/trust/red
+  flags). Used by the on-device brain (WebNeed now also fires on product words) and by the cloud web_search tool.
+- Screen takeover: a full-screen accessibility overlay with a Stop button (top-right) swallows the owner's touches while
+  OfflineNavigator or the cloud navigator drives an app; Jarvis's node clicks are unaffected and every injected gesture
+  opens the overlay for its own duration (`dispatchThrough`); Stop = Brain.stopAll + navigator stop + speech stop.
+- No vision model needed: the accessibility tree gives the screen as data; on-device OCR would be the next step for
+  image-only pages.
+1282 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN (DuckDuckGo HTML markup and overlay pass-through untested on
+the phone).
+
 ## 2026-10-07 (session 01BUKa) — Jarvis no longer hears (and answers) itself
 Owner: the voice seems to answer itself. Proven from source: only the ambient service's own speech (and the voice
 screen's) muted the ambient mic; the chat's spoken answers did not, so the listener transcribed Jarvis's own voice and a

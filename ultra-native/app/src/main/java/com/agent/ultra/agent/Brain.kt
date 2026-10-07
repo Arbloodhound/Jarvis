@@ -834,11 +834,16 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 // searches, the brain reads the results. Not for a memory / notes question.
                 val webQuery = if (focus == null) WebNeed.query(userInput) else null
                 val web = webQuery?.let { q ->
-                    val searching = ChatStore.setStatus(ChatStatus.Phase.THINKING, "searching the web")
+                    var searching = ChatStore.setStatus(ChatStatus.Phase.THINKING, "searching the web")
                     try {
-                        tools.execute("web_search", org.json.JSONObject().put("query", q))
+                        // Several targeted searches, the best pages read, sources numbered (WebResearch);
+                        // the old single search when that finds nothing.
+                        WebResearchRun.run(IntentRouter.requestPart(userInput)) { s ->
+                            val next = ChatStore.setStatus(ChatStatus.Phase.THINKING, s); ChatStore.clearStatus(searching); searching = next
+                        } ?: tools.execute("web_search", org.json.JSONObject().put("query", q))
                             .takeIf { !it.startsWith("OFFLINE") && !it.startsWith("Error") && it.isNotBlank() }
                             ?.let { WebNeed.brief(q, it) }
+                    } catch (e: kotlinx.coroutines.CancellationException) { throw e
                     } catch (e: Exception) { null } finally { ChatStore.clearStatus(searching) }
                 }
                 android.util.Log.d("UltraRoute", "web query=${webQuery?.take(60)} found=${web != null}")
@@ -847,7 +852,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 val prompt = LocalPrompt.build(system, history, userInput, historyChars,
                     memory = listOfNotNull(memory, web).joinToString("\n\n").ifBlank { null },
                     now = LocalPrompt.nowLine(),
-                    memoryCap = if (focus != null || web != null) MemoryFocus.MAX_CHARS else MemoryBrief.MAX_CHARS,
+                    memoryCap = if (web != null) WebNeed.RESEARCH_CHARS else if (focus != null) MemoryFocus.MAX_CHARS else MemoryBrief.MAX_CHARS,
                     memoryHeader = when {
                         focus != null -> "Focus: ${focus.focus.label}"
                         memory == null && web != null -> "Found for this question:"

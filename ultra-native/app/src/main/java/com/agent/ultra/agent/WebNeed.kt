@@ -17,7 +17,10 @@ object WebNeed {
         "\\b(latest|news|headlines?|today'?s|tonight'?s|this week'?s|right now|currently|current|up to date|" +
             "weather|forecast|temperature outside|price of|prices?|cost of|stock|share price|exchange rate|" +
             "scores?|who won|results? of|fixtures?|opening hours|open now|near me|release date|came out|" +
-            "trending|election|this year)\\b",
+            "trending|election|this year|" +
+            // Finding products (owner: "look for certain products I ask for"): always a search.
+            "cheapest|best deals?|on sale|in stock|where (?:can|do|to) (?:i )?(?:buy|get|find)|for sale|reviews? of|" +
+            "find me|look for|looking for|compare)\\b",
         RegexOption.IGNORE_CASE,
     )
 
@@ -30,6 +33,9 @@ object WebNeed {
         ASKED.find(t)?.let { return it.groupValues[1].trim().ifBlank { null } }
         return if (CURRENT.containsMatchIn(t)) t else null
     }
+
+    /** Room for a research brief (sources, pages, prices) in the prompt. */
+    const val RESEARCH_CHARS = 3000
 
     /** The block the brain gets with the results. */
     fun brief(query: String, results: String): String =

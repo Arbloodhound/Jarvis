@@ -966,6 +966,14 @@ Jarvis's pattern notes and Insights use ideas from these works. They describe te
 - **Psychology of language:** Pennebaker, The Secret Life of Pronouns (2011) — "I" vs "we", reasoning and certainty words. Al-Mosaiwi & Johnstone (2018) — absolutist words. Gottman — bids for connection, criticism, contempt, stonewalling. Cialdini, Influence (1984) — urgency, scarcity, social proof, reciprocity. Freedman & Fraser (1966) — foot-in-the-door. Beck — catastrophising.
 - **Psychoanalytic concepts (as possible readings only):** Freud — denial, displacement. Anna Freud, The Ego and the Mechanisms of Defence (1936) — intellectualisation, reaction formation. Vaillant — humour as a mature defence. Kernberg — splitting.
 
+## 11c. Searching and finding products
+
+- **Ask for anything to be found**: "search for…", "find me…", "where can I buy…", "cheapest…", "best … under £100", "reviews of…". Jarvis runs several searches at once, not one: the plain question, an exact-phrase search, a search of forums (Reddit and similar) for what people actually say, and one limited to reference or news sites for facts.
+- It reads the best pages themselves, not just the result snippets. A result found by several of the searches, or on a known retailer, review site or reference site, counts for more.
+- For products it pulls the prices out of the pages and marks each seller as a known retailer or not, then gives you a short ranked list: price, where, why it's trustworthy, and red flags (a price far below the rest, an unknown site, few reviews, used or refurbished). Sources are numbered [1], [2]… so you can check them.
+- When Jarvis drives an app or the browser itself, a thin green frame and a **Stop** button appear in the top corner. Your taps are held off so you can't knock it off course by accident (the system's back and home gestures still work). Tap **Stop** to end it at once.
+- It sees the screen through Android's accessibility service (every button, link and the page text), so it needs no extra vision model for normal sites and apps.
+
 ## 12. How it all works (deep dive)
 
 This section is for the curious. It walks through the machinery with the real numbers.

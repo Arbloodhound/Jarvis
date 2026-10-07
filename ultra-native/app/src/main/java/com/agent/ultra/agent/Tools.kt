@@ -200,7 +200,10 @@ class Tools(
                     val goal = params.optString("goal")
                     val hint = params.optString("appHint")
                     val nav = navigator ?: return "Error: navigator not wired"
-                    nav.run(goal, hint)
+                    // Takeover screen while the cloud navigator drives the app (Stop in the corner).
+                    val svc = com.agent.ultra.AgentAccessibilityService.getInstance()
+                    svc?.showTakeover()
+                    try { nav.run(goal, hint) } finally { svc?.hideTakeover() }
                 }
 
                 // ── Information ──────────────────────────────────────
@@ -665,6 +668,8 @@ class Tools(
         // rather than stalling. (See system-prompt rules 13-15.)
         if (!isOnline()) return@withContext "OFFLINE: no network. " +
             "Answer from your own knowledge; do not treat this as the fact being unavailable."
+        // Several targeted searches with the best pages read (WebResearch); the quick sources if it finds nothing.
+        runCatching { WebResearchRun.run(query) }.getOrNull()?.let { return@withContext it }
         instantAnswer(query)?.let { return@withContext it }
         wikipedia(query)?.let { return@withContext it }
         scrapeDdg(query)

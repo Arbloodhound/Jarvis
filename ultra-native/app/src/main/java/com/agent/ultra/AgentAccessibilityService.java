@@ -153,6 +153,127 @@ public class AgentAccessibilityService extends AccessibilityService {
         } catch (Exception ignored) {}
         gateOverlay = null;
     }
+    // ── Screen takeover (owner, 2026-10-07: "when it takes over the screen, a little stop button in the
+    // corner, and freeze the screen inputs on MY end, not the model's, so it can search uninterrupted").
+    // A full-screen accessibility overlay swallows the person's touches while Jarvis drives an app; its
+    // own taps pass: element clicks don't use touch at all, and each injected gesture opens the overlay
+    // for just its own duration (dispatchThrough). The system's back/home gestures still work, and the
+    // Stop button ends the run at once.
+    private android.view.View takeoverOverlay;
+    private android.view.WindowManager.LayoutParams takeoverLp;
+    private final Handler takeoverHandler = new Handler(Looper.getMainLooper());
+    private volatile long passUntil = 0L;
+
+    public void showTakeover() {
+        takeoverHandler.post(() -> {
+            if (takeoverOverlay != null) return;
+            try {
+                float dp = getResources().getDisplayMetrics().density;
+                android.widget.FrameLayout root = new android.widget.FrameLayout(this);
+                android.graphics.drawable.GradientDrawable frame = new android.graphics.drawable.GradientDrawable();
+                frame.setColor(0x10000000);
+                frame.setStroke((int) (3 * dp), 0xFF26C281);
+                root.setBackground(frame);
+                root.setOnTouchListener((v, e) -> true);   // the person's touches stop here
+                android.widget.LinearLayout pill = new android.widget.LinearLayout(this);
+                pill.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                pill.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                int pad = (int) (8 * dp);
+                pill.setPadding(pad * 2, pad / 2, pad / 2, pad / 2);
+                android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+                bg.setColor(0xE6202020);
+                bg.setCornerRadius(24 * dp);
+                pill.setBackground(bg);
+                android.widget.TextView label = new android.widget.TextView(this);
+                label.setText("Jarvis is working");
+                label.setTextColor(0xFFFFFFFF);
+                label.setTextSize(13);
+                android.widget.Button stop = new android.widget.Button(this);
+                stop.setText("Stop");
+                stop.setAllCaps(false);
+                stop.setOnClickListener(v -> stopFromTakeover());
+                pill.addView(label);
+                pill.addView(stop);
+                android.widget.FrameLayout.LayoutParams flp = new android.widget.FrameLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                        android.view.Gravity.TOP | android.view.Gravity.END);
+                flp.topMargin = (int) (40 * dp);
+                flp.rightMargin = (int) (12 * dp);
+                root.addView(pill, flp);
+                takeoverLp = new android.view.WindowManager.LayoutParams(
+                        android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                        android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                        android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                                | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                        android.graphics.PixelFormat.TRANSLUCENT);
+                ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).addView(root, takeoverLp);
+                takeoverOverlay = root;
+                Log.i(TAG, "TAKEOVER shown");
+            } catch (Exception e) {
+                Log.w(TAG, "takeover overlay could not be drawn: " + e.getMessage());
+            }
+        });
+    }
+
+    public void hideTakeover() {
+        takeoverHandler.post(() -> {
+            if (takeoverOverlay == null) return;
+            try { ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).removeView(takeoverOverlay); }
+            catch (Exception ignored) {}
+            takeoverOverlay = null;
+            Log.i(TAG, "TAKEOVER hidden");
+        });
+    }
+
+    /** The overlay's Stop: every run, the screen task and speech end now. */
+    private void stopFromTakeover() {
+        Log.i(TAG, "TAKEOVER stop pressed");
+        hideTakeover();
+        try { com.agent.ultra.agent.Brain.Companion.stopAll(); } catch (Throwable ignored) {}
+        try { com.agent.ultra.agent.OfflineNavigator.Companion.stopActive(); } catch (Throwable ignored) {}
+        try { com.agent.ultra.ui.SpeechQueue.Companion.stopAll(); } catch (Throwable ignored) {}
+    }
+
+    /** Jarvis's own touch gesture: the takeover screen lets touches through for the gesture's length. */
+    private boolean dispatchThrough(android.accessibilityservice.GestureDescription g,
+                                    GestureResultCallback cb, Handler h) {
+        if (takeoverOverlay != null) {
+            long ms = 0;
+            for (int i = 0; i < g.getStrokeCount(); i++) {
+                android.accessibilityservice.GestureDescription.StrokeDescription st = g.getStroke(i);
+                ms = Math.max(ms, st.getStartTime() + st.getDuration());
+            }
+            final long gestureMs = ms;
+            passUntil = Math.max(passUntil, System.currentTimeMillis() + gestureMs + 300);
+            java.util.concurrent.CountDownLatch open = new java.util.concurrent.CountDownLatch(1);
+            Runnable letThrough = () -> {
+                try {
+                    if (takeoverOverlay != null && (takeoverLp.flags & android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0) {
+                        takeoverLp.flags |= android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                        ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).updateViewLayout(takeoverOverlay, takeoverLp);
+                    }
+                } catch (Exception ignored) {}
+                open.countDown();
+                takeoverHandler.postDelayed(this::blockAgainIfDue, gestureMs + 320);
+            };
+            if (Looper.myLooper() == Looper.getMainLooper()) letThrough.run();
+            else {
+                takeoverHandler.post(letThrough);
+                try { open.await(500, TimeUnit.MILLISECONDS); } catch (InterruptedException ignored) {}
+            }
+        }
+        return super.dispatchGesture(g, cb, h);
+    }
+
+    private void blockAgainIfDue() {
+        if (takeoverOverlay == null || System.currentTimeMillis() < passUntil) return;
+        try {
+            takeoverLp.flags &= ~android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).updateViewLayout(takeoverOverlay, takeoverLp);
+        } catch (Exception ignored) {}
+    }
+
     public static AgentAccessibilityService getInstance() {
         synchronized (instanceLock) { return instance; }
     }
@@ -1479,7 +1600,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 GestureDescription gesture = new GestureDescription.Builder()
                     .addStroke(new GestureDescription.StrokeDescription(path, 0, 50))
                     .build();
-                dispatchGesture(gesture, new GestureResultCallback() {
+                dispatchThrough(gesture, new GestureResultCallback() {
                     @Override
                     public void onCompleted(GestureDescription g) {
                         emitA11yLog("A11Y_TAP", "{\"action\":\"COMPLETED\",\"x\":" + x + ",\"y\":" + y + "}");
@@ -1521,7 +1642,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 GestureDescription gesture = new GestureDescription.Builder()
                     .addStroke(new GestureDescription.StrokeDescription(path, 0, Math.max(durationMs, 100)))
                     .build();
-                dispatchGesture(gesture, new GestureResultCallback() {
+                dispatchThrough(gesture, new GestureResultCallback() {
                     @Override
                     public void onCompleted(GestureDescription g) { Log.i(TAG, "SWIPE: COMPLETED"); success.set(true); latch.countDown(); }
                     @Override
@@ -1545,7 +1666,7 @@ public class AgentAccessibilityService extends AccessibilityService {
     /** Main-thread dispatch without waiting: true when the system accepted the gesture. */
     private boolean dispatchNow(GestureDescription gesture) {
         try {
-            boolean accepted = dispatchGesture(gesture, null, null);
+            boolean accepted = dispatchThrough(gesture, null, null);
             Log.i(TAG, "GESTURE: dispatched from main thread, accepted=" + accepted);
             return accepted;
         } catch (Exception e) {
@@ -1818,7 +1939,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                                 android.graphics.Path p = new android.graphics.Path();
                                 p.moveTo(cx, cy);
                                 gb.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(p, 0, 50));
-                                dispatchGesture(gb.build(), null, null);
+                                dispatchThrough(gb.build(), null, null);
                                 result = true;
                                 enterBtn.recycle();
                             }
@@ -2137,7 +2258,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         builder.addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 150));
         final boolean[] done = {false};
         final boolean[] success = {false};
-        dispatchGesture(builder.build(), new android.accessibilityservice.AccessibilityService.GestureResultCallback() {
+        dispatchThrough(builder.build(), new android.accessibilityservice.AccessibilityService.GestureResultCallback() {
             @Override
             public void onCompleted(android.accessibilityservice.GestureDescription g) {
                 success[0] = true; done[0] = true;
@@ -2209,7 +2330,7 @@ public class AgentAccessibilityService extends AccessibilityService {
             new android.accessibilityservice.GestureDescription.Builder()
                 .addStroke(new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, Math.max(durationMs, 100)))
                 .build();
-        dispatchGesture(gesture, new android.accessibilityservice.AccessibilityService.GestureResultCallback() {
+        dispatchThrough(gesture, new android.accessibilityservice.AccessibilityService.GestureResultCallback() {
             @Override
             public void onCompleted(android.accessibilityservice.GestureDescription g) { success[0] = true; done[0] = true; }
             @Override

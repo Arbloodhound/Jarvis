@@ -56,6 +56,8 @@ class OfflineNavigator(
             status?.let { ChatStore.clearStatus(it) }
             status = s
         }
+        // The person's touches are held off while Jarvis drives the app; the overlay's Stop ends it.
+        com.agent.ultra.AgentAccessibilityService.getInstance()?.showTakeover()
         return try {
             coroutineScope {
                 job = coroutineContext[Job]
@@ -65,6 +67,7 @@ class OfflineNavigator(
             // Our own Stop cancelled the inner scope; the request itself goes on to say so.
             if (stopRequested && currentCoroutineContext().isActive) Outcome(false, "stopped", stepsTaken, stopped = true) else throw e
         } finally {
+            com.agent.ultra.AgentAccessibilityService.getInstance()?.hideTakeover()
             job = null
             if (active === this) active = null
             status?.let { ChatStore.clearStatus(it) }
