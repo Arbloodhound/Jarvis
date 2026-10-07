@@ -553,14 +553,20 @@ object FeatureProbes {
             val without = filler.firstOrNull { !it.second }?.third
             "; ambient decode wake: filler prompt ${if (wakeIn(withF)) "yes" else "NO"}, without ${if (wakeIn(without)) "yes" else "NO"}"
         }.orEmpty()
+        // Graded on what ambient listening itself would read: its own decode (filler prompt with
+        // the name), when the speech model loaded for it. The plain transcription above has no
+        // prompt and hears "Hey Joris" where ambient's decode hears "Hey, Jarvis." (Pixel, 2026-10-06).
+        val ambientWake = filler.firstOrNull { it.second }?.let { wakeIn(it.third) }
+        val gradedText = ambientWake ?: textWake
         val wv = when {
-            acoustic == true && textWake -> Verdict.PASS
-            acoustic == true || textWake -> Verdict.WARN
+            acoustic == true && gradedText -> Verdict.PASS
+            acoustic == true || gradedText -> Verdict.WARN
             else -> Verdict.FAIL
         }
         val wake = Result("Wake phrase", wv,
             "acoustic ${when (acoustic) { true -> "fired"; false -> "did NOT fire"; null -> "n/a (wake models missing)" }} " +
-                "(max score ${FeatureGrade.f2(maxScore.toDouble())}), text match ${if (textWake) "yes" else "NO"}$fillerSummary",
+                "(max score ${FeatureGrade.f2(maxScore.toDouble())}), text match ${if (gradedText) "yes" else "NO"}" +
+                (if (ambientWake != null) " (ambient's decode)" else "") + fillerSummary,
             when (wv) {
                 Verdict.PASS -> "\"Hey Jarvis\" is caught both by sound and by the words"
                 Verdict.WARN -> "\"Hey Jarvis\" is caught one way only"

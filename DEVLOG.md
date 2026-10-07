@@ -3,6 +3,19 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — 19:36 results file (an OLD build) + wake probe grading
+`Jarvis-results-20261006-1936.txt` was made on 2.6.7 or older (LLM threads=6, no own-voice probe, brain advice
+still names the "MoE stand-in"), so none of 229dfb0/876c4ac was tested. Its new facts:
+- Wake phrase: once WARN (acoustic fired 0.97 with emb on NNAPI; earlier runs 0.26/0.35 with emb on CPU,
+  TTS audio differs per run so the cause is NOT proven). Plain whisper heard "Hey Joris"; ambient's own decode
+  (filler prompt + name) heard "Hey, Jarvis." → wake yes. Fix (debug probe only): the text-match grade now uses
+  ambient's decode when it ran, as ambient listening does.
+- Pattern notes: the same no-"text" observation rejected again (fixed in 229dfb0, untested on the phone yet).
+- Thinker probe 2.6 tok/s with majfaults 587,543 (the mapped model re-read from storage after the other
+  models ran) and WARM at headroom 0.74 with OS status 1: CANNOT VERIFY the cause from this file (no load lines).
+- Flashlight live test skipped (no answer to the dialog in 2 min: the run was unattended).
+The owner re-sent the 17:58 file (byte-identical to the one already read).
+
 ## 2026-10-07 (session 01BUKa) — wake chime (owner request)
 `WakeChime`: a 150 ms two-tone beep (ToneGenerator, media stream, 70%) when Jarvis is woken: at once
 when the acoustic gate fires, else when a transcribed utterance starts with the wake phrase (not for the
