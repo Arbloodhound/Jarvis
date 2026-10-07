@@ -5,12 +5,13 @@ package com.agent.ultra.agent
  * written (owner, 2026-10-07: "answer right away … vocally"). Before, nothing was said until the
  * whole answer was done. Pure, JVM-tested.
  *
- * A sentence ends at . ! ? or : followed by a space, or at a line break. The first one goes out as
- * soon as it ends (a quick "Sure." is said at once); later ones wait for [minChars] so speech isn't
- * cut into many short pieces with a gap between each. "3.5" and "e.g." without a following space
+ * A sentence ends at . ! ? or : followed by a space, or at a line break. The first piece waits for
+ * [firstChars] and later ones for [minChars]: each piece is a separate synthesis, and the next is
+ * only made once the last has been said, so short pieces (a lone "Sure.") left a gap after every
+ * one or two words (owner, 2026-10-07: "it says one word … then again a bit afterwards"). "3.5" and "e.g." without a following space
  * don't end one.
  */
-class SpeechChunker(private val minChars: Int = MIN_CHARS) {
+class SpeechChunker(private val minChars: Int = MIN_CHARS, private val firstChars: Int = FIRST_CHARS) {
     private val buf = StringBuilder()
     private var sent = 0
 
@@ -37,7 +38,7 @@ class SpeechChunker(private val minChars: Int = MIN_CHARS) {
 
     /** Index just past the first sentence end that is long enough, or null. */
     private fun boundary(): Int? {
-        val need = if (sent == 0) 2 else minChars
+        val need = if (sent == 0) firstChars else minChars
         for (i in buf.indices) {
             val c = buf[i]
             val end = when {
@@ -51,6 +52,7 @@ class SpeechChunker(private val minChars: Int = MIN_CHARS) {
     }
 
     companion object {
-        const val MIN_CHARS = 60
+        const val FIRST_CHARS = 40
+        const val MIN_CHARS = 140
     }
 }

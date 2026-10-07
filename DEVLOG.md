@@ -3,6 +3,17 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — chat: copy, select, edit, branch; fuller speech pieces
+- Chat bubbles: press and hold selects text (SelectionContainer); tap opens Copy / Edit (own messages) / Branch. Edit puts
+  the text back in the box ("Resend" / "Cancel edit"): the old message and everything after it are removed
+  (`ChatStore.truncateFrom`, `deleteMessage` query, no schema change) and it is asked again. Branch = a new chat with the
+  conversation up to that message (`ChatStore.branchFrom`).
+- Owner: speech came out one or two words, a pause, then more. Each streamed piece is a separate synthesis and the next is
+  made only after the last is said, and the first piece could be a lone "Sure.". `SpeechChunker`: first piece ≥ 40 chars,
+  later ≥ 140. LIKELY cause, not proven: Kokoro's synthesis speed while the brain runs is unmeasured (Real-use check
+  "Jarvis's voice" measures it).
+1265+ JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (session 01BUKa) — Real-use check, screen tests, act first, thinking preview
 - Jarvis Tests → "★ Real-use check" (one tap, ~5 min, then saves + shares): 60 s of the real room (lines stored, whisper
   speed, speaker labels, model), the chosen voice's synthesis speed + playback, "Hey Jarvis, what time is it?" said by the

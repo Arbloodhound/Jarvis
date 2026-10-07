@@ -12,13 +12,14 @@ class SpeechChunkerTest {
         return out
     }
 
-    @Test fun firstSentenceGoesAtOnce() {
+    @Test fun aLoneWordIsNotSaidOnItsOwn() {
         val c = SpeechChunker()
-        assertEquals(listOf("Sure."), c.push("Sure. "))
+        assertEquals(emptyList<String>(), c.push("Sure. "))
+        assertEquals(listOf("Sure. It's 3 pm and the meeting is at four."), c.push("It's 3 pm and the meeting is at four. "))
     }
 
     @Test fun laterSentencesWaitForLength() {
-        val c = SpeechChunker(minChars = 40)
+        val c = SpeechChunker(minChars = 40, firstChars = 2)
         val out = feed(c, "Sure. It is 3 pm. The meeting with Sam is at four, in the small room. Bring the notes. ")
         assertEquals(listOf("Sure.", "It is 3 pm. The meeting with Sam is at four, in the small room."), out)
         assertEquals("Bring the notes.", c.flush())
@@ -32,7 +33,7 @@ class SpeechChunkerTest {
     }
 
     @Test fun lineBreaksEndAPiece() {
-        val c = SpeechChunker(minChars = 5)
+        val c = SpeechChunker(minChars = 5, firstChars = 5)
         val out = feed(c, "Here you go\n- milk\n- eggs and bread\n")
         assertEquals(listOf("Here you go", "- milk", "- eggs and bread"), out)
     }

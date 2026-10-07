@@ -139,6 +139,11 @@ fun ChatScreen(
     }
 
     var input by remember { mutableStateOf("") }
+    /** The bubble whose Copy / Edit / Branch row is open, and the message being edited (Send then
+     *  re-asks from it: it and everything after it are replaced). */
+    var actionsFor by remember { mutableStateOf<String?>(null) }
+    var editingId by remember { mutableStateOf<String?>(null) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val listState = rememberLazyListState()
     var a11yRunning by remember { mutableStateOf(AgentAccessibilityService.isRunning()) }
     // Enabled in Android's settings, yet not bound. The switch looks on and
@@ -342,21 +347,39 @@ fun ChatScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(ChatStore.messages, key = { it.id }) { msg ->
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = if (msg.fromUser) Arrangement.End else Arrangement.Start,
+                    horizontalAlignment = if (msg.fromUser) Alignment.End else Alignment.Start,
                 ) {
+                    // Tap: Copy / Edit / Branch under the bubble. Press and hold: select any part of it.
                     Surface(
                         color = if (msg.fromUser) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.surfaceVariant,
                         shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.clickable { actionsFor = if (actionsFor == msg.id) null else msg.id },
                     ) {
-                        Text(
-                            text = msg.text,
-                            color = if (msg.fromUser) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        )
+                        androidx.compose.foundation.text.selection.SelectionContainer {
+                            Text(
+                                text = msg.text,
+                                color = if (msg.fromUser) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            )
+                        }
+                    }
+                    if (actionsFor == msg.id) Row {
+                        TextButton(onClick = {
+                            clipboard.setText(androidx.compose.ui.text.AnnotatedString(msg.text))
+                            actionsFor = null
+                            android.widget.Toast.makeText(context, "Copied", android.widget.Toast.LENGTH_SHORT).show()
+                        }) { Text("Copy") }
+                        if (msg.fromUser) TextButton(onClick = {
+                            input = msg.text; editingId = msg.id; actionsFor = null
+                        }) { Text("Edit") }
+                        TextButton(onClick = {
+                            actionsFor = null
+                            scope.launch { ChatStore.branchFrom(msg.id) }
+                        }) { Text("Branch") }
                     }
                 }
             }
@@ -573,16 +596,25 @@ fun ChatScreen(
             if (status?.phase == ChatStatus.Phase.THINKING && com.agent.ultra.agent.Brain.thinkingActive) {
                 TextButton(onClick = { com.agent.ultra.agent.Brain.answerNow() }) { Text("Answer now") }
             }
+            if (editingId != null) TextButton(onClick = { editingId = null; input = "" }) { Text("Cancel edit") }
             // Enabled mid-run too: what is sent then stops or changes the run (sendNow).
             Button(
                 onClick = {
                     val text = input.trim()
                     if (text.isEmpty()) return@Button
                     input = ""
-                    sendNow(text)
+                    val edit = editingId
+                    editingId = null
+                    if (edit == null) sendNow(text) else scope.launch {
+                        // An edit: stop anything running, drop the old message and what followed, ask again.
+                        com.agent.ultra.agent.Brain.stopAll(); SpeechQueue.stopAll()
+                        while (ChatStore.thinking.value) kotlinx.coroutines.delay(100)
+                        ChatStore.truncateFrom(edit)
+                        sendNow(text)
+                    }
                 },
             ) {
-                Text("Send")
+                Text(if (editingId != null) "Resend" else "Send")
             }
         }
     }

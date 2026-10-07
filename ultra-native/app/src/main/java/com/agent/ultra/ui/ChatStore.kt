@@ -119,6 +119,35 @@ object ChatStore {
         }
     }
 
+    /** Remove message [id] and everything after it, on screen and on disk (editing a message
+     *  re-asks from there). */
+    suspend fun truncateFrom(id: String) {
+        val i = messages.indexOfFirst { it.id == id }
+        if (i < 0) return
+        val gone = messages.subList(i, messages.size).map { it.id }
+        withContext(Dispatchers.IO) { gone.forEach { dao?.deleteMessage(it) } }
+        while (messages.size > i) messages.removeAt(messages.size - 1)
+    }
+
+    /** A new conversation holding this one up to and including message [id], opened: try another
+     *  direction from that point without losing this one. */
+    suspend fun branchFrom(id: String) {
+        val i = messages.indexOfFirst { it.id == id }
+        if (i < 0) return
+        val keep = messages.subList(0, i + 1).toList()
+        val title = "Branch: " + (keep.firstOrNull { it.fromUser }?.text?.take(32) ?: "chat")
+        val cid = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val copies = keep.map { it.copy(id = UUID.randomUUID().toString()) }
+        withContext(Dispatchers.IO) {
+            dao?.upsertConversation(ConversationEntity(cid, title, now, now))
+            copies.forEach { dao?.insertMessage(MessageEntity(it.id, cid, it.fromUser, it.text, it.timestamp)) }
+        }
+        conversations.add(0, ConversationEntity(cid, title, now, now))
+        conversationId.value = cid
+        messages.clear(); messages.addAll(copies)
+    }
+
     /** Append to the visible conversation and persist. Title from first user message. */
     fun add(msg: ChatMessage) {
         onUi { messages.add(msg) }
