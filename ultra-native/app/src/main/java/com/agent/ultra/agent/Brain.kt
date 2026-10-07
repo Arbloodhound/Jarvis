@@ -202,6 +202,28 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             return
         }
 
+        // The notes tool, by voice or text: "note: buy milk", "remember that the gate code is 4512".
+        // Into the one notes store (the Notes screen); no model needed.
+        com.agent.ultra.listen.UserNotes.command(IntentRouter.requestPart(userInput))?.let { text ->
+            answer(controller.createNote(text).let { if (it.startsWith("Error")) "I couldn't save that note. $it" else it })
+            android.util.Log.i("UltraBrain", "RUN COMPLETE (note saved)")
+            return
+        }
+        // "Open my notes" / "show my memory": the screen when the app is in front; otherwise
+        // (said to ambient listening with the app closed) the answer reads them out instead.
+        val screenAsk = MemoryFocus.screen(userInput)
+        if (screenAsk != null && com.agent.ultra.ui.ChatStore.uiVisible) {
+            com.agent.ultra.ui.ChatStore.screenRequest.value = screenAsk
+            answer(if (screenAsk == "memory") "Opening your memory." else "Opening your notes.")
+            android.util.Log.i("UltraBrain", "RUN COMPLETE (open $screenAsk)")
+            return
+        }
+        // The memory / notes tools: a focused question (its own words, or the chat's Focus menu).
+        val spokenFocus = MemoryFocus.detect(userInput)
+            ?: screenAsk?.let { MemoryFocus.Ask(if (it == "memory") MemoryFocus.Focus.MEMORY else MemoryFocus.Focus.NOTES, "") }
+        val menuFocus = com.agent.ultra.ui.ChatStore.focus.value.takeIf { it != MemoryFocus.Focus.NORMAL }
+            ?.let { MemoryFocus.Ask(it, MemoryFocus.query(IntentRouter.requestPart(userInput))) }
+
         val ai = client
         if (ai == null) {
             // Offline/unconfigured path: the on-device model is the brain.
@@ -229,12 +251,15 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             // Device commands try the on-device tool loop first, through the same policy gate as
             // the cloud path; a request it cannot map is answered in text as before. The loop sees
             // the command alone: overheard ambient text must not shape params or task memory.
+            // A request that names the notes or memory is a question for them, never a device command
+            // ("search my notes for the wifi password" must not toggle wifi).
+            if (spokenFocus != null && local.isThinkingModel) { emitLocal(userInput, spokenFocus); return }
             if (LocalToolCall.offlineRoute(userInput, canDecline = local.isThinkingModel) &&
                 runLocalLoop(IntentRouter.requestPart(userInput))) return
             // A job of several steps on screens ("open settings and turn on dark mode"): the
             // on-device model drives the app itself, through the cloud navigator's action path.
             offlineNavTask(userInput)?.let { runOfflineNav(userInput, it); return }
-            emitLocal(userInput)
+            emitLocal(userInput, menuFocus)
             return
         }
 
@@ -579,7 +604,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     /** Direct local answer for the offline path. Thinking MoE presets get ChatML,
      * a routed + thermal-scaled think budget and a hidden trace; small models keep
      * the original plain prompt. */
-    private suspend fun emitLocal(userInput: String) {
+    private suspend fun emitLocal(userInput: String, focus: MemoryFocus.Ask? = null) {
         val msg = ChatMessage(false, "")
         ChatStore.addToState(msg)
         // "Thinking…" from the moment decoding starts (engine lock held, model loaded) until
@@ -603,7 +628,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 val nCtx = local.contextSize
                 val historyChars = 3000 * nCtx / com.agent.ultra.local.LocalModelEngine.CTX_SIZE
                 val needsHistory = HistoryPolicy.decide(userInput)
-                val wantsMemory = MemoryBrief.wants(userInput)
+                val wantsMemory = if (focus != null) MemoryBrief.Decision(true, "focus ${focus.focus}") else MemoryBrief.wants(userInput)
                 val past = if (!needsHistory.include && !wantsMemory.search) emptyList() else LocalPrompt.withoutCurrentTurn(
                     ChatStore.messages.toList()
                         .filter { it.id != msg.id }
@@ -613,13 +638,18 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 val history = if (needsHistory.include) HistoryPolicy.window(past, historyChars) else emptyList()
                 android.util.Log.d("UltraRoute", "history turns=${history.size} chars=${history.sumOf { it.text.length }} " +
                     "reason=${needsHistory.reason}")
-                val memory = if (!wantsMemory.search || MemoryBrief.provider == null) null else {
+                val memory = if (focus == null && (!wantsMemory.search || MemoryBrief.provider == null)) null else {
                     // The search can take up to MemoryBrief.TIMEOUT_MS: show it, not an empty bubble.
                     val searching = ChatStore.setStatus(ChatStatus.Phase.THINKING)
                     try {
-                        (if (wantsMemory.overview) MemoryBrief.recallOverview()
-                            else MemoryBrief.recall(MemoryBrief.query(userInput, past.lastOrNull { it.fromUser }?.text)))
-                            ?: MemoryBrief.NOTHING_FOUND   // searched, found nothing: say so, not "no memory"
+                        when {
+                            focus != null -> MemoryFocus.brief(focus, MemoryFocus.provider?.let { p ->
+                                kotlinx.coroutines.withTimeoutOrNull(MemoryBrief.TIMEOUT_MS) { p(focus, System.currentTimeMillis()) } })
+                            wantsMemory.overview -> MemoryBrief.recallOverview() ?: MemoryBrief.NOTHING_FOUND
+                            // searched, found nothing: say so, not "no memory"
+                            else -> MemoryBrief.recall(MemoryBrief.query(userInput, past.lastOrNull { it.fromUser }?.text))
+                                ?: MemoryBrief.NOTHING_FOUND
+                        }
                     } finally {
                         ChatStore.clearStatus(searching)
                     }
@@ -627,7 +657,9 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 android.util.Log.d("UltraRoute", "memory reason=${wantsMemory.reason} provider=${MemoryBrief.provider != null} " +
                     "briefChars=${memory?.length ?: 0}")
                 val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput, historyChars, memory,
-                    now = LocalPrompt.nowLine())
+                    now = LocalPrompt.nowLine(),
+                    memoryCap = if (focus != null) MemoryFocus.MAX_CHARS else MemoryBrief.MAX_CHARS,
+                    memoryHeader = if (focus != null) "Focus: ${focus.focus.label}" else MemoryBrief.HEADER)
                 val reserve = LocalPrompt.answerReserve(level)
                 val speed = local.decodeTokPerSec
                 val depth = com.agent.ultra.ui.UltraPrefs.thinkingDepth(appContext)

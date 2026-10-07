@@ -30,6 +30,11 @@ class UltraApplication : Application() {
      * it. MemoryBrief adds its own header, so the recall block's header line is dropped here. */
     private fun wireMemory() {
         val ctx = applicationContext
+        // Notes the old note tool left as text files join the one notes store (once).
+        Thread {
+            runCatching { com.agent.ultra.listen.MemoryNotes.get(ctx).importLegacyFiles(ctx.filesDir) }
+                .onSuccess { if (it > 0) android.util.Log.i("UltraMemory", "imported $it old note file(s)") }
+        }.start()
         com.agent.ultra.listen.MemoryRecall.extraSources +=
             com.agent.ultra.listen.MemoryRecall.textSource("notes") { q, n ->
                 com.agent.ultra.listen.MemoryNotes.get(ctx).search(q, n).map { it.ts to it.text }
@@ -38,6 +43,8 @@ class UltraApplication : Application() {
             val r = com.agent.ultra.listen.MemoryRecall
             r.brief(r.relevant(ctx, q, now)).substringAfter('\n', "").ifBlank { null }
         }
+        // The memory / notes tools (MemoryFocus): what the focused question reasons over.
+        com.agent.ultra.agent.MemoryFocus.provider = { ask, now -> focusedFind(ctx, ask, now) }
         // "What do you remember?": the newest notes and heard lines (notes first under the char cap).
         com.agent.ultra.agent.MemoryBrief.overviewProvider = { _ ->
             val notes = com.agent.ultra.listen.MemoryNotes.get(ctx).search("", 6)
@@ -48,6 +55,33 @@ class UltraApplication : Application() {
             com.agent.ultra.listen.MemoryRecall.brief(notes + heard).substringAfter('\n', "").ifBlank { null }
         }
     }
+
+    /** Lines for a focused question: notes as "[todo, Tue 7 Oct 2026] text"; heard lines with
+     *  their time. The newest when the query finds nothing (or is empty). */
+    private suspend fun focusedFind(ctx: android.content.Context, ask: com.agent.ultra.agent.MemoryFocus.Ask, now: Long): String? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val zone = java.time.ZoneId.systemDefault()
+            val parts = ArrayList<String>()
+            if (ask.focus == com.agent.ultra.agent.MemoryFocus.Focus.NOTES || ask.focus == com.agent.ultra.agent.MemoryFocus.Focus.BOTH) {
+                val store = com.agent.ultra.listen.MemoryNotes.get(ctx)
+                val kind = if (ask.todosOnly) com.agent.ultra.listen.NoteKind.TODO else null
+                val notes = store.list(kind, ask.query, 15).ifEmpty { store.list(kind, "", 15) }
+                if (notes.isNotEmpty()) parts += "Notes:\n" + notes.joinToString("\n") { "- " + it.describe(zone) }
+            }
+            if (ask.focus == com.agent.ultra.agent.MemoryFocus.Focus.MEMORY || ask.focus == com.agent.ultra.agent.MemoryFocus.Focus.BOTH) {
+                val r = com.agent.ultra.listen.MemoryRecall
+                val hits = (if (ask.query.isBlank()) emptyList() else r.relevant(ctx, ask.query, now, 12))
+                    .filter { it.source == r.SOURCE_HEARD }
+                    .ifEmpty {
+                        com.agent.ultra.listen.AmbientMemory.get(ctx).newest(12)
+                            .map { com.agent.ultra.listen.RecallHit(it.ts, it.text, 0.5f, r.SOURCE_HEARD) }
+                    }
+                val fmt = java.text.SimpleDateFormat("EEE d MMM h:mm a", java.util.Locale.UK)
+                if (hits.isNotEmpty()) parts += "Heard:\n" + hits.sortedBy { it.ts }
+                    .joinToString("\n") { "- ${fmt.format(java.util.Date(it.ts))}: ${it.text}" }
+            }
+            parts.joinToString("\n").ifBlank { null }
+        }
 
     companion object {
         lateinit var instance: UltraApplication

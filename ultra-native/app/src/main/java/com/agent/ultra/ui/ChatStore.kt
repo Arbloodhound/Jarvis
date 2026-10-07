@@ -27,6 +27,12 @@ data class ChatMessage(
  */
 object ChatStore {
     val messages = mutableStateListOf<ChatMessage>()
+    /** The chat's Focus menu: Normal, or answer from Memory / Notes / both ([MemoryFocus]). */
+    val focus = mutableStateOf(com.agent.ultra.agent.MemoryFocus.Focus.NORMAL)
+    /** A screen the brain was asked to open ("open my notes"); MainActivity takes and clears it. */
+    val screenRequest = mutableStateOf<String?>(null)
+    /** MainActivity is in front (resumed): a screen request can be shown. */
+    @Volatile var uiVisible = false
     val conversations = mutableStateListOf<ConversationEntity>()
     var conversationId = mutableStateOf<String?>(null)
 

@@ -38,7 +38,7 @@ How to answer:
      */
     fun build(
         system: String, history: List<Turn>, user: String, historyChars: Int = 3000, memory: String? = null,
-        now: String? = null,
+        now: String? = null, memoryCap: Int = MemoryBrief.MAX_CHARS, memoryHeader: String = MemoryBrief.HEADER,
     ): String {
         val kept = ArrayDeque<Turn>(); var used = 0
         for (t in history.asReversed()) {
@@ -56,7 +56,7 @@ How to answer:
             if (!memory.isNullOrBlank() || !now.isNullOrBlank()) {
                 append("<|im_start|>system\n")
                 if (!now.isNullOrBlank()) append("Now: ").append(now.trim()).append('\n')
-                if (!memory.isNullOrBlank()) append(MemoryBrief.HEADER).append('\n').append(MemoryBrief.cap(memory)).append('\n')
+                if (!memory.isNullOrBlank()) append(memoryHeader).append('\n').append(MemoryBrief.cap(memory, memoryCap)).append('\n')
                 setLength(length - 1)
                 append("<|im_end|>\n")
             }

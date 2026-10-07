@@ -78,6 +78,47 @@ class MemoryNotes private constructor(ctx: Context) :
             found.map { hit(it, zone) }
         }
 
+    /** A note the owner made ([UserNotes]): merged into a duplicate when there is one, as the
+     *  librarian's are. Returns the note as stored. */
+    fun addUser(text: String, now: Long = System.currentTimeMillis()): Note {
+        val fresh = UserNotes.build(text, now, ZoneId.systemDefault())
+        val dup = NoteMerge.findDuplicate(fresh, candidates(fresh.kind, fresh.text, 20))
+        return if (dup != null) NoteMerge.merge(dup, fresh, now).also { update(it) }
+            else fresh.copy(id = insert(fresh))
+    }
+
+    /** For the Notes screen: notes of [kind] (null = all) matching [query] (blank = all), newest first. */
+    fun list(kind: NoteKind?, query: String, limit: Int): List<Note> {
+        val q = NoteMerge.ftsQuery(query)
+        val kindSql = if (kind == null) "1" else "kind=?"
+        val kindArgs = if (kind == null) emptyList() else listOf(kind.key)
+        return if (q == null) notes("SELECT $COLS FROM notes WHERE $kindSql ORDER BY updated_ts DESC LIMIT ?",
+            *(kindArgs + limit.toString()).toTypedArray())
+        else notes("SELECT $COLS FROM notes WHERE id IN (SELECT docid FROM notes_fts WHERE notes_fts MATCH ?) " +
+            "AND $kindSql ORDER BY updated_ts DESC LIMIT ?", *(listOf(q) + kindArgs + limit.toString()).toTypedArray())
+    }
+
+    fun delete(id: Long) { writableDatabase.delete("notes", "id=?", arrayOf(id.toString())) }
+
+    /**
+     * Once: notes saved as text files by the old note tool (files/notes/note-<ms>.txt, never read
+     * by anything) are moved into this store with their original time; the folder is renamed so
+     * it runs once. Returns how many.
+     */
+    fun importLegacyFiles(filesDir: java.io.File): Int {
+        val dir = java.io.File(filesDir, "notes")
+        val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".txt") } ?: return 0
+        var n = 0
+        for (f in files.sortedBy { it.name }) {
+            val text = runCatching { f.readText() }.getOrNull()?.trim().orEmpty()
+            if (text.isEmpty()) continue
+            val ts = f.name.removePrefix("note-").removeSuffix(".txt").toLongOrNull() ?: f.lastModified()
+            addUser(text, ts); n++
+        }
+        dir.renameTo(java.io.File(filesDir, "notes-imported"))
+        return n
+    }
+
     fun count(): Int =
         readableDatabase.rawQuery("SELECT COUNT(*) FROM notes", null).use { it.moveToFirst(); it.getInt(0) }
 

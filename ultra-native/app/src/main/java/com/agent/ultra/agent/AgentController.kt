@@ -490,11 +490,11 @@ class AgentController(private val context: Context) {
         false
     }
 
+    /** Into the one notes store the Notes screen shows and Jarvis searches ([MemoryNotes]); it
+     *  used to be a text file nothing read. */
     fun createNote(text: String): String = try {
-        val dir = java.io.File(context.filesDir, "notes").apply { mkdirs() }
-        val f = java.io.File(dir, "note-${System.currentTimeMillis()}.txt")
-        f.writeText(text)
-        "Note saved: ${f.name}"
+        val n = com.agent.ultra.listen.MemoryNotes.get(context).addUser(text)
+        "Noted (${n.kind.key}): ${n.text}"
     } catch (e: Exception) {
         "Error: ${e.message}"
     }

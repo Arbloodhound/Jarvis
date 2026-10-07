@@ -1,6 +1,7 @@
 package com.agent.ultra.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +47,8 @@ fun ChatScreen(
     localEngine: LocalModelEngine,
     configVersion: Int,
     onOpenSettings: () -> Unit,
+    onOpenNotes: () -> Unit = {},
+    onOpenMemory: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -220,6 +223,8 @@ fun ChatScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                // seven buttons and the model chip don't fit a phone's width: scroll sideways
+                .horizontalScroll(androidx.compose.foundation.rememberScrollState())
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -251,6 +256,8 @@ fun ChatScreen(
                 ChatStore.add(ChatMessage(true, cmd))
                 launchRun { brain.run(cmd) }
             }) { Text("📍") }
+            TextButton(onClick = onOpenNotes) { Text("📝") }
+            TextButton(onClick = onOpenMemory) { Text("🧠") }
             // Hands-free session. Reachable here too, so it works before the
             // user has made Ultra their assistant app.
             TextButton(onClick = {
@@ -394,6 +401,43 @@ fun ChatScreen(
             }
         }
 
+        // Focus: answer from Memory, Notes or both ([MemoryFocus]) instead of the model's own knowledge.
+        var focusMenu by remember { mutableStateOf(false) }
+        val focus by ChatStore.focus
+        Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.foundation.layout.Box {
+                Surface(
+                    color = if (focus == com.agent.ultra.agent.MemoryFocus.Focus.NORMAL) MaterialTheme.colorScheme.surfaceVariant
+                        else MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.clickable { focusMenu = true },
+                ) {
+                    Text("Focus: ${focus.label} ▾", style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                }
+                androidx.compose.material3.DropdownMenu(expanded = focusMenu, onDismissRequest = { focusMenu = false }) {
+                    for (f in com.agent.ultra.agent.MemoryFocus.Focus.entries) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(f.label)
+                                    Text(when (f) {
+                                        com.agent.ultra.agent.MemoryFocus.Focus.NORMAL -> "Its own knowledge; memory when you ask about the past"
+                                        com.agent.ultra.agent.MemoryFocus.Focus.MEMORY -> "Every answer from what it heard"
+                                        com.agent.ultra.agent.MemoryFocus.Focus.NOTES -> "Every answer from your notes"
+                                        com.agent.ultra.agent.MemoryFocus.Focus.BOTH -> "From what it heard and your notes"
+                                    }, style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                }
+                            },
+                            onClick = { ChatStore.focus.value = f; focusMenu = false },
+                        )
+                    }
+                }
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -404,7 +448,12 @@ fun ChatScreen(
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
-                placeholder = { Text("Ask Jarvis…") },
+                placeholder = { Text(when (focus) {
+                    com.agent.ultra.agent.MemoryFocus.Focus.MEMORY -> "Ask about what Jarvis heard…"
+                    com.agent.ultra.agent.MemoryFocus.Focus.NOTES -> "Ask about your notes…"
+                    com.agent.ultra.agent.MemoryFocus.Focus.BOTH -> "Ask about your memory and notes…"
+                    else -> "Ask Jarvis…"
+                }) },
                 modifier = Modifier.weight(1f),
                 maxLines = 4,
             )

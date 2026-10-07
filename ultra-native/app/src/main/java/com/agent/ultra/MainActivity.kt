@@ -34,12 +34,21 @@ class MainActivity : ComponentActivity() {
                 val engine = remember { LocalModelEngine.shared(applicationContext) }
                 // Bump on provider save so the brain rebuilds with the new config.
                 var configVersion by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+                // "Open my notes" said or typed to the brain (MemoryFocus.screen): show it.
+                val asked by com.agent.ultra.ui.ChatStore.screenRequest
+                androidx.compose.runtime.LaunchedEffect(asked) {
+                    asked?.let { screen = it; com.agent.ultra.ui.ChatStore.screenRequest.value = null }
+                }
                 when (screen) {
                     "chat" -> ChatScreen(
                         localEngine = engine,
                         configVersion = configVersion,
                         onOpenSettings = { screen = "settings" },
+                        onOpenNotes = { screen = "notes" },
+                        onOpenMemory = { screen = "memory" },
                     )
+                    "notes" -> com.agent.ultra.ui.NotesScreen(onBack = { screen = "chat" }, onAsk = { screen = "chat" })
+                    "memory" -> com.agent.ultra.ui.MemoryScreen(onBack = { screen = "chat" }, onAsk = { screen = "chat" })
                     "settings" -> SettingsScreen(
                         localEngine = engine,
                         onConfigSaved = { configVersion++ },
@@ -50,8 +59,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onPause() {
+        com.agent.ultra.ui.ChatStore.uiVisible = false
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
+        com.agent.ultra.ui.ChatStore.uiVisible = true
         if (com.agent.ultra.ui.UltraPrefs.preloadBrain(this)) {
             LocalModelEngine.shared(applicationContext).preloadInBackground("app opened")
         }

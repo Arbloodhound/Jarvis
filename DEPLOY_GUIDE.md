@@ -129,6 +129,23 @@ Parts marked **(test data)** check one piece with fixed sample input. The rest u
 
 ---
 
+## Notes and memory (how to use them)
+
+- **📝 Notes** (chat screen, top row): every note in one place. That's the ones the memory model makes from what Jarvis hears, plus the ones you make.
+  - Filter by To-dos, Plans, People, Facts or Patterns.
+  - Search, add or delete notes.
+  - Tap **Ask Jarvis about my notes** to ask questions about them.
+- **🧠 Memory**: everything Jarvis heard, by day, searchable. **Ask Jarvis about my memory** lets you ask questions about it.
+- **Focus** (the chip above the text box): **Normal**, **Memory**, **Notes** or **Memory + notes**.
+  - In Memory or Notes, every question is answered from that and nothing else. It shows which note or moment it used, and says so when the answer isn't there.
+  - Set it back to Normal for everyday questions.
+- **By voice or typing**, no menu needed:
+  - "note: buy milk" or "remember that the gate code is 4512" saves a note.
+  - "search my notes for Lisbon", "what's in my memory about Sam" or "read me my to-do list" answers from them.
+  - "open my notes" or "show my memory" opens the screen. If you say it to the phone with the app closed, Jarvis reads them out instead.
+
+---
+
 ## Part 5: Real-life trial (1–2 days)
 
 Before calling it finished, use it normally:

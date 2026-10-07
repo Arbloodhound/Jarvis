@@ -3,6 +3,29 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — Notes and Memory screens, notes/memory tools, Focus menu
+Owner request: dedicated notes and memory sections holding the organised information, and a memory tool and notes
+tool reachable by voice, by typing and from a drop-down, so the AI reasons with its memory and/or notes.
+Subsystems C (notes store), A (Brain routing, prompt), G (UI).
+- One notes store: `note_create` (and "note: …", "remember that …", "take a note …" — `UserNotes.command`, handled
+  in Brain before any model) now writes to `MemoryNotes` (`addUser`: kind todo/plan/fact from the wording, time words
+  resolved, merged into a duplicate like the librarian's). Before, it wrote files/notes/*.txt that nothing read;
+  those are imported once at start (`importLegacyFiles`, folder renamed notes-imported).
+- `MemoryFocus` (the memory and notes tools): Focus NORMAL / MEMORY / NOTES / BOTH. From the chat's Focus chip
+  (ChatStore.focus) or the request's words (`detect`: "search my notes for X", "what's in my memory about Y",
+  "read my to-do list", "my memory and notes"); the query drops the focus words. Offline, a spoken/typed focus skips
+  the device-tool route (so "search my notes for the wifi password" never toggles wifi); the menu focus applies
+  after it. The brief: instruction ("answer from … reason across them, say which note or moment, say so if absent")
+  + up to 1800 chars of notes ("[todo, Tue 7 Oct 2026] …") and/or heard lines with times (UltraApplication
+  `focusedFind`: query match, else newest). Cloud path: focus not applied (it has ambient_recall); offline only.
+- "open my notes" / "show my memory" (`MemoryFocus.screen`): opens the screen when MainActivity is resumed
+  (ChatStore.uiVisible/screenRequest); said to ambient listening with the app closed, it answers by reading them.
+- UI: NotesScreen (kind chips, search, add, delete, "Ask Jarvis about my notes" → Notes focus), MemoryScreen (by
+  day, search via MemoryRecall, "Ask Jarvis about my memory"), 📝/🧠 buttons (quick-action row now scrolls
+  sideways), Focus chip + menu above the input, placeholder names the focus.
+1187 JVM tests, 0 failures (new: MemoryFocusTest, UserNotesTest). Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN (UI
+never rendered on a phone; answer quality from focused briefs unmeasured).
+
 ## 2026-10-07 (session 01BUKa) — the brain is told it has memory, notes and phone actions; real-feature checks
 Owner: "speaking to the model, it doesn't know it has memories or notes … is it in its system prompt? … the
 feature test should test the actual features, not sims." (Results file sent again = the 21:02 one, unchanged.)
