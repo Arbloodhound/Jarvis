@@ -117,8 +117,13 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
     val contextSize: Int get() = loadedCtx.takeIf { it > 0 && handle != 0L } ?: plannedContext()
     val modelFileSizeBytes: Long get() = if (modelFile.exists()) modelFile.length() else 0L
     /** Qwen3 Thinking MoE presets: ChatML prompts, template-opened <think> trace. */
-    /** Qwen3 thinking models: the MoE, and the small Qwen3 that stands in for it on a small phone. */
-    val isThinkingModel: Boolean get() = modelFile.name.let { it.startsWith("qwen3moe") || it.startsWith("qwen3-") }
+    /** Qwen3 thinking models: the MoE, and the small Qwen3 that stands in for it on a small phone.
+     *  Qwen3.5 ("qwen35-") too: same ChatML, and its template also opens the <think> block itself
+     *  (Qwen/Qwen3.5-4B chat_template.jinja: add_generation_prompt -> "<|im_start|>assistant\n<think>\n";
+     *  thinking off -> "<think>\n\n</think>\n\n", what LocalPrompt.buildNoThink emits). */
+    val isThinkingModel: Boolean get() = modelFile.name.let {
+        it.startsWith("qwen3moe") || it.startsWith("qwen3-") || it.startsWith("qwen35-")
+    }
     val modelFilePath: String get() = modelFile.absolutePath
 
     /**
@@ -873,11 +878,13 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         /**
          * KV-cache shape of a model: per token, layers x kvHeads x headDim elements each for K and V.
          * [vocab] sizes the logits part of the compute buffer; [trainCtx] caps the context
-         * (llama.cpp only warns past it, the model degrades).
+         * (llama.cpp only warns past it, the model degrades). [stateBytes]: a fixed per-sequence
+         * recurrent state on top (hybrid models; 0 for plain attention). For a hybrid model
+         * [layers] counts only its full-attention layers, the only ones with a KV cache.
          */
         internal data class KvProfile(
             val layers: Int, val kvHeads: Int, val headDim: Int, val vocab: Int,
-            val trainCtx: Int = Int.MAX_VALUE,
+            val trainCtx: Int = Int.MAX_VALUE, val stateBytes: Long = 0,
         ) {
             /** q8_0: a 32-element block is 34 bytes (32 int8 + one f16 scale). */
             val kvBytesPerToken: Long get() = layers.toLong() * kvHeads * headDim * 2 * 34 / 32
@@ -889,6 +896,14 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             "qwen3-1.7b" to KvProfile(28, 8, 128, 151_936),
             "qwen3-4b" to KvProfile(36, 8, 128, 151_936),           // Qwen3-4B (2507 thinking, abliterated)
             "qwen3-8b" to KvProfile(36, 8, 128, 151_936),
+            // Qwen3.5-4B (Qwen/Qwen3.5-4B config.json, text_config): hybrid, 32 layers of which every
+            // 4th (full_attention_interval 4) is full attention -> 8 KV layers (llama.cpp 8345f33
+            // qwen35.cpp marks the rest recurrent; the hybrid memory's attention filter keeps only
+            // the non-recurrent ones), num_key_value_heads 4, head_dim 256, vocab 248,320. The 24
+            // Gated DeltaNet layers keep an f32 state per sequence (hparams n_embd_r + n_embd_s:
+            // conv 3 x (4096 + 2 x 16 x 128) + ssm 128 x 4096 floats) = 24 x 548,864 x 4 B.
+            // Read from the base model's config, not from the abliterated GGUF's metadata.
+            "qwen35-4b" to KvProfile(8, 4, 256, 248_320, stateBytes = 24L * 548_864 * 4),
             "gemma3-1b" to KvProfile(26, 1, 256, 262_144),
             "llama32-1b" to KvProfile(16, 8, 64, 128_256),
             "qwen25-15b" to KvProfile(28, 2, 128, 151_936),
@@ -921,7 +936,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         fun memoryNeedBytes(fileName: String, modelBytes: Long, ctx: Int): Long {
             val p = kvProfile(fileName)
             val compute = N_UBATCH.toLong() * p.vocab * 4 + 2L * ctx * N_UBATCH * 2 + ACTIVATIONS_BYTES
-            return modelBytes + p.kvBytesPerToken * ctx + compute + ANDROID_RESERVE_BYTES + APP_MARGIN_BYTES
+            return modelBytes + p.kvBytesPerToken * ctx + p.stateBytes + compute + ANDROID_RESERVE_BYTES + APP_MARGIN_BYTES
         }
 
         /** Memory a load at [ctx] needs beyond the same load at [CTX_SIZE] (KV + mask growth). */
@@ -1035,6 +1050,18 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 "https://huggingface.co/mradermacher/Huihui-Qwen3-4B-Thinking-2507-abliterated-GGUF/resolve/main/Huihui-Qwen3-4B-Thinking-2507-abliterated.Q4_K_M.gguf",
                 "qwen3-4b-thinking-2507-abliterated-q4km.gguf", 2382,
                 "The same 4B with refusals removed (Q4_K_M, also on the fast path).",
+            ),
+            // Qwen3.5-4B, abliterated by huihui-ai, quantised by mradermacher. File and size checked
+            // on the Hub listing, 2026-10-07: 2,707,514,688 B. Qwen's card for the stock Qwen3.5-4B
+            // (thinking): GPQA Diamond 76.2 vs 65.8 for Qwen3-4B-Thinking-2507; the abliterated build
+            // is unmeasured (abliteration can cost some reasoning). A hybrid model (llama.cpp arch
+            // qwen35): the native side can't trim its state, so a turn reuses the previous prompt
+            // only when it extends it, and the speed-boost draft (Qwen3 vocabulary) never applies.
+            ModelChoice(
+                "Qwen3.5-4B abliterated (Q4_K_M) — strongest reasoning, new",
+                "https://huggingface.co/mradermacher/Huihui-Qwen3.5-4B-abliterated-GGUF/resolve/main/Huihui-Qwen3.5-4B-abliterated.Q4_K_M.gguf",
+                "qwen35-4b-abliterated-q4km.gguf", 2582,
+                "Newer generation of the 4B, refusals removed. On Qwen's published tests the stock Qwen3.5-4B reasons clearly better than the 4B Thinking 2507. Untested on this phone: speed unknown, and no speed boost for it. The 4B Thinking stays the safe default.",
             ),
             ModelChoice(
                 "Qwen3-8B (Q4_K_S) — bigger, slower",
@@ -1244,10 +1271,11 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         val FAST_DEFAULT = PRESETS.first { it.fileName == "qwen3-4b-thinking-2507-q4_0.gguf" }
 
         /** The default reasoning brain: Qwen3-4B Thinking 2507, and its abliterated build (same base
-         *  model). A slow brain test on these says keep it and how to speed it up, never "switch to
-         *  a smaller model" (all smaller presets reason worse): KitReport.advice. */
+         *  model), plus the Qwen3.5-4B abliterated (scores higher still on Qwen's published tests).
+         *  A slow brain test on these says keep it and how to speed it up, never "switch to a
+         *  smaller model" (all smaller presets reason worse): KitReport.advice. */
         val REASONING_DEFAULTS: Set<String> =
-            setOf(FAST_DEFAULT.fileName, "qwen3-4b-thinking-2507-abliterated-q4km.gguf")
+            setOf(FAST_DEFAULT.fileName, "qwen3-4b-thinking-2507-abliterated-q4km.gguf", "qwen35-4b-abliterated-q4km.gguf")
 
         /** Qwen3-8B Q4_K_S: the 14 GB+ default before Qwen3-4B Thinking 2507 replaced it. Still
          *  selectable, and kept by an install that already has it on disk ([defaultFor]). */

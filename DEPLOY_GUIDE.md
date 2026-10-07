@@ -55,6 +55,7 @@ Stay on Wi‑Fi and keep the phone plugged in for this part.
 
 ### 2a. Download everything
 1. Pick the brain first: Jarvis → ⚙ **Settings** → **ON-DEVICE MODEL** → **Change model** → **Qwen3-4B Thinking 2507 (Q4_0)**. It's faster than the 8B and scores higher on Qwen's reasoning tests. (Already have the 8B? Pick the 4B anyway; the 8B stays on the phone.)
+   - Optional, to try a newer and possibly stronger brain: ⚙ **Settings** → **ON-DEVICE MODEL** → **Change model** → **Qwen3.5-4B abliterated (Q4_K_M) — strongest reasoning, new** → **Download & use** (2.7 GB). Not yet tested on this phone and it gets no speed boost; the 4B Thinking stays the safe default, so switch back if it is slow or answers worse.
 2. Then ⚙ **Settings** → **DOWNLOADS** (at the top) → **Download all missing**.
    - It lists every model with its size. The two brains are the big ones (about 3.5 GB together); the rest are small.
    - The chat screen's **Download all** card does the same thing.
