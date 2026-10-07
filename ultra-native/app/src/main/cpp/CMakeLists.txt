@@ -15,11 +15,16 @@ set(LLAMA_HOME "$ENV{HOME}/llama-android")
 
 # One shim per CPU variant from build-llama-android.sh, all with the same JNI symbols.
 # LlmNative loads exactly one: the best the phone's /proc/cpuinfo supports.
+# ultra_vlm.cpp (VisionNative: a vision-language model through llama.cpp's libmtmd) is in the
+# same .so, so it shares the one llama/ggml. mtmd links before llama (it calls into it), and
+# vendor-hash is mtmd's only other static dependency (build-llama-android.sh).
 function(add_ultra_llm target libdir)
-    add_library(${target} SHARED ultra_llm.cpp)
+    add_library(${target} SHARED ultra_llm.cpp ultra_vlm.cpp)
     target_include_directories(${target} PRIVATE ${LLAMA_HOME}/include)
     target_link_directories(${target} PRIVATE ${LLAMA_HOME}/${libdir})
     target_link_libraries(${target}
+            mtmd
+            vendor-hash
             llama
             ggml-cpu
             ggml-base
@@ -33,7 +38,7 @@ endfunction()
 
 add_ultra_llm(ultra_llm lib)    # armv8-a: runs on any arm64 phone
 foreach(variant dotprod i8mm)
-    if(EXISTS "${LLAMA_HOME}/lib-${variant}/libggml-cpu.a")
+    if(EXISTS "${LLAMA_HOME}/lib-${variant}/libggml-cpu.a" AND EXISTS "${LLAMA_HOME}/lib-${variant}/libmtmd.a")
         add_ultra_llm(ultra_llm_${variant} lib-${variant})
     else()
         message(WARNING "ultra_llm_${variant}: ${LLAMA_HOME}/lib-${variant} missing; "

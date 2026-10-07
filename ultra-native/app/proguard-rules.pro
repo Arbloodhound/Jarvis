@@ -7,6 +7,9 @@
 # friends. Rename the class or the methods and the lookup fails at runtime,
 # the moment the on-device model is first used.
 -keep class com.agent.ultra.local.LlmNative { *; }
+# ultra_vlm.cpp (same .so) exports Java_com_agent_ultra_local_VisionNative_nativeVlmLoad,
+# _nativeVlmDescribe and _nativeVlmFree: same by-name binding, same failure if renamed.
+-keep class com.agent.ultra.local.VisionNative { *; }
 
 # The native side resolves this callback reflectively:
 #   GetMethodID(GetObjectClass(callback), "onToken", "(Ljava/lang/String;)Ljava/lang/String;")

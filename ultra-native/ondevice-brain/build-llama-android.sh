@@ -11,6 +11,13 @@
 #   lib-dotprod  armv8.2-a+dotprod+fp16         Cortex-A76/A55 era and later
 #   lib-i8mm     armv8.2-a+dotprod+i8mm+fp16    Armv8.6+/v9 cores, e.g. Tensor G5 (X4/A725/A520)
 # Only libggml-cpu.a differs between them; the rest is copied per variant for a simple link.
+#
+# Each variant also gets libmtmd.a (tools/mtmd, the multimodal / vision library ultra_vlm.cpp
+# links) and libvendor-hash.a, the one static lib mtmd links besides llama/ggml. Its other
+# vendor deps (miniaudio, stb, sheredom) are header-only INTERFACE targets at this pin, and
+# Threads is bionic's libc on Android. LLAMA_BUILD_MTMD builds mtmd alone, without the rest of
+# tools/ or libcommon (LLAMA_BUILD_TOOLS stays OFF). Video input is off: it needs
+# LLAMA_SUBPROCESS, which llama.cpp turns off for Android.
 set -euo pipefail
 : "${ANDROID_NDK:?set ANDROID_NDK to your NDK path, e.g. ~/Android/Sdk/ndk/27.0.12077973}"
 OUT="$HOME/llama-android"; SRC="${TMPDIR:-/tmp}/llama.cpp"
@@ -30,10 +37,15 @@ build_variant() {  # <lib dir name> <GGML_CPU_ARM_ARCH, empty = toolchain defaul
     -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_SHARED_LIBS=OFF -DGGML_OPENMP=OFF -DLLAMA_CURL=OFF -DGGML_NATIVE=OFF \
     -DGGML_CPU_ARM_ARCH="$arch" \
-    -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TOOLS=OFF -DLLAMA_BUILD_SERVER=OFF
-  cmake --build "$dir" -j --target llama      # takes several minutes per variant
+    -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TOOLS=OFF -DLLAMA_BUILD_SERVER=OFF \
+    -DLLAMA_BUILD_MTMD=ON
+  cmake --build "$dir" -j --target llama mtmd   # takes several minutes per variant
   rm -rf "${OUT:?}/$name"; mkdir -p "$OUT/$name"
-  find "$dir" -name 'libllama.a' -o -name 'libggml*.a' | xargs -I{} cp {} "$OUT/$name/"
+  find "$dir" -name 'libllama.a' -o -name 'libggml*.a' -o -name 'libmtmd.a' -o -name 'libvendor-hash.a' \
+    | xargs -I{} cp {} "$OUT/$name/"
+  for f in libllama.a libmtmd.a libvendor-hash.a; do
+    [ -f "$OUT/$name/$f" ] || { echo "missing $OUT/$name/$f after the build" >&2; exit 1; }
+  done
   echo "llama arm64 libs ($name, arch=${arch:-armv8-a}) -> $OUT/$name"; ls -la "$OUT/$name"
 }
 
@@ -42,4 +54,4 @@ build_variant lib-dotprod "armv8.2-a+dotprod+fp16"
 build_variant lib-i8mm    "armv8.2-a+dotprod+i8mm+fp16"
 
 mkdir -p "$OUT/include"
-cp include/*.h ggml/include/*.h "$OUT/include/"
+cp include/*.h ggml/include/*.h tools/mtmd/mtmd.h tools/mtmd/mtmd-helper.h "$OUT/include/"

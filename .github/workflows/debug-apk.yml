@@ -109,7 +109,14 @@ jobs:
               [ -f "$d/$v/libggml-cpu.a" ] || { echo "::error::$d/$v/libggml-cpu.a missing"; exit 1; }
             done
           done
+          # mtmd (on-device vision, ultra_vlm.cpp) is linked into every ultra_llm variant.
+          for v in lib lib-dotprod lib-i8mm; do
+            for a in libmtmd.a libvendor-hash.a; do
+              [ -f "$HOME/llama-android/$v/$a" ] || { echo "::error::~/llama-android/$v/$a missing"; exit 1; }
+            done
+          done
           for f in llama-android/lib/libllama.a llama-android/include/llama.h \
+                   llama-android/include/mtmd.h llama-android/include/mtmd-helper.h \
                    whisper-android/lib/libwhisper.a whisper-android/include/whisper.h; do
             [ -f "$HOME/$f" ] || { echo "::error::~/$f missing"; exit 1; }
           done
