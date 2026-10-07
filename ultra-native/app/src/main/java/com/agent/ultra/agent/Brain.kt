@@ -64,7 +64,26 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
      *  silence there could not be cut short. */
     var maxThinkingDepth: WaitBudget.Depth = WaitBudget.Depth.DEEP
 
+    /** Keep what the owner asks this brain in memory ([recordTurn]). Off for the ambient service's
+     *  brain (its requests were heard, so they are stored already) and for the Feature check. */
+    @Volatile var recordTurns: Boolean = true
+
     /** Every spoken/answered ending goes through here: the run's warning first, once. */
+    /** The owner's words to Jarvis, into memory as "[Me] (to Jarvis) …": found by memory search,
+     *  and the memory model makes notes from them like from anything heard. */
+    private fun recordTurn(userInput: String) {
+        if (!recordTurns) return
+        val text = IntentRouter.requestPart(userInput).replace(Regex("\\s+"), " ").trim()
+        if (text.length < 3 || text.startsWith("/")) return
+        try {
+            if (!com.agent.ultra.listen.AmbientConfig(appContext).rememberChat) return
+            com.agent.ultra.listen.AmbientMemory.get(appContext)
+                .record("${com.agent.ultra.listen.MemoryNoteRequest.TO_JARVIS} ${text.take(600)}", System.currentTimeMillis(), 1f)
+        } catch (e: Exception) {
+            android.util.Log.w("UltraBrain", "couldn't keep the request in memory: ${e.message}")
+        }
+    }
+
     private fun speakOut(text: String) {
         val w = spokenWarning
         spokenWarning = null
@@ -169,6 +188,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             if ((lastRun ?: loadLastRun())?.request == lastRequest) applyVerdict(false, "the user corrected it")
         }
         lastRequest = userInput
+        recordTurn(userInput)
         // Whatever this request turns out to be, the recorded run is no longer the last one.
         // Only a cloud run records itself again, at its end.
         lastRun = null
@@ -202,9 +222,22 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             return
         }
 
+        // Notes from what was already heard ("make a note of what Sam said about the boiler") or from
+        // the last answer ("save that as a note").
+        val noteFromMemory = when (val nr = com.agent.ultra.listen.MemoryNoteRequest.parse(IntentRouter.requestPart(userInput))) {
+            is com.agent.ultra.listen.MemoryNoteRequest.Kind.LastAnswer -> {
+                val last = com.agent.ultra.ui.ChatStore.messages.dropLast(1).lastOrNull { !it.fromUser && it.text.isNotBlank() }?.text
+                val text = last?.let { com.agent.ultra.listen.MemoryNoteRequest.fromAnswer(it) }
+                answer(if (text == null) "There's no answer to save yet." else controller.createNote(text))
+                android.util.Log.i("UltraBrain", "RUN COMPLETE (last answer noted)")
+                return
+            }
+            is com.agent.ultra.listen.MemoryNoteRequest.Kind.FromMemory -> MemoryFocus.Ask(MemoryFocus.Focus.MEMORY, nr.query)
+            null -> null
+        }
         // The notes tool, by voice or text: "note: buy milk", "remember that the gate code is 4512".
         // Into the one notes store (the Notes screen); no model needed.
-        com.agent.ultra.listen.UserNotes.command(IntentRouter.requestPart(userInput))?.let { text ->
+        if (noteFromMemory == null) com.agent.ultra.listen.UserNotes.command(IntentRouter.requestPart(userInput))?.let { text ->
             answer(controller.createNote(text).let { if (it.startsWith("Error")) "I couldn't save that note. $it" else it })
             android.util.Log.i("UltraBrain", "RUN COMPLETE (note saved)")
             return
@@ -253,6 +286,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             // the command alone: overheard ambient text must not shape params or task memory.
             // A request that names the notes or memory is a question for them, never a device command
             // ("search my notes for the wifi password" must not toggle wifi).
+            if (noteFromMemory != null && local.isThinkingModel) { emitLocal(userInput, noteFromMemory, noteMode = true); return }
             if (spokenFocus != null && local.isThinkingModel) { emitLocal(userInput, spokenFocus); return }
             if (LocalToolCall.offlineRoute(userInput, canDecline = local.isThinkingModel) &&
                 runLocalLoop(IntentRouter.requestPart(userInput))) return
@@ -604,7 +638,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     /** Direct local answer for the offline path. Thinking MoE presets get ChatML,
      * a routed + thermal-scaled think budget and a hidden trace; small models keep
      * the original plain prompt. */
-    private suspend fun emitLocal(userInput: String, focus: MemoryFocus.Ask? = null) {
+    private suspend fun emitLocal(userInput: String, focus: MemoryFocus.Ask? = null, noteMode: Boolean = false) {
         val msg = ChatMessage(false, "")
         ChatStore.addToState(msg)
         // "Thinking…" from the moment decoding starts (engine lock held, model loaded) until
@@ -643,8 +677,9 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                     val searching = ChatStore.setStatus(ChatStatus.Phase.THINKING)
                     try {
                         when {
-                            focus != null -> MemoryFocus.brief(focus, MemoryFocus.provider?.let { p ->
-                                kotlinx.coroutines.withTimeoutOrNull(MemoryBrief.TIMEOUT_MS) { p(focus, System.currentTimeMillis()) } })
+                            focus != null -> MemoryFocus.provider?.let { p ->
+                                kotlinx.coroutines.withTimeoutOrNull(MemoryBrief.TIMEOUT_MS) { p(focus, System.currentTimeMillis()) } }
+                                .let { found -> if (noteMode) MemoryFocus.noteBrief(focus, found) else MemoryFocus.brief(focus, found) }
                             wantsMemory.overview -> MemoryBrief.recallOverview() ?: MemoryBrief.NOTHING_FOUND
                             // searched, found nothing: say so, not "no memory"
                             else -> MemoryBrief.recall(MemoryBrief.query(userInput, past.lastOrNull { it.fromUser }?.text))
@@ -695,7 +730,19 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         result.onFailure {
             ChatStore.setText(msg.id, "Error: on-device model failed — ${it.message}")
         }
-        val finalMsg = ChatStore.messageById(msg.id) ?: msg
+        var finalMsg = ChatStore.messageById(msg.id) ?: msg
+        if (noteMode && result.isSuccess) {
+            // "Make a note of what Sam said …": the model wrote the note; the app files it.
+            val note = com.agent.ultra.listen.MemoryNoteRequest.noteText(finalMsg.text)
+            val saved = note?.let { controller.createNote(it) }
+            val text = when {
+                note == null -> "I found nothing about that in what I heard, so no note was made."
+                saved?.startsWith("Error") == true -> "${finalMsg.text}\n\n(Couldn't save it: $saved)"
+                else -> "$saved\n(from what I heard)"
+            }
+            ChatStore.setText(msg.id, text)
+            finalMsg = finalMsg.copy(text = text)
+        }
         ChatStore.persist(finalMsg)
         speakOut(finalMsg.text)
     }
@@ -1443,7 +1490,7 @@ JSON:"""
             controller.currentWifiSsid()?.let { add("WiFi: $it") }
         }.joinToString(" | ")
 
-        return """You are Jarvis — a capable, concise AI agent controlling this Android phone.
+        return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have full control of it through its accessibility service: reading and acting on the screen, screenshots, notifications, settings, apps. Never say you can't access or control the phone.
 PHONE STATE: $env
 TODAY: $date at $time
 
@@ -1518,7 +1565,10 @@ RULES:
             if (u.contains("http")) return false
             return Regex(
                 "\\b(flashlight|torch|wi-?fi|bluetooth|do not disturb|dnd|volume|brightness|" +
-                    "airplane|alarm|battery|clipboard|note this|open|launch)\\b"
+                    "airplane|alarm|battery|clipboard|note this|open|launch|" +
+                    "screenshot|screen ?shot|home screen|go home|go back|recent apps|notifications?|quick settings|" +
+                    "lock (?:the |my )?(?:phone|screen)|on (?:my|the) screen|music|song|track|pause|play|skip|" +
+                    "settings|where am i|my location)\\b"
             ).containsMatchIn(u)
         }
 

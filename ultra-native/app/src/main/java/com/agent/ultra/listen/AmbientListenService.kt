@@ -405,7 +405,10 @@ class AmbientListenService : Service() {
         if (windowOpen) {
             val command = WakeFilter.stripWakePhrase(r.text, wakeWords())
             if (command.length < 2) {
+                // "Hey Jarvis." and a pause: answer, then keep listening for the request (the
+                // window reopens after the reply, while the mic was muted for it).
                 if (windowId == wid) cmdWindowUntil = now + AmbientConfig.FOLLOWUP_MS
+                say(WAKE_REPLY) { if (windowId == wid) cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS }
                 return
             }
             consumedWindowId = wid
@@ -421,7 +424,10 @@ class AmbientListenService : Service() {
                 // Woken by the words (the acoustic gate missed, or there is none): chime now. Not
                 // for the follow-up utterance after a bare name, which has no wake phrase of its own.
                 if (WakeFilter.addressedCommand(r.text, cfg.wakeName) != null) { woke("words"); WakeChime.play() }
-                if (v.command.isBlank()) return          // bare name; follow-up will carry the command
+                if (v.command.isBlank()) {               // bare name; follow-up will carry the command
+                    say(WAKE_REPLY) { wake.holdFollowUp(System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS) }
+                    return
+                }
                 dispatch(buildContextualRequest(v.command, now))
             }
         }
@@ -464,25 +470,49 @@ class AmbientListenService : Service() {
         AmbientBridge.onCommand?.let { it(request); lastCommandDoneAt = System.currentTimeMillis(); return }
         // Main, as VoiceActivity's lifecycleScope runs it.
         scope.launch(Dispatchers.Main) {
-            // Same rule as the voice screen: never act for whoever is talking to a locked
-            // phone. A service can't ask for the unlock itself, so it says so and stops.
+            // Anyone can talk to a locked phone: only harmless requests run then (LockedPolicy),
+            // and without the overheard transcript, which is private. A service can't ask for the
+            // unlock itself, so for anything else it says so and stops.
             val km = getSystemService(android.app.KeyguardManager::class.java)
+            var run = request
             if (km != null && km.isKeyguardLocked) {
-                val speaker = speakerRef ?: com.agent.ultra.ui.Speaker(this@AmbientListenService).also { speakerRef = it }
-                val msg = "Unlock your phone to continue."
-                mutedUntil = System.currentTimeMillis() + EchoGuard.muteMsFor(msg)
-                speaker.speak(msg) { mutedUntil = System.currentTimeMillis() + AmbientConfig.ECHO_GUARD_MS }
-                return@launch
+                if (!com.agent.ultra.agent.LockedPolicy.allowed(request)) {
+                    say(com.agent.ultra.agent.LockedPolicy.REFUSAL)
+                    lastCommandDoneAt = System.currentTimeMillis()
+                    return@launch
+                }
+                run = com.agent.ultra.agent.IntentRouter.requestPart(request)
             }
-            try { fallbackBrain().run(request) }
+            // A thinking answer takes seconds: say so if it hasn't come within ACK_AFTER_MS.
+            answeredAt = 0L
+            val started = System.currentTimeMillis()
+            val ack = scope.launch {
+                kotlinx.coroutines.delay(ACK_AFTER_MS)
+                if (answeredAt < started) say(WORKING_REPLY)
+            }
+            try { fallbackBrain().run(run) }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { android.util.Log.w("UltraAmbient", "command failed: ${e.message}") }
-            finally { lastCommandDoneAt = System.currentTimeMillis() }
+            finally { ack.cancel(); lastCommandDoneAt = System.currentTimeMillis() }
         }
     }
 
     private var brainRef: com.agent.ultra.agent.Brain? = null
     private var speakerRef: com.agent.ultra.ui.Speaker? = null
+    /** When the service's brain last spoke an answer (the "On it." check). */
+    @Volatile private var answeredAt = 0L
+
+    /** Speaks [msg] in Jarvis's voice with the mic muted for it (echo guard), then [after]. */
+    private fun say(msg: String, after: () -> Unit = {}) {
+        mutedUntil = System.currentTimeMillis() + EchoGuard.muteMsFor(msg)
+        scope.launch(Dispatchers.Main) {   // as the brain's answers are spoken (the transcriber calls this too)
+            val speaker = speakerRef ?: com.agent.ultra.ui.Speaker(this@AmbientListenService).also { speakerRef = it }
+            speaker.speak(msg) {
+                mutedUntil = System.currentTimeMillis() + AmbientConfig.ECHO_GUARD_MS
+                after()
+            }
+        }
+    }
 
     @Synchronized private fun fallbackBrain(): com.agent.ultra.agent.Brain = brainRef ?: run {
         val speaker = speakerRef ?: com.agent.ultra.ui.Speaker(this).also { speakerRef = it }
@@ -491,7 +521,9 @@ class AmbientListenService : Service() {
         ).also { b ->
             // Spoken: no "Answer now" button, so keep thinking short.
             b.maxThinkingDepth = com.agent.ultra.agent.WaitBudget.Depth.QUICK
+            b.recordTurns = false   // what it is asked was heard, so it is in memory already
             b.onAnswer = { text ->
+                answeredAt = System.currentTimeMillis()
                 // Same echo guard as VoiceActivity: mute while speaking, bounded.
                 mutedUntil = System.currentTimeMillis() + EchoGuard.muteMsFor(text)
                 speaker.speak(text) {
@@ -544,6 +576,10 @@ class AmbientListenService : Service() {
     }
 
     companion object {
+        /** What Jarvis says to a bare "Hey Jarvis", and when an answer is still being thought out. */
+        const val WAKE_REPLY = "Yes?"
+        const val WORKING_REPLY = "On it."
+        private const val ACK_AFTER_MS = 2_500L
         private const val CHANNEL = "ambient_listen"
         private const val NOTIF_ID = 7101
         private const val MAX_MIC_FAILURES = 3

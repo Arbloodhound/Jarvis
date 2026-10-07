@@ -199,6 +199,21 @@ class AgentController(private val context: Context) {
     suspend fun back(): Boolean = withContext(Dispatchers.IO) { service?.performBack() ?: false }
     suspend fun home(): Boolean = withContext(Dispatchers.IO) { service?.performHome() ?: false }
 
+    /** The phone's own buttons and shades through the accessibility service: home, back, recents,
+     *  notifications, quick_settings, lock_screen. False when the service isn't running. */
+    suspend fun globalAction(action: String): Boolean = withContext(Dispatchers.IO) {
+        val s = service ?: return@withContext false
+        when (action.lowercase().replace(' ', '_')) {
+            "home" -> s.performHome()
+            "back" -> s.performBack()
+            "recents", "recent_apps", "app_switcher" -> s.performRecents()
+            "notifications", "notification_shade" -> s.performNotifications()
+            "quick_settings" -> s.performQuickSettings()
+            "lock_screen", "lock" -> s.performLockScreen()
+            else -> false
+        }
+    }
+
     // ── Apps ────────────────────────────────────────────────────────────
 
     fun launchApp(packageName: String): Boolean {

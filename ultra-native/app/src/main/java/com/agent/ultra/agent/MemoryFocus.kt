@@ -78,6 +78,15 @@ object MemoryFocus {
             "If they don't hold the answer, say so plainly."
     }
 
+    /** For "make a note of what Sam said about …": one note line, saved by the app afterwards. */
+    const val NOTE_INSTRUCTION = "The owner asked you to make ONE note from what you heard, given below with times. " +
+        "Write it as a single self-contained sentence under 30 words: what was said, who said it and when, names and " +
+        "numbers exactly as heard. Start with \"Note:\". If nothing below is about it, reply exactly \"Nothing found.\""
+
+    /** The block for a note made from memory ([NOTE_INSTRUCTION]). */
+    fun noteBrief(ask: Ask, found: String?): String =
+        NOTE_INSTRUCTION + "\n" + (found?.takeIf { it.isNotBlank() } ?: "(nothing found for \"${ask.query}\")")
+
     /** The block the brain gets: [instruction] then what was found (or that nothing was). */
     fun brief(ask: Ask, found: String?): String {
         val body = found?.takeIf { it.isNotBlank() } ?: "(nothing found${if (ask.query.isBlank()) "" else " for \"${ask.query}\""})"

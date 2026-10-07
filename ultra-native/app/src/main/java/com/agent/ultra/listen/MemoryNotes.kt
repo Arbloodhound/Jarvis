@@ -24,13 +24,16 @@ data class NoteHit(val text: String, val ts: Long, val kind: String)
  * (external content, kept in step by triggers) backs [search] and duplicate lookup.
  */
 class MemoryNotes private constructor(ctx: Context) :
-    SQLiteOpenHelper(ctx.applicationContext, "memory_notes.db", null, 1), NoteStore {
+    SQLiteOpenHelper(ctx.applicationContext, "memory_notes.db", null, 2), NoteStore {
 
     override fun onConfigure(db: SQLiteDatabase) { db.enableWriteAheadLogging() }
 
     override fun onCreate(db: SQLiteDatabase) { SCHEMA.forEach(db::execSQL) }
 
-    override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {}
+    override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {
+        // 2: who said it, and topic tags (the owner asked for speaker labels and tags on notes)
+        if (o < 2) UPGRADE_2.forEach(db::execSQL)
+    }
 
     override fun candidates(kind: NoteKind, text: String, limit: Int): List<Note> {
         val q = NoteMerge.ftsQuery(text)
@@ -88,6 +91,31 @@ class MemoryNotes private constructor(ctx: Context) :
     }
 
     /** For the Notes screen: notes of [kind] (null = all) matching [query] (blank = all), newest first. */
+    override fun createdSince(ts: Long, kind: NoteKind?, limit: Int): List<Note> =
+        if (kind == null) notes("SELECT $COLS FROM notes WHERE created_ts>=CAST(? AS INTEGER) ORDER BY created_ts DESC LIMIT ?",
+            ts.toString(), limit.toString())
+        else notes("SELECT $COLS FROM notes WHERE created_ts>=CAST(? AS INTEGER) AND kind=? ORDER BY created_ts DESC LIMIT ?",
+            ts.toString(), kind.key, limit.toString())
+
+    override fun related(text: String, beforeTs: Long, limit: Int): List<Note> {
+        val q = NoteMerge.ftsQuery(text) ?: return emptyList()
+        return NoteMerge.rank(text, notes(
+            "SELECT $COLS FROM notes WHERE id IN (SELECT docid FROM notes_fts WHERE notes_fts MATCH ?) " +
+                "AND created_ts<CAST(? AS INTEGER) ORDER BY updated_ts DESC LIMIT ?",
+            q, beforeTs.toString(), (limit * 5).coerceAtMost(200).toString(),
+        ), limit)
+    }
+
+    /** Every tag in use, most used first (the Notes screen's tag chips). */
+    fun allTags(limit: Int = 30): List<String> {
+        val counts = HashMap<String, Int>()
+        readableDatabase.rawQuery("SELECT tags FROM notes WHERE tags IS NOT NULL AND tags<>''", null).use { c ->
+            while (c.moveToNext()) c.getString(0).split(',').map { it.trim() }.filter { it.isNotEmpty() }
+                .forEach { counts[it] = (counts[it] ?: 0) + 1 }
+        }
+        return counts.entries.sortedByDescending { it.value }.take(limit).map { it.key }
+    }
+
     fun list(kind: NoteKind?, query: String, limit: Int): List<Note> {
         val q = NoteMerge.ftsQuery(query)
         val kindSql = if (kind == null) "1" else "kind=?"
@@ -141,6 +169,8 @@ class MemoryNotes private constructor(ctx: Context) :
         sourceIds = c.getString(6).split(',').mapNotNull { it.trim().toLongOrNull() },
         createdTs = c.getLong(7),
         updatedTs = c.getLong(8),
+        who = if (c.isNull(9)) null else c.getString(9),
+        tags = if (c.isNull(10)) emptyList() else c.getString(10).split(',').map { it.trim() }.filter { it.isNotEmpty() },
     )
 
     private fun values(n: Note) = ContentValues().apply {
@@ -149,15 +179,19 @@ class MemoryNotes private constructor(ctx: Context) :
         if (n.whenEnd == null) putNull("when_end") else put("when_end", n.whenEnd)
         put("heard_ts", n.heardTs); put("source_ids", n.sourceIds.joinToString(","))
         put("created_ts", n.createdTs); put("updated_ts", n.updatedTs)
+        if (n.who == null) putNull("who") else put("who", n.who)
+        put("tags", n.tags.joinToString(","))
     }
 
     companion object {
-        private const val COLS = "id,kind,text,when_ts,when_end,heard_ts,source_ids,created_ts,updated_ts"
+        private const val COLS = "id,kind,text,when_ts,when_end,heard_ts,source_ids,created_ts,updated_ts,who,tags"
+
+        val UPGRADE_2 = listOf("ALTER TABLE notes ADD COLUMN who TEXT", "ALTER TABLE notes ADD COLUMN tags TEXT")
 
         val SCHEMA = listOf(
             "CREATE TABLE notes(id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, text TEXT NOT NULL, " +
                 "when_ts INTEGER, when_end INTEGER, heard_ts INTEGER NOT NULL, source_ids TEXT NOT NULL, " +
-                "created_ts INTEGER NOT NULL, updated_ts INTEGER NOT NULL)",
+                "created_ts INTEGER NOT NULL, updated_ts INTEGER NOT NULL, who TEXT, tags TEXT)",
             "CREATE INDEX notes_kind ON notes(kind, updated_ts)",
             "CREATE VIRTUAL TABLE notes_fts USING fts4(content=\"notes\", text)",
             // the documented FTS4 external-content pattern: remove the old text before the row

@@ -403,14 +403,20 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
      * cues (heard before this existed, or the cue worker hasn't reached it yet).
      * [HeardLine.plain] is always the plain line.
      */
-    fun heardAfter(afterId: Long, limit: Int): List<HeardLine> {
+    fun heardAfter(afterId: Long, limit: Int): List<HeardLine> = tagged(
+        "WHERE h.rowid>CAST(? AS INTEGER) ORDER BY h.rowid ASC LIMIT ?", arrayOf(afterId.toString(), limit.toString()))
+
+    /** The newest [limit] lines with their speaker / cue tags ("[Me] …", "[Sam] [pause 1.2s] …"),
+     *  newest first: the Memory screen. */
+    fun newestTagged(limit: Int): List<HeardLine> = tagged("ORDER BY h.rowid DESC LIMIT ?", arrayOf(limit.toString()))
+
+    private fun tagged(where: String, args: Array<String>): List<HeardLine> {
         val out = ArrayList<HeardLine>()
         readableDatabase.rawQuery(
             "SELECT h.rowid,h.ts,h.text,t.body,t.voice,v.id,v.owner,v.name,v.num FROM heard h " +
                 "LEFT JOIN heard_tag t ON t.rowid=h.rowid AND t.ts=h.ts " +
-                "LEFT JOIN voices v ON v.id=t.voice " +
-                "WHERE h.rowid>CAST(? AS INTEGER) ORDER BY h.rowid ASC LIMIT ?",
-            arrayOf(afterId.toString(), limit.toString())
+                "LEFT JOIN voices v ON v.id=t.voice " + where,
+            args
         ).use { c ->
             while (c.moveToNext()) {
                 val plain = c.getString(2)
@@ -446,6 +452,20 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
         }
         return heardAfter(mark, limit)
     }
+
+    /**
+     * The re-read pass ([Librarian]): rows already organised under an older, sparser prompt, read
+     * again from the start so they get summaries, who-said-it, tags and more notes. Up to [limit]
+     * rows after its own mark and at or below the librarian's mark (newer rows are the normal pass's).
+     */
+    fun rereadQueue(limit: Int): List<HeardLine> {
+        val upTo = librarianMark().first
+        val from = metaGet(META_REREAD) ?: 0L
+        if (from >= upTo) return emptyList()
+        return heardAfter(from, limit).filter { it.id <= upTo }
+    }
+
+    fun markReread(id: Long) = metaPut(META_REREAD, id)
 
     /** Rows up to [id] are organised; [ts] is the newest ts among them. [reset] = overwrite. */
     fun markLibrarian(id: Long, ts: Long, reset: Boolean = false) {
@@ -514,6 +534,7 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
         const val META_VEC_HW = "vec_hw"
         /** meta key: see [generation]. */
         const val META_VEC_GEN = "vec_gen"
+        const val META_REREAD = "reread_mark"
         /** meta key: when the embedder download last failed (epoch ms), for a persisted backoff. */
         const val META_VEC_FETCH_FAIL = "vec_fetch_fail"
         /** meta key: consecutive failed embedder downloads (for the growing backoff). */

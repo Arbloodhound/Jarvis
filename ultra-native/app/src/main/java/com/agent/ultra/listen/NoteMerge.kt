@@ -9,7 +9,9 @@ import java.util.Locale
 enum class NoteKind {
     PERSON, PLAN, TODO, FACT,
     /** A conversational pattern with verbatim evidence ([Observation]); never merged. */
-    OBSERVATION;
+    OBSERVATION,
+    /** What one conversation was about and who took part; one per chunk, never merged. */
+    SUMMARY;
 
     val key: String get() = name.lowercase(Locale.ROOT)
 
@@ -22,6 +24,7 @@ enum class NoteKind {
             "event" to PLAN, "appointment" to PLAN, "meeting" to PLAN,
             "preference" to FACT, "place" to FACT, "people" to PERSON,
             "pattern" to OBSERVATION, "cue" to OBSERVATION,
+            "conversation" to SUMMARY, "overview" to SUMMARY, "gist" to SUMMARY,
         )
 
         /** Case-insensitive; a few synonyms a small model tends to write; null otherwise. */
@@ -48,6 +51,10 @@ data class Note(
     val sourceIds: List<Long>,
     val createdTs: Long,
     val updatedTs: Long,
+    /** Who said it or who it is about, as the transcript labels them ("Me", "Sam", "Speaker 2"); null = unclear. */
+    val who: String? = null,
+    /** Up to [MAX_TAGS] short lower-case topic tags ("work", "health"). */
+    val tags: List<String> = emptyList(),
 ) {
     /** "Tue 7 Oct 15:00", "Tue 7 Oct" (a whole day or part of one), or null with no time. */
     fun whenText(zone: ZoneId): String? {
@@ -59,12 +66,25 @@ data class Note(
     /** One line for the big model: "[plan, Tue 7 Oct 15:00] Dentist with Dr Lee". */
     fun describe(zone: ZoneId): String {
         val time = whenText(zone)?.let { ", $it" } ?: ""
-        return "[${kind.key}$time] $text"
+        val by = who?.let { ", $it" } ?: ""
+        val t = if (tags.isEmpty()) "" else " #" + tags.joinToString(" #")
+        return "[${kind.key}$time$by] $text$t"
     }
 
-    private companion object {
-        val AT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM yyyy HH:mm", Locale.ENGLISH)
-        val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.ENGLISH)
+    companion object {
+        const val MAX_TAGS = 3
+
+        /** Cleans tags from the model or the owner: lower case, letters/digits/spaces/hyphens, ≤ 20 chars, ≤ [MAX_TAGS]. Pure. */
+        fun cleanTags(raw: List<String>): List<String> = raw.asSequence()
+            .map { it.lowercase(Locale.ROOT).trim().trimStart('#').replace(Regex("[^\\p{L}\\p{N} -]+"), "").replace(Regex("\\s+"), " ").trim() }
+            .filter { it.length in 2..20 }.distinct().take(MAX_TAGS).toList()
+
+        /** A speaker label without brackets ("[Speaker 2]" → "Speaker 2"); null when blank or too long. Pure. */
+        fun cleanWho(raw: String?): String? = raw?.replace(Regex("\\s+"), " ")?.trim()?.removePrefix("[")?.removeSuffix("]")?.trim()
+            ?.takeIf { it.isNotEmpty() && it.length <= 40 }
+
+        private val AT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM yyyy HH:mm", Locale.ENGLISH)
+        private val DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.ENGLISH)
     }
 }
 
@@ -143,6 +163,8 @@ object NoteMerge {
             heardTs = minOf(old.heardTs, fresh.heardTs),
             sourceIds = (old.sourceIds + fresh.sourceIds).distinct().sorted().takeLast(MAX_SOURCES),
             updatedTs = now,
+            who = old.who ?: fresh.who,
+            tags = Note.cleanTags(old.tags + fresh.tags),
         )
     }
 

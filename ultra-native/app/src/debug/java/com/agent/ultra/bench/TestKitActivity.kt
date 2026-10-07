@@ -334,7 +334,9 @@ class TestKitActivity : ComponentActivity() {
             val brain = ChatStore.chatBrain(applicationContext, LocalModelEngine.shared(this@TestKitActivity), KIT_CONFIG_VERSION)
             ChatStore.add(ChatMessage(fromUser = true, text = q))
             ChatStore.thinking.value = true
-            try { brain.run(q) } finally { ChatStore.thinking.value = false }
+            // Test questions are not the owner's words: keep them out of memory and notes.
+            brain.recordTurns = false
+            try { brain.run(q) } finally { ChatStore.thinking.value = false; brain.recordTurns = true }
             ChatStore.messages.lastOrNull { !it.fromUser }?.text.orEmpty()
         }
     }

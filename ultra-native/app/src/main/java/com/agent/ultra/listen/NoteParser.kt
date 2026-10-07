@@ -9,7 +9,13 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /** A note as the model wrote it, before its time words are resolved. [obs] is set (and only
  *  set) for [NoteKind.OBSERVATION]; its quotes are already verified against the transcript. */
-data class NoteDraft(val kind: NoteKind, val text: String, val whenPhrase: String?, val obs: Observation? = null)
+data class NoteDraft(
+    val kind: NoteKind, val text: String, val whenPhrase: String?, val obs: Observation? = null,
+    /** Who said it / who it is about ("Me", "Sam", "Speaker 2"), from the model's "who". */
+    val who: String? = null,
+    /** Topic tags from the model's "tags" ([Note.cleanTags]). */
+    val tags: List<String> = emptyList(),
+)
 
 /**
  * Tolerant parser for the librarian's "one JSON object per line" output. Pure, JVM-tested.
@@ -153,7 +159,12 @@ object NoteParser {
             else -> string(whenEl)   // a number or object: keep the note, just without a time
         }?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) && !it.equals("none", true) }
         val k = normaliseKind(kind, text)
-        return NoteDraft(k, text, whenPhrase ?: whenFromText(k, text))
+        val tags = when (val t = o["tags"] ?: o["tag"]) {
+            is JsonArray -> t.mapNotNull { string(it) }
+            null, JsonNull -> emptyList()
+            else -> string(t)?.split(',', ';', '#').orEmpty()
+        }
+        return NoteDraft(k, text, whenPhrase ?: whenFromText(k, text), who = Note.cleanWho(string(o["who"])), tags = Note.cleanTags(tags))
     }
 
     /** Something someone has to do, said as such ("need to", "have to", "must", "remind me to",

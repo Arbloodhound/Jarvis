@@ -1875,6 +1875,9 @@ public class AgentAccessibilityService extends AccessibilityService {
     public boolean performQuickSettings() { return performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS); }
     public boolean performNotifications() { return performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS); }
     public boolean performRecents() { return performGlobalAction(GLOBAL_ACTION_RECENTS); }
+    public boolean performLockScreen() {
+        return android.os.Build.VERSION.SDK_INT >= 28 && performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
+    }
     public boolean takeScreenshot() {
         if (android.os.Build.VERSION.SDK_INT >= 28) {
             return performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT);

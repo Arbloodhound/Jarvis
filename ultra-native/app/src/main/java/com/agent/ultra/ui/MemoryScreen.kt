@@ -52,7 +52,8 @@ fun MemoryScreen(onBack: () -> Unit, onAsk: () -> Unit) {
         loading = true
         lines = withContext(Dispatchers.IO) {
             runCatching {
-                if (query.isBlank()) AmbientMemory.get(context).newest(500).map { it.ts to it.text }
+                // with who said it ("[Me] …", "[Sam] …") when speaker tags are on
+                if (query.isBlank()) AmbientMemory.get(context).newestTagged(500).map { it.ts to it.text }
                 else MemoryRecall.relevant(context, query, System.currentTimeMillis(), 50)
                     .filter { it.source == MemoryRecall.SOURCE_HEARD }.map { it.ts to it.text }
             }.getOrDefault(emptyList())

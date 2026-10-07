@@ -16,6 +16,10 @@ class WakeFilter(private val cfg: AmbientConfig) {
 
     private var followUpUntil = 0L
 
+    /** Keep listening for the request after a bare name until [untilMs] (Jarvis's "Yes?" took
+     *  part of the window with the mic muted). */
+    fun holdFollowUp(untilMs: Long) { followUpUntil = maxOf(followUpUntil, untilMs) }
+
     fun classify(text: String, now: Long): Verdict {
         val t = text.trim()
 

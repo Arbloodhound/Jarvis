@@ -100,6 +100,12 @@ class Tools(
                     else "Error: screenshot failed (accessibility service not running)"
                 }
                 "notification_read" -> controller.readNotifications(params.optInt("limit", 15))
+                "global_action" -> {
+                    val action = params.optString("action")
+                    if (controller.globalAction(action)) "Done: $action"
+                    else "Error: '$action' failed (accessibility service not running, or not one of home, back, " +
+                        "recents, notifications, quick_settings, lock_screen)"
+                }
 
                 // ── Learning by being shown ──────────────────────────
                 "watch_me" -> {

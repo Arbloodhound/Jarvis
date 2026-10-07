@@ -139,10 +139,28 @@ Parts marked **(test data)** check one piece with fixed sample input. The rest u
 - **Focus** (the chip above the text box): **Normal**, **Memory**, **Notes** or **Memory + notes**.
   - In Memory or Notes, every question is answered from that and nothing else. It shows which note or moment it used, and says so when the answer isn't there.
   - Set it back to Normal for everyday questions.
+- **Notes are made on their own.** With the screen off and Jarvis idle (on the charger, or above 50% battery), the memory model writes:
+  - a **summary** of every conversation;
+  - every plan, to-do, person, fact and decision in it, each labelled with **who said it** and **#tags**;
+  - **follow-up** notes when something links to an older note: brought up again, a plan changed, a to-do still open.
+  - It also goes back over older memories once and re-notes them this fuller way.
+  - **Organise now** on the Notes screen does it straight away.
+- **What you tell Jarvis** is remembered and noted too. Settings → VOICE → "Remember what I tell Jarvis" turns that off.
 - **By voice or typing**, no menu needed:
+  - "make a note of what Sam said about the boiler" searches what it heard, writes one note and saves it.
+  - "save that as a note" saves its last answer.
   - "note: buy milk" or "remember that the gate code is 4512" saves a note.
   - "search my notes for Lisbon", "what's in my memory about Sam" or "read me my to-do list" answers from them.
   - "open my notes" or "show my memory" opens the screen. If you say it to the phone with the app closed, Jarvis reads them out instead.
+
+---
+
+## "Hey Jarvis"
+
+- Say **"Hey Jarvis"** on its own: it beeps and says **"Yes?"**. Then say what you want.
+- Or say it all at once: **"Hey Jarvis, take a screenshot."** If the answer takes a few seconds, it says **"On it."** first.
+- It has full control of the phone: screenshots, home, back, recent apps, notifications, quick settings, reading the screen, music, settings pages, location, locking the phone, plus everything it could already do.
+- With the phone **locked**, it does harmless things: flashlight, music, volume, alarms, the time, general questions and adding a note. For anything private (memory, notes, messages, the screen, apps, location) it says "Unlock your phone for that one."
 
 ---
 

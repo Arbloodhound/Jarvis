@@ -3,6 +3,36 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — more notes on their own, notes from past memories, speaker/tags, "Hey Jarvis" replies, full device control
+Owner (2.6.15 working): more notes; notes made later from past memories, on its own; who-said-it labels and tags;
+"Hey Jarvis" doesn't answer — it should speak and do things; it must know it has full phone accessibility
+("take a screenshot" …).
+- Notes (C): kind SUMMARY (one per conversation, never merged); notes carry `who` and `tags` (MemoryNotes DB v2:
+  ALTER TABLE who/tags; parser reads "who"/"tags"; merge keeps who, unites tags; `describe` shows them). Librarian
+  prompt: summary first, every plan/todo/person/fact/opinion/decision its own line, who + 1-3 tags, lines
+  "[Me] (to Jarvis)" always noted, at most 12 lines (MAX_TOKENS 960 / plain 640; prompt + output still ≤ 4096 —
+  CueTaxonomyTest; system-length guard 2600→3100). Runs also off the charger at ≥ 50% battery and not in battery
+  saver (screen off, brain idle). On its own after each run: `LibrarianLinks` (new summaries vs older related notes →
+  up to 3 "follow-up" notes), and, once nothing new waits, a re-read pass over already-organised speech with the
+  new prompt (`AmbientMemory.rereadQueue`/reread_mark, patterns off so observations aren't doubled).
+  "Organise now" (Notes screen) = all passes immediately, any age, screen on. Owner's chat turns go into memory as
+  "[Me] (to Jarvis) …" (`Brain.recordTurn`; off for the ambient brain and the Feature check; setting "Remember what I
+  tell Jarvis", default on). "make a note of what Sam said about X" → memory focus + one-note instruction, the app
+  saves the "Note:" line; "save that as a note" saves the last answer (`MemoryNoteRequest`). Memory screen shows
+  speaker tags (`newestTagged`). Notes screen: Summaries chip, who in the header, #tags + tag filter chips.
+- "Hey Jarvis" (C/listen): bare wake → spoken "Yes?" and the request window reopens after it (gate window or
+  WakeFilter.holdFollowUp); a command not answered within 2.5 s → "On it."; all speech on Main with the echo mute.
+  The ambient brain already spoke its answers (its own Speaker) — whether the owner's misses were no wake, the locked
+  refusal or the long silent think is NOT proven (no log). Locked phone: `LockedPolicy` lets harmless requests run
+  (flashlight, volume, music, alarms, time, general questions, adding a note) without the overheard transcript;
+  private ones get "Unlock your phone for that one." (was: everything refused).
+- Device control (D/A): offline tool catalog + prompt gain screenshot, global_action (home/back/recents/notifications/
+  quick_settings/lock_screen — new AgentController.globalAction, a11y performLockScreen, manifest entry),
+  read_text_on_screen, notification_read, media_play/next, settings_open, device_location; routing keywords added.
+  Root cause of the screenshot complaint: those tools were never offered to the on-device brain (PROVEN from
+  source). OFFLINE_RULES and the cloud system prompt now state full accessibility control, "never say you can't".
+1196 JVM tests, 0 failures. Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (session 01BUKa) — Notes and Memory screens, notes/memory tools, Focus menu
 Owner request: dedicated notes and memory sections holding the organised information, and a memory tool and notes
 tool reachable by voice, by typing and from a drop-down, so the AI reasons with its memory and/or notes.

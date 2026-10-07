@@ -42,10 +42,11 @@ fun MemorySettings(context: Context) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("Organise memory while charging", style = MaterialTheme.typography.bodyMedium)
+            Text("Organise memory into notes", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "While the phone charges with the screen off, a small model on the phone turns what " +
-                    "it heard into short notes (plans, to-dos, people, facts) that Jarvis can look up. " +
+                "With the screen off and Jarvis idle (on the charger, or above 50% battery), a small model on the phone " +
+                    "turns what it heard into notes: a summary of each conversation, plans, to-dos, people and facts, " +
+                    "with who said it and topic tags. \"Organise now\" on the Notes screen does it straight away. " +
                     if (count >= 0) "$count notes so far." else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -53,6 +54,12 @@ fun MemorySettings(context: Context) {
         }
         Switch(checked = on, onCheckedChange = { on = it; cfg.organiseMemory = it })
     }
+    var rememberChat by remember { mutableStateOf(cfg.rememberChat) }
+    SubSwitch(
+        title = "Remember what I tell Jarvis",
+        detail = "What you type or say to Jarvis is kept in memory too, so it becomes notes and can be found later.",
+        checked = rememberChat, enabled = true,
+    ) { rememberChat = it; cfg.rememberChat = it }
     var patterns by remember { mutableStateOf(cfg.notePatterns) }
     var readings by remember { mutableStateOf(cfg.patternReadings) }
     SubSwitch(

@@ -21,6 +21,10 @@ object LocalToolCall {
         "flashlight_toggle", "wifi_toggle", "bluetooth_toggle", "do_not_disturb",
         "volume_set", "alarm_set", "note_create", "app_launch",
         "battery_status", "clipboard_read", "clipboard_write",
+        // Full device control through the accessibility service (owner, 2026-10-07: "take a
+        // screenshot" got a chat reply saying it couldn't, because none of these were offered).
+        "screenshot", "global_action", "read_text_on_screen", "notification_read",
+        "media_play", "media_next", "settings_open", "device_location",
     )
 
     /** What the model says when the message is not a command for one of [TOOLS]. */
@@ -68,6 +72,14 @@ app_launch {"target":"app name"}
 battery_status {}
 clipboard_read {}
 clipboard_write {"text":"..."}
+screenshot {}
+global_action {"action":"home|back|recents|notifications|quick_settings|lock_screen"}
+read_text_on_screen {}
+notification_read {"limit":10}
+media_play {}   (play or pause music)
+media_next {}   (next track)
+settings_open {"page":"wifi|bluetooth|display|sound|battery|apps|location|..."}
+device_location {}
 
 If no tool above does what the message asks (a question, chat, a timer, anything else), reply {"tool":"none","params":{}}.
 
@@ -77,6 +89,14 @@ open chrome -> {"tool":"app_launch","params":{"target":"chrome"}}
 set an alarm for 7 30 am -> {"tool":"alarm_set","params":{"hour":7,"minute":30,"label":"Jarvis alarm"}}
 what's my battery level -> {"tool":"battery_status","params":{}}
 turn off wifi -> {"tool":"wifi_toggle","params":{"on":false}}
+take a screenshot -> {"tool":"screenshot","params":{}}
+go to the home screen -> {"tool":"global_action","params":{"action":"home"}}
+pull down my notifications -> {"tool":"global_action","params":{"action":"notifications"}}
+read my notifications -> {"tool":"notification_read","params":{"limit":10}}
+what's on my screen -> {"tool":"read_text_on_screen","params":{}}
+pause the music -> {"tool":"media_play","params":{}}
+skip this song -> {"tool":"media_next","params":{}}
+lock the phone -> {"tool":"global_action","params":{"action":"lock_screen"}}
 set a timer for 5 minutes -> {"tool":"none","params":{}}
 """.trim()
 

@@ -44,6 +44,10 @@ interface NoteStore {
     fun candidates(kind: NoteKind, text: String, limit: Int): List<Note>
     fun insert(note: Note): Long
     fun update(note: Note)
+    /** Notes of [kind] (null = any) created at or after [ts], newest first ([LibrarianLinks]). */
+    fun createdSince(ts: Long, kind: NoteKind?, limit: Int): List<Note> = emptyList()
+    /** Notes sharing words with [text], any kind, created before [beforeTs], best first ([LibrarianLinks]). */
+    fun related(text: String, beforeTs: Long, limit: Int): List<Note> = emptyList()
 }
 
 /**
@@ -105,10 +109,11 @@ object LibrarianRun {
         log: (String) -> Unit = {},
         patterns: Boolean = true,
         readings: Boolean = true,
+        minAgeMs: Long = MIN_AGE_MS,
     ): Result {
         val fetched = source.unprocessed(MAX_ROWS + 1)   // one extra: is there more after this batch?
         val rows = fetched.take(MAX_ROWS)
-        val cutoff = now() - MIN_AGE_MS
+        val cutoff = now() - minAgeMs
         val ready = rows.takeWhile { it.ts <= cutoff }
         var chunks = LibrarianChunker.chunks(ready)
         // The row after the last ready one (too young, or past the batch) continues the same
@@ -200,7 +205,16 @@ object LibrarianRun {
                 store.insert(Note(
                     kind = NoteKind.OBSERVATION, text = ObservationText.render(d.text, d.obs, zone),
                     whenTs = null, whenEnd = null, heardTs = d.obs.quoteTs.minOrNull() ?: chunk.first().ts,
-                    sourceIds = ids, createdTs = now, updatedTs = now,
+                    sourceIds = ids, createdTs = now, updatedTs = now, who = d.obs.who,
+                ))
+                added++
+                continue
+            }
+            if (d.kind == NoteKind.SUMMARY) {
+                // One per conversation: two talks that sound alike are still two talks.
+                store.insert(Note(
+                    kind = NoteKind.SUMMARY, text = d.text, whenTs = null, whenEnd = null, heardTs = chunk.first().ts,
+                    sourceIds = ids, createdTs = now, updatedTs = now, who = d.who, tags = d.tags,
                 ))
                 added++
                 continue
@@ -209,7 +223,7 @@ object LibrarianRun {
             val span = TimeResolver.resolve(d.whenPhrase, heard, zone)
             val fresh = Note(
                 kind = d.kind, text = d.text, whenTs = span?.start, whenEnd = span?.end,
-                heardTs = heard, sourceIds = ids, createdTs = now, updatedTs = now,
+                heardTs = heard, sourceIds = ids, createdTs = now, updatedTs = now, who = d.who, tags = d.tags,
             )
             val dup = NoteMerge.findDuplicate(fresh, store.candidates(d.kind, d.text, CANDIDATES))
             if (dup != null) { store.update(NoteMerge.merge(dup, fresh, now)); merged++ }
@@ -220,8 +234,8 @@ object LibrarianRun {
 }
 
 /**
- * The librarian: while the phone is charging with the screen off and the big on-device brain
- * idle, the small model turns overheard rows into short dated notes ([MemoryNotes]) the big
+ * The librarian: while the screen is off and the big on-device brain idle, on the charger or
+ * (off it) with enough battery ([mayRun]), the small model turns overheard rows into short dated notes ([MemoryNotes]) the big
  * model can search. WorkManager is not a dependency of this app, so it is a check every
  * [IDLE_CHECK_MS] inside the ambient listening service ([start]), which only exists while
  * there is something being heard.
@@ -251,9 +265,19 @@ object Librarian {
     private val failures = LibrarianRun.Failures()
     private var job: Job? = null
 
-    /** Pure, JVM-tested: may the librarian work now? */
-    fun mayRun(enabled: Boolean, hasModel: Boolean, charging: Boolean, screenOn: Boolean, brainBusy: Boolean): Boolean =
-        enabled && hasModel && charging && !screenOn && !brainBusy
+    /** Below this battery level, off the charger, it waits for the charger. */
+    const val MIN_BATTERY_UNPLUGGED = 50
+
+    /**
+     * Pure, JVM-tested: may the librarian work now? Screen off and the brain idle, and either on
+     * the charger or (since the owner asked for many more notes, 2026-10-07) off it with at least
+     * [MIN_BATTERY_UNPLUGGED]% and battery saver off: the 1.7B model on two cores for a few minutes.
+     */
+    fun mayRun(
+        enabled: Boolean, hasModel: Boolean, charging: Boolean, screenOn: Boolean, brainBusy: Boolean,
+        batteryPct: Int = 0, powerSave: Boolean = false,
+    ): Boolean = enabled && hasModel && !screenOn && !brainBusy &&
+        (charging || (batteryPct >= MIN_BATTERY_UNPLUGGED && !powerSave))
 
     /** Starts the periodic check in [scope] (the ambient service's); once per scope lifetime. */
     fun start(context: Context, scope: CoroutineScope) {
@@ -281,10 +305,41 @@ object Librarian {
     /** [mayRun] on the live state, cheapest checks first and short-circuited: the usual answer
      *  (no model, not charging, screen on) costs no engine lookup. */
     fun allowed(ctx: Context): Boolean {
-        if (model == null || modelReady?.invoke() == false || !AmbientConfig(ctx).organiseMemory || !charging(ctx)) return false
-        if (ctx.getSystemService(PowerManager::class.java)?.isInteractive != false) return false
+        if (model == null || modelReady?.invoke() == false || !AmbientConfig(ctx).organiseMemory) return false
+        val pm = ctx.getSystemService(PowerManager::class.java)
+        if (pm?.isInteractive != false) return false
+        val charging = charging(ctx)
+        val pct = if (charging) 100 else ctx.getSystemService(BatteryManager::class.java)
+            ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: 0
+        if (!charging && (pct < MIN_BATTERY_UNPLUGGED || pm.isPowerSaveMode)) return false
         val busy = brainBusy?.invoke() ?: com.agent.ultra.local.LocalModelEngine.shared(ctx).busy.value
-        return mayRun(enabled = true, hasModel = true, charging = true, screenOn = false, brainBusy = busy)
+        return mayRun(enabled = true, hasModel = true, charging = charging, screenOn = false, brainBusy = busy,
+            batteryPct = pct, powerSave = pm.isPowerSaveMode)
+    }
+
+    /**
+     * "Organise now" on the Notes screen: one run straight away, screen on or off, charger or not,
+     * and conversations of any age (the owner is asking for it). Still never beside the brain.
+     * Returns a line for the screen.
+     */
+    suspend fun runNow(ctx: Context): String {
+        val m = model ?: return "The memory model isn't set up. Download it in Settings → DOWNLOADS."
+        if (modelReady?.invoke() == false) return "The memory model isn't downloaded yet (Settings → DOWNLOADS)."
+        val idle = { !(brainBusy?.invoke() ?: com.agent.ultra.local.LocalModelEngine.shared(ctx).busy.value) }
+        if (!idle()) return "Jarvis is busy answering; try again in a moment."
+        val mem = AmbientMemory.get(ctx)
+        val source = object : HeardSource {
+            override fun unprocessed(limit: Int): List<HeardLine> = mem.librarianQueue(limit)
+            override fun markProcessed(id: Long, ts: Long) = mem.markLibrarian(id, ts)
+        }
+        val cfg = AmbientConfig(ctx)
+        val r = passes(ctx, m, source, keepGoing = idle, minAgeMs = 0L, patterns = cfg.notePatterns, readings = cfg.patternReadings)
+        return when {
+            r.chunks == 0 && r.added == 0 && r.merged == 0 -> "Nothing new to organise."
+            else -> "Organised ${r.chunks} conversation part(s): ${r.added} new note(s), ${r.merged} merged" +
+                (if (r.links.added > 0) ", ${r.links.added} follow-up(s) linking to older notes" else "") + "." +
+                if (r.more) " More is waiting; tap again." else ""
+        }
     }
 
     /** One run if allowed; returns whether more rows are waiting. Stopped mid-call (cancelled)
@@ -300,12 +355,8 @@ object Librarian {
         val cfg = AmbientConfig(ctx)
         val result = coroutineScope {
             val work = async {
-                LibrarianRun.run(
-                    source, MemoryNotes.get(ctx), m, ZoneId.systemDefault(),
-                    now = System::currentTimeMillis, keepGoing = { allowed(ctx) }, failures = failures,
-                    log = { android.util.Log.w(TAG, it) },
-                    patterns = cfg.notePatterns, readings = cfg.patternReadings,
-                )
+                passes(ctx, m, source, keepGoing = { allowed(ctx) }, minAgeMs = LibrarianRun.MIN_AGE_MS,
+                    patterns = cfg.notePatterns, readings = cfg.patternReadings)
             }
             val watch = launch {
                 while (true) {
@@ -323,10 +374,51 @@ object Librarian {
                 watch.cancel()
             }
         } ?: return false
-        android.util.Log.i(TAG, "run: chunks=${result.chunks} added=${result.added} merged=${result.merged} " +
-            "rejected=${result.rejected} skipped=${result.skipped} stop=${result.stop} " +
-            "observations=${result.observations} readings=${result.readings}")
         return result.more
+    }
+
+    /** What one librarian turn did: the new speech, the follow-up notes, the re-read of old speech. */
+    data class Passes(val main: LibrarianRun.Result, val links: LibrarianLinks.Result, val reread: LibrarianRun.Result?) {
+        val more: Boolean get() = main.more || reread?.more == true
+        val added: Int get() = main.added + links.added + (reread?.added ?: 0)
+        val merged: Int get() = main.merged + links.merged + (reread?.merged ?: 0)
+        val chunks: Int get() = main.chunks + (reread?.chunks ?: 0)
+    }
+
+    /**
+     * New speech into notes; then, on its own, follow-up notes linking the new conversations to older
+     * notes ([LibrarianLinks]); then, when nothing new is waiting, old speech read again with the
+     * fuller prompt (summaries, who, tags, every note) from the re-read mark ([AmbientMemory.rereadQueue]).
+     * Old speech is re-read without conversation patterns: their observations are never merged, so
+     * they would be noted twice.
+     */
+    private suspend fun passes(
+        ctx: Context, m: SmallModel, source: HeardSource, keepGoing: () -> Boolean, minAgeMs: Long,
+        patterns: Boolean, readings: Boolean,
+    ): Passes {
+        val store = MemoryNotes.get(ctx)
+        val zone = ZoneId.systemDefault()
+        val log: (String) -> Unit = { android.util.Log.w(TAG, it) }
+        val start = System.currentTimeMillis()
+        val main = LibrarianRun.run(source, store, m, zone, now = System::currentTimeMillis, keepGoing = keepGoing,
+            failures = failures, log = log, patterns = patterns, readings = readings, minAgeMs = minAgeMs)
+        val links = if (keepGoing()) LibrarianLinks.run(store, m, zone, since = start, now = System::currentTimeMillis,
+            keepGoing = keepGoing, log = log) else LibrarianLinks.Result(0, 0, 0)
+        val reread = if (!main.more && main.chunks == 0 && keepGoing()) {
+            val mem = AmbientMemory.get(ctx)
+            val old = object : HeardSource {
+                override fun unprocessed(limit: Int): List<HeardLine> = mem.rereadQueue(limit)
+                override fun markProcessed(id: Long, ts: Long) = mem.markReread(id)
+            }
+            LibrarianRun.run(old, store, m, zone, now = System::currentTimeMillis, keepGoing = keepGoing,
+                failures = failures, log = log, patterns = false, readings = false, minAgeMs = 0L)
+        } else null
+        val p = Passes(main, links, reread)
+        android.util.Log.i(TAG, "run: chunks=${main.chunks} added=${main.added} merged=${main.merged} " +
+            "rejected=${main.rejected} skipped=${main.skipped} stop=${main.stop} observations=${main.observations} " +
+            "readings=${main.readings} | links looked=${links.looked} added=${links.added} merged=${links.merged} | " +
+            "reread chunks=${reread?.chunks ?: 0} added=${reread?.added ?: 0} merged=${reread?.merged ?: 0}")
+        return p
     }
 
     private fun charging(ctx: Context): Boolean = try {

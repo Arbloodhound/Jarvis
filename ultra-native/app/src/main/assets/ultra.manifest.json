@@ -24,6 +24,7 @@
         "read"
       ]
     },
+    {"name": "global_action", "effects": ["mutate"]},
     {
       "name": "app_launch",
       "effects": [

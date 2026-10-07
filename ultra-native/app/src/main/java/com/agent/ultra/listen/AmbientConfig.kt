@@ -31,6 +31,12 @@ class AmbientConfig(context: Context) {
         get() = p.getBoolean("organise_memory", true)
         set(v) = p.edit().putBoolean("organise_memory", v).apply()
 
+    /** What the owner types or says to Jarvis goes into memory too ("[Me] (to Jarvis) …"), so the
+     *  memory model makes notes from it and memory search finds it. */
+    var rememberChat: Boolean
+        get() = p.getBoolean("remember_chat", true)
+        set(v) = p.edit().putBoolean("remember_chat", v).apply()
+
     /** The librarian also notes observable conversation patterns (hedging, commitments, ...)
      *  with verbatim quotes. Only used while [organiseMemory] is on. */
     var notePatterns: Boolean
