@@ -331,9 +331,12 @@ class AmbientListenService : Service() {
                 val fr = if (n == frame.size) frame else frame.copyOf(n)
                 // Acoustic gate: when present, it decides when we're addressed.
                 // whisper then runs only for the command window + throttled memory.
-                if (gate?.accept(fr) == true) synchronized(windowLock) {
-                    windowId++
-                    cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS
+                if (gate?.accept(fr) == true) {
+                    synchronized(windowLock) {
+                        windowId++
+                        cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS
+                    }
+                    WakeChime.play()
                 }
                 seg.push(fr)
 
@@ -404,6 +407,9 @@ class AmbientListenService : Service() {
         when (val v = wake.classify(r.text, now)) {
             is WakeFilter.Verdict.Ambient -> Unit        // store only; stay silent
             is WakeFilter.Verdict.Addressed -> {
+                // Woken by the words (the acoustic gate missed, or there is none): chime now. Not
+                // for the follow-up utterance after a bare name, which has no wake phrase of its own.
+                if (WakeFilter.addressedCommand(r.text, cfg.wakeName) != null) WakeChime.play()
                 if (v.command.isBlank()) return          // bare name; follow-up will carry the command
                 dispatch(buildContextualRequest(v.command, now))
             }

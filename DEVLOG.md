@@ -3,6 +3,14 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — wake chime (owner request)
+`WakeChime`: a 150 ms two-tone beep (ToneGenerator, media stream, 70%) when Jarvis is woken: at once
+when the acoustic gate fires, else when a transcribed utterance starts with the wake phrase (not for the
+follow-up after a bare "Hey Jarvis"). One chime per wake (2 s gap). Ambient is not muted for it, so a
+command spoken straight after the name isn't cut off. Not a setting (owner asked for it on).
+Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN (not heard on the phone; whether the mic picks the beep up and
+whisper writes it down is unmeasured).
+
 ## 2026-10-07 (session 01BUKa) — from the 17:58 results file: 4 LLM threads, wake mishearing, own-voice wake test, observation repair; Qwen3.5 preset merged
 
 Input: owner's `Jarvis-results-20261006-1758.txt` (Pixel 10 Pro XL, 4B Thinking Q4_0). Feature check

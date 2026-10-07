@@ -64,7 +64,7 @@ Stay on Wi‑Fi and keep the phone plugged in for this part.
 
 ### 2b. Listening and voice
 1. Settings → **VOICE** → turn on **Ambient listening**. Allow the microphone when asked.
-2. Check that **Wake name** says **Jarvis**.
+2. Check that **Wake name** says **Jarvis**. When you say "Hey Jarvis", a short beep plays: it heard you, say what you want (it uses the media volume).
 3. Optional, for "who said what" tags: tap **Record my voice** and talk normally for 10 seconds. This turns speaker tags on.
    - Don't press it while Jarvis is talking.
    - Skip it if you don't want voiceprints stored; pause and timing tags work without it.
