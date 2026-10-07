@@ -90,6 +90,13 @@ class MemoryNotes private constructor(ctx: Context) :
             else fresh.copy(id = insert(fresh))
     }
 
+    /** A conversation-insights note ([ConversationInsights.noteText]), tagged "insights". */
+    fun addInsight(text: String, now: Long = System.currentTimeMillis()): Note {
+        val n = Note(kind = NoteKind.SUMMARY, text = text, whenTs = null, whenEnd = null, heardTs = now,
+            sourceIds = emptyList(), createdTs = now, updatedTs = now, who = null, tags = listOf("insights"))
+        return n.copy(id = insert(n))
+    }
+
     /** For the Notes screen: notes of [kind] (null = all) matching [query] (blank = all), newest first. */
     override fun createdSince(ts: Long, kind: NoteKind?, limit: Int): List<Note> =
         if (kind == null) notes("SELECT $COLS FROM notes WHERE created_ts>=CAST(? AS INTEGER) ORDER BY created_ts DESC LIMIT ?",

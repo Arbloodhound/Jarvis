@@ -3,6 +3,24 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — Insights, literature-based patterns, Algospeak, tips; notes QoL
+Owner: lean into note-taking, pattern noticing and sociolinguistics, grounded in real literature (incl. Aleksic's
+Algospeak), spot manipulation (people and algorithms), tell me what I could do, more notes.
+- `ConversationInsights` (counting, JVM-tested) over tagged heard lines: per-speaker share, questions, fillers, hedges,
+  politeness, positive/negative, swearing, overlaps, pace/loudness, laughs, favourite words; who answers whom, busiest
+  hour, topics; literature findings with sources (Pennebaker I/we/cognitive, Al-Mosaiwi & Johnstone absolutist, Lakoff tag
+  questions/intensifiers, Holmes certainty, Searle directives, Bernstein vocabulary, Tannen style, Giles accommodation).
+  💡 Insights screen (Today/Week/Month, Save as note, Share); "how did I talk today" / "who talks the most this week"
+  answered by the brain; a daily insights note from the librarian run (yesterday, ≥200 words).
+- Librarian patterns +14 (tag_question, intensifier, absolutist, self_focus, we_talk, backchannel, self_repair,
+  storytelling, accommodation, code_switching, algospeak, trend_language, engagement_bait, persuasion); readings +27
+  (Freud/A. Freud/Vaillant/Kernberg/Beck defences, Tannen styles, Cialdini/Freedman-Fraser tactics, guilt-tripping,
+  love-bombing, gaslighting-like, engagement farming, Grice, Goffman, Coates, Fairclough, Bucholtz & Hall, Labov,
+  Schiffrin, Bernstein); readings may carry a "tip" (what Me could do), shown as "What you could do: …". Tactics are named
+  as tactics, never as a verdict on a person. Up to 16 notes per chunk (MAX_TOKENS 1100; still fits 4096).
+- Notes: select text, Copy / Share per note, Share all. Guide: Insights/notes/chat section + Sources.
+JVM tests 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN (the 1.7B librarian's use of the longer taxonomy is unmeasured).
+
 ## 2026-10-07 (session 01BUKa) — chat: copy, select, edit, branch; fuller speech pieces
 - Chat bubbles: press and hold selects text (SelectionContainer); tap opens Copy / Edit (own messages) / Branch. Edit puts
   the text back in the box ("Resend" / "Cancel edit"): the old message and everything after it are removed

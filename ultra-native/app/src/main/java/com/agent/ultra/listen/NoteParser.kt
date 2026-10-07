@@ -139,7 +139,10 @@ object NoteParser {
         val alt = string(o["alt"] ?: o["alternative"])?.replace(Regex("\\s+"), " ")?.trim() ?: return null
         if (alt.isEmpty() || alt.length > MAX_ALT) return null
         if (CueText.verdict(hedge) != null || CueText.verdict(alt) != null) return null
-        return Reading(id, hedge, conf, alt)
+        // The tip is optional: a bad one is dropped, the reading kept.
+        val tip = string(o["tip"])?.replace(Regex("\\s+"), " ")?.trim()
+            ?.takeIf { it.isNotEmpty() && it.length <= MAX_ALT && CueText.verdict(it) == null }
+        return Reading(id, hedge, conf, alt, tip)
     }
 
     private fun draft(o: JsonObject, source: Source, droppedReading: () -> Unit): NoteDraft? {

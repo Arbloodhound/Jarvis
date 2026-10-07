@@ -433,6 +433,8 @@ object Librarian {
             LibrarianRun.run(old, store, m, zone, now = System::currentTimeMillis, keepGoing = keepGoing,
                 failures = failures, log = log, patterns = false, readings = false, minAgeMs = 0L)
         } else null
+        // Yesterday's conversation insights as a note, once a day (counting, no model).
+        runCatching { Insights.dailyNote(ctx) }.onFailure { log("insights note failed: ${it.message}") }
         // Who unnamed voices are, from what was said ("I'm Sam", "thanks, Sam" + Sam answering).
         runCatching {
             val mem = AmbientMemory.get(ctx)

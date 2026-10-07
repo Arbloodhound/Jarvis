@@ -362,6 +362,14 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             android.util.Log.i("UltraBrain", "RUN COMPLETE (note saved)")
             return
         }
+        // "How did I talk today?", "who talks the most?": conversation insights, counted from what was heard.
+        com.agent.ultra.listen.ConversationInsights.asked(IntentRouter.requestPart(userInput))?.let { period ->
+            val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.agent.ultra.listen.Insights.report(appContext, period) }
+            answer(com.agent.ultra.listen.ConversationInsights.answer(r, period))
+            android.util.Log.i("UltraBrain", "RUN COMPLETE (insights)")
+            return
+        }
         // "Open my notes" / "show my memory": the screen when the app is in front; otherwise
         // (said to ambient listening with the app closed) the answer reads them out instead.
         val screenAsk = MemoryFocus.screen(userInput)

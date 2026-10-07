@@ -943,6 +943,29 @@ The model list says how much memory the phone has, and marks each model **"fits 
 
 - Make sure the phone is online and say "search the web for…", "google…", "look up…" — or simply ask something current ("what's the weather tomorrow?", "who won last night?").
 
+## 11b. New: Insights, notes and chat tools
+
+### Conversation insights
+- Tap **💡** in the chat (or ask "how did I talk today?", "who talked the most this week?", "my speaking patterns this month") to see how the talking went: who did most of it, who got talked over, who answers whom, filler words ("um", "like"), hedges ("maybe", "I think"), questions, politeness, positive vs negative words, laughter, swearing, talking faster or louder than usual, the busiest hour, the main topics and each person's favourite words.
+- It is counted from what Jarvis heard and who it thinks said it, so it needs **Who's speaking** on; speaker labels are guesses.
+- **Save as note** files it in Notes (tagged #insights); **Share** sends it anywhere. Every day the memory model also saves yesterday's insights as a note on its own when there was enough talk.
+
+### Notes
+- Press and hold a note to select part of it; **Copy** and **Share** are on every note; **Share all** sends every note shown as one text.
+
+### Chat
+- Press and hold a message to select text. Tap a message for **Copy**, **Edit** (your own messages: change it and press **Resend**; what came after is replaced) and **Branch** (a new chat from that point, keeping the original).
+- **Act first**: phone actions happen at once and Jarvis says what it did afterwards (Settings → HOW JARVIS TALKS).
+- While Jarvis thinks about a typed question, the "Thinking…" line shows its latest thoughts.
+
+## Sources behind the patterns
+
+Jarvis's pattern notes and Insights use ideas from these works. They describe tendencies in how people talk; a pattern in a note is a possible reading with the quote as evidence, never a diagnosis.
+
+- **Sociolinguistics and conversation:** Lakoff, Language and Woman's Place (1975) — hedges, tag questions, intensifiers. Tannen, Conversational Style (1984) and You Just Don't Understand (1990) — high-involvement vs high-considerateness. Brown & Levinson, Politeness (1987) — positive, negative and off-record politeness, face-threatening acts. Goffman, On Face-Work (1955) and Frame Analysis (1974). Grice, Logic and Conversation (1975) — maxims and implicature. Sacks, Schegloff & Jefferson (1974) — turn-taking; Schegloff, Jefferson & Sacks (1977) — self-repair. Yngve (1970) — backchannels. Labov, The Social Stratification of English in New York City (1966) — style shifting; Labov & Waletzky (1967) — narrative. Bernstein, Class, Codes and Control (1971) — restricted and elaborated codes. Giles — Communication Accommodation Theory. Gumperz, Discourse Strategies (1982) — code-switching. Coates, Women Talk (1996) — cooperative overlap. Holmes, Women, Men and Politeness (1995). Schiffrin, Discourse Markers (1987). Searle, Speech Acts (1969). Fairclough, Language and Power (1989). Bucholtz & Hall, Identity and Interaction (2005). Tagliamonte — intensifiers. Aleksic, Algospeak (2025) — filter-dodging words, algorithm-spread trends and engagement bait.
+- **Psychology of language:** Pennebaker, The Secret Life of Pronouns (2011) — "I" vs "we", reasoning and certainty words. Al-Mosaiwi & Johnstone (2018) — absolutist words. Gottman — bids for connection, criticism, contempt, stonewalling. Cialdini, Influence (1984) — urgency, scarcity, social proof, reciprocity. Freedman & Fraser (1966) — foot-in-the-door. Beck — catastrophising.
+- **Psychoanalytic concepts (as possible readings only):** Freud — denial, displacement. Anna Freud, The Ego and the Mechanisms of Defence (1936) — intellectualisation, reaction formation. Vaillant — humour as a mature defence. Kernberg — splitting.
+
 ## 12. How it all works (deep dive)
 
 This section is for the curious. It walks through the machinery with the real numbers.

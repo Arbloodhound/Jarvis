@@ -234,7 +234,7 @@ class CueTaxonomyTest {
         assertEquals(CuePattern.TOPIC_SHIFT, CuePattern.parse("Topic shift"))
         assertEquals(ReadingId.MINIMISING, ReadingId.parse("minimizing"))
         assertNull(ReadingId.parse("narcissism"))
-        assertEquals(14, CuePattern.entries.size)
+        assertEquals(28, CuePattern.entries.size)
     }
 
     // ---- what memory and the brain see ---------------------------------------------------------
@@ -261,7 +261,7 @@ class CueTaxonomyTest {
         val lines = (0 until 60).map { HeardLine(it.toLong(), at(18, 0) + it * 4_000L, "[Sam] um [pause 1.2s] so yeah right") }
         val chunk = LibrarianChunker.chunks(lines).first()
         val p = LibrarianPrompt.build(chunk, zone)
-        assertTrue("system ${LibrarianPrompt.SYSTEM.length} chars", LibrarianPrompt.SYSTEM.length <= 3_100)   // summary, who, tags added; the real limit is the next line
+        assertTrue("system ${LibrarianPrompt.SYSTEM.length} chars", LibrarianPrompt.SYSTEM.length <= 3_800)   // summary, who, tags, literature patterns added; the real limit is the next line
         assertTrue("prompt ${tokens(p)} + ${LibrarianPrompt.MAX_TOKENS}", tokens(p) + LibrarianPrompt.MAX_TOKENS <= 4_096)
         assertTrue(LibrarianPrompt.SYSTEM_PLAIN.length < LibrarianPrompt.SYSTEM.length)
         assertFalse(LibrarianPrompt.SYSTEM_PLAIN.contains("observation"))

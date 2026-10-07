@@ -53,6 +53,7 @@ fun NotesScreen(onBack: () -> Unit, onAsk: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val store = remember { MemoryNotes.get(context) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     var kind by remember { mutableStateOf<NoteKind?>(null) }
     var query by remember { mutableStateOf("") }
     var newNote by remember { mutableStateOf("") }
@@ -130,7 +131,9 @@ fun NotesScreen(onBack: () -> Unit, onAsk: () -> Unit) {
                                     Text(listOfNotNull(n.kind.label, n.whenText(zone), n.who?.let { w -> if (w == "Me" && owner.isNotBlank()) owner else w })
                                         .joinToString(" · "),
                                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                    Text(n.text, style = MaterialTheme.typography.bodyMedium)
+                                    androidx.compose.foundation.text.selection.SelectionContainer {
+                                        Text(n.text, style = MaterialTheme.typography.bodyMedium)   // hold to select
+                                    }
                                     if (n.tags.isNotEmpty()) Text(n.tags.joinToString(" ") { "#$it" },
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
@@ -138,9 +141,16 @@ fun NotesScreen(onBack: () -> Unit, onAsk: () -> Unit) {
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                                 }
-                                TextButton(onClick = {
-                                    scope.launch { withContext(Dispatchers.IO) { runCatching { store.delete(n.id) } }; reload++ }
-                                }) { Text("✕", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) }
+                                Column {
+                                    TextButton(onClick = {
+                                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(n.text))
+                                        android.widget.Toast.makeText(context, "Copied", android.widget.Toast.LENGTH_SHORT).show()
+                                    }) { Text("Copy", style = MaterialTheme.typography.labelSmall) }
+                                    TextButton(onClick = { shareText(context, n.text) }) { Text("Share", style = MaterialTheme.typography.labelSmall) }
+                                    TextButton(onClick = {
+                                        scope.launch { withContext(Dispatchers.IO) { runCatching { store.delete(n.id) } }; reload++ }
+                                    }) { Text("✕", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) }
+                                }
                             }
                         }
                     }
@@ -159,6 +169,13 @@ fun NotesScreen(onBack: () -> Unit, onAsk: () -> Unit) {
                         organising = false; reload++
                     }
                 }, modifier = Modifier.weight(1f)) { Text(if (organising) "Organising…" else "Organise now") }
+                // Every note shown, as one text to send or keep elsewhere.
+                androidx.compose.material3.OutlinedButton(enabled = notes.isNotEmpty(), onClick = {
+                    shareText(context, notes.joinToString("\n\n") { n ->
+                        listOfNotNull(n.kind.label, n.whenText(zone), n.who).joinToString(" · ") + "\n" + n.text +
+                            (if (n.tags.isEmpty()) "" else "\n" + n.tags.joinToString(" ") { "#$it" })
+                    })
+                }) { Text("Share all") }
                 Button(onClick = {
                     ChatStore.focus.value = MemoryFocus.Focus.NOTES
                     onAsk()

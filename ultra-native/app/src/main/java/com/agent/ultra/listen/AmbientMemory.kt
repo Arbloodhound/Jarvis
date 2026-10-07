@@ -429,6 +429,10 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
         return out
     }
 
+    /** Lines heard since [sinceTs] with their speaker / cue tags, oldest first (conversation insights). */
+    fun taggedSince(sinceTs: Long, limit: Int): List<HeardLine> =
+        tagged("WHERE h.ts>=CAST(? AS INTEGER) ORDER BY h.ts ASC LIMIT ?", arrayOf(sinceTs.toString(), limit.toString()))
+
     /** The newest [limit] lines with their speaker / cue tags ("[Me] …", "[Sam] [pause 1.2s] …"),
      *  newest first: the Memory screen. */
     fun newestTagged(limit: Int): List<HeardLine> = tagged("ORDER BY h.rowid DESC LIMIT ?", arrayOf(limit.toString()))

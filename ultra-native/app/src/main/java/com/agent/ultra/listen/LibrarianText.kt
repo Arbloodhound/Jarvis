@@ -77,8 +77,8 @@ object LibrarianChunker {
  * model sorting notes gains little from reasoning and the tokens cost battery.
  */
 object LibrarianPrompt {
-    /** Room for a summary and 11 notes; an observation line (quote + fields) is ~60-70 tokens. */
-    const val MAX_TOKENS = 960
+    /** Room for a summary and ~15 notes; an observation line (quote + fields) is ~60-70 tokens. */
+    const val MAX_TOKENS = 1100
 
     /** Room for a summary and 11 plain notes of ~45 tokens with who and tags (patterns off). */
     const val MAX_TOKENS_PLAIN = 640
@@ -114,13 +114,14 @@ Output one JSON object per line and nothing else, like:
 - A line may start with who spoke: [Me] is the phone's owner, [Speaker 2] or [Unknown] someone unnamed, else their name. [pause 1.2s], [fast], [slow], [louder], [quieter], [overlap] and (laughs) say how it was said. Use them to tell people apart; never copy brackets into a note.
 """.trimStart())
         if (patterns) append("""
-- pattern, one of: ${CuePattern.entries.joinToString(", ") { it.id }}. commitment = a specific promise (who, what, when); stress_marker = pauses, fillers, faster/slower, louder/quieter.
+- pattern, one of: ${CuePattern.entries.joinToString(", ") { it.id }}. commitment = a specific promise (who, what, when); stress_marker = pauses, fillers, faster/slower, louder/quieter; tag_question = "…, isn't it?"; absolutist = always/never/nothing; self_focus = mostly I/me/my; we_talk = we/us/our; backchannel = "mm-hm", "yeah" while another talks; self_repair = restarts and corrections; accommodation = picking up the other's words or style; algospeak = filter-dodging words ("unalive", "seggs"); trend_language = viral phrases ("rizz", "delulu"); engagement_bait = "comment below", "wait for it"; persuasion = urgency, scarcity, flattery, guilt, "everyone's doing it".
+- Look for patterns in every conversation: note each one you can quote.
 - who: the speaker. quote: words copied exactly from one line; several as ["...","..."]. confidence: low, med or high.
 - Describe only what was said and how. Never judge: nothing about intent, honesty, feelings, health or personality.
 """.trimStart())
         append("""
 - Skip greetings, TV, radio, songs and anything unclear. Never invent details.
-- At most 12 lines. If the transcript is only noise or TV, output NONE; otherwise always start with the summary.
+- At most 16 lines. If the transcript is only noise or TV, output NONE; otherwise always start with the summary.
 """.trimStart())
     }.trim()
 
