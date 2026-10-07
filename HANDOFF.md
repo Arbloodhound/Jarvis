@@ -1,6 +1,12 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
-## LATEST+7 (session 01BUKa, 2026-10-07 ~11:00 UTC) — read this first
+## LATEST+8 (session 01BUKa, 2026-10-07 evening) — read this first
+`v2.6.26-test` (run 26) is Latest. Since v2.6.24: Real-use check (Jarvis Tests ★, one tap), screen tests (ScreensTest,
+Robolectric, in CI), act first, live thinking preview, Instant spoken think, transcript only when needed, chat Copy /
+Edit / Branch / select, speech in fuller pieces, Tor Browser in prompts. All SOURCE-FIXED BUT RUNTIME-UNPROVEN. Next:
+owner runs ★ Real-use check and sends the file (voice speed, first spoken word, stop time, download speed).
+
+## LATEST+7 (session 01BUKa, 2026-10-07 ~11:00 UTC)
 `v2.6.24-test` (run 24, 31255f4) is Latest (run 23 built but failed to publish in a GitHub outage). Also since: abliterated 4B default, 4-connection model downloads, accurate-speech download from Settings. Since v2.6.20: answers spoken sentence by sentence, spoken
 requests think ≤5 s, stop / add-on / change mid-task (chat, voice screen, Hey Jarvis barge-in), whisper small.en +
 speed fallback + looser quiet-speech filters, speaker labels on by default, voice picker (Kokoro George default + 10
