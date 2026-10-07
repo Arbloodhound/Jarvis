@@ -84,9 +84,11 @@ object DraftModel {
         LocalModelEngine.roomBesideOther(availBytes, otherMappedBytes.coerceAtLeast(0) + thinkerMappedBytes.coerceAtLeast(0))
 
     /** Thinker files the draft can serve: the Qwen3 family (same tokenizer). Anything else would
-     *  only be refused by the vocabulary check after reading 382 MB. Pure. */
+     *  only be refused by the vocabulary check after reading 382 MB. Not Qwen3.5 ("qwen35-"): a
+     *  different vocabulary (248,320 tokens), and a hybrid model the native side won't draft for
+     *  (nativeAttachDraft -3). Pure. */
     fun eligible(thinkerFileName: String): Boolean =
-        thinkerFileName.startsWith("qwen3") && thinkerFileName != FILE
+        thinkerFileName.startsWith("qwen3") && !thinkerFileName.startsWith("qwen35") && thinkerFileName != FILE
 
     fun file(context: Context): File = File(context.filesDir, "models/$FILE")
 
