@@ -67,6 +67,14 @@ object WebResearch {
         return q.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
     }
 
+    /**
+     * DuckDuckGo answered with its bot check or a rate limit instead of results: HTTP 202, or the
+     * page carries its challenge form (the same signals SearXNG's and duckduckgo_search's
+     * DuckDuckGo engines check). Read as "blocked", never as "no results".
+     */
+    fun ddgBlocked(code: Int, html: String): Boolean =
+        code == 202 || "challenge-form" in html || "anomaly-modal" in html
+
     /** Results from a DuckDuckGo HTML page: the real link out of its redirect, title and snippet. */
     fun parseDdg(html: String): List<Hit> {
         val out = ArrayList<Hit>()

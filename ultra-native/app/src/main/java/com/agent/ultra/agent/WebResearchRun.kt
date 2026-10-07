@@ -8,7 +8,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 /** [WebResearch] over the network: the planned queries in parallel, then the best pages read. */
@@ -30,6 +29,27 @@ object WebResearchRun {
     }.getOrNull()
 
     /**
+     * One DuckDuckGo HTML search, sent the way the maintained scrapers send it (ddgs, duckduckgo_search
+     * and SearXNG all POST the form to html.duckduckgo.com/html with this Referer): a plain GET is the
+     * request most likely to get the bot check. Null when blocked ([WebResearch.ddgBlocked]) or failed.
+     */
+    private fun search(q: String): String? = runCatching {
+        val form = okhttp3.FormBody.Builder().add("q", q).add("b", "").build()
+        val req = Request.Builder().url("https://html.duckduckgo.com/html/").post(form)
+            .header("User-Agent", UA).header("Accept-Language", "en")
+            .header("Referer", "https://html.duckduckgo.com/")
+            .header("Sec-Fetch-Dest", "document").header("Sec-Fetch-Mode", "navigate")
+            .header("Sec-Fetch-Site", "same-origin").header("Sec-Fetch-User", "?1").build()
+        http.newCall(req).execute().use { r ->
+            val html = r.body?.string().orEmpty()
+            if (!r.isSuccessful || WebResearch.ddgBlocked(r.code, html)) {
+                android.util.Log.w("UltraWeb", "search blocked or failed: HTTP ${r.code}")
+                null
+            } else html
+        }
+    }.getOrNull()
+
+    /**
      * The research brief for [request], or null when nothing came back. [onScreen] reads a page in
      * the browser on screen (its text after the page's scripts ran), for when none of the best
      * pages gave any text over plain HTTP — sites built in JavaScript. Outside [BUDGET_MS].
@@ -42,8 +62,7 @@ object WebResearchRun {
         withTimeoutOrNull(BUDGET_MS) {
             onStatus("searching ${queries.size} ways")
             val hits = coroutineScope {
-                queries.map { q -> async { get("https://html.duckduckgo.com/html/?q=" + URLEncoder.encode(q, "UTF-8"))
-                    ?.let { WebResearch.parseDdg(it) }.orEmpty() } }.awaitAll()
+                queries.map { q -> async { search(q)?.let { WebResearch.parseDdg(it) }.orEmpty() } }.awaitAll()
             }
             ranked = WebResearch.rank(hits, kind)
             onStatus("reading ${minOf(PAGES, ranked.size)} pages")

@@ -106,4 +106,10 @@ class WebResearchTest {
         assertTrue(b.contains("prices seen: $329.99"))
         assertTrue(b.contains("ranked shortlist"))
     }
+
+    @Test fun ddgBotCheckAndRateLimitReadAsBlockedNotEmpty() {
+        assertTrue(WebResearch.ddgBlocked(202, ""))
+        assertTrue(WebResearch.ddgBlocked(200, "<form id=\"challenge-form\" action=\"//duckduckgo.com/anomaly.js\">"))
+        assertTrue(!WebResearch.ddgBlocked(200, "<a class=\"result__a\" href=\"https://example.com\">Example</a>"))
+    }
 }
