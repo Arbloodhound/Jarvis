@@ -3,6 +3,26 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — screen vision: ML Kit OCR + on-device vision model (Qwen2.5-VL 3B)
+Owner: add Google's ML Kit and the vision model ("another two to four gigabytes" is fine), all the search-first glue,
+optimised to run on the phone, in one build.
+- Native (subagent, d0a2ebc→e6701f6): llama.cpp @8345f33 built with LLAMA_BUILD_MTMD (libmtmd.a + libvendor-hash.a per
+  CPU variant); `ultra_vlm.cpp` in every libultra_llm*.so: `VisionNative.nativeVlmLoad/Describe/Free` (mmap, CPU, n_ubatch
+  512, image_max_tokens 512, chat template, M-RoPE positions, temp 0.2/top_k 40/top_p 0.9, calling thread pinned). Symbols
+  exported in all 3 variants, LOAD align 0x4000, check-cpu-variants OK; CI lib checks extended.
+- `VisionModel`: ggml-org Qwen2.5-VL-3B-Instruct Q4_K_M (1.93 GB) + mmproj Q8_0 (0.84 GB), ParallelDownload, background
+  fetch from Settings → SCREEN VISION; loads on demand (4 threads on the big cores, n_ctx 4096), picture scaled to 896 px
+  long side, Librarian yields, unloads after 2 min idle.
+- `ScreenVision`: AccessibilityService.takeScreenshot (canTakeScreenshot added — the service must be toggled once), ML
+  Kit text-recognition 16.0.1 bundled Latin, `OcrLayout` (pure, tested) for reading order; picture text goes through
+  noteScreenSecrets. Tools: read_text_on_screen/describe_screen add OCR when the tree is thin; new `screen_ocr` and
+  `look_at_screen`. OfflineNavigator: < 3 actionable elements → OCR (or a vision description) appended, not tappable.
+  WebResearchRun: no page text over HTTP → best page opened on screen under the takeover, read, Back (screen on and
+  unlocked only).
+1287 JVM tests, 0 failures; assembleDebug OK. SOURCE-FIXED BUT RUNTIME-UNPROVEN: no image has been described anywhere
+(HF downloads blocked here); screenshot permission, OCR quality, VLM load/encode time and memory all unmeasured.
+Next: owner downloads the vision model, asks "describe my screen", sends a Real-use results file / logcat UltraVlm lines.
+
 ## 2026-10-07 (session 01BUKa) — searching first: research engine, product finding, screen takeover
 Owner: the project is a general assistant with a big emphasis on SEARCHING (intelligent web search, product finding
 with seller checks, forums/consensus, cross-referencing, best price), driven by voice and the screen, with a Stop

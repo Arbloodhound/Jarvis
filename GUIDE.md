@@ -751,6 +751,13 @@ The model list says how much memory the phone has, and marks each model **"fits 
 
 ## 11. How do I…?
 
+### Let Jarvis see pictures, games and maps
+
+- Settings → **SCREEN VISION** → **Download vision model** (2.8 GB; it carries on if you leave Settings).
+- Then ask "what's on my screen?", "describe this photo" or "what does this button look like?".
+- Text in pictures is read without the download (ML Kit is built in).
+- If it says the screen couldn't be captured, turn Jarvis off and on once in Android Settings → Accessibility.
+
 ### Make Jarvis sound different
 
 - Settings → **JARVIS'S VOICE** → **Voice**.
@@ -972,7 +979,16 @@ Jarvis's pattern notes and Insights use ideas from these works. They describe te
 - It reads the best pages themselves, not just the result snippets. A result found by several of the searches, or on a known retailer, review site or reference site, counts for more.
 - For products it pulls the prices out of the pages and marks each seller as a known retailer or not, then gives you a short ranked list: price, where, why it's trustworthy, and red flags (a price far below the rest, an unknown site, few reviews, used or refurbished). Sources are numbered [1], [2]… so you can check them.
 - When Jarvis drives an app or the browser itself, a thin green frame and a **Stop** button appear in the top corner. Your taps are held off so you can't knock it off course by accident (the system's back and home gestures still work). Tap **Stop** to end it at once.
-- It sees the screen through Android's accessibility service (every button, link and the page text), so it needs no extra vision model for normal sites and apps.
+- It sees the screen through Android's accessibility service (every button, link and the page text). If a page gives no text that way (sites built in JavaScript), Jarvis opens the best result in your browser behind the Stop frame, reads it, and goes Back. This only happens with the screen on and unlocked.
+
+## 11d. Screen vision (reading the screen as a picture)
+
+- Some screens carry little or no text Jarvis can read directly: games, maps, photos with writing on them, pages drawn on a canvas. For these Jarvis takes a picture of the screen (nothing is saved) and reads it in two ways.
+- **Text reader (built in):** Google ML Kit text recognition, inside the app and offline, about a tenth of a second. "What's on my screen?" adds the text from the picture by itself when the normal read finds very little. When Jarvis drives an app and a screen has almost nothing to tap, it reads the picture too, but those words can't be tapped by number.
+- **Vision model (download):** Qwen2.5-VL 3B, about 2.8 GB, in **Settings → SCREEN VISION → Download vision model**. With it, Jarvis can *look*: "what's in this photo?", "describe my screen", "which button is the blue one?". It loads when it's needed (a few seconds), takes roughly 10–30 seconds to answer on this phone, and frees its memory 2 minutes after the last use. The memory model steps aside while it works.
+- Banking, password and other secure screens come out black, by Android's design. Protected apps are never captured.
+- If reading the picture says the screen could not be captured, turn Jarvis's accessibility service **off and on once** in Android Settings → Accessibility (Android only grants the screenshot permission when the service starts).
+- A code or card number read from a picture is guarded like one read as text: Jarvis won't send it anywhere.
 
 ## 12. How it all works (deep dive)
 
