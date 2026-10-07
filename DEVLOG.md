@@ -3,6 +3,18 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — results file names its build; whisper on idle big cores
+- The 19:41 file (sent as "what my update gave me") is the 19:36 file plus 8 log lines: "Save results" re-sends
+  every earlier run (the results file accumulates), so nothing new was tested. Each section header and the file
+  header now carry the app version ("· app 2.6.11 (28)").
+- New in its log (old build, hold cap present): "backlog full: dropped" 8 utterances at 19:38–19:39 (29 since
+  start), i.e. more than 8 utterances queued faster than whisper finished them. Ambient whisper ran only on the
+  two A520s (2 threads). Now (`AmbientThrottle.placement`): while neither model is busy and thermal is NORMAL,
+  whisper uses 4 threads on the LLM cores (the probe's 6 s clip took ~3 s there); otherwise unchanged. Every
+  ambient transcription logs `whisper audioMs= ms= threads= cpus=` so the next file shows whether it keeps up.
+  Root cause of the drops (whisper slower than speech on the little cores) is LIKELY, not proven: no timing was
+  logged before. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (session 01BUKa) — 19:36 results file (an OLD build) + wake probe grading
 `Jarvis-results-20261006-1936.txt` was made on 2.6.7 or older (LLM threads=6, no own-voice probe, brain advice
 still names the "MoE stand-in"), so none of 229dfb0/876c4ac was tested. Its new facts:

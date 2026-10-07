@@ -25,4 +25,18 @@ class AmbientThrottleTest {
         assertTrue(d(SLOWED, gate = false).transcribe); assertTrue(d(WAKE_ONLY, gate = false).transcribe)
     }
     @Test fun neverMoreThreadsThanBase() = assertEquals(1, AmbientThrottle.decide(SLOWED, false, true, 1).threads)
+
+    private val llm = intArrayOf(2, 3, 4, 5, 6, 7)
+    private val little = intArrayOf(0, 1)
+    private fun place(busy: Boolean, cool: Boolean, l: IntArray = llm) =
+        AmbientThrottle.placement(d(NORMAL), busy, cool, l, little).let { it.first to it.second.toList() }
+
+    /** Brain idle and phone cool: the big cores are free, whisper takes 4 of them. */
+    @Test fun idleAndCoolUsesTheBigCores() = assertEquals(4 to llm.toList(), place(busy = false, cool = true))
+
+    @Test fun busyOrWarmStaysOnItsOwnCores() {
+        assertEquals(2 to little.toList(), place(busy = true, cool = true))
+        assertEquals(2 to little.toList(), place(busy = false, cool = false))
+        assertEquals(2 to little.toList(), place(busy = false, cool = true, l = IntArray(0)))   // cores unknown
+    }
 }

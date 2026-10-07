@@ -64,6 +64,7 @@ class AmbientListenService : Service() {
     private val turnGaps = TurnGaps()      // whisper worker only: the pause before each utterance
     // The cores the LLM doesn't run on (the little ones on big.LITTLE); empty = unpinned.
     private val whisperCpus by lazy { com.agent.ultra.local.CpuTopology.current.whisperCpus.toIntArray() }
+    private val llmCpus by lazy { com.agent.ultra.local.CpuTopology.current.llmCpus.toIntArray() }
     private var wakeLock: PowerManager.WakeLock? = null
 
     @Volatile var mutedUntil = 0L          // echo guard: set by the TTS layer while speaking
@@ -375,9 +376,17 @@ class AmbientListenService : Service() {
             logDropped("thermal $level", pcm.size, false)
             return
         }
+        val (threads, cpus) = AmbientThrottle.placement(
+            plan, com.agent.ultra.local.LocalModelEngine.anyBusy.value,
+            level == com.agent.ultra.agent.ThermalPolicy.Level.NORMAL, llmCpus, whisperCpus)
+        val t0 = System.currentTimeMillis()
         val r = WhisperNative.transcribe(
-            whisper, pcm, plan.threads, WhisperNative.verbatimPrompt(cfg.wakeName), whisperCpus, timing = true,
-        ) ?: return
+            whisper, pcm, threads, WhisperNative.verbatimPrompt(cfg.wakeName), cpus, timing = true,
+        )
+        // Whether whisper keeps up with speech: ms > audioMs means slower than real time.
+        android.util.Log.d("UltraAmbient", "whisper audioMs=$audioMs ms=${System.currentTimeMillis() - t0} " +
+            "threads=$threads cpus=${cpus.toList()}")
+        if (r == null) return
         lastTranscribedAt = System.currentTimeMillis()
         if (!kept(r)) return
 

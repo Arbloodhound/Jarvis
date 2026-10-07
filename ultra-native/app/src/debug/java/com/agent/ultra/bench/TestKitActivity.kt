@@ -158,7 +158,16 @@ class TestKitActivity : ComponentActivity() {
     private suspend fun say(s: String) = withContext(Dispatchers.Main) { lines.add(s) }
 
     private suspend fun record(section: String, body: List<String>) = withContext(Dispatchers.IO) {
-        results.appendText("\n===== $section ${stamp()} =====\n" + body.joinToString("\n") + "\n")
+        results.appendText("\n===== $section ${stamp()} · app $appVersion =====\n" + body.joinToString("\n") + "\n")
+    }
+
+    /** This build's version ("2.6.10 (27)"): the results file keeps every earlier run, so each
+     *  section says which build it came from (a save right after an update re-sends old runs). */
+    private val appVersion: String by lazy {
+        try {
+            val pi = packageManager.getPackageInfo(packageName, 0)
+            "${pi.versionName} (${if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode else @Suppress("DEPRECATION") pi.versionCode.toLong()})"
+        } catch (_: Exception) { "?" }
     }
 
     // ---------------------------------------------------------------- phone info
@@ -176,6 +185,7 @@ class TestKitActivity : ComponentActivity() {
         val soc = if (Build.VERSION.SDK_INT >= 31) "${Build.SOC_MANUFACTURER} ${Build.SOC_MODEL}" else Build.HARDWARE
         val recentCrash = KitReport.hasCrash(logcat(System.currentTimeMillis() - 3_600_000, listOf("AndroidRuntime")))
         return listOf(
+            "App: $appVersion (each section below names the build it ran on)",
             "Phone: ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.DISPLAY}",
             "Chip: $soc",
             "RAM: ${mem.totalMem / 1_048_576} MB total, ${mem.availMem / 1_048_576} MB free now",

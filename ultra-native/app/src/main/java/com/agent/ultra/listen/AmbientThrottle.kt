@@ -31,4 +31,21 @@ object AmbientThrottle {
         AmbientMode.SLOWED -> Decision(true, minOf(HOT_THREADS, baseThreads))
         AmbientMode.WAKE_ONLY -> Decision(commandWindowOpen || !gateReady, minOf(HOT_THREADS, baseThreads))
     }
+
+    /** Threads whisper gets on the LLM's cores while the brain is idle. */
+    const val IDLE_FAST_THREADS = 4
+
+    /**
+     * Where whisper runs for one utterance: the threads and cores to pin it to. While the brain
+     * is idle (neither model generating, loading or warming) and the phone is [cool] (thermal NORMAL), the LLM's big
+     * cores are free, so whisper takes up to [IDLE_FAST_THREADS] of them: the Feature check
+     * transcribed 6 s of speech in ~3 s there. Otherwise it stays on its own cores
+     * ([whisperCpus], the two A520s on the Tensor G5) with the [plan]'s threads, so it never
+     * slows an answer. On the old build the Pixel logged "backlog full: dropped" while listening
+     * only ran on the little cores (2026-10-06 19:38). No LLM cores known = unchanged.
+     */
+    fun placement(plan: Decision, brainBusy: Boolean, cool: Boolean, llmCpus: IntArray, whisperCpus: IntArray): Pair<Int, IntArray> =
+        if (!brainBusy && cool && llmCpus.isNotEmpty())
+            minOf(IDLE_FAST_THREADS, llmCpus.size) to llmCpus
+        else plan.threads to whisperCpus
 }
