@@ -101,7 +101,10 @@ class OfflineNavigator(
             val step = stepsTaken + 1
             val (w, h) = actor.screenSize()
             var screen = OfflineNav.compact(flat, w, h)
-            if (screen.elements.size < OfflineNav.THIN_ELEMENTS && ScreenVision.unavailable() == null) {
+            // Never for a protected app: its screen reads as PROTECTED (no elements), and a picture of
+            // it must not be read either.
+            if (screen.elements.size < OfflineNav.THIN_ELEMENTS && flat != com.agent.ultra.AgentAccessibilityService.PROTECTED &&
+                ScreenVision.unavailable() == null) {
                 // A game, map or canvas page: the tree has next to nothing, the picture has the words.
                 val words = ScreenVision.readScreen(controller)
                 val seen = if (words.isNullOrBlank()) ScreenVision.look(controller, "") else words

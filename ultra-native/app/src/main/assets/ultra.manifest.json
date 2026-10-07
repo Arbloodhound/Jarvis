@@ -18,6 +18,7 @@
         "read"
       ]
     },
+    {"name": "ambient_recall", "effects": ["read"]},
     {"name": "screen_ocr", "effects": ["read"]},
     {"name": "look_at_screen", "effects": ["read"]},
     {
