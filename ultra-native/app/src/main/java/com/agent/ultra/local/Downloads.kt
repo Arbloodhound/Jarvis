@@ -27,7 +27,8 @@ import java.io.File
  * ([downloadAllMissing]). Each item is fetched by the code that already fetches it elsewhere —
  * [LocalModelEngine.downloadModel] for the two LLMs, [ModelFetcher.ensure] with the ambient
  * service's arguments for whisper / VAD / wake word, [LocalVoice.fetch], [SentenceEmbedder.fetch]
- * and [VoicePrints.fetch] — so resume, exact-size and checksum rules stay theirs. What this adds
+ * and [VoicePrints.fetch], and [ModelFetcher.ensure] at its exact size for the speed boost's
+ * draft model ([DraftModel]) — so resume, exact-size and checksum rules stay theirs. What this adds
  * is that the user can ask: before it, the voice downloaded only when Jarvis was about to speak
  * an answer (spoken replies are off by default), and the embedder only from the memory indexer
  * (after a heard line, on Wi-Fi, past its retry backoff). An explicit download skips those gates.
@@ -44,6 +45,7 @@ object Downloads {
     const val VOICE = "voice"
     const val EMBEDDER = "embedder"
     const val SPEAKER = "speaker"
+    const val DRAFT = "draft"
 
     // Download sizes for the files with no exact size in code: measured from the published files
     // by an earlier session (whisper 59.7 MB, VAD 0.9, wake 1.1 + 1.3 + 1.3, voice 21.0). Shown
@@ -79,6 +81,8 @@ object Downloads {
     }
 
     private fun len(f: File) = if (f.exists()) f.length() else 0L
+    /** filesDir/models, where both LLMs and the speed boost's draft live. */
+    private fun models(ctx: Context) = File(ctx.filesDir, "models")
     /** Bytes in ModelFetcher's unfinished-download file for [name]. */
     private fun part(dir: File, name: String) = len(File(dir, "$name.part"))
 
@@ -95,11 +99,15 @@ object Downloads {
         val thinker = LocalModelEngine.shared(ctx)
         val librarian = LocalModelEngine.librarian(ctx)
         val wake = wakeFiles(ctx)
-        return listOf(
+        return listOfNotNull(
             DownloadPlan.Asset(THINKER, "Brain: ${shortLabel(thinker)}", modelBytes(thinker),
                 thinker.modelPresent, partBytes = thinker.partialBytes()),
             DownloadPlan.Asset(LIBRARIAN, "Memory model: ${shortLabel(librarian)}", modelBytes(librarian),
                 librarian.modelPresent, partBytes = librarian.partialBytes()),
+            // Only beside a brain it can speed up (the Qwen3 family: same tokenizer).
+            if (!DraftModel.eligible(thinker.modelFileName)) null
+            else DownloadPlan.Asset(DRAFT, "Speed boost for the brain (draft model)", DraftModel.BYTES,
+                DraftModel.present(ctx), partBytes = part(models(ctx), DraftModel.FILE)),
             DownloadPlan.Asset(WHISPER, "Speech recognition (whisper)", WHISPER_BYTES,
                 LocalWhisper.modelPresent(ctx), partBytes = part(dir, AmbientConfig.ASR_MODEL)),
             DownloadPlan.Asset(VAD, "Speech detector (VAD)", VAD_BYTES,
@@ -177,6 +185,7 @@ object Downloads {
             EMBEDDER -> DownloadPlan.fraction(part(dir, SentenceEmbedder.MODEL) + part(dir, SentenceEmbedder.VOCAB),
                 SentenceEmbedder.MODEL_BYTES + SentenceEmbedder.VOCAB_BYTES)
             SPEAKER -> DownloadPlan.fraction(part(dir, VoicePrints.MODEL), VoicePrints.MODEL_BYTES)
+            DRAFT -> DownloadPlan.fraction(part(models(ctx), DraftModel.FILE), DraftModel.BYTES)
             else -> null
         }
     }
@@ -199,6 +208,11 @@ object Downloads {
             VOICE -> if (LocalVoice.fetch(ctx)) null else RETRY
             EMBEDDER -> if (SentenceEmbedder.fetch(ctx)) { MemoryIndexer.kick(ctx); null } else RETRY
             SPEAKER -> if (VoicePrints.fetch(ctx)) null else RETRY
+            // Exact size: resumable, and a wrong-size file is never used (DraftModel.present).
+            DRAFT -> models(ctx).let { m ->
+                m.mkdirs()
+                if (ModelFetcher.ensure(m, DraftModel.FILE, DraftModel.URL, exactBytes = DraftModel.BYTES)) null else RETRY
+            }
             else -> "unknown item"
         }
     }

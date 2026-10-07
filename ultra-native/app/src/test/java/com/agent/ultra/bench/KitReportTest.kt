@@ -94,6 +94,25 @@ class KitReportTest {
         assertNull(KitReport.median(listOf(null, null)))
     }
 
+    private val reasoning = setOf("qwen3-4b-thinking-2507-q4_0.gguf", "qwen3-4b-thinking-2507-abliterated-q4km.gguf")
+
+    /** Pixel 10 Pro XL, 4B Thinking at 3.4 tok/s: keep it and speed it up, never the weaker 1.7B. */
+    @Test fun slowReasoningDefaultIsKeptNotSwapped() {
+        val text = KitReport.advice(KitReport.Model.TRY_SMALLER, "Qwen3-4B Thinking 2507 (Q4_0)",
+            "qwen3-4b-thinking-2507-q4_0.gguf", 2266, 3.4, presets, lib, reasoning)
+        assertTrue(text, text.startsWith("KEEP this model"))
+        assertFalse(text, "1.7B" in text)
+        assertFalse(text, "TRY A SMALLER" in text)
+        for (hint in listOf("close other heavy apps", "cool down", "Quick", "Speed boost")) assertTrue(text, hint in text)
+    }
+
+    @Test fun slowAbliteratedTwinIsKeptToo() = assertTrue(KitReport.advice(KitReport.Model.TRY_SMALLER, "4B abliterated",
+        "qwen3-4b-thinking-2507-abliterated-q4km.gguf", 2382, 2.0, presets, lib, reasoning).startsWith("KEEP"))
+
+    /** The rule is only about the reasoning default: a slow 8B is still pointed at the (stronger) 4B. */
+    @Test fun slow8bStillSuggestsThe4b() = assertTrue(KitReport.advice(KitReport.Model.TRY_SMALLER, "Qwen3-8B (Q4_K_S)",
+        "qwen3-8b-q4ks.gguf", 4580, 3.0, presets, lib, reasoning).contains("Qwen3-4B Thinking 2507 (Q4_0)"))
+
     /** A 4B a few percent smaller than another 4B is no cure: the next real step down is suggested. */
     @Test fun aBarelySmallerModelIsNotSuggested() {
         val s = KitReport.smallerModel("qwen3-4b-thinking-2507-abliterated-q4km.gguf", 2382, 4.9, presets, lib)!!

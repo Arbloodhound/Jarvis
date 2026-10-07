@@ -60,8 +60,23 @@ object LlmNative {
         maxTokens: Int,
         temperature: Float,
         threads: Int,          // <= 0 keeps the current count
+        draftMax: Int,         // > 0 with a draft attached: speculative decoding, drafts up to this long
         callback: TokenCallback?,
     ): Int
+
+    /**
+     * Loads the speculative-decoding draft model ([DraftModel]) beside [handle] with a [ctxSize]
+     * context. Returns that ctx (> 0), 0 when the file didn't load, -1 when its vocabulary
+     * isn't the loaded model's (llama.cpp's own compatibility check), -2 when its context
+     * couldn't be created. On failure nothing stays loaded and generation runs without it.
+     */
+    external fun nativeAttachDraft(handle: Long, path: String, ctxSize: Int): Int
+
+    /** Frees the draft model (no-op without one); generation continues without it. */
+    external fun nativeDetachDraft(handle: Long)
+
+    /** The last [nativeGenerate]'s speculation: [drafted, accepted]; drafted = -1 = no draft used. */
+    external fun nativeSpecStats(handle: Long): IntArray
 
     external fun nativeFree(handle: Long)
 

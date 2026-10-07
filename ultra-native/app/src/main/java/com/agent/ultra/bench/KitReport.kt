@@ -106,8 +106,14 @@ object KitReport {
         return Suggestion(pick, expected(pick))
     }
 
-    /** The brain test's one-line verdict for the model in use ([currentLabel]), naming a real
-     *  smaller preset ([smallerModel]) when it is too slow. */
+    /**
+     * The brain test's one-line verdict for the model in use ([currentLabel]), naming a real
+     * smaller preset ([smallerModel]) when it is too slow, except when the model in use is one of
+     * [reasoningDefaults] (the default reasoning brain): every smaller preset reasons worse, and
+     * trading reasoning for speed is not the advice. Then it says to keep it and how to make it
+     * faster ([KEEP_FOR_REASONING]). Pixel 10 Pro XL: the 4B Thinking measured 3.4 tok/s on one
+     * brain test and 6.0 on the next, and the 3.4 run was told to switch to the 1.7B.
+     */
     fun advice(
         verdict: Model,
         currentLabel: String,
@@ -116,10 +122,12 @@ object KitReport {
         medianTps: Double?,
         presets: List<Preset>,
         exclude: Set<String> = emptySet(),
+        reasoningDefaults: Set<String> = emptySet(),
     ): String = when (verdict) {
         Model.KEEP -> "KEEP this model ($currentLabel)."
         Model.NOT_ENOUGH_DATA -> "Not enough answers to judge — send me the results file."
-        Model.TRY_SMALLER -> when (val s = smallerModel(currentFile, currentMb, medianTps, presets, exclude)) {
+        Model.TRY_SMALLER -> if (currentFile in reasoningDefaults) "KEEP this model ($currentLabel): $KEEP_FOR_REASONING"
+        else when (val s = smallerModel(currentFile, currentMb, medianTps, presets, exclude)) {
             null -> "$currentLabel is already the smallest model listed; nothing smaller to try — send me the results file."
             else -> "TRY A SMALLER MODEL: Settings → ON-DEVICE MODEL → Change model → \"${s.preset.label}\" → Download, " +
                 "then run test 2 again." + (s.expectedTokPerSec?.let {
@@ -127,6 +135,11 @@ object KitReport {
                 } ?: "")
         }
     }
+
+    /** What to do when the default reasoning brain is slow, instead of a weaker model. */
+    const val KEEP_FOR_REASONING = "it reasons best of the models this phone runs, and every smaller one reasons worse. " +
+        "To make it faster: close other heavy apps, let the phone cool down, set Settings → Thinking depth to Quick, " +
+        "and turn on Settings → Speed boost (draft model) (its helper downloads under DOWNLOADS → Download all missing)."
 
     fun fmt(v: Double): String = String.format(java.util.Locale.ROOT, "%.1f", v)
 

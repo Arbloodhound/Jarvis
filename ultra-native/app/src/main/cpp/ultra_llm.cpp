@@ -1,5 +1,8 @@
 #include <jni.h>
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <android/log.h>
@@ -12,6 +15,26 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
 namespace {
+
+// Speculative decoding's draft model: a small model with the thinker's vocabulary
+// (nativeAttachDraft checks it). Lives beside the thinker's context, shares its thread pool,
+// and never runs at the same time as it.
+struct Draft {
+    llama_model *model = nullptr;
+    llama_context *ctx = nullptr;
+    const llama_vocab *vocab = nullptr;
+    int32_t ctxSize = 0;
+    // Exactly the tokens in the draft's KV cache (sequence 0), in position order, like
+    // Engine::cached. Synced to the thinker's committed tokens before every draft.
+    std::vector<llama_token> cached;
+};
+
+void freeDraft(Draft *d) {
+    if (!d) return;
+    if (d->ctx) llama_free(d->ctx);
+    if (d->model) llama_model_free(d->model);
+    delete d;
+}
 
 struct Engine {
     llama_model *model = nullptr;
@@ -26,6 +49,11 @@ struct Engine {
     // sits at position i. Prompt tokens, then every sampled token that was decoded,
     // then every injected token decoded. Empty = the memory is (to be) cleared.
     std::vector<llama_token> cached;
+    Draft *draft = nullptr;           // null = no speculative decoding
+    // The last generate's speculation: tokens the draft proposed, and how many of them the
+    // thinker accepted. specDrafted = -1: that generate ran without the draft.
+    int specDrafted = -1;
+    int specAccepted = 0;
 };
 
 // Runs the pinned pool for one generation. The caller is ggml's worker 0, but ggml pins it
@@ -170,6 +198,283 @@ std::string deliverToken(const std::string &piece) {
     return inject;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Speculative decoding. Ported from llama.cpp 8345f33 rather than linked: common/ (libcommon)
+// is not part of this app's static llama build (build-llama-android.sh builds only libllama +
+// ggml), and its speculative.cpp drags in common_sampler / common_batch / chat / json. What is
+// ported is small and follows llama.cpp line for line:
+//  - vocabCompatible  = common_speculative_are_compatible (common/speculative.cpp)
+//  - draftTokens      = common_speculative_impl_draft_simple::draft (greedy argmax draft,
+//                       stops below a confidence floor or at the length cap)
+//  - the verify loop  = examples/speculative-simple + common_sampler_sample_and_accept_n
+//                       (common/sampling.cpp): the thinker samples every position with its own
+//                       sampler; a draft token is kept only when that sample equals it.
+// ---------------------------------------------------------------------------------------------
+
+// common/speculative.cpp SPEC_VOCAB_MAX_SIZE_DIFFERENCE / SPEC_VOCAB_CHECK_START_TOKEN_ID.
+constexpr int kVocabMaxSizeDiff = 128;
+constexpr int kVocabCheckStart = 5;
+// Draft length cap the shim accepts (Kotlin passes the length it wants, at most this).
+constexpr int kMaxDraft = 16;
+// A draft stops at the first token the draft model is less sure of than this (its top
+// softmax probability). 0.75 was llama.cpp's own draft p_min default before 8345f33 (it is
+// 0 there now, with other implementations doing the filtering).
+constexpr float kDraftPMin = 0.75f;
+// A draft the thinker keeps rejecting costs time (its decodes plus a wider check) and saves
+// none. Once kGiveUpAfter tokens were drafted in one generation and under a quarter were
+// kept, the rest of that generation runs without drafting (the next one tries again). A
+// guard, not a tuned figure: in a host check (tiny random models) an always-wrong draft
+// made generation several times slower.
+constexpr int kGiveUpAfter = 32;
+
+// Same checks, same order, as common_speculative_are_compatible: vocab type, BOS/EOS
+// handling, size within 128, and every token text from id 5 on identical.
+bool vocabCompatible(const llama_vocab *tgt, const llama_vocab *dft) {
+    if (llama_vocab_type(tgt) != llama_vocab_type(dft)) {
+        LOGE("draft: vocab type %d != %d", (int) llama_vocab_type(dft), (int) llama_vocab_type(tgt));
+        return false;
+    }
+    if (llama_vocab_get_add_bos(tgt) != llama_vocab_get_add_bos(dft) ||
+        (llama_vocab_get_add_bos(tgt) && llama_vocab_bos(tgt) != llama_vocab_bos(dft))) {
+        LOGE("draft: BOS handling differs");
+        return false;
+    }
+    if (llama_vocab_get_add_eos(tgt) != llama_vocab_get_add_eos(dft) ||
+        (llama_vocab_get_add_eos(tgt) && llama_vocab_eos(tgt) != llama_vocab_eos(dft))) {
+        LOGE("draft: EOS handling differs");
+        return false;
+    }
+    const int nT = llama_vocab_n_tokens(tgt), nD = llama_vocab_n_tokens(dft);
+    if (std::abs(nT - nD) > kVocabMaxSizeDiff) {
+        LOGE("draft: vocab size %d vs %d", nD, nT);
+        return false;
+    }
+    for (int i = kVocabCheckStart; i < std::min(nT, nD); ++i) {
+        if (std::strcmp(llama_vocab_get_text(tgt, i), llama_vocab_get_text(dft, i)) != 0) {
+            LOGE("draft: token %d text differs", i);
+            return false;
+        }
+    }
+    return true;
+}
+
+void resetDraft(Draft *d) {
+    llama_memory_clear(llama_get_memory(d->ctx), true);
+    d->cached.clear();
+}
+
+// Makes the draft's KV hold exactly `committed` followed by `next`, with the logits of `next`
+// last. Keeps the longest common prefix it already holds (as generate() does for the
+// thinker); anything that doesn't check out is a full clear. False on a decode failure
+// (the draft is then cleared and the caller decodes without it this step).
+bool draftSync(Draft *d, const std::vector<llama_token> &committed, llama_token next) {
+    llama_memory_t mem = llama_get_memory(d->ctx);
+    size_t p = 0;
+    if (llama_memory_seq_pos_max(mem, 0) + 1 == (llama_pos) d->cached.size() &&
+        llama_memory_seq_pos_min(mem, 0) <= 0) {
+        const size_t lim = std::min(d->cached.size(), committed.size());
+        while (p < lim && d->cached[p] == committed[p]) p++;
+    }
+    if (p > 0 && p < d->cached.size() && !llama_memory_seq_rm(mem, 0, (llama_pos) p, -1)) p = 0;
+    if (p == 0) resetDraft(d);
+    else d->cached.resize(p);
+    std::vector<llama_token> add(committed.begin() + (long) p, committed.end());
+    add.push_back(next);
+    if ((int) (d->cached.size() + add.size()) >= d->ctxSize) return false;
+    if (llama_decode(d->ctx, llama_batch_get_one(add.data(), (int32_t) add.size())) != 0) {
+        LOGE("draft: sync decode failed");
+        resetDraft(d);
+        return false;
+    }
+    d->cached.insert(d->cached.end(), add.begin(), add.end());
+    return true;
+}
+
+// Greedy draft of up to nMax tokens continuing committed + next (draft-simple's loop).
+// `out` may come back shorter, or empty.
+void draftTokens(Draft *d, const llama_vocab *tgtVocab, const std::vector<llama_token> &committed,
+                 llama_token next, int nMax, std::vector<llama_token> &out) {
+    out.clear();
+    if (nMax <= 0 || !draftSync(d, committed, next)) return;
+    const int nVocab = std::min(llama_vocab_n_tokens(d->vocab), llama_vocab_n_tokens(tgtVocab));
+    while ((int) out.size() < nMax) {
+        const float *logits = llama_get_logits_ith(d->ctx, -1);
+        if (!logits) break;
+        int best = 0;
+        for (int i = 1; i < nVocab; i++) if (logits[i] > logits[best]) best = i;
+        // Softmax probability of the top token = 1 / sum(exp(l - lmax)); stop summing as soon as
+        // the sum proves it is below the floor (the usual case for an unsure step).
+        const float lmax = logits[best], limit = 1.0f / kDraftPMin;
+        float sum = 0.0f;
+        for (int i = 0; i < nVocab && sum <= limit; i++) sum += std::exp(logits[i] - lmax);
+        if (sum > limit) break;
+        out.push_back(best);
+        if ((int) out.size() >= nMax || llama_vocab_is_eog(tgtVocab, best)) break;
+        if ((int) d->cached.size() + 1 >= d->ctxSize) break;
+        llama_token t = best;
+        if (llama_decode(d->ctx, llama_batch_get_one(&t, 1)) != 0) {
+            LOGE("draft: decode failed");
+            resetDraft(d);
+            break;                                       // keep what was drafted; the next sync rebuilds
+        }
+        d->cached.push_back(t);
+    }
+}
+
+// Decodes `inject` (Kotlin's forced text) into the thinker, as the plain loop does.
+// False on a decode failure (the cache was reset).
+bool decodeInject(Engine *engine, const std::string &inject, int &nPast) {
+    std::vector<llama_token> inj(inject.size() + 8);
+    int n = llama_tokenize(engine->vocab, inject.c_str(), inject.size(), inj.data(), inj.size(), false, true);
+    if (n > 0 && nPast + n < engine->ctxSize - 1) {
+        inj.resize(n);
+        if (llama_decode(engine->ctx, llama_batch_get_one(inj.data(), n)) != 0) {
+            LOGE("inject decode failed"); resetCache(engine); return false;
+        }
+        engine->cached.insert(engine->cached.end(), inj.begin(), inj.end());
+        nPast += n;
+    } else {
+        LOGE("inject skipped (n=%d, nPast=%d)", n, nPast);
+    }
+    return true;
+}
+
+/*
+ * The decode loop with a draft model. Emits exactly what the plain loop emits:
+ *  - Every emitted token is the thinker's own sample: `chain` applied to the thinker's logits
+ *    for exactly the committed prefix, one draw from the same seeded RNG per emitted token, in
+ *    the same order (llama_sampler_sample accepts the token itself; the plain loop's extra
+ *    llama_sampler_accept is a no-op for this chain at 8345f33: top_k / top_p / temp have no
+ *    accept, dist's only acts for backend sampling). A draft token only decides which positions get their logits from one
+ *    batched decode instead of one decode each; when the thinker's sample differs, that
+ *    sample is used and the rest of the draft is dropped. So the output distribution is the
+ *    thinker's, unchanged, at any temperature (no rejection sampling, no draft probabilities
+ *    involved). Token for token it equals a run without the draft except where the batched
+ *    logits differ in the last float bits from one-token decodes (the CPU kernels are not
+ *    batch-invariant; see the prefix-reuse note in nativeGenerate), which can flip a near-tie.
+ *  - Every token gets its callback before the next is sampled, so streaming, ThinkBudget's
+ *    count and inject, and STOP behave as in the plain loop: a stopped token is removed from
+ *    the KV cache, and engine->cached always describes the cache.
+ */
+int generateSpeculative(Engine *engine, llama_sampler *chain, int maxTokens, int draftMax, int nPrompt) {
+    Draft *d = engine->draft;
+    llama_memory_t mem = llama_get_memory(engine->ctx);
+    llama_batch batch = llama_batch_init(kMaxDraft + 1, 0, 1);
+    std::vector<llama_token> draft;
+    int generated = 0, nPast = nPrompt, drafted = 0, accepted = 0, rounds = 0;
+    bool haveNext = false;
+    llama_token next = 0;
+    // Batch index of the logits the next sample reads: -1 = the last decode's last output.
+    int sampleIdx = -1;
+    bool drafting = true;
+    // The draft reads the prompt now, with the thinker's prefill, rather than after the first
+    // token: its time then counts as waiting for the first token, not as decoding (tok/s and
+    // DecodeSpeed time from the first token). A prefix it already holds is reused.
+    if (nPrompt >= 2) {
+        const std::vector<llama_token> head(engine->cached.begin(), engine->cached.end() - 1);
+        draftSync(d, head, engine->cached.back());
+    }
+    const int64_t t0 = ggml_time_us();
+
+    while (generated < maxTokens) {
+        if (nPast >= engine->ctxSize - 1) { LOGE("ctx full at %d", nPast); break; }
+        const llama_token tok = haveNext ? next : llama_sampler_sample(chain, engine->ctx, sampleIdx);
+        haveNext = false;
+        sampleIdx = -1;
+        if (llama_vocab_is_eog(engine->vocab, tok)) break;
+
+        char buf[256];
+        int len = llama_token_to_piece(engine->vocab, tok, buf, sizeof(buf), 0, true);
+        const std::string inject = deliverToken(len > 0 ? std::string(buf, len) : std::string());
+        if (inject == kStop) break;
+
+        // Draft room: positions up to ctxSize - 2 (as the plain loop), the output budget, and
+        // the draft's own context. No drafting before forced text.
+        int k = std::min({draftMax, maxTokens - generated - 1, engine->ctxSize - 2 - nPast,
+                          d->ctxSize - 2 - nPast});
+        draft.clear();
+        if (drafting && inject.empty() && k > 0) draftTokens(d, engine->vocab, engine->cached, tok, k, draft);
+        k = (int) draft.size();
+
+        batch.n_tokens = k + 1;
+        for (int i = 0; i <= k; i++) {
+            batch.token[i] = i == 0 ? tok : draft[i - 1];
+            batch.pos[i] = nPast + i;
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i][0] = 0;
+            batch.logits[i] = 1;
+        }
+        if (llama_decode(engine->ctx, batch) != 0) { LOGE("decode failed mid-gen"); resetCache(engine); break; }
+        engine->cached.push_back(tok);
+        nPast++;
+        generated++;
+
+        if (!inject.empty()) {
+            if (!decodeInject(engine, inject, nPast)) break;
+            continue;                                   // next sample: logits of the forced text
+        }
+        if (k == 0) continue;                           // next sample: logits of tok (the only output)
+
+        rounds++;
+        drafted += k;
+        bool stop = false, failed = false;
+        // Logits at batch index i predict the token after tok, draft[0..i-1].
+        for (int i = 0; i <= k; i++) {
+            const llama_token t = llama_sampler_sample(chain, engine->ctx, i);
+            if (i < k && t == draft[i] && generated < maxTokens && !llama_vocab_is_eog(engine->vocab, t)) {
+                len = llama_token_to_piece(engine->vocab, t, buf, sizeof(buf), 0, true);
+                const std::string inj = deliverToken(len > 0 ? std::string(buf, len) : std::string());
+                if (inj == kStop) { stop = true; break; }   // not committed: removed below
+                engine->cached.push_back(t);                 // already in the KV at nPast
+                nPast++;
+                generated++;
+                accepted++;
+                if (!inj.empty()) {
+                    // Drop the unverified rest first, so the forced text follows t directly.
+                    if (!llama_memory_seq_rm(mem, 0, (llama_pos) engine->cached.size(), -1)) {
+                        resetCache(engine); failed = true; break;
+                    }
+                    const int before = nPast;
+                    if (!decodeInject(engine, inj, nPast)) failed = true;
+                    // Skipped for lack of room: the next sample reads t's own logits, which
+                    // sit at batch index i + 1 (t is draft[i]), as the plain loop would.
+                    else if (nPast == before) sampleIdx = i + 1;
+                    break;
+                }
+                continue;
+            }
+            // The thinker's own token at this position: the next one to emit (an EOG ends the
+            // generation there, exactly as in the plain loop).
+            next = t;
+            haveNext = true;
+            break;
+        }
+        if (failed) break;
+        if (drafted >= kGiveUpAfter && accepted * 4 < drafted) {
+            drafting = false;
+            LOGI("spec: %d of %d drafted tokens kept; drafting off for the rest of this answer", accepted, drafted);
+        }
+        // Remove the drafted tokens the thinker did not keep. Their KV sits past every
+        // committed position; removing a tail leaves no trace (see nativeGenerate).
+        if (!engine->cached.empty() &&
+            !llama_memory_seq_rm(mem, 0, (llama_pos) engine->cached.size(), -1)) {
+            LOGE("seq_rm failed after verify");
+            resetCache(engine);
+            break;
+        }
+        if (stop) break;
+    }
+
+    llama_batch_free(batch);
+    const double secs = (double) (ggml_time_us() - t0) / 1e6;
+    engine->specDrafted = drafted;
+    engine->specAccepted = accepted;
+    LOGI("spec: generated=%d drafted=%d accepted=%d (%.0f%%) rounds=%d draftMax=%d decode %.1f tok/s",
+         generated, drafted, accepted, drafted > 0 ? 100.0 * accepted / drafted : 0.0, rounds, draftMax,
+         secs > 0 ? generated / secs : 0.0);
+    return generated;
+}
+
 } // namespace
 
 extern "C" {
@@ -222,6 +527,10 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
     // positions, and then generate() can never reuse the shared prompt prefix (it falls
     // back to a full prefill). No effect on models without SWA (the Qwen3 MoE).
     cparams.swa_full = true;
+    // Speculative decoding verifies up to kMaxDraft + 1 tokens of one sequence in one batch,
+    // each with its logits. The per-sequence cap (default 1 at 8345f33) is only enforced for
+    // backend samplers, which this shim doesn't use; set so the requirement is stated.
+    cparams.n_outputs_max_per_seq = kMaxDraft + 1;
     cparams.n_threads = threads;
     cparams.n_threads_batch = threads;
 
@@ -291,9 +600,11 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
 JNIEXPORT jint JNICALL
 Java_com_agent_ultra_local_LlmNative_nativeGenerate(
         JNIEnv *env, jobject, jlong handle, jstring jprompt, jint maxTokens,
-        jfloat temperature, jint threads, jobject callback) {
+        jfloat temperature, jint threads, jint draftMax, jobject callback) {
     auto *engine = reinterpret_cast<Engine *>(handle);
     if (!engine || !engine->ctx) return -1;
+    engine->specDrafted = -1;
+    engine->specAccepted = 0;
 
     // ThermalGuard: fewer threads when hot. Applies to this and later calls. A pinned pool
     // has exactly its load-time workers; ggml would clamp a larger count with a warning on
@@ -301,6 +612,7 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
     if (threads > 0) {
         if (engine->pool) threads = std::min<int>(threads, engine->poolThreads);
         llama_set_n_threads(engine->ctx, threads, threads);
+        if (engine->draft) llama_set_n_threads(engine->draft->ctx, threads, threads);
     }
 
     const std::string prompt = jstringToUtf8(env, jprompt);
@@ -410,6 +722,14 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
     llama_sampler_chain_add(chain, llama_sampler_init_temp(temperature));
     llama_sampler_chain_add(chain, llama_sampler_init_dist(42));
 
+    // With a draft model attached and asked for: the speculative loop (same output, see
+    // generateSpeculative). Otherwise the plain loop below, unchanged.
+    if (engine->draft && draftMax > 0) {
+        const int n = generateSpeculative(engine, chain, maxTokens, std::min<int>(draftMax, kMaxDraft), nPrompt);
+        llama_sampler_free(chain);
+        return n;
+    }
+
     int generated = 0;
     int nPast = nPrompt;
     for (; generated < maxTokens; generated++) {
@@ -461,10 +781,89 @@ Java_com_agent_ultra_local_LlmNative_nativeContextSize(JNIEnv *, jobject, jlong 
     return engine ? engine->ctxSize : 0;
 }
 
+// Loads the speculative-decoding draft model beside a loaded engine. Returns the draft's ctx
+// (> 0) on success; 0 = the model didn't load, -1 = its vocabulary isn't the engine's
+// (llama.cpp's own check, vocabCompatible), -2 = its context couldn't be created. On any
+// failure nothing stays loaded and generate runs as before. Replaces a draft already attached.
+JNIEXPORT jint JNICALL
+Java_com_agent_ultra_local_LlmNative_nativeAttachDraft(JNIEnv *env, jobject, jlong handle, jstring jpath, jint ctxSize) {
+    auto *engine = reinterpret_cast<Engine *>(handle);
+    if (!engine || !engine->ctx || ctxSize <= 0) return 0;
+    freeDraft(engine->draft);
+    engine->draft = nullptr;
+
+    const char *path = env->GetStringUTFChars(jpath, nullptr);
+    llama_model_params mparams = llama_model_default_params();
+    mparams.n_gpu_layers = 0;
+    // Always the app's own memory: a few hundred MB, read once; a mapped draft could be paged
+    // out between tokens like the thinker's mapped weights were.
+    mparams.load_mode = LLAMA_LOAD_MODE_NONE;
+    mparams.lazy_mode = LLAMA_LAZY_MODE_OFF;
+    llama_model *model = llama_model_load_from_file(path, mparams);
+    env->ReleaseStringUTFChars(jpath, path);
+    if (!model) { LOGE("draft: model load failed"); return 0; }
+    if (!vocabCompatible(engine->vocab, llama_model_get_vocab(model))) {
+        LOGE("draft: vocabulary differs from the thinker's; speculative decoding off");
+        llama_model_free(model);
+        return -1;
+    }
+
+    llama_context_params cparams = llama_context_default_params();
+    cparams.n_ctx = ctxSize;
+    cparams.n_batch = ctxSize;        // the draft prefills the whole prompt in one llama_decode
+    cparams.n_ubatch = 512;
+    // The draft only ever reads its last token's logits: reserving one output row instead of
+    // n_ubatch keeps its compute buffer ~300 MB smaller (512 x 151,936 x 4 B for Qwen).
+    cparams.n_outputs_max = 1;
+    cparams.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
+    cparams.type_k = GGML_TYPE_Q8_0;
+    cparams.type_v = GGML_TYPE_Q8_0;
+    cparams.n_threads = engine->poolThreads > 0 ? engine->poolThreads : cparams.n_threads;
+    cparams.n_threads_batch = cparams.n_threads;
+    llama_context *ctx = llama_init_from_model(model, cparams);
+    if (!ctx) {
+        LOGE("draft: ctx init failed at ctx=%d (cause in llama.cpp log)", ctxSize);
+        llama_model_free(model);
+        return -2;
+    }
+    // Same pinned workers as the thinker: the two never decode at the same time.
+    if (engine->pool) llama_attach_threadpool(ctx, engine->pool, nullptr);
+
+    auto *d = new Draft();
+    d->model = model;
+    d->ctx = ctx;
+    d->vocab = llama_model_get_vocab(model);
+    d->ctxSize = ctxSize;
+    engine->draft = d;
+    LOGI("draft attached: ctx=%d vocab=%d", ctxSize, llama_vocab_n_tokens(d->vocab));
+    return ctxSize;
+}
+
+JNIEXPORT void JNICALL
+Java_com_agent_ultra_local_LlmNative_nativeDetachDraft(JNIEnv *, jobject, jlong handle) {
+    auto *engine = reinterpret_cast<Engine *>(handle);
+    if (!engine) return;
+    freeDraft(engine->draft);
+    engine->draft = nullptr;
+}
+
+// The last generate's speculation: {drafted, accepted}; drafted = -1 when it ran without one.
+JNIEXPORT jintArray JNICALL
+Java_com_agent_ultra_local_LlmNative_nativeSpecStats(JNIEnv *env, jobject, jlong handle) {
+    auto *engine = reinterpret_cast<Engine *>(handle);
+    jint v[2] = {engine ? engine->specDrafted : -1, engine ? engine->specAccepted : 0};
+    jintArray out = env->NewIntArray(2);
+    if (out) env->SetIntArrayRegion(out, 0, 2, v);
+    return out;
+}
+
 JNIEXPORT void JNICALL
 Java_com_agent_ultra_local_LlmNative_nativeFree(JNIEnv *, jobject, jlong handle) {
     auto *engine = reinterpret_cast<Engine *>(handle);
     if (!engine) return;
+    // Before the pool: the draft's context uses it too.
+    freeDraft(engine->draft);
+    engine->draft = nullptr;
     if (engine->ctx) llama_free(engine->ctx);
     // After the context (the pool was only attached to it; llama does not own or free it).
     if (engine->pool) ggml_threadpool_free(engine->pool);

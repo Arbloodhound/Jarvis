@@ -718,7 +718,8 @@ object FeatureProbes {
     /** The brain test's verdict line for the model in use ([KitReport.advice]). */
     fun modelAdvice(engine: LocalModelEngine, verdict: KitReport.Model, medianTps: Double?): String =
         KitReport.advice(verdict, engine.modelLabel, engine.modelFileName, modelMb(engine), medianTps, presets(),
-            exclude = setOf(LocalModelEngine.LIBRARIAN_DEFAULT.fileName))
+            exclude = setOf(LocalModelEngine.LIBRARIAN_DEFAULT.fileName),
+            reasoningDefaults = LocalModelEngine.REASONING_DEFAULTS)
 
     private fun missingThinker(feature: String) =
         Result(feature, Verdict.MISSING, "not downloaded", DownloadPlan.MISSING_HINT)
@@ -761,7 +762,8 @@ object FeatureProbes {
             },
             listOfNotNull("model=${engine.modelLabel} file=${engine.modelFileSizeBytes / 1_048_576} MB ctx=${engine.contextSize} " +
                 "thinking=${engine.isThinkingModel}", "tokens=$pieces thermal=${ThermalGuard.level}",
-                // Slow or paging: a smaller model is the remedy for both. One 64-token sample, so a guide only.
+                // Slow or paging: a smaller model, unless this is the reasoning default (then: keep it,
+                // and how to speed it up). One 64-token sample, so a guide only.
                 if (tps < KitReport.COMFORT_TOK_PER_SEC || faults > 1000)
                     "one short sample: " + modelAdvice(engine, KitReport.Model.TRY_SMALLER, tps.takeIf { it > 0 })
                 else null)))

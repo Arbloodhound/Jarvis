@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.agent.ultra.local.CpuVariant
+import com.agent.ultra.local.DraftModel
 import com.agent.ultra.local.LlmNative
 import com.agent.ultra.local.LocalModelEngine
 import com.agent.ultra.local.PageFaults
@@ -22,8 +23,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   adb shell am broadcast -a com.agent.ultra.BENCH -n com.agent.ultra/.bench.BenchReceiver \
  *       [--ei threads N] [--ei tokens M]
  *
- * Logs (tag UltraBench) the CPU topology, then for each thread count runs a fixed prompt
- * [BenchReport.RUNS] times through LocalModelEngine and reports the last run. Ends with "done".
+ * Logs (tag UltraBench) the CPU topology, then for each setting of [BenchReport.configs] (each
+ * thread count without and with the speed boost's draft model, then other draft lengths) runs a
+ * fixed prompt [BenchReport.RUNS] times through LocalModelEngine and reports the last run. Ends
+ * with "done".
  *
  * Broadcast limit: onReceive has ~10 s (60 s for a background broadcast) before the system
  * calls it an ANR, and a sweep takes minutes. So goAsync() only covers the topology dump; the
@@ -91,10 +94,15 @@ class BenchReceiver : BroadcastReceiver() {
             return
         }
         Log.i(TAG, "model=${File(engine.modelFilePath).name} sizeMB=${engine.modelFileSizeBytes / 1_048_576}")
+        val draftFile = DraftModel.present(context) && DraftModel.eligible(File(engine.modelFilePath).name)
+        Log.i(TAG, "draft model " + if (draftFile) "on the phone (${DraftModel.FILE})"
+            else "not available (not downloaded, or this brain isn't Qwen3): draft runs skipped")
+        val configs = BenchReport.configs(threads, draftFile, DraftModel.DRAFT_MAX)
         val power = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
         var seq = 0
+        val measured = mutableListOf<Pair<BenchReport.Config, Double>>()
         try {
-            for (n in threads) {
+            for ((n, draftLen) in configs) {
                 for (run in 1..BenchReport.RUNS) {
                     seq++
                     var first = -1L
@@ -104,7 +112,8 @@ class BenchReceiver : BroadcastReceiver() {
                     val t0 = System.currentTimeMillis()
                     // A different first word each run: a KV cache that reuses a matching
                     // prefix must not skip the prompt the measurement is timing.
-                    val result = engine.generate("Run $seq. $PROMPT", maxTokens = tokens, threads = n, exactThreads = true) {
+                    val result = engine.generate("Run $seq. $PROMPT", maxTokens = tokens, threads = n, exactThreads = true,
+                        draft = draftLen > 0, draftLen = draftLen) {
                         val now = System.currentTimeMillis()
                         if (first < 0) first = now
                         last = now
@@ -112,7 +121,8 @@ class BenchReceiver : BroadcastReceiver() {
                     }
                     val f1 = PageFaults.read()
                     if (result.isFailure) {
-                        Log.e(TAG, "error: generate failed at threads=$n: ${result.exceptionOrNull()?.message}")
+                        Log.e(TAG, "error: generate failed at threads=$n draft=${BenchReport.draftLabel(draftLen)}: " +
+                            "${result.exceptionOrNull()?.message}")
                         Log.i(TAG, "done status=error")
                         return
                     }
@@ -123,9 +133,17 @@ class BenchReceiver : BroadcastReceiver() {
                         tokPerSec = BenchReport.decodeTokPerSec(count, first, last),
                         majfaults = if (f0 >= 0 && f1 >= 0) f1 - f0 else -1,
                         thermal = thermalStatus(power),
+                        draftLen = draftLen,
+                        drafted = engine.lastSpecStats[0],
+                        accepted = engine.lastSpecStats[1],
                     )
+                    if (draftLen > 0 && engine.lastSpecStats[0] < 0)
+                        Log.w(TAG, "draft=$draftLen asked but not used (no room, or refused: see UltraLlm 'draft' lines)")
                     if (run < BenchReport.RUNS) Log.i(TAG, "warmup $line")
-                    else Log.i(TAG, line)
+                    else {
+                        Log.i(TAG, line)
+                        measured += BenchReport.Config(n, draftLen) to BenchReport.decodeTokPerSec(count, first, last)
+                    }
                 }
             }
         } finally {
@@ -134,6 +152,7 @@ class BenchReceiver : BroadcastReceiver() {
             // real request reloads with the app's own thread policy instead of the last bench count.
             engine.unload()
         }
+        Log.i(TAG, BenchReport.summary(measured))
         Log.i(TAG, "done status=ok")
     }
 

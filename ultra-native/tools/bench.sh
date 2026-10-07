@@ -3,13 +3,15 @@
 # Usage: bench.sh [threads] [tokens] [timeout-seconds]
 #   threads  one count to run; 0 or omitted sweeps 4, 5, 6
 #   tokens   tokens to generate per run (default 64)
-# Each count runs twice and the second is reported (the first absorbs warm-up).
+# Each count runs without and (when downloaded) with the speed boost's draft model,
+# then draft lengths 4 and 8 at the top count; each setting runs twice and the
+# second is reported (the first absorbs warm-up). A "summary" line names the best.
 # Prints the CPU topology the app sees, then a table. Needs a model already
 # downloaded in the app (Settings); otherwise the app logs why and stops.
 set -uo pipefail
 THREADS="${1:-0}"
 TOKENS="${2:-0}"
-TIMEOUT="${3:-900}"
+TIMEOUT="${3:-1800}"
 APP=com.agent.ultra
 RECEIVER=$APP/.bench.BenchReceiver
 
@@ -47,16 +49,17 @@ fi
 BENCH="$(printf '%s\n' "$LOG" | grep "UltraBench:" | sed -E 's/^[A-Z]\/UltraBench *: //')"
 
 echo "=== topology and status"
-printf '%s\n' "$BENCH" | grep -vE "^(threads=|warmup |done|$)"
+printf '%s\n' "$BENCH" | grep -vE "^(threads=|warmup |summary |done|$)"
 echo "=== engine (UltraLlm)"
 printf '%s\n' "$LOG" | grep "UltraLlm:" | sed -E 's/^[A-Z]\/UltraLlm *: //'
-echo "=== result (second run of each count)"
+echo "=== result (second run of each threads/draft setting; draft=off is plain decoding)"
 printf '%s\n' "$BENCH" | grep "^threads=" | awk '
-  BEGIN { printf "%-8s | %-8s | %-9s | %-9s | %-9s | %s\n", "threads", "tok/s", "promptMs", "majfaults", "genTokens", "thermal" }
+  BEGIN { printf "%-8s | %-6s | %-8s | %-9s | %-9s | %-9s | %-9s | %s\n", "threads", "draft", "tok/s", "accept", "promptMs", "majfaults", "genTokens", "thermal" }
   {
     split("", v)
     for (i = 1; i <= NF; i++) { split($i, kv, "="); v[kv[1]] = kv[2] }
-    printf "%-8s | %-8s | %-9s | %-9s | %-9s | %s\n", v["threads"], v["tokPerSec"], v["promptMs"], v["majfaults"], v["genTokens"], v["thermal"]
+    printf "%-8s | %-6s | %-8s | %-9s | %-9s | %-9s | %-9s | %s\n", v["threads"], v["draft"], v["tokPerSec"], v["accept"], v["promptMs"], v["majfaults"], v["genTokens"], v["thermal"]
   }'
+printf '%s\n' "$BENCH" | grep "^summary "
 printf '%s\n' "$BENCH" | grep "^done" || echo "(not done)"
 printf '%s\n' "$BENCH" | grep "^done status=ok" > /dev/null

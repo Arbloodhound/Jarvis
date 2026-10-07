@@ -195,7 +195,10 @@ fun SettingsScreen(
         )
         // A download of a model that is neither model's choice now (e.g. the 4B a 16 GB phone
         // started before its default became the 8B): kept, so it can continue, but shown.
-        val stranded = partials.filterKeys { it != localEngine.modelFileName && it != librarian.modelFileName }
+        // The speed boost's draft (DOWNLOADS fetches and resumes it) is not a stranded model download.
+        val stranded = partials.filterKeys {
+            it != localEngine.modelFileName && it != librarian.modelFileName && it != com.agent.ultra.local.DraftModel.FILE
+        }
         for ((f, b) in stranded) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -302,6 +305,37 @@ fun SettingsScreen(
                 Switch(checked = resident, onCheckedChange = { on ->
                     resident = on
                     UltraPrefs.setKeepBrainInMemory(context, on)
+                })
+            }
+        }
+
+        run {
+            var boost by remember { mutableStateOf(UltraPrefs.speedBoost(context)) }
+            val draftHere = remember(statusTick) { com.agent.ultra.local.DraftModel.present(context) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Speed boost (draft model)", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "A small helper model guesses the next few words and the brain checks them " +
+                            "all at once, so answers come faster with the same quality (the brain " +
+                            "still picks every word). Uses about 0.7–1.5 GB of memory beside the " +
+                            "brain; skipped automatically when memory is short. " +
+                            when {
+                                !com.agent.ultra.local.DraftModel.eligible(localEngine.modelFileName) ->
+                                    "Works with the Qwen3 brains only (like the default 4B Thinking), not this one."
+                                draftHere -> "Takes effect on the next answer."
+                                else -> "Needs the 0.4 GB helper: DOWNLOADS → Download all missing."
+                            },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = boost, onCheckedChange = { on ->
+                    boost = on
+                    UltraPrefs.setSpeedBoost(context, on)
                 })
             }
         }

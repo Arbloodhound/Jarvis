@@ -467,8 +467,65 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             residentLoaded = resident && handle != 0L
             // A resident copy can't be dropped, so only the mapped mode needs the page cache warmed.
             if (handle != 0L && !resident) warmPageCache("after load")
+            // Now, measured with the thinker in memory: the speed boost's draft, if it fits.
+            if (handle != 0L) syncDraft(null)
             return handle != 0L
         }
+    }
+
+    /** The draft's ctx while one is attached to [handle] (speed boost); 0 = none. */
+    @Volatile private var draftCtx = 0
+    /** The draft failed to attach for this load (missing vocab match, load or ctx failure):
+     *  not retried until the thinker is loaded again. */
+    @Volatile private var draftFailed = false
+
+    /** Whether the next generations use the speed boost's draft model (debug tests read it). */
+    val draftAttached: Boolean get() = draftCtx > 0 && handle != 0L
+
+    /** [drafted, accepted] of this engine's last generation; drafted = -1 = ran without a draft. */
+    @Volatile var lastSpecStats: IntArray = intArrayOf(-1, 0)
+        private set
+
+    /**
+     * Attach or drop the draft model to match what is wanted: [want] null = the setting
+     * (Settings → "Speed boost") and the file being on the phone; true/false = the debug speed
+     * test's explicit choice. Thinker only, Qwen3 thinkers only. Attaches only when
+     * [DraftModel.contextFor] finds room with the thinker already in memory, so it can't push
+     * the thinker into paging; when it doesn't fit, generation just runs without it (asked
+     * again next time, a cheap memory reading). Caller holds [nativeMutex].
+     */
+    private fun syncDraft(want: Boolean?) {
+        val h = handle
+        if (h == 0L || role != Role.THINKER) return
+        val wanted = (want ?: com.agent.ultra.ui.UltraPrefs.speedBoost(context)) &&
+            DraftModel.eligible(modelFileName) && DraftModel.present(context)
+        if (!wanted) {
+            // Only the setting turning it off frees it; the speed test's "without" run keeps it
+            // loaded and simply doesn't use it (draftMax 0).
+            if (draftCtx > 0 && want == null) {
+                LlmNative.nativeDetachDraft(h)
+                draftCtx = 0
+                android.util.Log.i("UltraLlm", "draft detached (speed boost off)")
+            }
+            return
+        }
+        if (draftCtx > 0 || draftFailed) return
+        val other = otherEngine()
+        val otherMapped = if (other == null) 0L else otherMappedBytes(
+            other.loaded, other.residentLoaded, other.modelFilePath == modelFilePath, other.modelFileSizeBytes)
+        val avail = availableRam()
+        val room = DraftModel.roomAfterThinker(avail, otherMapped, if (residentLoaded) 0L else modelFileSizeBytes)
+        val ctx = DraftModel.contextFor(room, loadedCtx)
+        if (ctx == 0) {
+            android.util.Log.i("UltraLlm", "draft skipped: roomMB=${room / MIB} (need " +
+                "${DraftModel.needBytes(CTX_SIZE) / MIB} + ${DraftModel.FREE_AFTER_BYTES / MIB} free)")
+            return
+        }
+        val t0 = System.currentTimeMillis()
+        val r = LlmNative.nativeAttachDraft(h, DraftModel.file(context).absolutePath, ctx)
+        if (r > 0) draftCtx = r else draftFailed = true
+        android.util.Log.i("UltraLlm", "draft attach -> $r (ctx=$ctx roomMB=${room / MIB} " +
+            "needMB=${DraftModel.needBytes(ctx) / MIB}) in ${System.currentTimeMillis() - t0}ms")
     }
 
     /**
@@ -532,6 +589,11 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         /** Benchmark only: run exactly [threads] (capped at the loaded count), ignoring the thermal
          *  policy. The Pixel speed sweep asked for 4/5/6 and every run got 2 (policy said HOT). */
         exactThreads: Boolean = false,
+        /** Speed boost's draft model: null = the setting; true/false = the debug speed test's
+         *  with/without runs. Same output either way (ultra_llm.cpp generateSpeculative). */
+        draft: Boolean? = null,
+        /** Benchmark only: draft length (> 0), instead of [DraftModel.DRAFT_MAX]. */
+        draftLen: Int = 0,
         onStart: () -> Unit = {},
         onToken: (String) -> Unit = {},
     ): Result<String> = withContext(Dispatchers.IO) { thinkerDemanding {
@@ -556,6 +618,10 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 if (h == 0L) return@withLock Result.failure(
                     IllegalStateException("on-device model was unloaded")
                 )
+                // Before the timing starts: a first attach reads the draft's file.
+                syncDraft(draft)
+                val draftMax = if (draft != false && draftAttached)
+                    (if (draftLen > 0) draftLen else DraftModel.DRAFT_MAX) else 0
                 val sb = StringBuilder()
                 val t0 = System.currentTimeMillis()
                 val faults0 = PageFaults.read()
@@ -572,7 +638,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 // A cancelled caller (the librarian when the phone is picked up, a stopped test)
                 // stops at the next token instead of holding the cores until maxTokens.
                 val callerJob = kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
-                val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, nThreads) cb@{ piece ->
+                val n = LlmNative.nativeGenerate(h, prompt, maxTokens, 0.2f, nThreads, draftMax) cb@{ piece ->
                     if (yields && thinkerDemand.get() > 0) { stopped = true; return@cb LlmNative.STOP }
                     if (callerJob?.isActive == false) { cancelled = true; return@cb LlmNative.STOP }
                     tLast = System.currentTimeMillis()
@@ -589,9 +655,12 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 // Thrash check: after the first answer, majfaults should stay near 0 and tok/s steady.
                 val ms = (System.currentTimeMillis() - t0).coerceAtLeast(1)
                 val faults1 = PageFaults.read()
+                val spec = LlmNative.nativeSpecStats(h).takeIf { it.size == 2 } ?: intArrayOf(-1, 0)
+                lastSpecStats = spec
                 android.util.Log.i("UltraLlm", "gen tokens=$n ms=$ms tokPerSec=${"%.1f".format(n * 1000.0 / ms)} " +
                     "majfaults=${if (faults0 >= 0 && faults1 >= 0) faults1 - faults0 else -1} " +
-                    "availMB=${availableRam() / 1_048_576} model=${modelFile.name} cpu=${LlmNative.variant} threads=$nThreads")
+                    "availMB=${availableRam() / 1_048_576} model=${modelFile.name} cpu=${LlmNative.variant} threads=$nThreads " +
+                    "draft=${specLabel(spec)}")
                 if (n >= 0 && pieces > 1) decodeSpeed.observe(modelFile.name, pieces - 1, tLast - tFirst)
                 thinkBudget?.let {
                     android.util.Log.d("UltraRoute", "thinkTokens=${it.thinkTokens} forced=${it.forced} budget=${it.budgetTokens}")
@@ -637,8 +706,10 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         genMutex.withLock {
             nativeMutex.withLock {
                 if (handle != 0L) {
-                    LlmNative.nativeFree(handle)
+                    LlmNative.nativeFree(handle)       // frees the draft too
                     handle = 0
+                    draftCtx = 0
+                    draftFailed = false
                     decodeSpeed.reset()
                     loadedCtx = 0
                     residentLoaded = false
@@ -702,6 +773,15 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
          *  memory (<= 0) stays unknown, which [residentLoad] treats as "map it". Pure, JVM-tested. */
         fun roomBesideOther(availBytes: Long, otherMappedBytes: Long): Long =
             if (availBytes <= 0) availBytes else (availBytes - otherMappedBytes.coerceAtLeast(0L)).coerceAtLeast(0L)
+
+        /** "off" (no draft used), or "accepted/drafted (rate%)" for the gen log line. Pure, JVM-tested. */
+        fun specLabel(stats: IntArray): String {
+            val drafted = stats.getOrElse(0) { -1 }
+            val accepted = stats.getOrElse(1) { 0 }
+            if (drafted < 0) return "off"
+            val pct = if (drafted > 0) accepted * 100 / drafted else 0
+            return "$accepted/$drafted($pct%)"
+        }
 
         /** Model files being downloaded by either engine: both may pick the same file. */
         private val downloadsInFlight: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
@@ -1005,10 +1085,10 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             // URL not checked from the build machine (Hugging Face is blocked there): a failed
             // download on the phone means the file moved, not that the app is broken.
             ModelChoice(
-                "Qwen3 1.7B (Q4_K_M) — MoE stand-in for small phones",
+                "Qwen3 1.7B (Q4_K_M) — for small phones",
                 "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf",
                 "qwen3-1.7b-q4km.gguf", 1110,
-                "Same Qwen3 prompt format and <think> handling as the MoE, small enough for a 4GB phone. Tests the offline brain path (think budget, hidden trace, routing) before the MoE is on a phone that fits it.",
+                "Same Qwen3 prompt format and <think> handling as the 4B, small enough for a 4GB phone. Noticeably weaker reasoning than the 4B Thinking: only for phones the 4B doesn't fit.",
             ),
             // The librarian's default (Settings → MEMORY MODEL). File and size checked on the Hub
             // listing (unsloth/Qwen3-1.7B-GGUF), 2026-10-06: 1,056,782,912 B. Q4_0 is repacked
@@ -1162,6 +1242,12 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
 
         /** What a phone with room for it defaults to: Qwen3-4B Thinking 2507 Q4_0. */
         val FAST_DEFAULT = PRESETS.first { it.fileName == "qwen3-4b-thinking-2507-q4_0.gguf" }
+
+        /** The default reasoning brain: Qwen3-4B Thinking 2507, and its abliterated build (same base
+         *  model). A slow brain test on these says keep it and how to speed it up, never "switch to
+         *  a smaller model" (all smaller presets reason worse): KitReport.advice. */
+        val REASONING_DEFAULTS: Set<String> =
+            setOf(FAST_DEFAULT.fileName, "qwen3-4b-thinking-2507-abliterated-q4km.gguf")
 
         /** Qwen3-8B Q4_K_S: the 14 GB+ default before Qwen3-4B Thinking 2507 replaced it. Still
          *  selectable, and kept by an install that already has it on disk ([defaultFor]). */

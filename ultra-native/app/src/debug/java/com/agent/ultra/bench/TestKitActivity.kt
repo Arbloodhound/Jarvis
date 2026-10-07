@@ -331,7 +331,8 @@ class TestKitActivity : ComponentActivity() {
     private suspend fun speedTest() {
         say("— Speed test —")
         if (!LocalModelEngine.shared(this).modelPresent) { say("Download the brain model first."); return }
-        say("Running… about 10 minutes. Keep this screen open and the phone on the charger.")
+        say("Running… about 15 minutes (4, 5 and 6 threads, each without and with the speed boost). " +
+            "Keep this screen open and the phone on the charger.")
         val t0 = System.currentTimeMillis()
         val ran = withContext(Dispatchers.IO) { BenchReceiver.runNow(applicationContext) }
         if (!ran) { say("A speed test is already running."); return }
