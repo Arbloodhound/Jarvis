@@ -96,6 +96,10 @@ std::u16string utf8ToUtf16(const std::string &s) {
             if ((cc & 0xC0) != 0x80) { bad = true; break; }
             cp = (cp << 6) | (cc & 0x3F);
         }
+        // Overlong forms, UTF-16 surrogates and values past U+10FFFF are not characters (and a
+        // surrogate would reach NewString as invalid UTF-16).
+        static const uint32_t kMin[5] = {0, 0, 0x80, 0x800, 0x10000};
+        if (!bad && (cp < kMin[len] || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF)) bad = true;
         if (bad) { out.push_back(0xFFFD); i++; continue; }
         appendUtf16(out, cp);
         i += len;
