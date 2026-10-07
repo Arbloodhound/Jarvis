@@ -3,6 +3,11 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — speaking to Jarvis runs the request
+Owner: speaking to it should make it do the task. The chat's 🎙 only filled the text box, so a spoken request did
+nothing until Send. Now the recognised words are sent at once (`ChatScreen.sendNow`, shared with Send; held in the
+box only while a run is in progress). 1204 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (session 01BUKa) — unrestricted phone access; Jarvis's voice on the media volume
 Owner: unrestricted access to the phone and everything on it; make sure it knows it can use the screen; "I never
 heard the speech model talk".

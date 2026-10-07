@@ -79,6 +79,23 @@ fun ChatScreen(
         }
     }
 
+    /** One request from this screen, typed or spoken: shown, then run. "/local …" is the raw-model dev path. */
+    fun sendNow(text: String) {
+        ChatStore.add(ChatMessage(fromUser = true, text = text))
+        launchRun {
+            if (text.startsWith("/local ")) {
+                val prompt = text.removePrefix("/local ").trim()
+                val msg = ChatMessage(false, "")
+                ChatStore.addToState(msg)
+                val r = localEngine.generate(prompt, 300) { piece -> ChatStore.appendTo(msg.id, piece) }
+                r.onFailure { ChatStore.setText(msg.id, "Error: ${it.message}") }
+                ChatStore.messageById(msg.id)?.let { ChatStore.persist(it) }
+            } else {
+                brain.run(text)
+            }
+        }
+    }
+
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     var a11yRunning by remember { mutableStateOf(AgentAccessibilityService.isRunning()) }
@@ -468,7 +485,10 @@ fun ChatScreen(
                     },
                 ) { spoken ->
                     listening = false
-                    input = (input + " " + spoken).trim()
+                    // Speaking is asking: what was said runs at once, like Send (owner, 2026-10-07: it only
+                    // filled the box, so a spoken request did nothing until Send was pressed).
+                    val text = (input + " " + spoken).trim()
+                    if (text.isNotEmpty() && !ChatStore.thinking.value) { input = ""; sendNow(text) } else input = text
                 }
             }
             DisposableEffect(speechHelper) { onDispose { speechHelper.stop() } }
@@ -507,23 +527,8 @@ fun ChatScreen(
                 onClick = {
                     val text = input.trim()
                     if (text.isEmpty()) return@Button
-                    ChatStore.add(ChatMessage(fromUser = true, text = text))
                     input = ""
-                    launchRun {
-                            if (text.startsWith("/local ")) {
-                                // Dev path: raw on-device generation
-                                val prompt = text.removePrefix("/local ").trim()
-                                val msg = ChatMessage(false, "")
-                                ChatStore.addToState(msg)
-                                val r = localEngine.generate(prompt, 300) { piece ->
-                                    ChatStore.appendTo(msg.id, piece)
-                                }
-                                r.onFailure { ChatStore.setText(msg.id, "Error: ${it.message}") }
-                                ChatStore.messageById(msg.id)?.let { ChatStore.persist(it) }
-                            } else {
-                                brain.run(text)
-                            }
-                    }
+                    sendNow(text)
                 },
             ) {
                 Text("Send")
