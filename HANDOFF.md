@@ -5,7 +5,7 @@ Owner's results `Jarvis-results-20261006-1758.txt`: Feature check PASS 17 / WARN
 (1167 JVM tests, 0 failures; assembleDebug OK) fixes from it: LLM decodes with 4 threads (speed test 4=8.96,
 5=7.23, 6=4.79 tok/s; pool still 6 workers), "I hate/hi/hay Jarvis" wakes, new probe "Wake phrase (your
 voice)", observation without "text" kept with a plain summary. Merged `claude/qwen35-preset` (host-harness
-PASS on a tiny qwen35 model, see DEVLOG). Release APK run 9 started for 229dfb0 → `v2.6.9-test`.
+PASS on a tiny qwen35 model, see DEVLOG). Then 876c4ac: wake chime (owner request). Run 9 failed in CI setup (pip download timeout, no build ran); run 10 (37556147640) for 876c4ac succeeded → published `v2.6.10-test` (Latest).
 Next: owner updates via Obtainium → Jarvis Tests 3 (speed) + 5 (Feature check, says "Hey Jarvis" when asked)
 → sends file. Check: tok/s ≈ 9 at 4 threads; own-voice wake result; pattern notes now PASS.
 
