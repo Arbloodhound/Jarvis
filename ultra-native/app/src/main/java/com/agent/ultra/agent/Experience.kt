@@ -69,7 +69,7 @@ object Experience {
      * succeeding with another is still a wall and its way round. */
     private val FAMILIES = listOf(
         setOf("app_launch", "react_navigate", "open_url"),
-        setOf("read_text_on_screen", "read_screen_deep", "describe_screen", "screenshot"),
+        setOf("read_text_on_screen", "read_screen_deep", "describe_screen", "screen_ocr", "look_at_screen", "screenshot"),
         setOf("sms_send", "contacts_read"),
     )
 

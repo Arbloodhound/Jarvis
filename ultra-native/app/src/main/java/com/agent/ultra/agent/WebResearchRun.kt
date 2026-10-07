@@ -20,6 +20,8 @@ object WebResearchRun {
     private const val PAGES = 3
     /** The whole search, queries and pages: past this the brain answers with what's in. */
     const val BUDGET_MS = 20_000L
+    /** Opening one page on screen and reading it. */
+    const val SCREEN_MS = 15_000L
 
     private fun get(url: String): String? = runCatching {
         http.newCall(Request.Builder().url(url).header("User-Agent", UA).header("Accept-Language", "en").build()).execute().use { r ->
@@ -27,8 +29,12 @@ object WebResearchRun {
         }
     }.getOrNull()
 
-    /** The research brief for [request], or null when nothing came back. */
-    suspend fun run(request: String, onStatus: (String) -> Unit = {}): String? = withContext(Dispatchers.IO) {
+    /**
+     * The research brief for [request], or null when nothing came back. [onScreen] reads a page in
+     * the browser on screen (its text after the page's scripts ran), for when none of the best
+     * pages gave any text over plain HTTP — sites built in JavaScript. Outside [BUDGET_MS].
+     */
+    suspend fun run(request: String, onScreen: (suspend (String) -> String?)? = null, onStatus: (String) -> Unit = {}): String? = withContext(Dispatchers.IO) {
         val kind = WebResearch.kind(request)
         val queries = WebResearch.plan(request, java.time.Year.now().value)
         var pages: Map<String, String> = emptyMap()
@@ -44,6 +50,11 @@ object WebResearchRun {
             pages = coroutineScope {
                 ranked.take(PAGES).map { r -> async { r.hit.url to get(r.hit.url)?.let { WebResearch.pageText(it) } } }.awaitAll()
             }.mapNotNull { (u, t) -> t?.takeIf { it.length > 80 }?.let { u to it } }.toMap()
+        }
+        if (pages.isEmpty() && onScreen != null) ranked.firstOrNull()?.let { best ->
+            onStatus("opening ${best.hit.domain} on screen")
+            val seen = withTimeoutOrNull(SCREEN_MS) { onScreen(best.hit.url) }?.takeIf { it.length > 80 }
+            if (seen != null) pages = mapOf(best.hit.url to seen.take(1400))
         }
         android.util.Log.i("UltraWeb", "research kind=$kind queries=${queries.size} results=${ranked.size} pages=${pages.size}")
         if (ranked.isEmpty()) null else WebResearch.brief(request, kind, queries, ranked, pages)

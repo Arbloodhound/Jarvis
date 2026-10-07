@@ -56,7 +56,7 @@ data class Fact(
             // Results of driving another app or the web: what came back was
             // written by that app or page.
             "react_navigate", "web_search", "open_url" -> Source.THIRD_PARTY_CONTENT
-            "read_text_on_screen", "read_screen_deep", "describe_screen" -> Source.ACCESSIBILITY_TREE
+            "read_text_on_screen", "read_screen_deep", "describe_screen", "screen_ocr", "look_at_screen" -> Source.ACCESSIBILITY_TREE
             "screenshot", "notification_read" -> Source.ACCESSIBILITY_TREE
             // Pure actions (toggles, volume, clipboard_write) observe nothing.
             else -> null

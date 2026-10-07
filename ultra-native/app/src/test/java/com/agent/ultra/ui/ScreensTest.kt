@@ -103,7 +103,7 @@ class ScreensTest {
         }
         rule.waitForIdle()
         for (s in listOf("DOWNLOADS", "PEOPLE", "SYSTEM PROMPT", "ON-DEVICE MODEL", "MEMORY MODEL",
-                "WHERE THE AGENT MAY GO", "JARVIS'S VOICE", "HOW JARVIS TALKS", "VOICE", "ABOUT"))
+                "WHERE THE AGENT MAY GO", "SCREEN VISION", "JARVIS'S VOICE", "HOW JARVIS TALKS", "VOICE", "ABOUT"))
             rule.onNodeWithText(s).assertExists()
         rule.onNodeWithText("📖 Guide").performClick()
         assertTrue(guide)

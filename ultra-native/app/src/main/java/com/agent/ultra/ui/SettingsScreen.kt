@@ -903,6 +903,10 @@ fun SettingsScreen(
             })
         }
 
+        // ── Seeing the screen: ML Kit text (built in) and the vision model (download) ──
+        SectionTitle("SCREEN VISION")
+        ScreenVisionSettings(context)
+
         // ── Jarvis's voice and how it talks ───────────────────────────
         SectionTitle("JARVIS'S VOICE")
         JarvisVoiceSettings(context)

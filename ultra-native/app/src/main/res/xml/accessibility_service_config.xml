@@ -10,6 +10,7 @@
     android:notificationTimeout="200"
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
+    android:canTakeScreenshot="true"
     android:canRequestFilterKeyEvents="true"
     android:settingsActivity="com.agent.ultra.MainActivity"
     android:accessibilityFlags="flagDefault|flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows" />

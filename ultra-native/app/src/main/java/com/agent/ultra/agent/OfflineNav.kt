@@ -132,6 +132,23 @@ object OfflineNav {
         fun element(n: Int): Element? = elements.getOrNull(n - 1)?.takeIf { it.n == n }
     }
 
+    /** Fewer actionable elements than this and the screen is read as a picture as well. */
+    const val THIN_ELEMENTS = 3
+    const val PICTURE_CHARS = 700
+
+    /**
+     * [screen] with what a picture of it shows ([seen]: OCR lines, or the vision model's
+     * description) added below the numbered list, marked as not tappable by number. Unchanged when
+     * [seen] is blank.
+     */
+    fun withPicture(screen: Screen, seen: String?): Screen {
+        val t = seen?.trim().orEmpty()
+        if (t.isEmpty()) return screen
+        val block = "Seen in a picture of the screen (read only, NOT tappable by number):\n" +
+            (if (t.length <= PICTURE_CHARS) t else t.take(PICTURE_CHARS - 1).trimEnd() + "…")
+        return screen.copy(text = screen.text.trimEnd() + "\n" + block)
+    }
+
     private fun cut(s: String, max: Int): String {
         val t = s.replace(Regex("\\s+"), " ").trim()
         return if (t.length <= max) t else t.take(max - 1).trimEnd() + "…"

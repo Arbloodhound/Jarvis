@@ -838,7 +838,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                     try {
                         // Several targeted searches, the best pages read, sources numbered (WebResearch);
                         // the old single search when that finds nothing.
-                        WebResearchRun.run(IntentRouter.requestPart(userInput)) { s ->
+                        WebResearchRun.run(IntentRouter.requestPart(userInput), tools::readPageOnScreen) { s ->
                             val next = ChatStore.setStatus(ChatStatus.Phase.THINKING, s); ChatStore.clearStatus(searching); searching = next
                         } ?: tools.execute("web_search", org.json.JSONObject().put("query", q))
                             .takeIf { !it.startsWith("OFFLINE") && !it.startsWith("Error") && it.isNotBlank() }
@@ -1863,6 +1863,11 @@ SCREEN:
     Use this whenever the answer is in a LIST, FEED, ARTICLE, SEARCH RESULTS,
     PRICES, or anything below the fold. read_text_on_screen sees the header only.
   describe_screen, screenshot, notification_read
+  screen_ocr — reads the words in a PICTURE of the screen (games, maps, images, pages with
+    little accessible text). read_text_on_screen already adds it when the screen is thin.
+  look_at_screen — the on-device vision model looks at the screen and describes it, or answers
+    a question about it. params: {question?}  Slower (~10-30 s); use when layout, images or
+    colours matter, not for plain text.
 
 RECIPES (the user's saved routines — replay a whole sequence by name):
   recipe_run — run a saved routine. params: {name}

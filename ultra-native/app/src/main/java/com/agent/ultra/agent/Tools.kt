@@ -76,8 +76,8 @@ class Tools(
                     when {
                         flat == PROTECTED -> PROTECTED_MSG
                         flat == "[]" || flat.isBlank() ->
-                            "Error: nothing could be read — " + controller.serviceProblem.ifBlank { "the screen was empty" }
-                        else -> summarizeFlat(flat)
+                            withPictureText("", "Error: nothing could be read — " + controller.serviceProblem.ifBlank { "the screen was empty" })
+                        else -> withPictureText(summarizeFlat(flat))
                     }
                 }
                 "read_screen_deep" -> {
@@ -91,8 +91,28 @@ class Tools(
                     when {
                         flat == PROTECTED -> PROTECTED_MSG
                         flat == "[]" || flat.isBlank() ->
-                            "Error: nothing could be read — " + controller.serviceProblem.ifBlank { "the screen was empty" }
-                        else -> "Current app: ${controller.activePackage()}\n" + summarizeFlat(flat)
+                            withPictureText("", "Error: nothing could be read — " + controller.serviceProblem.ifBlank { "the screen was empty" })
+                        else -> "Current app: ${controller.activePackage()}\n" + withPictureText(summarizeFlat(flat))
+                    }
+                }
+                "screen_ocr" -> {
+                    if (controller.screenFlat() == PROTECTED) PROTECTED_MSG
+                    else ScreenVision.unavailable()?.let { "Error: $it" }
+                        ?: ScreenVision.readScreen(controller)?.ifBlank { "No text in the picture of the screen." }
+                        ?: "Error: the screen could not be captured (a secure screen, or the accessibility service needs " +
+                            "turning off and on again once to allow screenshots)."
+                }
+                "look_at_screen" -> {
+                    val q = params.optString("question")
+                    when {
+                        controller.screenFlat() == PROTECTED -> PROTECTED_MSG
+                        ScreenVision.unavailable() != null -> "Error: ${ScreenVision.unavailable()}"
+                        !com.agent.ultra.local.VisionModel.ready(context) ->
+                            "The vision model is not downloaded (Settings → SCREEN VISION), so here is the text read from " +
+                                "the picture instead:\n" + (ScreenVision.readScreen(controller) ?: "(nothing could be read)")
+                        else -> ScreenVision.look(controller, q)
+                            ?: ("The vision model could not look just now; the text read from the picture:\n" +
+                                (ScreenVision.readScreen(controller) ?: "(nothing could be read)"))
                     }
                 }
                 "screenshot" -> {
@@ -349,6 +369,18 @@ class Tools(
      * "is not available". The limit is now a character budget, so a sparse
      * screen costs nothing and a rich one is actually readable.
      */
+    /**
+     * [tree] as it is, or with the words read from a picture of the screen added when the tree is
+     * too thin to rely on ([OcrLayout.sparse]: games, maps, canvas and many web pages). [ifNothing]
+     * is the answer when neither has anything.
+     */
+    private suspend fun withPictureText(tree: String, ifNothing: String = tree): String {
+        if (!OcrLayout.sparse(tree) || ScreenVision.unavailable() != null) return ifNothing
+        val seen = ScreenVision.readScreen(controller)?.takeIf { it.isNotBlank() } ?: return ifNothing
+        val head = if (tree.isBlank() || tree == "Screen has no readable text") "" else tree + "\n"
+        return head + "Text read from a picture of the screen (OCR — not tappable by number):\n" + seen
+    }
+
     private fun summarizeFlat(flat: String, budget: Int = VIEWPORT_BUDGET): String {
         return try {
             val labels = labelsOf(flat)
@@ -669,10 +701,39 @@ class Tools(
         if (!isOnline()) return@withContext "OFFLINE: no network. " +
             "Answer from your own knowledge; do not treat this as the fact being unavailable."
         // Several targeted searches with the best pages read (WebResearch); the quick sources if it finds nothing.
-        runCatching { WebResearchRun.run(query) }.getOrNull()?.let { return@withContext it }
+        runCatching { WebResearchRun.run(query, ::readPageOnScreen) }.getOrNull()?.let { return@withContext it }
         instantAnswer(query)?.let { return@withContext it }
         wikipedia(query)?.let { return@withContext it }
         scrapeDdg(query)
+    }
+
+    /**
+     * [url] opened in the browser on screen, under the takeover overlay, and its text read once the
+     * page's scripts have run (the tree, plus OCR when the tree is thin); then Back, to where the
+     * person was. Null when the screen is off or locked, the service is not running, or nothing
+     * could be read. For [WebResearchRun] when plain HTTP gets no text from a page.
+     */
+    suspend fun readPageOnScreen(url: String): String? {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+        if (!controller.serviceRunning || pm?.isInteractive != true || km?.isKeyguardLocked == true) return null
+        if (!withContext(Dispatchers.Main) { controller.openUrl(url) }) return null
+        val svc = com.agent.ultra.AgentAccessibilityService.getInstance()
+        svc?.showTakeover()
+        return try {
+            kotlinx.coroutines.delay(4500)
+            val flat = controller.screenFlat()
+            if (flat == PROTECTED) return null
+            val tree = labelsOf(flat).filter { it.length > 2 }.joinToString("\n")
+            val text = if (OcrLayout.sparse(tree, 200)) listOf(tree, ScreenVision.readScreen(controller).orEmpty())
+                .filter { it.isNotBlank() }.joinToString("\n") else tree
+            controller.noteScreenSecrets(text)
+            android.util.Log.i("UltraWeb", "read on screen ${WebResearch.domainOf(url)}: ${text.length} chars")
+            text.takeIf { it.isNotBlank() }
+        } finally {
+            svc?.hideTakeover()
+            controller.globalAction("back")
+        }
     }
 
     private fun instantAnswer(query: String): String? {
@@ -817,7 +878,7 @@ class Tools(
         val SECRET_MAY_PASS = setOf(
             "react_navigate",
             "read_text_on_screen", "read_screen_deep", "describe_screen",
-            "screenshot", "notification_read", "device_info", "battery_status",
+            "screen_ocr", "look_at_screen", "screenshot", "notification_read", "device_info", "battery_status",
             "system_info", "recipe_list", "watch_me", "stop_watching",
             "cancel_watching",
         )

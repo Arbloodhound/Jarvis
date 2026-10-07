@@ -100,7 +100,13 @@ class OfflineNavigator(
             }
             val step = stepsTaken + 1
             val (w, h) = actor.screenSize()
-            val screen = OfflineNav.compact(flat, w, h)
+            var screen = OfflineNav.compact(flat, w, h)
+            if (screen.elements.size < OfflineNav.THIN_ELEMENTS && ScreenVision.unavailable() == null) {
+                // A game, map or canvas page: the tree has next to nothing, the picture has the words.
+                val words = ScreenVision.readScreen(controller)
+                val seen = if (words.isNullOrBlank()) ScreenVision.look(controller, "") else words
+                screen = OfflineNav.withPicture(screen, seen)
+            }
             val here = controller.activePackage().ifBlank { pkg }
             val sig = OfflineNav.signature(flat, here)
 

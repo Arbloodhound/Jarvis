@@ -176,6 +176,8 @@ dependencies {
     // Unpacks the own-voice download (a .tar.bz2: Android has no public bzip2 or tar API).
     // Apache-2.0, pure Java; only its bzip2 and tar readers are used, R8 drops the rest.
     implementation("org.apache.commons:commons-compress:1.28.0")
+    // Text in a picture of the screen (ScreenVision): the bundled Latin model, inside the APK, offline.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
