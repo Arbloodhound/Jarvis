@@ -302,6 +302,12 @@ class AmbientListenService : Service() {
         java.io.File(filesDir, AmbientConfig.VAD_MODEL).absolutePath.let { if (java.io.File(it).exists()) it else "" },
     )
 
+    /** The accurate model has just been downloaded (from Settings): switch to it before the next
+     *  utterance, if it's wanted. */
+    fun useAccurateModel() {
+        if (cfg.accurateSpeech && !cfg.smallTooSlow && AmbientConfig.smallReady(filesDir)) wantAsr = AmbientConfig.ASR_SMALL_MODEL
+    }
+
     /** On the transcriber thread, between utterances: load [wantAsr] in place of the current model. */
     private fun switchAsrIfWanted() {
         val want = wantAsr ?: return

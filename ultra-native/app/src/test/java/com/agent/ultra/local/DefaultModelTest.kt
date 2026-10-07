@@ -8,7 +8,8 @@ import org.junit.Test
 
 class DefaultModelTest {
     private val big = "qwen3-8b-q4ks.gguf"
-    private val fast = "qwen3-4b-thinking-2507-q4_0.gguf"
+    private val fast = "qwen3-4b-thinking-2507-abliterated-q4km.gguf"
+    private val stock = "qwen3-4b-thinking-2507-q4_0.gguf"
     private val gemma = "gemma3-1b-q4km.gguf"
 
     // Range of totalMem a "16 GB" phone actually reports (same as ModelFitTest).
@@ -32,7 +33,7 @@ class DefaultModelTest {
 
     /** The 4B preset is the file checked on the Hub (unsloth, 2,375,773,312 B = 2266 MiB). */
     @Test fun fastPresetIsTheCheckedFile() {
-        val m = LocalModelEngine.FAST_DEFAULT
+        val m = LocalModelEngine.STOCK_4B
         assertEquals(
             "https://huggingface.co/unsloth/Qwen3-4B-Thinking-2507-GGUF/resolve/main/Qwen3-4B-Thinking-2507-Q4_0.gguf",
             m.url,
@@ -83,4 +84,11 @@ class DefaultModelTest {
 
     @Test fun eightBStaysSelectable() =
         assertFalse(LocalModelEngine.PRESETS.first { it.fileName == big }.desktopOnly)
+
+    @Test fun aDownloadedStock4bIsKeptUntilTheAbliteratedOneIsThere() {
+        assertEquals(stock, LocalModelEngine.defaultFor(16_000_000_000L, setOf(stock)).fileName)
+        assertEquals(fast, LocalModelEngine.defaultFor(16_000_000_000L, setOf(stock, fast)).fileName)
+        assertEquals("The default is now the abliterated 4B (same model, refusals removed): pick it below to switch.",
+            LocalModelEngine.fasterThinkerHint(stock))
+    }
 }

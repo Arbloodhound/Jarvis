@@ -3,6 +3,17 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — abliterated 4B default; downloads over 4 connections; accurate speech fixes
+- Default thinker = Qwen3-4B Thinking 2507 abliterated Q4_K_M (owner's choice over Qwen3.5: same base as the measured
+  default, speed boost kept). `STOCK_4B` (Q4_0) stays in use where it's downloaded and the abliterated isn't (never points
+  a working install at a missing file); the picker hints to switch.
+- `ParallelDownload`: model downloads ≥200 MB use 4 ranged connections into the one .part (no second copy), resumable via
+  `.part.plan` (counts saved after fsync); a server that doesn't answer an exact range → the old one-connection path.
+  An old one-connection .part becomes the first finished range. Speed gain depends on the network: UNMEASURED.
+- Accurate speech (whisper small): Settings now starts its download itself, shows live progress, and listening switches
+  to it as soon as it's in (`useAccurateModel`); before, only a listening restart did.
+1255 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (session 01BUKa) — voice picker, "How Jarvis talks" settings, in-app Guide
 Owner: the voice sounds bad, let me choose; more settings, still compatible; a complete guide, also inside the app.
 - `VoiceCatalog`: 12 own voices (sherpa-onnx tts-models, sha256 + size pinned 2026-10-07): Kokoro int8 (11 speakers, default

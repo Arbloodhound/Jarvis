@@ -170,12 +170,14 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
     fun partialDownloads(): Map<String, Long> =
         File(context.filesDir, "models").listFiles()
             ?.filter { it.isFile && it.name.endsWith(PART_SUFFIX) && it.length() > 0 }
-            ?.associate { it.name.removeSuffix(PART_SUFFIX) to it.length() } ?: emptyMap()
+            ?.associate { it.name.removeSuffix(PART_SUFFIX) to ParallelDownload.bytesSoFar(it) } ?: emptyMap()
 
     /** Delete the unfinished download of [fileName]; false while either engine downloads it. */
     fun deletePartial(fileName: String): Boolean {
         if (fileName in downloadsInFlight) return false
-        return File(File(context.filesDir, "models"), fileName + PART_SUFFIX).delete()
+        val part = File(File(context.filesDir, "models"), fileName + PART_SUFFIX)
+        ParallelDownload.planFile(part).delete()
+        return part.delete()
     }
 
     /**
@@ -222,6 +224,10 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 .build()
             target.parentFile?.mkdirs()
             var lastError: Exception? = null
+            // Several connections at once when the server serves byte ranges (ParallelDownload);
+            // asked once, on the first attempt that reaches it.
+            var parallelTotal: Long? = null
+            var probed = false
             for (attempt in 1..MAX_DOWNLOAD_ATTEMPTS) {
                 if (attempt > 1) {
                     val wait = DownloadResume.backoffMs(attempt - 1)
@@ -232,6 +238,30 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                     withContext(kotlinx.coroutines.NonCancellable) { kotlinx.coroutines.delay(wait) }
                 }
                 try {
+                    if (!probed) {
+                        val probe = okhttp3.Request.Builder().url(url).header("Range", "bytes=0-0").build()
+                        parallelTotal = client.newCall(probe).execute().use { r ->
+                            ParallelDownload.totalFromProbe(r.code, r.header("Content-Range"))
+                        }?.takeIf { it >= ParallelDownload.MIN_PARALLEL_BYTES }
+                        probed = true
+                        android.util.Log.i("UltraLlm", "download: ${if (parallelTotal != null)
+                            "${ParallelDownload.CONNECTIONS} connections, ${parallelTotal!! / 1_048_576} MB" else "one connection"}")
+                    }
+                    val ptotal = parallelTotal
+                    if (ptotal != null) {
+                        ParallelDownload.run(client, url, tmp, ptotal) { written ->
+                            downloadProgress.value = written.toFloat() / ptotal
+                            onProgress(written.toFloat() / ptotal)
+                        }
+                        if (!tmp.renameTo(target)) {
+                            return@withContext Result.failure(Exception("could not move the download into place"))
+                        }
+                        android.util.Log.i("UltraLlm", "download complete: ${ptotal / 1_048_576} MB (attempt $attempt, parallel)")
+                        return@withContext Result.success(ptotal)
+                    }
+                    // One connection: a .part written by the parallel download is sparse (its length
+                    // isn't what it holds), so it can't be resumed this way.
+                    ParallelDownload.planFile(tmp).let { if (it.exists()) { it.delete(); tmp.delete() } }
                     val existing = if (tmp.exists()) tmp.length() else 0L
                     val req = okhttp3.Request.Builder().url(url).apply {
                         DownloadResume.rangeHeader(existing)?.let { header("Range", it) }
@@ -1050,16 +1080,16 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             // checked on the Hub listing, 2026-10-06 (unsloth has no Q4_0 for the 8B: Q4_K_S,
             // also repacked).
             ModelChoice(
-                "Qwen3-4B Thinking 2507 (Q4_0) — default: fast, strongest reasoning",
+                "Qwen3-4B Thinking 2507 (Q4_0) — fast, strongest reasoning",
                 "https://huggingface.co/unsloth/Qwen3-4B-Thinking-2507-GGUF/resolve/main/Qwen3-4B-Thinking-2507-Q4_0.gguf",
                 "qwen3-4b-thinking-2507-q4_0.gguf", 2266,
                 "Reasoning model small enough to stay fully in memory with room to spare, on the phone CPU's fast path. Strong maths/reasoning for its size and good at tool calls.",
             ),
             ModelChoice(
-                "Qwen3-4B Thinking 2507 ABLITERATED (Q4_K_M)",
+                "Qwen3-4B Thinking 2507 ABLITERATED (Q4_K_M) — default",
                 "https://huggingface.co/mradermacher/Huihui-Qwen3-4B-Thinking-2507-abliterated-GGUF/resolve/main/Huihui-Qwen3-4B-Thinking-2507-abliterated.Q4_K_M.gguf",
                 "qwen3-4b-thinking-2507-abliterated-q4km.gguf", 2382,
-                "The same 4B with refusals removed (Q4_K_M, also on the fast path).",
+                "The same 4B with refusals removed (Q4_K_M, also on the fast path, speed boost included). The default since 2026-10-07 (owner's choice).",
             ),
             // Qwen3.5-4B, abliterated by huihui-ai, quantised by mradermacher. File and size checked
             // on the Hub listing, 2026-10-07: 2,707,514,688 B. Qwen's card for the stock Qwen3.5-4B
@@ -1277,15 +1307,20 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         /** The abliterated MoE IQ2_M (kept for reference / ContextSizeTest; no longer a default). */
         val MOE_DEFAULT = PRESETS.first { it.fileName == "qwen3moe-abliterated-iq2m.gguf" }
 
-        /** What a phone with room for it defaults to: Qwen3-4B Thinking 2507 Q4_0. */
-        val FAST_DEFAULT = PRESETS.first { it.fileName == "qwen3-4b-thinking-2507-q4_0.gguf" }
+        /** What a phone with room for it defaults to: Qwen3-4B Thinking 2507 abliterated, Q4_K_M (the
+         *  owner's choice, 2026-10-07: the same model as [STOCK_4B] with refusals removed). */
+        val FAST_DEFAULT = PRESETS.first { it.fileName == "qwen3-4b-thinking-2507-abliterated-q4km.gguf" }
+
+        /** The default before that: the stock Qwen3-4B Thinking 2507, Q4_0. An install that has it on disk
+         *  keeps using it until the abliterated one is downloaded ([defaultFor]). */
+        val STOCK_4B = PRESETS.first { it.fileName == "qwen3-4b-thinking-2507-q4_0.gguf" }
 
         /** The default reasoning brain: Qwen3-4B Thinking 2507, and its abliterated build (same base
          *  model), plus the Qwen3.5-4B abliterated (scores higher still on Qwen's published tests).
          *  A slow brain test on these says keep it and how to speed it up, never "switch to a
          *  smaller model" (all smaller presets reason worse): KitReport.advice. */
         val REASONING_DEFAULTS: Set<String> =
-            setOf(FAST_DEFAULT.fileName, "qwen3-4b-thinking-2507-abliterated-q4km.gguf", "qwen35-4b-abliterated-q4km.gguf")
+            setOf(FAST_DEFAULT.fileName, STOCK_4B.fileName, "qwen35-4b-abliterated-q4km.gguf")
 
         /** Qwen3-8B Q4_K_S: the 14 GB+ default before Qwen3-4B Thinking 2507 replaced it. Still
          *  selectable, and kept by an install that already has it on disk ([defaultFor]). */
@@ -1319,7 +1354,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             // Not the MoE any more: on the 16 GB Pixel it can't stay in memory (see PRESETS).
             val byRam = if (totalRamBytes > 0 && fitFor(FAST_DEFAULT, totalRamBytes) != Fit.TOO_BIG) FAST_DEFAULT else DEFAULT
             if (byRam.fileName in downloaded) return byRam
-            val earlier = listOf(BIG_DEFAULT, DEFAULT).filter {
+            val earlier = listOf(STOCK_4B, BIG_DEFAULT, DEFAULT).filter {
                 it == DEFAULT || (totalRamBytes > 0 && fitFor(it, totalRamBytes) != Fit.TOO_BIG)
             }
             return earlier.firstOrNull { it.fileName in downloaded } ?: byRam
@@ -1327,10 +1362,11 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
 
         /** One line for the model picker while the thinker is the 8B; null for any other file.
          *  Pure, JVM-tested (DefaultModelTest). */
-        fun fasterThinkerHint(currentFileName: String): String? =
-            if (currentFileName == BIG_DEFAULT.fileName)
-                "4B-Thinking is faster and scores higher on reasoning benchmarks."
-            else null
+        fun fasterThinkerHint(currentFileName: String): String? = when (currentFileName) {
+            BIG_DEFAULT.fileName -> "4B-Thinking is faster and scores higher on reasoning benchmarks."
+            STOCK_4B.fileName -> "The default is now the abliterated 4B (same model, refusals removed): pick it below to switch."
+            else -> null
+        }
     }
 }
 

@@ -131,7 +131,18 @@ fun VoiceSettings(context: Context) {
 
     // The speech model: small hears quiet and distant speech better than base.
     var accurate by remember { mutableStateOf(cfg.accurateSpeech) }
-    val modelState = remember(accurate) {
+    var asrTick by remember { mutableIntStateOf(0) }
+    // The accurate model downloads from here too (not only when listening starts), the line below
+    // follows its progress, and listening switches to it as soon as it's in.
+    LaunchedEffect(accurate) {
+        if (accurate && !cfg.smallTooSlow && !AmbientConfig.smallReady(context.filesDir)) {
+            launch(Dispatchers.IO) {
+                if (AmbientConfig.fetchSmall(context.filesDir)) com.agent.ultra.listen.AmbientListenService.instance?.useAccurateModel()
+            }
+        }
+        while (true) { kotlinx.coroutines.delay(1_500); asrTick++ }
+    }
+    val modelState = remember(accurate, asrTick) {
         val dir = context.filesDir
         val part = java.io.File(dir, AmbientConfig.ASR_SMALL_MODEL + ".part").length()
         when {
