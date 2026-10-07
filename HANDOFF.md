@@ -1,6 +1,13 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
-## LATEST+9 (session 01BUKa, 2026-10-07 night) — read this first
+## LATEST+10 (session 01BUKa, 2026-10-07 late night) — read this first
+`v2.6.33-test` (run 33) is Latest: verification pass. ARCHITECTURE.md (the code skeleton, 8 Mermaid diagrams); native
+shims PROVEN on host (vision output identical to llama-mtmd-cli, ASan clean; harnesses in ultra-native/tools/host-harness);
+14 bugs fixed (Stop swallowed by tools, ambient_recall always refused, protected-app OCR, takeover ref-count and tap
+settle, DDG POST + bot-check detection, invalid UTF-8, bitmap lifetimes…). Phone runtime still unproven. Next: owner
+runs describe-my-screen, a product search, an app task, and ★ Real-use check.
+
+## LATEST+9 (session 01BUKa, 2026-10-07 night)
 `v2.6.32-test` (run 32) is Latest: screen vision — ML Kit OCR built in, Qwen2.5-VL 3B vision model (2.8 GB, Settings →
 SCREEN VISION), screen_ocr / look_at_screen tools, OCR in thin screens and the offline navigator, browser fallback for
 JavaScript pages. `v2.6.31-test`: search-first research engine + takeover with Stop. The accessibility service must be
