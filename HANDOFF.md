@@ -1,7 +1,7 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
 ## LATEST+8 (session 01BUKa, 2026-10-07 evening) — read this first
-`v2.6.29-test` (run 29) is Latest (second Real-use fixes: window by segment start, speed boost off, prompt warm-up, Ryan default voice). Before: `v2.6.28-test` (fixes from the first Real-use check: runaway segments, slow-core whisper, copied prompt examples, Kokoro threads). Before: `v2.6.27-test` (adds Insights, literature patterns, Algospeak, tips, notes copy/share). Before: v2.6.26. Since v2.6.24: Real-use check (Jarvis Tests ★, one tap), screen tests (ScreensTest,
+`v2.6.30-test` (run 30) is Latest (Jarvis no longer hears itself: every Speaker mutes the listener). Before: `v2.6.29-test` (second Real-use fixes: window by segment start, speed boost off, prompt warm-up, Ryan default voice). Before: `v2.6.28-test` (fixes from the first Real-use check: runaway segments, slow-core whisper, copied prompt examples, Kokoro threads). Before: `v2.6.27-test` (adds Insights, literature patterns, Algospeak, tips, notes copy/share). Before: v2.6.26. Since v2.6.24: Real-use check (Jarvis Tests ★, one tap), screen tests (ScreensTest,
 Robolectric, in CI), act first, live thinking preview, Instant spoken think, transcript only when needed, chat Copy /
 Edit / Branch / select, speech in fuller pieces, Tor Browser in prompts. All SOURCE-FIXED BUT RUNTIME-UNPROVEN. Next:
 owner runs ★ Real-use check and sends the file (voice speed, first spoken word, stop time, download speed).
