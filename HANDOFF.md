@@ -1,5 +1,11 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## LATEST+3 (session 01BUKa, 2026-10-07 ~04:45 UTC) — read this first
+`v2.6.13-test` (run 13, 40d4479) is Latest: + listening resumes after restart/update (ResumeNotice, Jarvis Tests
+starts it), misspelt name after a wake word wakes ("Hey Joris"). The owner's 21:02 file was STILL an old build
+(≤2.6.8): Obtainium has not installed 2.6.10/2.6.12 (verified the 2.6.12 APK itself has the new code, versionCode
+29). Next: confirm the phone shows "App: 2.6.13" in Jarvis Tests 1 before reading any results.
+
 ## LATEST+2 (session 01BUKa, 2026-10-07 ~03:00 UTC) — read this first
 `v2.6.12-test` (run 12, 7ffe265) is the Latest release: everything below plus the wake chime, own-voice wake
 probe graded on ambient's decode, results file stamped with the app version, ambient whisper on the idle big
