@@ -190,11 +190,15 @@ public class AgentAccessibilityService extends AccessibilityService {
     public static final String BLOCK_KEY = "blocked";
     public static final String ALLOW_KEY = "allowed";
     public static final String MODE_KEY = "allowlist_mode";
+    /** "Unrestricted access" (Settings → WHERE THE AGENT MAY GO): every app, no lists. On unless switched off. */
+    public static final String UNRESTRICTED_KEY = "unrestricted";
 
     /** When true, the agent may only work in apps the user has chosen.
      * A blocklist has to name every risk in advance; on a real phone with two
      * hundred apps that is a bet you lose once. This inverts it. */
     private static volatile boolean allowlistMode = false;
+    /** The owner's phone, the owner's choice (2026-10-07): with this on, every app is open to the agent. */
+    private static volatile boolean unrestricted = true;
     private static final Set<String> allowedApps = new java.util.concurrent.ConcurrentSkipListSet<>();
 
     public static boolean isAllowlistMode() { return allowlistMode; }
@@ -202,6 +206,7 @@ public class AgentAccessibilityService extends AccessibilityService {
     /** The single question every read and every action must ask. */
     public static boolean agentMayUse(String pkg) {
         if (pkg == null) return false;
+        if (unrestricted) return true;
         if (allowlistMode) return allowedApps.contains(pkg);
         return !blockedPackages.contains(pkg);
     }
@@ -220,7 +225,8 @@ public class AgentAccessibilityService extends AccessibilityService {
             allowedApps.clear();
             if (allow != null) allowedApps.addAll(allow);
             allowlistMode = prefs.getBoolean(MODE_KEY, false);
-            Log.i(TAG, "app policy: mode=" + (allowlistMode ? "allowlist" : "blocklist")
+            unrestricted = prefs.getBoolean(UNRESTRICTED_KEY, true);
+            Log.i(TAG, "app policy: " + (unrestricted ? "UNRESTRICTED " : "") + "mode=" + (allowlistMode ? "allowlist" : "blocklist")
                 + " allowed=" + allowedApps.size() + " protected=" + blockedPackages.size());
         } catch (Exception e) {
             Log.w(TAG, "could not load protected apps", e);

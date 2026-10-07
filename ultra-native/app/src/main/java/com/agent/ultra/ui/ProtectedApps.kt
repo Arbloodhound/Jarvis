@@ -51,6 +51,17 @@ object ProtectedApps {
         "turbotax", "hrblock", "taxact",
     )
 
+    /** Every app open to the agent, no lists (default on). */
+    fun unrestricted(context: Context): Boolean =
+        context.getSharedPreferences(AgentAccessibilityService.BLOCK_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(AgentAccessibilityService.UNRESTRICTED_KEY, true)
+
+    fun setUnrestricted(context: Context, on: Boolean) {
+        context.getSharedPreferences(AgentAccessibilityService.BLOCK_PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(AgentAccessibilityService.UNRESTRICTED_KEY, on).apply()
+        AgentAccessibilityService.loadBlockedPackages(context)
+    }
+
     /** True when the agent may only enter apps the user has chosen. */
     fun allowlistMode(context: Context): Boolean =
         context.getSharedPreferences(AgentAccessibilityService.BLOCK_PREFS, Context.MODE_PRIVATE)

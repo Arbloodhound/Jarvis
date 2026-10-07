@@ -671,6 +671,20 @@ fun SettingsScreen(
 
         // ── App access ────────────────────────────────────────────────
         SectionTitle("WHERE THE AGENT MAY GO")
+        var unrestricted by remember { mutableStateOf(ProtectedApps.unrestricted(context)) }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Unrestricted access", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Jarvis may read and use every app on the phone, with no lists. It still asks before paying, " +
+                        "deleting or sending something. On the on-device brain nothing leaves the phone; with an online " +
+                        "AI provider, what it reads on screen is sent to that provider. Switch off to use the lists below.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+            Switch(checked = unrestricted, onCheckedChange = { unrestricted = it; ProtectedApps.setUnrestricted(context, it) })
+        }
         var allowMode by remember { mutableStateOf(ProtectedApps.allowlistMode(context)) }
         Row(
             modifier = Modifier.fillMaxWidth(),

@@ -1535,7 +1535,7 @@ JSON:"""
 
         val owner = LocalPrompt.ownerSection(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
             com.agent.ultra.ui.UltraPrefs.customInstructions(appContext)).let { if (it.isEmpty()) "" else "\n$it\n" }
-        return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have full control of it through its accessibility service: reading and acting on the screen, screenshots, notifications, settings, apps. Never say you can't access or control the phone.
+        return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have unrestricted access to it and everything on it through its accessibility service: you can see and use the screen (read, tap, type, scroll), every app, messages, contacts, notifications, settings, screenshots. Never say you can't see the screen or can't access or control the phone.
 PHONE STATE: $env
 TODAY: $date at $time
 $owner
@@ -1613,7 +1613,7 @@ RULES:
                     "airplane|alarm|battery|clipboard|note this|open|launch|" +
                     "screenshot|screen ?shot|home screen|go home|go back|recent apps|notifications?|quick settings|" +
                     "lock (?:the |my )?(?:phone|screen)|on (?:my|the) screen|music|song|track|pause|play|skip|" +
-                    "settings|where am i|my location)\\b"
+                    "settings|where am i|my location|texts?|sms|messages?|contacts?|number|storage|phone info)\\b"
             ).containsMatchIn(u)
         }
 

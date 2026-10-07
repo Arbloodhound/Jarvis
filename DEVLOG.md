@@ -3,6 +3,22 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — unrestricted phone access; Jarvis's voice on the media volume
+Owner: unrestricted access to the phone and everything on it; make sure it knows it can use the screen; "I never
+heard the speech model talk".
+- App access: `AgentAccessibilityService.unrestricted` (pref "unrestricted", default ON) — `agentMayUse` true for every
+  package; Settings → WHERE THE AGENT MAY GO "Unrestricted access" switch (off = the old allow/protected lists, which
+  first-run pre-ticked banking, mail and messaging apps). Payment / delete / send confirmations (policy gate) unchanged.
+- On-device tools + sms_read, contacts_read, system_info (routing keywords). OFFLINE_RULES and the cloud prompt: unrestricted
+  access to the phone and everything on it, sees and uses the screen (read, tap, type, scroll, any app, multi-step),
+  messages/contacts/notifications; "never say you can't see the screen or access the phone".
+- Voice: phone logs had shown "SPEAK OWN … SPEAK DONE", so speech played but wasn't heard. Own voice and platform TTS
+  now use USAGE_MEDIA (was USAGE_ASSISTANT, which a Pixel may route to a separate assistant volume or keep quiet for a
+  non-assistant app — LIKELY, not proven) with transient-duck audio focus; "Speak answers aloud" now defaults ON (it
+  was off, so typed questions never spoke). Settings → VOICE "Test Jarvis's voice" says a sentence and shows which
+  voice and the media volume.
+1204 JVM tests, 0 failures. Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (session 01BUKa) — "Hey Jarvis" no longer waits for the memory model; the on-device brain searches the web
 Owner (2.6.17): "Hey Jarvis" doesn't respond; the AI keeps saying it can't browse the internet though it has the
 phone and its screen.

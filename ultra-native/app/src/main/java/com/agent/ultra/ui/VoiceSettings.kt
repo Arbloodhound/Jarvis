@@ -66,9 +66,32 @@ fun HeyJarvisStatus() {
     )
 }
 
+/** "Test Jarvis's voice": says a sentence through the same path answers use, and says what to check. */
+@Composable
+fun VoiceTest(context: Context) {
+    val speaker = remember { Speaker(context) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { speaker.shutdown() } }
+    var status by remember { mutableStateOf<String?>(null) }
+    OutlinedButton(onClick = {
+        val am = context.getSystemService(android.media.AudioManager::class.java)
+        val vol = am?.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) ?: -1
+        val max = am?.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) ?: 0
+        val own = UltraPrefs.ownVoice(context) && com.agent.ultra.listen.LocalVoice.available &&
+            com.agent.ultra.listen.LocalVoice.voicePresent(context)
+        status = (if (own) "Speaking with Jarvis's own voice…" else "Speaking with the phone's voice (Jarvis's own isn't downloaded)…") +
+            if (vol == 0) "\nMedia volume is at 0: turn it up with the volume buttons." else " (media volume $vol/$max)"
+        speaker.speak("Hello, I'm Jarvis. If you can hear me, my voice works.") {
+            status = "Done. Didn't hear it? Turn up the media volume (press a volume button and raise the top bar), " +
+                "and check Bluetooth isn't sending sound elsewhere."
+        }
+    }, modifier = Modifier.padding(top = 8.dp)) { Text("Test Jarvis's voice") }
+    status?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
+}
+
 @Composable
 fun VoiceSettings(context: Context) {
     HeyJarvisStatus()
+    VoiceTest(context)
     val cfg = remember { AmbientConfig(context) }
     val mem = remember { AmbientMemory.get(context) }
     val scope = rememberCoroutineScope()

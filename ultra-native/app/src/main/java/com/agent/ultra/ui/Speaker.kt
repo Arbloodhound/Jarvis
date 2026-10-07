@@ -121,6 +121,37 @@ class Speaker(context: Context) {
         cb?.invoke()
     }
 
+    // ── Audio output ─────────────────────────────────────────────────────
+
+    /**
+     * Media volume, the one the volume buttons set (owner, 2026-10-07: "I never heard it talk";
+     * logs showed speech playing). USAGE_ASSISTANT before: on a Pixel that can be its own volume, or
+     * silent while the app isn't the phone's assistant.
+     */
+    private val ATTRS: AudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
+
+    private val audio = app.getSystemService(android.media.AudioManager::class.java)
+    @Volatile private var focus: android.media.AudioFocusRequest? = null
+
+    /** Music ducks while Jarvis talks. */
+    private fun takeFocus() {
+        if (android.os.Build.VERSION.SDK_INT < 26 || audio == null) return
+        try {
+            val r = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                .setAudioAttributes(ATTRS).build()
+            audio.requestAudioFocus(r); focus = r
+        } catch (_: Exception) {}
+    }
+
+    private fun dropFocus() {
+        val r = focus ?: return
+        focus = null
+        if (android.os.Build.VERSION.SDK_INT >= 26) try { audio?.abandonAudioFocusRequest(r) } catch (_: Exception) {}
+    }
+
     // ── Own voice ────────────────────────────────────────────────────────
 
     private fun silence(p: Playback?) {
@@ -161,6 +192,7 @@ class Speaker(context: Context) {
                         rate = a.sampleRate
                         t = openTrack(rate)
                         if (t == null) { fallbackFrom = i; break }
+                        takeFocus()
                         p.track = t
                         if (!isActive) break
                         t!!.play()
@@ -182,6 +214,7 @@ class Speaker(context: Context) {
             fallbackFrom = if (written < parts.size) written else -1
         } finally {
             t?.let { tr -> p.track = null; try { tr.release() } catch (_: Exception) {} }
+            dropFocus()
         }
         if (!currentCoroutineContext().isActive) return   // stopped or replaced
         if (fallbackFrom >= 0) {
@@ -197,10 +230,7 @@ class Speaker(context: Context) {
         val min = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
         if (min <= 0) null else AudioTrack.Builder()
             .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
+                ATTRS
             )
             .setAudioFormat(
                 AudioFormat.Builder()
@@ -297,6 +327,7 @@ class Speaker(context: Context) {
             engineFailed()
             return
         }
+        try { engine.setAudioAttributes(ATTRS) } catch (_: Exception) {}   // media volume, as the own voice
         val r = engine.setLanguage(Locale.getDefault())
         if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
             engine.setLanguage(Locale.US)

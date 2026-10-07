@@ -31,10 +31,11 @@ object UltraPrefs {
     private const val K_SPEAK = "speak_answers"
 
     /** Speak answers aloud in the chat screen. The voice session always
-     * speaks — that is the point of it — so this covers typed use only. */
+     * speaks — that is the point of it — so this covers typed use only. On by default since
+     * 2026-10-07 (the owner had never heard Jarvis speak). */
     fun speakAnswers(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(K_SPEAK, false)
+            .getBoolean(K_SPEAK, true)
 
     private const val K_OWN_SPEECH = "own_speech"
 

@@ -25,6 +25,8 @@ object LocalToolCall {
         // screenshot" got a chat reply saying it couldn't, because none of these were offered).
         "screenshot", "global_action", "read_text_on_screen", "notification_read",
         "media_play", "media_next", "settings_open", "device_location",
+        // Everything on the phone (owner, 2026-10-07: "unrestricted access to the phone and everything on it").
+        "sms_read", "contacts_read", "system_info",
     )
 
     /** What the model says when the message is not a command for one of [TOOLS]. */
@@ -80,6 +82,9 @@ media_play {}   (play or pause music)
 media_next {}   (next track)
 settings_open {"page":"wifi|bluetooth|display|sound|battery|apps|location|..."}
 device_location {}
+sms_read {"limit":5}   (read my texts / messages)
+contacts_read {"name":"..."}   (a contact's number or details)
+system_info {}   (storage, Wi-Fi, Bluetooth, battery, phone details)
 
 If no tool above does what the message asks (a question, chat, a timer, anything else), reply {"tool":"none","params":{}}.
 
@@ -97,6 +102,9 @@ what's on my screen -> {"tool":"read_text_on_screen","params":{}}
 pause the music -> {"tool":"media_play","params":{}}
 skip this song -> {"tool":"media_next","params":{}}
 lock the phone -> {"tool":"global_action","params":{"action":"lock_screen"}}
+read my last texts -> {"tool":"sms_read","params":{"limit":5}}
+what's Sam's number -> {"tool":"contacts_read","params":{"name":"Sam"}}
+how much storage do I have -> {"tool":"system_info","params":{}}
 set a timer for 5 minutes -> {"tool":"none","params":{}}
 """.trim()
 
