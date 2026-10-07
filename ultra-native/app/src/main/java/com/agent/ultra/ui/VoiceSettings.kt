@@ -116,7 +116,41 @@ fun VoiceSettings(context: Context) {
         Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
     }
 
-    if (voices.isNotEmpty()) {
+    if (voices.isNotEmpty()) Text(
+        "Name the voices it has heard in Settings → PEOPLE.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+/**
+ * Settings → PEOPLE: the voices heard so far, to name ("that was Sam") or forget. Names show in
+ * transcripts and notes ("[Sam]") and the brain reads them. Voiceprints never leave the phone.
+ */
+@Composable
+fun VoiceList(context: Context) {
+    val mem = remember { AmbientMemory.get(context) }
+    val scope = rememberCoroutineScope()
+    var voices by remember { mutableStateOf<List<Voice>>(emptyList()) }
+    var counts by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
+    var refresh by remember { mutableIntStateOf(0) }
+    LaunchedEffect(refresh) {
+        withContext(Dispatchers.IO) {
+            runCatching { mem.voices() to mem.voiceLineCounts() }.getOrNull()
+        }?.let { voices = it.first; counts = it.second }
+    }
+    if (voices.isEmpty()) {
+        Text(
+            "No voices yet. Turn on \"Who's speaking\" (Settings → VOICE) and the people it hears appear " +
+                "here as Speaker 2, Speaker 3 … to name.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        return
+    }
+    run {
         Text(
             "Voices heard. Type a name to label a voice (give two voices the same name to join them).",
             style = MaterialTheme.typography.bodySmall,

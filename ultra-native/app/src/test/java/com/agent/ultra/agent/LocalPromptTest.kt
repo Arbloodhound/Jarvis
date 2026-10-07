@@ -75,4 +75,15 @@ class LocalPromptTest {
         assertEquals("wednesday 7 october 2026, 5:05 am",
             LocalPrompt.nowLine(1_791_349_500_000L, java.util.TimeZone.getTimeZone("UTC")).lowercase())
     }
+
+    /** Settings → PEOPLE / SYSTEM PROMPT: the owner's name and instructions end the system block. */
+    @Test fun ownerSection() {
+        assertEquals(LocalPrompt.OFFLINE_RULES, LocalPrompt.offlineSystem("", "  "))
+        val s = LocalPrompt.offlineSystem("Dafarus", "Keep answers short.")
+        assertTrue(s.startsWith(LocalPrompt.OFFLINE_RULES))
+        assertTrue(s.contains("is Dafarus. In transcripts and notes \"Me\" is Dafarus."))
+        assertTrue(s.endsWith("The owner's own instructions (follow them, unless they ask for something unsafe):\nKeep answers short."))
+        assertEquals("The owner's own instructions (follow them, unless they ask for something unsafe):\nBe brief.",
+            LocalPrompt.ownerSection("", "Be brief."))
+    }
 }

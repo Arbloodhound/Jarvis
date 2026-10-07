@@ -5,6 +5,29 @@ import android.content.Context
 /** App-level preferences that are not provider credentials. */
 object UltraPrefs {
     private const val PREFS = "ultra_settings"
+
+    private const val K_OWNER_NAME = "owner_name"
+    private const val K_INSTRUCTIONS = "custom_instructions"
+    /** Longest custom instructions kept: they go into every prompt, and prompt tokens are prefill time. */
+    const val MAX_INSTRUCTIONS = 1500
+
+    /** The owner's name (Settings → PEOPLE): Jarvis is told it, and "[Me]" in transcripts is them. Blank = not set. */
+    fun ownerName(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(K_OWNER_NAME, "").orEmpty().trim()
+
+    fun setOwnerName(context: Context, name: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(K_OWNER_NAME, name.replace(Regex("[\\[\\]\\n]"), " ").trim().take(40)).apply()
+    }
+
+    /** The owner's own instructions (Settings → SYSTEM PROMPT), added to both brains' system prompts. */
+    fun customInstructions(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(K_INSTRUCTIONS, "").orEmpty().trim()
+
+    fun setCustomInstructions(context: Context, text: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(K_INSTRUCTIONS, text.trim().take(MAX_INSTRUCTIONS)).apply()
+    }
     private const val K_SPEAK = "speak_answers"
 
     /** Speak answers aloud in the chat screen. The voice session always

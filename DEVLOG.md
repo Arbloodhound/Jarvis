@@ -3,6 +3,22 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — PEOPLE and SYSTEM PROMPT settings, voices named from what is heard and told
+Owner: a system-prompt section; a section to name people, and to give his own name; names inferred from what it
+hears and what he tells it. (G settings, A prompts, C voices.)
+- UltraPrefs.ownerName / customInstructions (≤ 1500 chars). `LocalPrompt.ownerSection` ("The owner … is X. In
+  transcripts and notes "Me" is X." + "The owner's own instructions …") ends the offline system block
+  (`offlineSystem`, stable per turn → KV reuse) and is added to the cloud system prompt. The librarian's user message
+  says "[Me] is X". Notes screen shows the name for "Me".
+- Settings: PEOPLE (your name + `VoiceList`, moved out of VOICE: name/forget each voice) and SYSTEM PROMPT (your
+  instructions, "Show the built-in instructions").
+- `NameInference` (no model): self-introduction ("I'm Sam", 3 points) and being addressed then answering within 15 s
+  (1 point each); a voice is named at ≥ 3 points and ≥ 2× the runner-up; never the owner, an already-named voice, a
+  name another voice has, or the owner's own name. Runs after every librarian turn over 14 days of tagged lines
+  (`AmbientMemory.voiceLines`). Told: "Speaker 2 is Sam", "the person I was just talking to is Anna" (last non-owner
+  voice in 15 min) → `renameVoice` (Brain.nameVoice); refused on a locked phone; describing words rejected.
+1201 JVM tests, 0 failures. Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN (speaker tags depend on voiceprints being on).
+
 ## 2026-10-07 (session 01BUKa) — more notes on their own, notes from past memories, speaker/tags, "Hey Jarvis" replies, full device control
 Owner (2.6.15 working): more notes; notes made later from past memories, on its own; who-said-it labels and tags;
 "Hey Jarvis" doesn't answer — it should speak and do things; it must know it has full phone accessibility

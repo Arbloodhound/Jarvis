@@ -398,6 +398,7 @@ object Librarian {
     ): Passes {
         val store = MemoryNotes.get(ctx)
         val zone = ZoneId.systemDefault()
+        LibrarianPrompt.ownerName = com.agent.ultra.ui.UltraPrefs.ownerName(ctx)
         val log: (String) -> Unit = { android.util.Log.w(TAG, it) }
         val start = System.currentTimeMillis()
         val main = LibrarianRun.run(source, store, m, zone, now = System::currentTimeMillis, keepGoing = keepGoing,
@@ -413,6 +414,17 @@ object Librarian {
             LibrarianRun.run(old, store, m, zone, now = System::currentTimeMillis, keepGoing = keepGoing,
                 failures = failures, log = log, patterns = false, readings = false, minAgeMs = 0L)
         } else null
+        // Who unnamed voices are, from what was said ("I'm Sam", "thanks, Sam" + Sam answering).
+        runCatching {
+            val mem = AmbientMemory.get(ctx)
+            val voices = mem.voices()
+            val names = NameInference.infer(mem.voiceLines(System.currentTimeMillis() - 14 * 86_400_000L, 20_000),
+                taken = voices.mapNotNull { it.name }.toSet(), ownerName = com.agent.ultra.ui.UltraPrefs.ownerName(ctx))
+            for ((voice, name) in names) {
+                mem.renameVoice(voice, name)
+                android.util.Log.i(TAG, "named voice $voice \"$name\" from what was said")
+            }
+        }.onFailure { log("names: ${it.message}") }
         val p = Passes(main, links, reread)
         android.util.Log.i(TAG, "run: chunks=${main.chunks} added=${main.added} merged=${main.merged} " +
             "rejected=${main.rejected} skipped=${main.skipped} stop=${main.stop} observations=${main.observations} " +

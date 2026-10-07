@@ -69,6 +69,24 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     @Volatile var recordTurns: Boolean = true
 
     /** Every spoken/answered ending goes through here: the run's warning first, once. */
+    /** Gives the voice [who] the name [name] (Settings → PEOPLE shows it); a line to say back. */
+    private fun nameVoice(who: com.agent.ultra.listen.NameInference.Who, name: String): String = try {
+        val mem = com.agent.ultra.listen.AmbientMemory.get(appContext)
+        val voices = mem.voices()
+        val voice = when (who) {
+            is com.agent.ultra.listen.NameInference.Who.SpeakerNum -> voices.firstOrNull { it.num == who.num && !it.owner }
+            com.agent.ultra.listen.NameInference.Who.LastOther -> mem.voiceLines(System.currentTimeMillis() - 15 * 60_000L, 5_000)
+                .lastOrNull { it.voice > 0 && !it.owner }?.let { l -> voices.firstOrNull { it.id == l.voice } }
+        }
+        when {
+            voice == null && who is com.agent.ultra.listen.NameInference.Who.SpeakerNum ->
+                "I don't have a Speaker ${who.num}. The voices I know are in Settings → PEOPLE."
+            voice == null -> "I haven't heard anyone but you in the last 15 minutes, so I don't know whose voice to name. " +
+                "Turn on \"Who's speaking\" in Settings → VOICE if it's off."
+            else -> { mem.renameVoice(voice.id, name); "Got it: ${voice.label} is $name from now on." }
+        }
+    } catch (e: Exception) { "I couldn't name that voice: ${e.message}" }
+
     /** The owner's words to Jarvis, into memory as "[Me] (to Jarvis) …": found by memory search,
      *  and the memory model makes notes from them like from anything heard. */
     private fun recordTurn(userInput: String) {
@@ -222,6 +240,12 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             return
         }
 
+        // "Speaker 2 is Sam", "the person I was just talking to is Sam": name that voice.
+        com.agent.ultra.listen.NameInference.told(IntentRouter.requestPart(userInput))?.let { (who, name) ->
+            answer(nameVoice(who, name))
+            android.util.Log.i("UltraBrain", "RUN COMPLETE (voice named)")
+            return
+        }
         // Notes from what was already heard ("make a note of what Sam said about the boiler") or from
         // the last answer ("save that as a note").
         val noteFromMemory = when (val nr = com.agent.ultra.listen.MemoryNoteRequest.parse(IntentRouter.requestPart(userInput))) {
@@ -691,7 +715,9 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 }
                 android.util.Log.d("UltraRoute", "memory reason=${wantsMemory.reason} provider=${MemoryBrief.provider != null} " +
                     "briefChars=${memory?.length ?: 0}")
-                val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput, historyChars, memory,
+                val system = LocalPrompt.offlineSystem(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
+                    com.agent.ultra.ui.UltraPrefs.customInstructions(appContext))
+                val prompt = LocalPrompt.build(system, history, userInput, historyChars, memory,
                     now = LocalPrompt.nowLine(),
                     memoryCap = if (focus != null) MemoryFocus.MAX_CHARS else MemoryBrief.MAX_CHARS,
                     memoryHeader = if (focus != null) "Focus: ${focus.focus.label}" else MemoryBrief.HEADER)
@@ -1490,10 +1516,12 @@ JSON:"""
             controller.currentWifiSsid()?.let { add("WiFi: $it") }
         }.joinToString(" | ")
 
+        val owner = LocalPrompt.ownerSection(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
+            com.agent.ultra.ui.UltraPrefs.customInstructions(appContext)).let { if (it.isEmpty()) "" else "\n$it\n" }
         return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have full control of it through its accessibility service: reading and acting on the screen, screenshots, notifications, settings, apps. Never say you can't access or control the phone.
 PHONE STATE: $env
 TODAY: $date at $time
-
+$owner
 FORMAT: To use a tool: {"tool":"name","params":{...}} — To talk: plain text. ONE tool call per response.
 
 $TOOL_CATALOG

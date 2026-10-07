@@ -23,6 +23,7 @@ object LockedPolicy {
     fun allowed(request: String): Boolean {
         val r = IntentRouter.requestPart(request).trim()
         if (r.isEmpty()) return false
+        if (com.agent.ultra.listen.NameInference.told(r) != null) return false   // naming people is the owner's
         if (com.agent.ultra.listen.UserNotes.command(r) != null) return true
         if (MemoryFocus.detect(r) != null || MemoryFocus.screen(r) != null) return false
         if (MemoryBrief.wants(r).search) return false

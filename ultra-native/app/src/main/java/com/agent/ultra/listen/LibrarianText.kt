@@ -127,9 +127,11 @@ Output one JSON object per line and nothing else, like:
     private val DAY = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.ENGLISH)
     private val HM = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH)
 
-    fun userMessage(chunk: List<HeardLine>, zone: ZoneId): String {
+    fun userMessage(chunk: List<HeardLine>, zone: ZoneId, ownerName: String = ""): String {
         val first = Instant.ofEpochMilli(chunk.first().ts).atZone(zone)
         return buildString {
+            // [Me] has a name once the owner gave it (Settings → PEOPLE): notes then say who.
+            if (ownerName.isNotBlank()) append("[Me] is ").append(ownerName.trim()).append(", the phone's owner.\n")
             append("Overheard on ").append(DAY.format(first)).append(":\n")
             for (l in chunk) {
                 append('[').append(HM.format(Instant.ofEpochMilli(l.ts).atZone(zone))).append("] ")
@@ -140,9 +142,12 @@ Output one JSON object per line and nothing else, like:
         }
     }
 
+    /** Set by the app from Settings → PEOPLE; blank = not given. */
+    @Volatile var ownerName: String = ""
+
     fun build(chunk: List<HeardLine>, zone: ZoneId, patterns: Boolean = true): String = buildString {
         append("<|im_start|>system\n").append(if (patterns) SYSTEM else SYSTEM_PLAIN).append("<|im_end|>\n")
-        append("<|im_start|>user\n").append(userMessage(chunk, zone)).append("<|im_end|>\n")
+        append("<|im_start|>user\n").append(userMessage(chunk, zone, ownerName)).append("<|im_end|>\n")
         append("<|im_start|>assistant\n<think>\n\n</think>\n\n")
     }
 }

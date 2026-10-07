@@ -26,6 +26,26 @@ How to answer:
 - Your reply may be spoken aloud: lead with the answer, keep it short unless asked for depth.
 """.trim()
 
+    /**
+     * The owner's part of a system prompt: their name (so "[Me]" and "you" have one) and their own
+     * instructions from Settings → SYSTEM PROMPT. Empty when neither is set. It goes at the end of
+     * the system block, which stays the same turn to turn (KV prefix reuse). Pure.
+     */
+    fun ownerSection(ownerName: String, instructions: String): String = buildString {
+        val name = ownerName.trim()
+        if (name.isNotEmpty()) append("The owner of this phone, who you are talking to, is ").append(name)
+            .append(". In transcripts and notes \"Me\" is ").append(name).append(". Call them ").append(name).append(" when it fits.")
+        val ins = instructions.trim()
+        if (ins.isNotEmpty()) {
+            if (isNotEmpty()) append('\n')
+            append("The owner's own instructions (follow them, unless they ask for something unsafe):\n").append(ins)
+        }
+    }
+
+    /** [OFFLINE_RULES] plus [ownerSection]. */
+    fun offlineSystem(ownerName: String, instructions: String): String =
+        ownerSection(ownerName, instructions).let { if (it.isEmpty()) OFFLINE_RULES else OFFLINE_RULES + "\n" + it }
+
     data class Turn(val fromUser: Boolean, val text: String)
 
     /**

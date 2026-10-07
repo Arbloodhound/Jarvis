@@ -114,6 +114,14 @@ fun SettingsScreen(
         DownloadsSection()
 
         // ── Cloud provider ────────────────────────────────────────────
+        SectionTitle("PEOPLE")
+        PeopleSettings(context)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        SectionTitle("SYSTEM PROMPT")
+        SystemPromptSettings(context)
+        Spacer(modifier = Modifier.height(12.dp))
+
         SectionTitle("AI PROVIDER (CLOUD)")
         Text(
             "Drives the tool loop when the network is up. Any OpenAI-compatible endpoint works.",

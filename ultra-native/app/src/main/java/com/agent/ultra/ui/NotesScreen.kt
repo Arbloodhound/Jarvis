@@ -73,6 +73,7 @@ fun NotesScreen(onBack: () -> Unit, onAsk: () -> Unit) {
     }
     androidx.activity.compose.BackHandler(onBack = onBack)
     val zone = remember { ZoneId.systemDefault() }
+    val owner = remember { UltraPrefs.ownerName(context) }
     val heardFmt = remember { SimpleDateFormat("EEE d MMM, h:mm a", Locale.UK) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -126,7 +127,8 @@ fun NotesScreen(onBack: () -> Unit, onAsk: () -> Unit) {
                             Row(modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(listOfNotNull(n.kind.label, n.whenText(zone), n.who).joinToString(" · "),
+                                    Text(listOfNotNull(n.kind.label, n.whenText(zone), n.who?.let { w -> if (w == "Me" && owner.isNotBlank()) owner else w })
+                                        .joinToString(" · "),
                                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                                     Text(n.text, style = MaterialTheme.typography.bodyMedium)
                                     if (n.tags.isNotEmpty()) Text(n.tags.joinToString(" ") { "#$it" },

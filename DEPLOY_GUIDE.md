@@ -155,6 +155,20 @@ Parts marked **(test data)** check one piece with fixed sample input. The rest u
 
 ---
 
+## People and your own instructions
+
+- **Settings → PEOPLE**
+  - **Your name:** Jarvis calls you by it, and notes say it instead of "Me".
+  - **Voices heard:** Speaker 2, Speaker 3 and so on, with a name box for each. Give two voices the same name to join them.
+- **Jarvis names people itself:**
+  - when someone says "I'm Sam" or "my name is Sam";
+  - when you keep calling someone by name ("thanks, Sam") and that voice answers. That needs a few times, so it doesn't guess from one remark.
+  - It never renames a voice you named.
+- **Or tell it**, by voice or typing: "Speaker 2 is Sam", "the person I was just talking to is Anna".
+- **Settings → SYSTEM PROMPT:** type your own instructions, e.g. "keep answers short, I work nights, my wife is Anna". Both brains follow them. **Show the built-in instructions** shows what Jarvis is told by default.
+
+---
+
 ## "Hey Jarvis"
 
 - Say **"Hey Jarvis"** on its own: it beeps and says **"Yes?"**. Then say what you want.

@@ -406,6 +406,29 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
     fun heardAfter(afterId: Long, limit: Int): List<HeardLine> = tagged(
         "WHERE h.rowid>CAST(? AS INTEGER) ORDER BY h.rowid ASC LIMIT ?", arrayOf(afterId.toString(), limit.toString()))
 
+    /** Lines since [sinceTs] with their voice, oldest first: [NameInference]'s input. */
+    fun voiceLines(sinceTs: Long, limit: Int): List<NameInference.Line> {
+        val out = ArrayList<NameInference.Line>()
+        readableDatabase.rawQuery(
+            "SELECT h.ts,h.text,t.voice,v.owner,v.name FROM heard h " +
+                "JOIN heard_tag t ON t.rowid=h.rowid AND t.ts=h.ts " +
+                "LEFT JOIN voices v ON v.id=t.voice " +
+                "WHERE h.ts>=CAST(? AS INTEGER) ORDER BY h.ts ASC LIMIT ?",
+            arrayOf(sinceTs.toString(), limit.toString())
+        ).use { c ->
+            while (c.moveToNext()) {
+                val voice = if (c.isNull(2)) 0L else c.getLong(2)
+                out += NameInference.Line(
+                    voice = if (voice > 0 && !c.isNull(3)) voice else 0L,
+                    owner = !c.isNull(3) && c.getInt(3) != 0,
+                    named = !c.isNull(4) && c.getString(4).isNotBlank(),
+                    ts = c.getLong(0), text = c.getString(1),
+                )
+            }
+        }
+        return out
+    }
+
     /** The newest [limit] lines with their speaker / cue tags ("[Me] …", "[Sam] [pause 1.2s] …"),
      *  newest first: the Memory screen. */
     fun newestTagged(limit: Int): List<HeardLine> = tagged("ORDER BY h.rowid DESC LIMIT ?", arrayOf(limit.toString()))
