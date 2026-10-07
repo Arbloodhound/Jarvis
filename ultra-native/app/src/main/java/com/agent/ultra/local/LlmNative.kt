@@ -68,7 +68,9 @@ object LlmNative {
      * Loads the speculative-decoding draft model ([DraftModel]) beside [handle] with a [ctxSize]
      * context. Returns that ctx (> 0), 0 when the file didn't load, -1 when its vocabulary
      * isn't the loaded model's (llama.cpp's own compatibility check), -2 when its context
-     * couldn't be created. On failure nothing stays loaded and generation runs without it.
+     * couldn't be created, -3 when the loaded model (or the draft) has recurrent/hybrid memory
+     * (Qwen3.5), whose rejected draft tokens can't be rolled back. On failure nothing stays
+     * loaded and generation runs without it.
      */
     external fun nativeAttachDraft(handle: Long, path: String, ctxSize: Int): Int
 

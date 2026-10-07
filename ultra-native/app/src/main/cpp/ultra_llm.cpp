@@ -50,6 +50,13 @@ struct Engine {
     // then every injected token decoded. Empty = the memory is (to be) cleared.
     std::vector<llama_token> cached;
     Draft *draft = nullptr;           // null = no speculative decoding
+    // Recurrent or hybrid memory (Qwen3.5: Gated DeltaNet layers beside full attention). Such a
+    // state holds only the latest position, so llama.cpp 8345f33 cannot drop a tail of it
+    // (llama_memory_recurrent::seq_rm returns false for a partial range unless the context has
+    // rollback snapshots, n_rs_seq > 0, which this shim does not request). Prefix reuse is then
+    // limited to a pure extension (nothing to remove), and speculative decoding is refused, as
+    // its verify step must remove rejected draft tokens.
+    bool recurrent = false;
     // The last generate's speculation: tokens the draft proposed, and how many of them the
     // thinker accepted. specDrafted = -1: that generate ran without the draft.
     int specDrafted = -1;
@@ -592,8 +599,9 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
     engine->pool = pool;
     engine->poolThreads = pool ? threads : 0;
     engine->cpus = cpus;
-    LOGI("loaded: ctx=%d threads=%d pinnedCpus=%zu kv=%s", ctxSize, threads, cpus.size(),
-         ggml_type_name(cparams.type_k));
+    engine->recurrent = llama_model_is_recurrent(model) || llama_model_is_hybrid(model);
+    LOGI("loaded: ctx=%d threads=%d pinnedCpus=%zu kv=%s recurrent=%d", ctxSize, threads, cpus.size(),
+         ggml_type_name(cparams.type_k), (int) engine->recurrent);
     return reinterpret_cast<jlong>(engine);
 }
 
@@ -657,15 +665,28 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
     llama_memory_t mem = llama_get_memory(engine->ctx);
     const int nPrompt = (int) tokens.size();
     int reuse = 0;
-    if (llama_memory_seq_pos_max(mem, 0) + 1 == (llama_pos) engine->cached.size() &&
-        llama_memory_seq_pos_min(mem, 0) <= 0) {
-        const int lim = std::min((int) engine->cached.size(), nPrompt - 1);
-        while (reuse < lim && engine->cached[reuse] == tokens[reuse]) reuse++;
-    }
-    if (reuse > 0 && !(llama_memory_seq_rm(mem, 0, reuse, -1) &&
-                       llama_memory_seq_pos_min(mem, 0) == 0 &&
-                       llama_memory_seq_pos_max(mem, 0) == reuse - 1)) {
-        reuse = 0;
+    if (engine->recurrent) {
+        // Recurrent / hybrid: the state after the last cached token is all there is (its
+        // seq_pos_min is that last position, not 0). Reuse only when this prompt starts with
+        // everything cached, so nothing has to be removed; any other overlap re-reads the whole
+        // prompt from a cleared state. Never decode onto a state that holds tokens this prompt
+        // does not have.
+        const int n = (int) engine->cached.size();
+        if (n > 0 && n <= nPrompt - 1 && llama_memory_seq_pos_max(mem, 0) + 1 == (llama_pos) n &&
+            std::equal(engine->cached.begin(), engine->cached.end(), tokens.begin())) {
+            reuse = n;
+        }
+    } else {
+        if (llama_memory_seq_pos_max(mem, 0) + 1 == (llama_pos) engine->cached.size() &&
+            llama_memory_seq_pos_min(mem, 0) <= 0) {
+            const int lim = std::min((int) engine->cached.size(), nPrompt - 1);
+            while (reuse < lim && engine->cached[reuse] == tokens[reuse]) reuse++;
+        }
+        if (reuse > 0 && !(llama_memory_seq_rm(mem, 0, reuse, -1) &&
+                           llama_memory_seq_pos_min(mem, 0) == 0 &&
+                           llama_memory_seq_pos_max(mem, 0) == reuse - 1)) {
+            reuse = 0;
+        }
     }
     if (reuse == 0) resetCache(engine);
     else engine->cached.resize(reuse);
@@ -724,7 +745,7 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
 
     // With a draft model attached and asked for: the speculative loop (same output, see
     // generateSpeculative). Otherwise the plain loop below, unchanged.
-    if (engine->draft && draftMax > 0) {
+    if (engine->draft && draftMax > 0 && !engine->recurrent) {
         const int n = generateSpeculative(engine, chain, maxTokens, std::min<int>(draftMax, kMaxDraft), nPrompt);
         llama_sampler_free(chain);
         return n;
@@ -783,14 +804,20 @@ Java_com_agent_ultra_local_LlmNative_nativeContextSize(JNIEnv *, jobject, jlong 
 
 // Loads the speculative-decoding draft model beside a loaded engine. Returns the draft's ctx
 // (> 0) on success; 0 = the model didn't load, -1 = its vocabulary isn't the engine's
-// (llama.cpp's own check, vocabCompatible), -2 = its context couldn't be created. On any
-// failure nothing stays loaded and generate runs as before. Replaces a draft already attached.
+// (llama.cpp's own check, vocabCompatible), -2 = its context couldn't be created, -3 = the
+// engine (or the draft) has recurrent/hybrid memory, whose rejected draft tokens can't be
+// removed (Engine::recurrent). On any failure nothing stays loaded and generate runs as before.
+// Replaces a draft already attached.
 JNIEXPORT jint JNICALL
 Java_com_agent_ultra_local_LlmNative_nativeAttachDraft(JNIEnv *env, jobject, jlong handle, jstring jpath, jint ctxSize) {
     auto *engine = reinterpret_cast<Engine *>(handle);
     if (!engine || !engine->ctx || ctxSize <= 0) return 0;
     freeDraft(engine->draft);
     engine->draft = nullptr;
+    if (engine->recurrent) {
+        LOGE("draft: refused, the model has recurrent/hybrid memory (no partial rollback)");
+        return -3;
+    }
 
     const char *path = env->GetStringUTFChars(jpath, nullptr);
     llama_model_params mparams = llama_model_default_params();
@@ -806,6 +833,13 @@ Java_com_agent_ultra_local_LlmNative_nativeAttachDraft(JNIEnv *env, jobject, jlo
         LOGE("draft: vocabulary differs from the thinker's; speculative decoding off");
         llama_model_free(model);
         return -1;
+    }
+    // draftSync trims the draft's own cache with partial seq_rm; a recurrent draft would only
+    // ever fall back to full re-reads. Refused rather than run slowly.
+    if (llama_model_is_recurrent(model) || llama_model_is_hybrid(model)) {
+        LOGE("draft: refused, the draft model has recurrent/hybrid memory");
+        llama_model_free(model);
+        return -3;
     }
 
     llama_context_params cparams = llama_context_default_params();
