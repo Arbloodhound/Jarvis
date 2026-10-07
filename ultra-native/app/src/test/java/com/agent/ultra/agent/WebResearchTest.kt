@@ -41,6 +41,39 @@ class WebResearchTest {
         assertTrue(hits[0].snippet.contains("$329.99"))
     }
 
+    private fun fixture(name: String) = javaClass.classLoader!!.getResource("ddg/$name")!!.readText()
+
+    // Saved DuckDuckGo pages (see the files' headers for where they come from), not hand-written markup.
+    @Test fun parsesSavedPageWithDirectLinks() {
+        val hits = WebResearch.parseDdg(fixture("html_direct_links.html"))
+        assertEquals(
+            listOf(
+                "https://www.thespruce.com/evergreen-ground-cover-plants-4582146",
+                "https://www.bhg.com/evergreen-groundcover-plants-8767875",
+                "https://savvygardening.com/evergreen-groundcover/",
+            ),
+            hits.map { it.url },
+        )
+        assertEquals("15 Best Evergreen Ground Cover Plants - The Spruce", hits[0].title)
+        assertTrue(hits[0].snippet.startsWith("Evergreen ground cover plants offer a practical way"))
+        assertEquals("thespruce.com", hits[0].domain)
+    }
+
+    @Test fun parsesSavedPageWithRedirectLinks() {
+        val hits = WebResearch.parseDdg(fixture("html_uddg_links.html"))
+        assertEquals(
+            listOf(
+                "https://en.wikipedia.org/wiki/Foo_Fighters",
+                "https://www.dictionary.com/e/tech-science/foo/",
+                "https://foofighters.com/",
+            ),
+            hits.map { it.url },
+        )
+        assertEquals("foo | Meaning & Origin - Dictionary.com", hits[1].title)
+        assertTrue(hits[1].snippet.startsWith("\"Foo was here\" was a popular piece of graffiti"))
+        assertTrue(hits[1].snippet.contains("Holman's foo"))
+    }
+
     @Test fun rankingRewardsConsensusAndTrust() {
         val shop = WebResearch.Hit("Best Buy", "https://www.bestbuy.com/x", "")
         val sketchy = WebResearch.Hit("Cheap!!", "https://super-deals-xm5.shop/x", "")

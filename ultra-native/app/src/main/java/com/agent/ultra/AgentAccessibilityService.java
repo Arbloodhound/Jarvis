@@ -166,6 +166,8 @@ public class AgentAccessibilityService extends AccessibilityService {
     private int takeoverHolds = 0;
     private final Handler takeoverHandler = new Handler(Looper.getMainLooper());
     private volatile long passUntil = 0L;
+    /** Uptime when the overlay last stopped taking touches; 0 while it takes them. */
+    private volatile long touchableOffAt = 0L;
 
     public void showTakeover() {
         takeoverHandler.post(() -> {
@@ -229,6 +231,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         try { ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).removeView(takeoverOverlay); }
         catch (Exception ignored) {}
         takeoverOverlay = null;
+        touchableOffAt = 0L;
         Log.i(TAG, "TAKEOVER hidden");
     }
 
@@ -241,53 +244,68 @@ public class AgentAccessibilityService extends AccessibilityService {
         try { com.agent.ultra.ui.SpeechQueue.Companion.stopAll(); } catch (Throwable ignored) {}
     }
 
-    /** Jarvis's own touch gesture: the takeover screen lets touches through for the gesture's length. */
+    /**
+     * Jarvis's own touch gesture: the takeover screen lets touches through for the gesture's length.
+     *
+     * updateViewLayout only schedules the change; the input system sees FLAG_NOT_TOUCHABLE a frame
+     * or more later, while the gesture's first touch is injected at once. Sent straight away, the
+     * touch lands on the overlay and is swallowed (and still reported completed), so the gesture
+     * waits [TakeoverPass.SETTLE_MS] after the flag change. On the main thread the change cannot
+     * even start until this returns, so the gesture is sent later from the main looper instead.
+     */
     private boolean dispatchThrough(android.accessibilityservice.GestureDescription g,
                                     GestureResultCallback cb, Handler h) {
-        if (takeoverOverlay != null) {
-            long ms = 0;
-            for (int i = 0; i < g.getStrokeCount(); i++) {
-                android.accessibilityservice.GestureDescription.StrokeDescription st = g.getStroke(i);
-                ms = Math.max(ms, st.getStartTime() + st.getDuration());
-            }
-            final long gestureMs = ms;
-            passUntil = Math.max(passUntil, System.currentTimeMillis() + gestureMs + 300);
-            java.util.concurrent.CountDownLatch open = new java.util.concurrent.CountDownLatch(1);
-            Runnable letThrough = () -> {
-                try {
-                    if (takeoverOverlay != null && (takeoverLp.flags & android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0) {
-                        takeoverLp.flags |= android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-                        ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).updateViewLayout(takeoverOverlay, takeoverLp);
-                    }
-                } catch (Exception ignored) {}
-                open.countDown();
-                takeoverHandler.postDelayed(this::blockAgainIfDue, gestureMs + 320);
-            };
-            // The window change reaches input dispatch asynchronously: the gesture starts a couple of
-            // frames later, so its touch-down does not land on the overlay.
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                letThrough.run();
-                takeoverHandler.postDelayed(() -> {
-                    if (!super.dispatchGesture(g, cb, h) && cb != null) cb.onCancelled(g);
-                }, PASS_SETTLE_MS);
-                return true;
-            }
-            takeoverHandler.post(letThrough);
-            try {
-                open.await(500, TimeUnit.MILLISECONDS);
-                Thread.sleep(PASS_SETTLE_MS);
-            } catch (InterruptedException ignored) {}
+        if (takeoverOverlay == null) return super.dispatchGesture(g, cb, h);
+        long ms = 0;
+        for (int i = 0; i < g.getStrokeCount(); i++) {
+            android.accessibilityservice.GestureDescription.StrokeDescription st = g.getStroke(i);
+            ms = Math.max(ms, st.getStartTime() + st.getDuration());
         }
-        return super.dispatchGesture(g, cb, h);
+        final long gestureMs = ms;
+        final long settle = com.agent.ultra.agent.TakeoverPass.SETTLE_MS;
+        // Includes the wait below: the overlay must not take touches back in the middle of the gesture.
+        passUntil = Math.max(passUntil, System.currentTimeMillis() + settle + gestureMs + 300);
+        java.util.concurrent.CountDownLatch open = new java.util.concurrent.CountDownLatch(1);
+        Runnable letThrough = () -> {
+            try {
+                if (takeoverOverlay != null && (takeoverLp.flags & android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0) {
+                    takeoverLp.flags |= android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).updateViewLayout(takeoverOverlay, takeoverLp);
+                    touchableOffAt = android.os.SystemClock.uptimeMillis();
+                }
+            } catch (Exception ignored) {}
+            open.countDown();
+            takeoverHandler.postDelayed(this::blockAgainIfDue, settle + gestureMs + 320);
+        };
+        boolean onMain = Looper.myLooper() == Looper.getMainLooper();
+        if (onMain) letThrough.run();
+        else {
+            takeoverHandler.post(letThrough);
+            try { open.await(500, TimeUnit.MILLISECONDS); } catch (InterruptedException ignored) {}
+        }
+        long wait = com.agent.ultra.agent.TakeoverPass.waitMs(touchableOffAt, android.os.SystemClock.uptimeMillis());
+        if (wait <= 0) return super.dispatchGesture(g, cb, h);
+        if (!onMain) {
+            try { Thread.sleep(wait); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            return super.dispatchGesture(g, cb, h);
+        }
+        takeoverHandler.postDelayed(() -> {
+            boolean accepted = AgentAccessibilityService.super.dispatchGesture(g, cb, h);
+            Log.i(TAG, "GESTURE: sent " + wait + " ms after the takeover opened, accepted=" + accepted);
+            if (!accepted && cb != null) {
+                if (h != null) h.post(() -> cb.onCancelled(g)); else cb.onCancelled(g);
+            }
+        }, wait);
+        return true;
     }
 
-    private static final long PASS_SETTLE_MS = 50;
 
     private void blockAgainIfDue() {
         if (takeoverOverlay == null || System.currentTimeMillis() < passUntil) return;
         try {
             takeoverLp.flags &= ~android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
             ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).updateViewLayout(takeoverOverlay, takeoverLp);
+            touchableOffAt = 0L;
         } catch (Exception ignored) {}
     }
 
