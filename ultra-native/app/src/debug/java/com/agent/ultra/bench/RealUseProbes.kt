@@ -101,7 +101,7 @@ object RealUseProbes {
         if (!listening(env)) return listOf(Result(f, Verdict.FAIL, "not listening", "turn on Settings → VOICE → Ambient listening"))
         val t0 = System.currentTimeMillis()
         env.status("Saying \"Hey Jarvis, what time is it?\" through the speaker")
-        val sp = com.agent.ultra.ui.Speaker(env.ctx)
+        val sp = com.agent.ultra.ui.Speaker(env.ctx, heardByListener = true)   // the listener must hear this one
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { sp.speak("Hey Jarvis. What time is it?") }
         val woke = withTimeoutOrNull(20_000) { while (AmbientListenService.lastWakeAt < t0) delay(150); true } ?: false
         sp.shutdown()

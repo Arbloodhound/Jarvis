@@ -390,7 +390,7 @@ class AmbientListenService : Service() {
                 if (n == 0) continue
                 tap?.offer(frame, n)
                 val fr = if (n == frame.size) frame else frame.copyOf(n)
-                if (System.currentTimeMillis() < mutedUntil) {
+                if (System.currentTimeMillis() < mutedUntil || com.agent.ultra.ui.Speaker.mutesListener()) {
                     seg.reset()
                     // Barge-in (owner: "stop doing something when I tell it to"): while Jarvis talks,
                     // only the "Hey Jarvis" sound model listens. It firing cuts the speech off and
@@ -672,6 +672,7 @@ class AmbientListenService : Service() {
         com.agent.ultra.agent.Brain.hushAll()
         com.agent.ultra.ui.SpeechQueue.stopAll()
         mutedUntil = 0L                      // after stopAll: its idle callback re-mutes briefly
+        com.agent.ultra.ui.Speaker.clearEchoTail()
         synchronized(windowLock) {
             windowId++
             cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS

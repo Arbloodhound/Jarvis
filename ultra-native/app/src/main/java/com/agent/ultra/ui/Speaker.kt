@@ -39,7 +39,23 @@ import java.util.Locale
  * Start and finish are logged (`UltraSpeak`) — that is how speak-back gets verified on a
  * machine that cannot hear the phone.
  */
-class Speaker(context: Context) {
+class Speaker(
+    context: Context,
+    /** True only for the Real-use check's spoken "Hey Jarvis": the listener must hear that one. */
+    private val heardByListener: Boolean = false,
+) {
+    /** Whether this speaker is talking now (counted in [talkingCount] for the listener's echo guard). */
+    @Volatile private var talking = false
+
+    private fun markTalking() {
+        if (heardByListener || talking) return
+        talking = true; talkingCount.incrementAndGet()
+    }
+
+    private fun markIdle() {
+        if (!talking) return
+        talking = false; talkingCount.decrementAndGet(); lastTalkEndAt = System.currentTimeMillis()
+    }
 
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
@@ -80,6 +96,7 @@ class Speaker(context: Context) {
     fun speak(text: String, whenDone: (() -> Unit)? = null) {
         val clean = forSpeech(text)
         if (clean.isBlank()) { whenDone?.invoke(); return }
+        markTalking()
         val ownVoice = UltraPrefs.ownVoice(app)
         val old: Playback?
         val g: Long
@@ -98,6 +115,7 @@ class Speaker(context: Context) {
     }
 
     fun stop() {
+        markIdle()
         val old: Playback?
         val cb = synchronized(lock) {
             gen++; pending = null; old = own; own = null
@@ -117,6 +135,7 @@ class Speaker(context: Context) {
 
     /** Fire whenDone if [g] is still the current speech. */
     private fun finish(g: Long) {
+        if (synchronized(lock) { g == gen }) markIdle()
         val cb = synchronized(lock) { if (g != gen) null else whenDoneCb.also { whenDoneCb = null } }
         cb?.invoke()
     }
@@ -382,6 +401,22 @@ class Speaker(context: Context) {
     }
 
     companion object {
+        private val talkingCount = java.util.concurrent.atomic.AtomicInteger(0)
+        @Volatile private var lastTalkEndAt = 0L
+        /** How long after Jarvis stops talking the listener still ignores the mic (room echo). */
+        private const val ECHO_TAIL_MS = 700L
+
+        /**
+         * Jarvis is talking somewhere in the app (chat, voice screen, ambient, a test), or just
+         * stopped: the ambient listener must not take it as someone speaking. Before, only the
+         * ambient service's own speech muted it, so a chat answer that said "Jarvis" could wake it
+         * and Jarvis answered itself.
+         */
+        fun mutesListener(now: Long = System.currentTimeMillis()): Boolean =
+            talkingCount.get() > 0 || now - lastTalkEndAt < ECHO_TAIL_MS
+
+        /** "Hey Jarvis" over Jarvis's speech: listen at once, no echo tail. */
+        fun clearEchoTail() { lastTalkEndAt = 0L }
         private const val TAG = "UltraSpeak"
         private const val WRITE_SLICE = 2048   // samples, ~93 ms at 22 kHz
 

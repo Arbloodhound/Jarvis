@@ -3,6 +3,14 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — Jarvis no longer hears (and answers) itself
+Owner: the voice seems to answer itself. Proven from source: only the ambient service's own speech (and the voice
+screen's) muted the ambient mic; the chat's spoken answers did not, so the listener transcribed Jarvis's own voice and a
+reply containing "Jarvis" could wake it. Now every Speaker counts while talking (`Speaker.mutesListener`: any talking,
+plus a 700 ms echo tail) and the capture loop treats that as muted (the wake model still listens for barge-in; barge-in
+clears the tail). The Real-use loopback's spoken "Hey Jarvis" is exempt (`heardByListener`). SOURCE-FIXED BUT
+RUNTIME-UNPROVEN.
+
 ## 2026-10-07 (session 01BUKa) — fixes from the second Real-use check (app 2.6.28)
 Results 13:03 (PROVEN from log unless said): room listening now PASS (whisper on cpus [2..7], 0.4x real time, segments
 1-9 s after the first). Still failing:
