@@ -3,6 +3,30 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — verification pass: architecture skeleton, upstream cross-checks, host runs
+Owner: verify all code by cross-referencing public repos, build an architecture skeleton first, make sure it works.
+- Skeleton: ARCHITECTURE.md (8 Mermaid diagrams: overview, voice, tool call + gates, navigation, web, memory, native
+  boundary, storage; all rendered in headless Chromium) from two full read-throughs; also published as a page.
+- Native (host, tools/host-harness): ultra_vlm.cpp vs llama.cpp 8345f33 with a tiny random Qwen2.5-VL pair: output
+  token-for-token identical to llama-mtmd-cli, ASan clean, no leak over 995 describes, error paths OK; 403x896 → 448
+  image tokens. ultra_llm.cpp harness PASS (prefix reuse, threads, inject, pinning). ultra_whisper.cpp vs whisper.cpp
+  with a random tiny model + repo VAD: text, word timing, VAD segments, ASan clean. Bug fixed: both LLM shims let
+  invalid UTF-8 (overlong, surrogates, > U+10FFFF) through as invalid UTF-16 (6/12 cases failed, now 12/12). PROVEN on host.
+- Android/APIs vs AOSP, googlesamples/mlkit, sherpa-onnx v1.13.8, OkHttp, ddgs/duckduckgo_search/SearXNG: takeScreenshot
+  usage correct; ML Kit bundled needs no Play services (bytecode) but its datatransport/firelog sends usage events;
+  sherpa-onnx Kotlin byte-identical to v1.13.8; downloads' Range handling correct, vision sizes match HF.
+- Bugs fixed (SOURCE-FIXED BUT RUNTIME-UNPROVEN unless said): ambient_recall always refused by the gate (missing from
+  the manifest; ToolWiringTest now checks all 40 tools both ways); OfflineNavigator OCR'd protected apps; Stop was turned
+  into an "Error:" tool result (Tools.execute and web_search caught CancellationException); readPageOnScreen's Back
+  skipped on cancel; research ran twice on the fallback; takeover overlay not reference-counted and Jarvis's own first
+  touch could land on it (TakeoverPass settle wait, 120 ms, reasoned not measured); screenshot/OCR bitmap lifetimes and an
+  8 s OCR limit; Jarvis's own window read as "the screen"; ambient_recall marked third-party in the gate; vision model at
+  most once per navigation run; DuckDuckGo searched with POST + Referer like the maintained scrapers and a bot check /
+  HTTP 202 read as blocked (was parsed as 0 results).
+- Known, not fixed: the overlay covers the status bar (no notification pull-down during a takeover); ML Kit telemetry;
+  dead entries (file_delete in DESTRUCTIVE, wake_onnx pref, ultra_a11y prefs) left per no-refactor rule.
+1296 JVM tests, 0 failures; assembleDebug OK. Next: owner tests on the phone (describe my screen, a search, an app task).
+
 ## 2026-10-07 (session 01BUKa) — screen vision: ML Kit OCR + on-device vision model (Qwen2.5-VL 3B)
 Owner: add Google's ML Kit and the vision model ("another two to four gigabytes" is fine), all the search-first glue,
 optimised to run on the phone, in one build.
