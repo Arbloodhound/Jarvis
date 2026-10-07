@@ -1,5 +1,13 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
+## LATEST+2 (session 01BUKa, 2026-10-07 ~03:00 UTC) — read this first
+`v2.6.12-test` (run 12, 7ffe265) is the Latest release: everything below plus the wake chime, own-voice wake
+probe graded on ambient's decode, results file stamped with the app version, ambient whisper on the idle big
+cores + per-utterance whisper timing. The owner's 19:36/19:41 files were from an old build (no new tests ran).
+Next: owner updates → Jarvis Tests 1 (header must say App: 2.6.12) → 3 → 5 → Save → send. Then check: tok/s at
+4 threads ≈ 9; "Wake phrase (your voice)"; pattern notes; `whisper audioMs= ms=` lines (ms < audioMs = keeps up);
+any "backlog full" lines.
+
 ## LATEST+1 (session 01BUKa, 2026-10-07 ~01:30 UTC) — read this first
 Owner's results `Jarvis-results-20261006-1758.txt`: Feature check PASS 17 / WARN 2 / FAIL 1. Commit 229dfb0
 (1167 JVM tests, 0 failures; assembleDebug OK) fixes from it: LLM decodes with 4 threads (speed test 4=8.96,
