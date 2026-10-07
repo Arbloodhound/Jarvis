@@ -93,6 +93,7 @@ Stay on Wi‑Fi and keep the phone plugged in for this part.
 | **5 · Feature check** | 20–40 min | every feature: PASS / WARN / FAIL / MISSING, with a score |
 
 4. During **5 · Feature check**:
+   - Near the end it asks you to say the wake phrase. Tap **Yes**, then straight away say **"Hey Jarvis, what time is it?"** in your normal voice, about an arm's length from the phone. It records 5 seconds. This tests your real voice; the earlier wake test can only use Jarvis's own voice.
    - When it asks about the flashlight, tap **Yes, go ahead**. It turns the light on and off by itself to test phone control.
    - If one part looks stuck for more than about 5 minutes, tap **Skip this part**. Don't tap Stop unless you want to end the whole run.
 5. When it finishes, tap **4 · Save results to Downloads + share**.
@@ -105,7 +106,7 @@ Stay on Wi‑Fi and keep the phone plugged in for this part.
 - **Memory model:** does it turn a sample conversation into the right notes?
 - **Memory search:** does it find the right memory by meaning, keyword and "yesterday"?
 - **Pattern notes:** observations only, no diagnoses.
-- **Voice:** Jarvis speaks a sentence and Whisper writes it down (accuracy score). Plus "Hey Jarvis" detection, with and without the "um, uh" prompt.
+- **Voice:** Jarvis speaks a sentence and Whisper writes it down (accuracy score). Plus "Hey Jarvis" detection, in Jarvis's voice and then in yours.
 - **Transcript tags:** pause detection, word timing, speaker matching.
 - **Phone control offline:** flashlight on and off.
 - **Safety:** refuses wrong payment amounts, asks before money or delete actions.

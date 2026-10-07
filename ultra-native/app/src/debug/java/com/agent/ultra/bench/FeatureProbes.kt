@@ -526,26 +526,7 @@ object FeatureProbes {
         env.status("Voice: testing the wake phrase")
         val (wpcm, _) = speak16k(ctx, WAKE_SENTENCE, 2500, 1000)
             ?: return listOf(round, Result("Wake phrase", Verdict.FAIL, "voice produced no audio", "couldn't make the test audio"))
-        var acoustic: Boolean? = null
-        var maxScore = 0f
-        var placement = ""
-        if (wakeModelsPresent(ctx)) {
-            val gate = WakeGate(ctx)
-            try {
-                if (gate.ready) {
-                    placement = gate.placement
-                    var fired = false
-                    var i = 0
-                    while (i < wpcm.size) {
-                        val end = minOf(i + WakeGate.CHUNK, wpcm.size)
-                        if (gate.accept(wpcm.copyOfRange(i, end))) fired = true
-                        maxScore = maxOf(maxScore, gate.lastScore)
-                        i = end
-                    }
-                    acoustic = fired
-                }
-            } finally { gate.close() }
-        }
+        val (acoustic, maxScore, placement) = gateOn(ctx, wpcm)
         val wakeText = LocalWhisper.transcribe(ctx, wpcm)?.text.orEmpty()
         val name = AmbientConfig(ctx).wakeName
         val command = WakeFilter.addressedCommand(wakeText, name)
@@ -589,6 +570,77 @@ object FeatureProbes {
                 "wake name=\"$name\" gate placement=${placement.ifBlank { "-" }}") + fillerLines)
         return listOf(round, wake)
     }
+
+    /** The acoustic gate (the "Hey Jarvis" model) over [pcm]: fired (null = wake models missing
+     *  or not loadable), its highest score, and where it ran. */
+    private fun gateOn(ctx: Context, pcm: ShortArray): Triple<Boolean?, Float, String> {
+        if (!wakeModelsPresent(ctx)) return Triple(null, 0f, "")
+        val gate = WakeGate(ctx)
+        try {
+            if (!gate.ready) return Triple(null, 0f, "")
+            var fired = false
+            var maxScore = 0f
+            var i = 0
+            while (i < pcm.size) {
+                val end = minOf(i + WakeGate.CHUNK, pcm.size)
+                if (gate.accept(pcm.copyOfRange(i, end))) fired = true
+                maxScore = maxOf(maxScore, gate.lastScore)
+                i = end
+            }
+            return Triple(fired, maxScore, gate.placement)
+        } finally { gate.close() }
+    }
+
+    /**
+     * The wake phrase in the owner's own voice: the probe above can only use Jarvis's synthetic
+     * voice, which the "Hey Jarvis" model and whisper may hear differently from a person. Records
+     * [OWN_WAKE_MS] from the mic (ambient muted meanwhile, as voice enrolment does), then runs the
+     * same acoustic gate and ambient's own whisper decode and text match on it.
+     */
+    suspend fun wakeOwnVoice(env: ProbeEnv): List<Result> {
+        val ctx = env.ctx
+        val feature = "Wake phrase (your voice)"
+        if (!WhisperNative.available || !LocalWhisper.modelPresent(ctx))
+            return listOf(Result(feature, Verdict.MISSING, "speech model missing", speechFix()))
+        if (ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+            return listOf(Result(feature, Verdict.WARN, "microphone not allowed", "allow the microphone for Jarvis (Settings → VOICE → Ambient listening)"))
+        if (!env.confirm("Your voice: tap Yes, then straight away say \"$WAKE_SENTENCE\" in your normal voice, " +
+                "about an arm's length from the phone. It records ${OWN_WAKE_MS / 1000} seconds. Tap No to skip."))
+            return listOf(Result(feature, Verdict.WARN, "skipped (you tapped No)", "not tested"))
+        env.status("Recording: say \"$WAKE_SENTENCE\" now")
+        val (clip, viaAmbient) = com.agent.ultra.listen.VoicePrints.recordMuted(OWN_WAKE_MS)
+        if (clip == null) return listOf(Result(feature, Verdict.FAIL, "the microphone gave no audio", "couldn't record"))
+        env.status("Wake phrase (your voice): checking the recording")
+        val db = CueAudio.frameDb(clip)
+        val loudest = db.maxOrNull() ?: -120f
+        // The gate needs ~2 s of audio before a phrase to fill its window: silence in front, as
+        // the synthetic test pads it (ambient's gate has been running long before anyone speaks).
+        val (acoustic, maxScore, placement) = gateOn(ctx, ShortArray(AmbientConfig.SAMPLE_RATE * 2) + clip)
+        val name = AmbientConfig(ctx).wakeName
+        val heard = ambientWhisper(ctx) { h -> ambientTranscribe(h, clip, WhisperNative.verbatimPrompt(name), true) }
+        val command = heard?.let { WakeFilter.addressedCommand(it.text, name) }
+        val textWake = command != null
+        val v = when {
+            acoustic == true && textWake -> Verdict.PASS
+            acoustic == true || textWake -> Verdict.WARN
+            else -> Verdict.FAIL
+        }
+        return listOf(Result(feature, v,
+            "acoustic ${when (acoustic) { true -> "fired"; false -> "did NOT fire"; null -> "n/a (wake models missing)" }} " +
+                "(max score ${FeatureGrade.f2(maxScore.toDouble())}), text match ${if (textWake) "yes" else "NO"}, " +
+                "heard \"${oneLine(heard?.text ?: "(nothing)", 80)}\"",
+            when (v) {
+                Verdict.PASS -> "your \"Hey Jarvis\" is caught both by sound and by the words"
+                Verdict.WARN -> "your \"Hey Jarvis\" is caught one way only, so it still wakes"
+                else -> "your \"Hey Jarvis\" was not recognised"
+            },
+            listOf("asked to say: $WAKE_SENTENCE", "heard (ambient decode): ${heard?.text ?: "(nothing)"} " +
+                "(confidence ${FeatureGrade.f2((heard?.confidence ?: 0f).toDouble())})",
+                "command after wake: ${command ?: "-"}", "loudest frame ${FeatureGrade.f1(loudest.toDouble())} dB, " +
+                    "audio from ${if (viaAmbient) "ambient capture" else "own recorder"}, gate placement=${placement.ifBlank { "-" }}")))
+    }
+
+    private const val OWN_WAKE_MS = 5_000L
 
     // ── 3 + 6. Memory model (librarian) ────────────────────────────────────────────────────
 

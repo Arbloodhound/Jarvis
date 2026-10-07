@@ -109,6 +109,14 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
     private val engineThreads: Int
         get() = if (role == Role.LIBRARIAN) minOf(LIBRARIAN_THREADS, baseThreads()) else baseThreads()
 
+    /** Workers the thinker's pinned pool is created with: one per LLM core (up to 6), more than
+     *  the [engineThreads] it decodes with, so the speed test can still try 5 and 6 threads. This
+     *  is the layout the Pixel speed test measured (6-worker pool, 4 decoding = fastest); idle
+     *  workers just wait. The librarian's pool is its own thread count. */
+    private val poolThreads: Int
+        get() = if (role == Role.LIBRARIAN) engineThreads
+            else maxOf(engineThreads, CpuTopology.current.llmCpus.size)
+
     /**
      * Context window (tokens) a prompt plus its output must fit: the loaded model's, or before a
      * load, the one the load will choose (same pure function, same inputs). The native side
@@ -454,7 +462,8 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             val threads = engineThreads
             val cpus = if (role == Role.LIBRARIAN) topo.fastestFirst.filter { it in topo.llmCpus }.take(threads).sorted()
                 else topo.llmCpus
-            android.util.Log.i("UltraLlm", "$role cpus llm=$cpus whisper=${topo.whisperCpus} threads=$threads")
+            val pool = poolThreads
+            android.util.Log.i("UltraLlm", "$role cpus llm=$cpus whisper=${topo.whisperCpus} threads=$threads pool=$pool")
             val ctx = if (plannedCtx > 0) plannedCtx else plannedContext()
             // A resident copy can't give pages back: what a ctx above 4096 adds (KV, mask) must
             // also fit beside it. At 4096 the check is unchanged (its headroom covered that size).
@@ -466,7 +475,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             android.util.Log.i("UltraLlm", "$role load resident=$resident ctx=$ctx availMB=${avail / 1_048_576} " +
                 "otherMappedMB=${otherMappedBytes / 1_048_576} " +
                 "fileMB=${modelFileSizeBytes / 1_048_576} totalMB=${totalRam / 1_048_576}")
-            handle = LlmNative.nativeLoad(modelFile.absolutePath, threads, ctx, cpus.toIntArray(), resident)
+            handle = LlmNative.nativeLoad(modelFile.absolutePath, pool, ctx, cpus.toIntArray(), resident)
             loadedCtx = if (handle != 0L) LlmNative.nativeContextSize(handle) else 0
             android.util.Log.i("UltraLlm", "nativeLoad -> handle=$handle ctx=$loadedCtx in ${System.currentTimeMillis() - t0}ms")
             residentLoaded = resident && handle != 0L
@@ -630,7 +639,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 val sb = StringBuilder()
                 val t0 = System.currentTimeMillis()
                 val faults0 = PageFaults.read()
-                val nThreads = if (exactThreads && threads > 0) minOf(threads, engineThreads)
+                val nThreads = if (exactThreads && threads > 0) minOf(threads, poolThreads)
                     else ThermalPolicy.resolveThreads(threads, ThermalGuard.level, engineThreads)
                 onStart()
                 // Decode speed: time from the first sampled token to the last, so prompt prefill
@@ -857,8 +866,9 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         const val THREADS = 4
 
         /** Full-speed generate thread count; the thermal policy scales down from it. One per
-         *  big core (see [CpuTopology]); [THREADS] when the core layout can't be read. The
-         *  model loads with exactly this many pinned workers; more per call is clamped. */
+         *  [CpuTopology.MAX_LLM_THREADS] (4, the Pixel's fastest); [THREADS] when the core layout
+         *  can't be read. The thinker's pool has a worker per LLM core ([poolThreads]); a call
+         *  never decodes with more than this outside the speed test. */
         fun baseThreads(): Int = CpuTopology.current.llmThreads
         /** The context every model gets at least (what all loads used before [contextFor]). */
         const val CTX_SIZE = 4096

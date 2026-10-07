@@ -106,6 +106,28 @@ class CueTaxonomyTest {
         assertEquals(5, r.rejected)
     }
 
+    /** The 1.7B model's real output on the Pixel (Feature check, 2026-10-06): no "text". Kept, with
+     *  a plain who + pattern summary; the quote is still checked against the lines. */
+    @Test fun observationWithoutTextGetsAPlainSummary() {
+        val r = NoteParser.parse(
+            "{\"kind\":\"observation\",\"pattern\":\"decision\",\"who\":\"Me\"," +
+                "\"quote\":\"I'll book the table for 7pm on Friday\",\"confidence\":\"high\"}", tagged)
+        assertEquals(0, r.rejected)
+        val d = r.notes.single()
+        assertEquals("Me — decision", d.text)
+        assertEquals(CuePattern.DECISION, d.obs!!.pattern)
+        assertEquals(listOf(at(18, 2)), d.obs!!.quoteTs)
+        assertEquals("Me — topic shift", NoteParser.plainSummary("Me", CuePattern.TOPIC_SHIFT))
+        // an unverifiable quote is still rejected, summary or not
+        val bad = NoteParser.parse(
+            "{\"kind\":\"observation\",\"pattern\":\"decision\",\"who\":\"Me\"," +
+                "\"quote\":\"I'll book it for Saturday\",\"confidence\":\"high\"}", tagged)
+        assertTrue(bad.notes.isEmpty())
+        assertEquals(1, bad.rejected)
+        // other kinds still need their text
+        assertEquals(1, NoteParser.parse("{\"kind\":\"fact\",\"when\":\"today\"}").rejected)
+    }
+
     // ---- observations, never verdicts ---------------------------------------------------------
 
     @Test fun verdictWordsAreRejected() {

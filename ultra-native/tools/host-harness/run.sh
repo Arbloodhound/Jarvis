@@ -3,7 +3,8 @@
 # Builds the shim as a host JNI library against /tmp/llama.cpp/build-host (llama.cpp
 # 8345f33, x86_64) and runs Harness.java with the tiny random model. A unit that changes
 # a JNI signature edits driver/ here (or a copy passed as arg 2). First run setup.sh.
-# HARNESS_CPUS="2,3" pins the engine to those CPUs; unset = unpinned.
+# HARNESS_CPUS="2,3" pins the engine to those CPUs; unset = unpinned. MODEL=<gguf> another model;
+# DRAFT=<gguf> also tests the speed-boost draft (EXPECT_REFUSED=true: the model must refuse it).
 set -euo pipefail
 SRC="${1:?path to ultra_llm.cpp}"; H="$(cd "$(dirname "$0")" && pwd)"; DRIVER="${2:-$H/driver}"
 L="${LLAMA_SRC:-/tmp/llama.cpp}"
@@ -20,7 +21,7 @@ g++ -std=c++17 -O1 -g -fPIC -shared -fpermissive -w \
 mkdir -p "$OUT/classes"
 javac -d "$OUT/classes" $(find "$DRIVER" -name '*.java')
 set +e
-java -Djava.library.path="$OUT" -Dmodel="${MODEL:-$H/tiny-qwen3.gguf}" -cp "$OUT/classes" com.agent.ultra.local.Harness 2>"$OUT/native.log"
+java -Djava.library.path="$OUT" -Dmodel="${MODEL:-$H/tiny-qwen3.gguf}" -Ddraft="${DRAFT:-}" -DexpectRefused="${EXPECT_REFUSED:-false}" -cp "$OUT/classes" com.agent.ultra.local.Harness 2>"$OUT/native.log"
 rc=$?; set -e
 echo "native log: $OUT/native.log ($(grep -c . "$OUT/native.log") lines)"; grep -E "^\[UltraLlm\]" "$OUT/native.log" | sort | uniq -c | sort -rn | head -15
 exit $rc

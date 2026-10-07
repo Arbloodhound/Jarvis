@@ -15,7 +15,7 @@ class CpuTopologyTest {
         val t = CpuTopology.fromMaxFreqs(g5)
         assertEquals(listOf(7, 2, 3, 4, 5, 6, 0, 1), t.fastestFirst)
         assertEquals(listOf(7, 2, 3, 4, 5, 6), t.big)
-        assertEquals(6, t.llmThreads)
+        assertEquals(4, t.llmThreads)   // fastest in the Pixel speed test; they float over all 6 big cores
         assertEquals(listOf(2, 3, 4, 5, 6, 7), t.llmCpus)
         assertEquals(listOf(0, 1), t.whisperCpus)
     }
@@ -26,7 +26,7 @@ class CpuTopologyTest {
         val t = CpuTopology.fromMaxFreqs(f)
         assertEquals(listOf(0, 1, 2, 3, 4, 5), t.llmCpus)
         assertEquals(listOf(6, 7), t.whisperCpus)
-        assertEquals(6, t.llmThreads)
+        assertEquals(4, t.llmThreads)
     }
 
     @Test fun twoBigCoresStillGetFourThreads() {
@@ -45,7 +45,7 @@ class CpuTopologyTest {
             4 to 2_800_000L, 5 to 2_800_000L, 6 to 2_700_000L, 7 to 3_300_000L)
         val t = CpuTopology.fromMaxFreqs(f)
         assertEquals(7, t.big.size)
-        assertEquals(6, t.llmThreads)
+        assertEquals(4, t.llmThreads)
         assertEquals(listOf(1, 2, 3, 4, 5, 7), t.llmCpus)
         assertEquals(listOf(0, 6), t.whisperCpus)
     }
@@ -59,7 +59,7 @@ class CpuTopologyTest {
 
     @Test fun oneClusterOfEightLeavesTwoForWhisper() {
         val t = CpuTopology.fromMaxFreqs((0..7).associateWith { 2_000_000L })
-        assertEquals(6, t.llmThreads)
+        assertEquals(4, t.llmThreads)
         assertEquals(listOf(0, 1, 2, 3, 4, 5), t.llmCpus)
         assertEquals(listOf(6, 7), t.whisperCpus)
     }

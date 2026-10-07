@@ -173,21 +173,9 @@ object VoicePrints {
             if (!fetch(app)) return Enrol.Failed("Couldn't download the voice model (about 40 MB). Check the connection.")
         }
         val ambient = AmbientListenService.instance
-        // Never cut short a longer mute (Jarvis speaking: the echo guard's), and at the end lift
-        // only our own: a mute someone else set meanwhile stands.
-        val ours = System.currentTimeMillis() + ENROL_MS + TAP_SLACK_MS + 1_000L   // the longest the recording can take
-        val mute = ambient?.let { maxOf(it.mutedUntil, ours) }
-        if (ambient != null && mute != null) ambient.mutedUntil = mute
         onState("recording")
-        val viaAmbient = ambient != null && ambient.capturing
-        val pcm = try {
-            if (viaAmbient) fromAmbient(ambient!!, ENROL_MS) else record(ENROL_MS)
-        } finally {
-            if (ambient != null && ambient.mutedUntil == mute && mute == ours) {
-                ambient.mutedUntil = System.currentTimeMillis() + 300L
-            }
-        }
-            ?: return Enrol.Failed("The microphone isn't available.")
+        val (pcm0, viaAmbient) = recordMuted(ENROL_MS)
+        val pcm = pcm0 ?: return Enrol.Failed("The microphone isn't available.")
         onState("saving")
         val db = CueAudio.frameDb(pcm)
         val gate = CueAudio.gateDb(quietFloor(db))
@@ -203,6 +191,30 @@ object VoicePrints {
         if (emb == null) return Enrol.Failed("Couldn't make a voiceprint from that recording.")
         AmbientMemory.get(app).enrolOwner(emb, System.currentTimeMillis())
         return Enrol.Done
+    }
+
+    /**
+     * [ms] of the microphone with ambient listening muted meanwhile, so the clip isn't also
+     * stored as heard speech (or answered). While ambient has the mic open the audio comes from
+     * its capture ([AmbientListenService.tap]): a second recorder beside it may be handed
+     * silence. Returns the clip (null = no mic) and whether it came from ambient capture. Never
+     * cuts short a longer mute (Jarvis speaking: the echo guard's), and at the end lifts only its
+     * own: a mute someone else set meanwhile stands. Used by [enrol] and the debug wake test.
+     */
+    suspend fun recordMuted(ms: Long): Pair<ShortArray?, Boolean> {
+        val ambient = AmbientListenService.instance
+        val ours = System.currentTimeMillis() + ms + TAP_SLACK_MS + 1_000L   // the longest the recording can take
+        val mute = ambient?.let { maxOf(it.mutedUntil, ours) }
+        if (ambient != null && mute != null) ambient.mutedUntil = mute
+        val viaAmbient = ambient != null && ambient.capturing
+        val pcm = try {
+            if (viaAmbient) fromAmbient(ambient!!, ms) else record(ms)
+        } finally {
+            if (ambient != null && ambient.mutedUntil == mute && mute == ours) {
+                ambient.mutedUntil = System.currentTimeMillis() + 300L
+            }
+        }
+        return pcm to viaAmbient
     }
 
     /** The recording's own noise floor: its quietest tenth. */

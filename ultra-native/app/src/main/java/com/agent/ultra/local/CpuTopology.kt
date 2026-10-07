@@ -9,13 +9,20 @@ package com.agent.ultra.local
 object CpuTopology {
     /** Threads, and no pinning, when the frequencies can't be read (today's behaviour). */
     const val FALLBACK_THREADS = 4
-    const val MAX_LLM_THREADS = 6
+    /** Cores the LLM's pool may run on (its cpumask): the big cores, at most this many. */
+    const val MAX_LLM_CPUS = 6
+    /** Threads the LLM decodes with at full speed. Pixel 10 Pro XL speed test (Jarvis Tests 3,
+     *  2026-10-06, Qwen3-4B Thinking Q4_0, pool over the 6 big cores): 4 threads 8.96 tok/s,
+     *  5 threads 7.23, 6 threads 4.79 (warm-ups 9.20 / 7.55 / 5.21). Decoding is memory-bound,
+     *  so threads past 4 only add barrier waits. The 4 float over all the big cores ([llmCpus]),
+     *  as measured, so the scheduler can step around a busy one. */
+    const val MAX_LLM_THREADS = 4
 
     data class Topology(
         val fastestFirst: List<Int>,   // CPU ids, fastest first (ties: lower id first)
         val big: List<Int>,            // every CPU above the slowest cluster's frequency
-        val llmThreads: Int,           // big-core count, at least 4 (or every CPU), at most 6
-        val llmCpus: List<Int>,        // empty = don't pin
+        val llmThreads: Int,           // at most 4 (MAX_LLM_THREADS), fewer only with fewer CPUs
+        val llmCpus: List<Int>,        // big cores, at least 4 (or every CPU), at most 6; empty = don't pin
         val whisperCpus: List<Int>,    // empty = don't pin
     )
 
@@ -33,8 +40,8 @@ object CpuTopology {
         // Never fewer than the 4 threads measured on the A15 5G (2 big + 6 little cores): with
         // only 2 big cores, the LLM takes the next-fastest cores too rather than lose half its threads.
         val floor = minOf(FALLBACK_THREADS, ordered.size)
-        val threads = big.size.coerceIn(floor, MAX_LLM_THREADS)
-        val llm = ordered.take(threads)
+        val llm = ordered.take(big.size.coerceIn(floor, MAX_LLM_CPUS))
+        val threads = minOf(llm.size, MAX_LLM_THREADS)
         val whisper = ordered.filter { it !in llm }
             .ifEmpty { ordered.filter { maxFreqKhz.getValue(it) == slowest } }
         return Topology(ordered, big, threads, llm.sorted(), whisper.sorted())

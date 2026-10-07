@@ -12,6 +12,10 @@ import java.util.*;
  *  3. inject: the callback returns "</think>" once, as ThinkBudget does.
  *  4. affinity: Cpus_allowed_list of every thread of this process, sampled during
  *     generation, is printed as "affinity <list> x<count>".
+ *  5. continue: a prompt that extends the previous prompt + its answer (the only reuse a
+ *     recurrent/hybrid model such as Qwen3.5 gets) must match a fresh engine too.
+ *  6. draft (-Ddraft=<gguf>): attach it as the speed-boost draft; the output with drafting on
+ *     must equal the plain output. A recurrent/hybrid engine must refuse it (-3) and still answer.
  * Exit code 0 = all checks passed.
  */
 public final class Harness {
@@ -37,10 +41,11 @@ public final class Harness {
     static final Set<String> callerDuring = new TreeSet<>();
     static int callerNotRestored = 0;
 
-    static String gen(long h, String prompt, int threads, TokenCallback cb) {
+    static String gen(long h, String prompt, int threads, TokenCallback cb) { return gen(h, prompt, threads, 0, cb); }
+    static String gen(long h, String prompt, int threads, int draftMax, TokenCallback cb) {
         StringBuilder sb = new StringBuilder();
         String before = callerAffinity();
-        int n = LlmNative.nativeGenerate(h, prompt, MAX, 0.2f, threads, piece -> {
+        int n = LlmNative.nativeGenerate(h, prompt, MAX, 0.2f, threads, draftMax, piece -> {
             synchronized (callerDuring) { callerDuring.add(callerAffinity()); }
             sb.append(piece);
             return cb == null ? null : cb.onToken(piece);
@@ -122,6 +127,37 @@ public final class Harness {
         final int[] count = {0};
         String inj = gen(h, A + C, 2, piece -> ++count[0] == 5 ? "</think>" : null);
         System.out.println("inject: ok, " + inj.substring(0, inj.indexOf(':')) + " tokens");
+
+        // 5. continue: previous prompt + its answer + more (a pure extension of what is cached).
+        String p1 = A + B, o1 = gen(h, p1, 2, null);
+        String p2 = p1 + o1.substring(o1.indexOf(':') + 1) + " User: and tomorrow? ";
+        String cont = gen(h, p2, 2, null);
+        long f2 = load(2); String contFresh = gen(f2, p2, 2, null); LlmNative.nativeFree(f2);
+        boolean contOk = cont.equals(contFresh);
+        if (!contOk) fails++;
+        System.out.println("continue " + (contOk ? "OK" : "MISMATCH\n   carried: " + cont + "\n   fresh:   " + contFresh));
+
+        // 5b. a generate stopped at its first token leaves exactly the prompt cached, so the next
+        // prompt that extends it is a pure extension (recurrent models reuse only that).
+        gen(h, A, 2, piece -> "\uFFFF");
+        String ext = gen(h, A + B, 2, null);
+        long f3 = load(2); String extFresh = gen(f3, A + B, 2, null); LlmNative.nativeFree(f3);
+        boolean extOk = ext.equals(extFresh);
+        if (!extOk) fails++;
+        System.out.println("extend " + (extOk ? "OK" : "MISMATCH\n   carried: " + ext + "\n   fresh:   " + extFresh));
+
+        // 6. draft
+        String draft = System.getProperty("draft", "");
+        if (!draft.isEmpty()) {
+            String plain = gen(h, A + B, 2, 0, null);
+            int rc = LlmNative.nativeAttachDraft(h, draft, CTX);
+            String spec = gen(h, A + B, 2, 4, null);
+            boolean same = spec.equals(plain);
+            if (!same) fails++;
+            System.out.println("draft attach -> " + rc + "; drafted output " + (same ? "same as plain" : "DIFFERENT\n   plain: " + plain + "\n   spec:  " + spec));
+            if (Boolean.getBoolean("expectRefused") && rc != -3) { fails++; System.out.println("draft: expected refusal (-3), got " + rc); }
+            LlmNative.nativeDetachDraft(h);
+        }
 
         LlmNative.nativeFree(h);
         sampling = false; sampler.join();

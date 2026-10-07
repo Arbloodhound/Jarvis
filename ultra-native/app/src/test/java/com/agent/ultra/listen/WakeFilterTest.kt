@@ -50,4 +50,15 @@ class WakeFilterTest {
         assertEquals("umbrellas are on sale", cmd("Jarvis, umbrellas are on sale"))
         assertEquals("ermine is a stoat", strip("Hey Jarvis ermine is a stoat"))
     }
+
+    /** "Hey" as whisper heard it on the phone (Feature check, 2026-10-06), and "hi". */
+    @Test fun heyAsWhisperMishearsItStillWakes() {
+        assertEquals("What time is it?", cmd("I hate Jarvis. What time is it?"))
+        assertEquals("what's the time", cmd("Hi Jarvis, what's the time"))
+        assertEquals("", cmd("Hay, Jarvis."))
+        assertEquals("", strip("I hate Jarvis."))
+        // only right before the name: hating something else is conversation
+        assertEquals(null, cmd("I hate Mondays, Jarvis"))
+        assertEquals(null, cmd("I really hate Jarvis"))
+    }
 }

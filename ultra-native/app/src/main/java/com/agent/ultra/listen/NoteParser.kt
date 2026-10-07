@@ -35,8 +35,8 @@ data class NoteDraft(val kind: NoteKind, val text: String, val whenPhrase: Strin
  * The zero-shot pipeline asks for "reading" in a second pass ([ReadingPrompt]) whose lines are
  * the reading object plus "obs":<1-based observation number>; [parseReadings] reads those.
  *
- * An observation is REJECTED when: the pattern isn't a [CuePattern] id; who/confidence/text is
- * missing; any quote is not found verbatim (tags, case, punctuation and spacing aside) in one
+ * An observation is REJECTED when: the pattern isn't a [CuePattern] id; who/confidence is
+ * missing (a missing "text" summary is filled in by [plainSummary]); any quote is not found verbatim (tags, case, punctuation and spacing aside) in one
  * source line ([CueText.quoteIn]); the quoted lines name speakers and none of them is its "who"
  * (untagged and [Unknown] lines name no one); or its text/who contains a verdict word
  * ([CueText.VERDICT_WORDS]: diagnoses, personality labels, honesty claims) or an
@@ -47,7 +47,8 @@ data class NoteDraft(val kind: NoteKind, val text: String, val whenPhrase: Strin
  * drop counted as rejected) when its id is unknown, its hedge has no hedge word, confidence or
  * alt is missing, or it contains a verdict word.
  *
- * Two repairs for what a small model gets wrong (plan/todo/person/fact only, never observations):
+ * Two repairs for what a small model gets wrong (plan/todo/person/fact only; an observation only
+ * ever gets [plainSummary] when its "text" is missing):
  * a fact worded as a duty ("need to", "must", "remind me to" …) becomes a todo ([normaliseKind]);
  * a plan or todo with no "when" takes the time words from its own text ([whenFromText]).
  */
@@ -137,12 +138,13 @@ object NoteParser {
 
     private fun draft(o: JsonObject, source: Source, droppedReading: () -> Unit): NoteDraft? {
         val kind = NoteKind.parse(string(o["kind"]) ?: return null) ?: return null
-        val text = string(o["text"])?.replace(Regex("\\s+"), " ")?.trim() ?: return null
-        if (text.isEmpty() || text.length > MAX_TEXT) return null
+        val given = string(o["text"])?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.isNotEmpty() }
+        if (given != null && given.length > MAX_TEXT) return null
         if (kind == NoteKind.OBSERVATION) {
-            val obs = observation(o, text, source, droppedReading) ?: return null
-            return NoteDraft(kind, text, null, obs)
+            val (summary, obs) = observation(o, given, source, droppedReading) ?: return null
+            return NoteDraft(kind, summary, null, obs)
         }
+        val text = given ?: return null
         // No diagnosis, personality label or honesty verdict in any note ("Sam is a liar" as a person note).
         if (CueText.verdict(text) != null) return null
         val whenEl = o["when"] ?: o["time"]
@@ -187,10 +189,12 @@ object NoteParser {
     fun whenFromText(kind: NoteKind, text: String): String? =
         if (kind.timed) TimeResolver.phraseIn(text) else null
 
-    private fun observation(o: JsonObject, text: String, source: Source, droppedReading: () -> Unit): Observation? {
+    /** The observation and its summary: the model's "text", or when it left that out, [plainSummary]. */
+    private fun observation(o: JsonObject, given: String?, source: Source, droppedReading: () -> Unit): Pair<String, Observation>? {
         val pattern = CuePattern.parse(string(o["pattern"])) ?: return null
         val who = string(o["who"])?.replace(Regex("\\s+"), " ")?.trim()?.removePrefix("[")?.removeSuffix("]")?.trim()
             ?.takeIf { it.isNotEmpty() && it.length <= MAX_WHO } ?: return null
+        val text = given ?: plainSummary(who, pattern)
         val conf = Confidence.parse(string(o["confidence"])) ?: return null
         val quotes = when (val q = o["quote"] ?: o["quotes"]) {
             is JsonArray -> q.map { string(it) ?: return null }
@@ -208,8 +212,17 @@ object NoteParser {
         if (named.any { it != null } && named.none { it != null && CueText.sameSpeaker(who, it) }) return null
         for (s in listOf(text, who)) if (CueText.verdict(s, quotes) != null || CueText.intentClaim(s, quotes) != null) return null
         val reading = (o["reading"] as? JsonObject)?.let { r -> reading(r).also { if (it == null) droppedReading() } }
-        return Observation(pattern, who, quotes, lines.map { it.ts }, conf, reading, quoteWho = named)
+        return text to Observation(pattern, who, quotes, lines.map { it.ts }, conf, reading, quoteWho = named)
     }
+
+    /**
+     * An observation's summary when the model wrote none: who, and the pattern's name ("Me —
+     * decision"). The 1.7B model does leave it out (Pixel Feature check, 2026-10-06: pattern,
+     * who, quote and confidence, no "text"), and the observation was then thrown away whole.
+     * Nothing is inferred: the verified quote stays the evidence, and the label is the
+     * [CuePattern] id the model chose.
+     */
+    fun plainSummary(who: String, pattern: CuePattern): String = "$who — ${pattern.id.replace('_', ' ')}"
 
     /** The chunk the model read, with each line's words and named speaker worked out once. */
     private class Source(val lines: List<HeardLine>) {

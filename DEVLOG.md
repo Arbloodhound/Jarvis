@@ -3,6 +3,46 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — from the 17:58 results file: 4 LLM threads, wake mishearing, own-voice wake test, observation repair; Qwen3.5 preset merged
+
+Input: owner's `Jarvis-results-20261006-1758.txt` (Pixel 10 Pro XL, 4B Thinking Q4_0). Feature check
+PASS 17 · WARN 2 · FAIL 1 · MISSING 0 (downloads, memory search 5/5, voice WER 0%, librarian 3/3, thinker
+6/6, offline flashlight on/off all PASS). Subsystems: B (threads), C (wake text, notes), F (probe), H (harness).
+1. **LLM threads 6 → 4** (`CpuTopology.MAX_LLM_THREADS` 4; new `MAX_LLM_CPUS` 6). Speed test in that file:
+   4 threads 8.96 tok/s, 5 → 7.23, 6 → 4.79 (warm-ups 9.20/7.55/5.21); brain tests at 6 threads 2.9–3.4,
+   at 4 threads 6–9.7. The thinker's pool keeps a worker per big core (6, cpumask = the 6 big cores) and
+   decodes with 4 — the exact layout that was measured — so the speed test can still try 5 and 6
+   (`LocalModelEngine.poolThreads`). WARM is now 3 threads, HOT 2 (8.2 tok/s was seen at 2).
+2. **Wake text**: whisper heard the probe's spoken "Hey Jarvis, what time is it?" as "I hate Jarvis. What
+   time is it?" (ambient's decode) / "I hate Joris." `WakeFilter` now accepts "hi", "hay" and the misheard
+   "I hate" right before the name. Cost: a genuine "I hate Jarvis." at the start of an utterance wakes it.
+   The acoustic gate's max score was 0.35 (< 0.5) on Jarvis's synthetic voice: not changed (no evidence about
+   a human voice).
+3. **New probe "Wake phrase (your voice)"** (before the flashlight): asks the owner to say the phrase,
+   records 5 s (ambient muted; via ambient's tap when it holds the mic: `VoicePrints.recordMuted`, extracted
+   from enrolment, same behaviour), runs the acoustic gate (2 s silence in front) and ambient's whisper decode
+   + text match. PASS both / WARN one / FAIL none. DEPLOY_GUIDE Part 3 says what to do.
+4. **Pattern notes WARN root cause**: the 1.7B wrote `{"kind":"observation","pattern":"decision","who":"Me",
+   "quote":"…","confidence":"high"}` with no "text"; the parser rejected the whole note. An observation with
+   no summary now gets `NoteParser.plainSummary` ("Me — decision"); quote verification and verdict checks
+   unchanged; other kinds still need text.
+5. **Qwen3.5-4B abliterated preset** (branch `claude/qwen35-preset`, session 01K5Mi WIP) reviewed and merged:
+   selectable, not default; hybrid memory → prefix reuse only when the prompt extends the cache, no draft
+   (native -3). Verified: Hub file size 2,707,514,688 B; Qwen/Qwen3.5-4B config (8 full-attention layers of
+   32, 4 KV heads × 256, vocab 248,320; DeltaNet state 24 × 548,864 f32); llama.cpp 8345f33 has arch qwen35,
+   `llama_model_is_hybrid`, pre-tokenizer qwen35.
+6. **Host harness** (`tools/host-harness`): driver was stale (no draftMax) — updated; new checks "continue",
+   "extend" (pure-extension reuse) and draft attach (`DRAFT=`, `EXPECT_REFUSED=`). Results with a generated
+   tiny qwen35 GGUF (4 layers, 1 full-attention): HARNESS PASS — every carried-cache output equals a fresh
+   engine, pure-extension reuse 46 of 77 tokens, draft refused -3 and output unchanged. Tiny qwen3: PASS
+   (its draft context fails to create on the host, -2: the tiny model's q8_0/FA ctx fails there too; the
+   speculative loop itself was not re-run here).
+
+Status: 1 SOURCE-FIXED BUT RUNTIME-UNPROVEN (expect ~9 tok/s, the measured 4-thread number). 2, 4 PROVEN
+against the exact strings from the phone (JVM tests); live wake still RUNTIME-UNPROVEN. 3 CANNOT VERIFY
+until the owner runs it. 5 PARTIALLY PROVEN (host, tiny random model; never run on the phone; abliterated
+build's reasoning unmeasured).
+
 ## 2026-10-07 (session 01K5Mi) — Feature-check fixes, one-tap updates, speed boost
 - Merged (agents): DOWNLOADS + "Download all missing"; ambient hold cap/thermal drops fix, librarian
   when/todo normaliser, model-aware verdict, thermal 0.75/0.87/0.95; default thinker Qwen3-4B-Thinking-2507

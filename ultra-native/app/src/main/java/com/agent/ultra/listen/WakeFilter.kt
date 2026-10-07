@@ -34,15 +34,21 @@ class WakeFilter(private val cfg: AmbientConfig) {
     }
 
     companion object {
-        /** Words that may precede the name in a wake phrase ("hey jarvis", "ok jarvis"). */
-        val WAKE_PREFIXES = setOf("hey", "ok", "okay")
+        /** Words that may precede the name in a wake phrase ("hey jarvis", "ok jarvis", "hi jarvis";
+         *  "hay" is whisper's spelling of a drawn-out "hey"). */
+        val WAKE_PREFIXES = setOf("hey", "ok", "okay", "hi", "hay")
+
+        /** Whisper's mishearings of "hey" before the name, seen on the phone: the Feature check's
+         *  spoken "Hey Jarvis, what time is it?" came back as "I hate Jarvis. What time is it?"
+         *  (ambient's own decode) and "I hate Joris." (2026-10-06 results file). Regex pieces. */
+        private val MISHEARD_PREFIXES = listOf("i\\W+hate")
 
         /** Fillers whisper now keeps (WhisperNative.verbatimPrompt): "Um, hey Jarvis" still wakes,
          *  and "Hey Jarvis, um." is a bare wake (not the command "um."). */
         private const val FILLERS = "um+|uh+|uhm+|erm+|er|hmm+|mm+"
 
         private fun wakeHead(names: List<String>): Regex {
-            val prefixes = WAKE_PREFIXES.joinToString("|")
+            val prefixes = (WAKE_PREFIXES + MISHEARD_PREFIXES).joinToString("|")
             return Regex(
                 "^\\W*(?:(?:$FILLERS)\\W+)*(?:(?:$prefixes)\\W+)?(?:" + names.joinToString("|") { Regex.escape(it) } +
                     ")(?![\\p{L}\\p{N}])[\\s,.:;!?-]*" +
@@ -53,7 +59,8 @@ class WakeFilter(private val cfg: AmbientConfig) {
 
         /**
          * Text-match wake: the utterance must START with the name, optionally after
-         * "hey" / "ok" / "okay" ("Hey Jarvis, ...", "Jarvis, ..."). A name later in a
+         * "hey" / "ok" / "okay" / "hi" (or a known mishearing of "hey", [MISHEARD_PREFIXES])
+         * ("Hey Jarvis, ...", "Jarvis, ..."). A name later in a
          * sentence ("I asked Jarvis yesterday") is just conversation. Returns the
          * command after the wake phrase ("" for a bare wake phrase), or null when not
          * addressed.
