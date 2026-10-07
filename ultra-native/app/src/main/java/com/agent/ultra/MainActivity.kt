@@ -57,10 +57,6 @@ class MainActivity : ComponentActivity() {
         }
         // Ambient listening the user left on but that isn't running (Android 15+ refuses to start
         // it at boot; a mic permission granted later): start it now, from the foreground.
-        if (com.agent.ultra.listen.AmbientConfig(this).enabled &&
-            com.agent.ultra.listen.AmbientListenService.instance == null
-        ) {
-            com.agent.ultra.listen.AmbientListenService.start(this)
-        }
+        com.agent.ultra.listen.AmbientListenService.resumeIfOff(this)
     }
 }

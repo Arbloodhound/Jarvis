@@ -78,6 +78,9 @@ class TestKitActivity : ComponentActivity() {
         // The benchmark and the brain test need this screen in front the whole time (a
         // background app is held to the small cores); keep it from sleeping.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // As opening Jarvis does: listening left on but stopped by a restart or an update (the
+        // Feature check otherwise finds "running=no", Pixel 2026-10-06 20:44).
+        com.agent.ultra.listen.AmbientListenService.resumeIfOff(this)
         setContent {
             AgentUltraTheme {
                 Surface(Modifier.fillMaxSize()) {

@@ -3,6 +3,24 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — 21:02 results: still an old build; listening after restart/update; "Hey Joris"
+`Jarvis-results-20261006-2102.txt`: new runs (pid 1922 = phone just restarted) but still an OLD build ("THINKER
+... threads=6" without "pool=", no own-voice probe, no app version). Feature check PASS 16 / WARN 2 / FAIL 2.
+Thinker 10.2–11.6 tok/s at 6 threads on a cool phone (headroom 0.38) — so 6 threads is not always slow; in every
+same-run sweep 4 was ≥ 6 (11:10 run 11.50 vs 11.08; 17:37 run 8.96 vs 4.79), so 4 stays.
+1. **Ambient FAIL "on=yes running=no"** after the restart: Android 15+ refuses a mic FGS from BOOT_COMPLETED
+   (BootReceiver already skipped it) and the Feature check runs in Jarvis Tests, which never started the service.
+   Now: `AmbientListenService.resumeIfOff` from MainActivity and Jarvis Tests; BootReceiver also handles
+   MY_PACKAGE_REPLACED; on Android 15+ boot and after an update it posts `ResumeNotice` ("Jarvis isn't listening —
+   tap to turn it back on"), cleared when the service starts. No FGS start is attempted from the update broadcast
+   (mic while-in-use from background: unverified).
+2. **Wake text**: whisper wrote the name as "Joris" again, even with the name prompt ("Hey, Joris, what time is
+   it?"). `WakeFilter.soundsLikeName` (same first letter, ≥4 letters, length ±2, ≤2 edits) accepts a misspelt name
+   ONLY right after a wake word; a bare "Joris, …" and Hey James/Travis/Doris/Jack stay conversation.
+3. Pattern notes: same rejected observation (fixed in 229dfb0; this build didn't have it).
+Status: 1, 2 SOURCE-FIXED BUT RUNTIME-UNPROVEN. Owner's update path (Obtainium) did not deliver 2.6.10/2.6.12:
+CANNOT VERIFY why from the file.
+
 ## 2026-10-07 (session 01BUKa) — results file names its build; whisper on idle big cores
 - The 19:41 file (sent as "what my update gave me") is the 19:36 file plus 8 log lines: "Save results" re-sends
   every earlier run (the results file accumulates), so nothing new was tested. Each section header and the file

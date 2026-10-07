@@ -45,6 +45,8 @@ This token can only **read** the Jarvis repo. It cannot change anything, and it 
 
 **After that:** Obtainium notifies you → tap **Update**. Your models and settings stay, because every build is signed with the same key. Each build has a higher version number (2.6.&lt;build number&gt;), so Android always accepts it as an update.
 
+**Check it really installed:** Android shows its own "Update this app?" box after you tap Update in Obtainium. Tap **Update** there too, then wait for "App installed". Then open **Jarvis Tests** → **1 · Hardware check**: the first line says **App: 2.6.&lt;number&gt;**. If there's no "App:" line, the new build isn't installed. Pull down in Obtainium to refresh and try again.
+
 The 14-day build links (Part 1) still work too, if you ever need them.
 
 ---

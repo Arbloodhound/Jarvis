@@ -5,17 +5,20 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * Restart ambient listening after reboot — only if the user had it on.
- * Android 15+ refuses a microphone foreground service started from BOOT_COMPLETED,
- * so there it waits for the app to be opened (MainActivity starts it then).
+ * Brings ambient listening back after a reboot or an app update — only if the user had it on.
+ * Android 15+ refuses a microphone foreground service started from BOOT_COMPLETED, and an update
+ * stops the service, so there it posts [ResumeNotice] instead: one tap opens the app, which
+ * starts it from the foreground (MainActivity / Jarvis Tests).
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED &&
-            AmbientConfig(context).enabled &&
-            android.os.Build.VERSION.SDK_INT < 35
-        ) {
+        val action = intent.action
+        if (action != Intent.ACTION_BOOT_COMPLETED && action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        if (!AmbientConfig(context).enabled || AmbientListenService.instance != null) return
+        if (action == Intent.ACTION_BOOT_COMPLETED && android.os.Build.VERSION.SDK_INT < 35) {
             AmbientListenService.start(context)
+        } else {
+            ResumeNotice.show(context, action)
         }
     }
 }

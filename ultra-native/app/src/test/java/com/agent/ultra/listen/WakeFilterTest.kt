@@ -1,6 +1,8 @@
 package com.agent.ultra.listen
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WakeFilterTest {
@@ -60,5 +62,22 @@ class WakeFilterTest {
         // only right before the name: hating something else is conversation
         assertEquals(null, cmd("I hate Mondays, Jarvis"))
         assertEquals(null, cmd("I really hate Jarvis"))
+    }
+
+    /** "Hey, Joris, what time is it?" — the Pixel's decode of "Hey Jarvis" (2026-10-06, four times). */
+    @Test fun aMisspeltNameAfterHeyStillWakes() {
+        assertEquals("what time is it?", cmd("Hey, Joris, what time is it?"))
+        assertEquals("", cmd("Hey Jervis."))
+        assertEquals("what time is it?", strip("Hey, Joris, what time is it?"))
+        // without a wake word before it, a near-name is not a wake
+        assertEquals(null, cmd("Joris, what time is it?"))
+        // other names stay conversation
+        for (s in listOf("Hey James, what time is it?", "Hey Travis, come here", "Hey Doris!", "Hey Jack, look"))
+            assertEquals(s, null, cmd(s))
+    }
+
+    @Test fun soundsLikeName() {
+        for (w in listOf("Joris", "Jervis", "Javis", "Jarvus", "jarviss")) assertTrue(w, WakeFilter.soundsLikeName(w, "Jarvis"))
+        for (w in listOf("James", "Jason", "Travis", "Doris", "Jo", "Jack")) assertFalse(w, WakeFilter.soundsLikeName(w, "Jarvis"))
     }
 }

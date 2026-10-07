@@ -69,8 +69,55 @@ class WakeFilter(private val cfg: AmbientConfig) {
             val n = name.trim()
             if (n.isEmpty()) return null
             val t = text.trim()
-            val m = wakeHead(listOf(n)).find(t) ?: return null
-            return t.substring(m.range.last + 1).trim()
+            val end = (wakeHead(listOf(n)).find(t)?.range?.last ?: nearHeadEnd(t, listOf(n))) ?: return null
+            return t.substring(end + 1).trim()
+        }
+
+        /** Any wake word, then any word, then the usual separators and fillers; group 1 = the word. */
+        private val NEAR_HEAD: Regex by lazy {
+            val prefixes = (WAKE_PREFIXES + MISHEARD_PREFIXES).joinToString("|")
+            Regex(
+                "^\\W*(?:(?:$FILLERS)\\W+)*(?:$prefixes)\\W+([\\p{L}']+)(?![\\p{L}\\p{N}])[\\s,.:;!?-]*" +
+                    "(?:(?:$FILLERS)(?![\\p{L}\\p{N}])[\\s,.:;!?-]*)*",
+                RegexOption.IGNORE_CASE,
+            )
+        }
+
+        /**
+         * Last index of a wake head whose name whisper misspelt, or null: only right after a wake
+         * word ("Hey Joris, what time is it?" — four of the Pixel's decodes of Jarvis's own
+         * "Hey Jarvis", 2026-10-06, even with the name in whisper's prompt), and only a word that
+         * [soundsLikeName]. A bare "Joris, …" with no "hey" before it is not a wake.
+         */
+        private fun nearHeadEnd(text: String, names: List<String>): Int? {
+            val m = NEAR_HEAD.find(text) ?: return null
+            val word = m.groupValues[1]
+            return if (names.any { soundsLikeName(word, it) }) m.range.last else null
+        }
+
+        /**
+         * Whether [word] is close enough to [name] to be whisper's misspelling of it: the same
+         * first letter, at least 4 letters, length within 2 and at most 2 letter edits
+         * (Joris / Jervis / Javis / Jarvus for Jarvis; not James, Doris or Travis). Pure.
+         */
+        fun soundsLikeName(word: String, name: String): Boolean {
+            val w = word.lowercase().filter { it.isLetter() }
+            val n = name.lowercase().filter { it.isLetter() }
+            if (w.length < 4 || n.isEmpty() || w[0] != n[0] || kotlin.math.abs(w.length - n.length) > 2) return false
+            return editDistance(w, n) <= 2
+        }
+
+        private fun editDistance(a: String, b: String): Int {
+            var prev = IntArray(b.length + 1) { it }
+            for (i in 1..a.length) {
+                val cur = IntArray(b.length + 1)
+                cur[0] = i
+                for (j in 1..b.length) {
+                    cur[j] = minOf(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + if (a[i - 1] == b[j - 1]) 0 else 1)
+                }
+                prev = cur
+            }
+            return prev[b.length]
         }
 
         /**
@@ -84,7 +131,9 @@ class WakeFilter(private val cfg: AmbientConfig) {
             val alts = names.map { it.trim() }.filter { it.isNotEmpty() }
             if (alts.isEmpty()) return t
             val prefixes = WAKE_PREFIXES.joinToString("|")
-            val rest = wakeHead(alts).replaceFirst(t, "").trim()
+            val exact = wakeHead(alts).find(t)?.range?.last
+            val rest = (if (exact != null) t.substring(exact + 1)
+                else nearHeadEnd(t, alts)?.let { t.substring(it + 1) } ?: t).trim()
             val loneGreeting = Regex("^(?:$prefixes)\\W+[\\p{L}']+\\W*$", RegexOption.IGNORE_CASE)
             return if (loneGreeting.matches(rest)) "" else rest
         }
