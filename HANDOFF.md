@@ -1,7 +1,7 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
 ## LATEST+8 (session 01BUKa, 2026-10-07 evening) — read this first
-`v2.6.26-test` (run 26) is Latest. Since v2.6.24: Real-use check (Jarvis Tests ★, one tap), screen tests (ScreensTest,
+`v2.6.27-test` (run 27) is Latest (adds Insights, literature patterns, Algospeak, tips, notes copy/share). Before: v2.6.26. Since v2.6.24: Real-use check (Jarvis Tests ★, one tap), screen tests (ScreensTest,
 Robolectric, in CI), act first, live thinking preview, Instant spoken think, transcript only when needed, chat Copy /
 Edit / Branch / select, speech in fuller pieces, Tor Browser in prompts. All SOURCE-FIXED BUT RUNTIME-UNPROVEN. Next:
 owner runs ★ Real-use check and sends the file (voice speed, first spoken word, stop time, download speed).
