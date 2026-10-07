@@ -54,4 +54,25 @@ class LocalPromptTest {
         assertEquals(0, out.count { it.fromUser && it.text == "what is a MoE" })
         assertEquals(h, LocalPrompt.withoutCurrentTurn(h, "something new"))
     }
+
+    /** Date/time and memory share one late system block; the system + history prefix is unchanged. */
+    @Test fun nowLineGoesBeforeTheUserTurn() {
+        val plain = LocalPrompt.build("s", emptyList(), "u")
+        val p = LocalPrompt.build("s", emptyList(), "u", now = "Tuesday 7 October 2026, 2:05 pm", memory = "- note: x")
+        assertTrue(p.contains("<|im_start|>system\nNow: Tuesday 7 October 2026, 2:05 pm\n${MemoryBrief.HEADER}\n- note: x<|im_end|>\n<|im_start|>user\nu"))
+        assertTrue(p.startsWith(plain.substringBefore("<|im_start|>user")))
+        val onlyNow = LocalPrompt.build("s", emptyList(), "u", now = "Monday")
+        assertTrue(onlyNow.contains("<|im_start|>system\nNow: Monday<|im_end|>\n<|im_start|>user"))
+    }
+
+    /** The offline brain is told what it can do, so it stops saying it has no memory or tools. */
+    @Test fun offlineRulesStateItsMemoryAndActions() {
+        val r = LocalPrompt.OFFLINE_RULES
+        assertTrue(r.contains("What I remember"))
+        assertTrue(r.contains("Never say you have no memory"))
+        assertTrue(r.contains("flashlight"))
+        assertFalse(r.contains("cannot browse or use tools"))
+        assertEquals("wednesday 7 october 2026, 5:05 am",
+            LocalPrompt.nowLine(1_791_349_500_000L, java.util.TimeZone.getTimeZone("UTC")).lowercase())
+    }
 }

@@ -338,6 +338,7 @@ class AmbientListenService : Service() {
                         windowId++
                         cmdWindowUntil = System.currentTimeMillis() + AmbientConfig.FOLLOWUP_MS
                     }
+                    woke("sound")
                     WakeChime.play()
                 }
                 seg.push(fr)
@@ -419,7 +420,7 @@ class AmbientListenService : Service() {
             is WakeFilter.Verdict.Addressed -> {
                 // Woken by the words (the acoustic gate missed, or there is none): chime now. Not
                 // for the follow-up utterance after a bare name, which has no wake phrase of its own.
-                if (WakeFilter.addressedCommand(r.text, cfg.wakeName) != null) WakeChime.play()
+                if (WakeFilter.addressedCommand(r.text, cfg.wakeName) != null) { woke("words"); WakeChime.play() }
                 if (v.command.isBlank()) return          // bare name; follow-up will carry the command
                 dispatch(buildContextualRequest(v.command, now))
             }
@@ -459,7 +460,8 @@ class AmbientListenService : Service() {
     /** The voice screen's brain answers when it is open; otherwise a brain owned by
      * this service does, so a command is never dropped because no Activity is alive. */
     private fun dispatchNow(request: String) {
-        AmbientBridge.onCommand?.let { it(request); return }
+        lastCommand = request; lastCommandAt = System.currentTimeMillis()
+        AmbientBridge.onCommand?.let { it(request); lastCommandDoneAt = System.currentTimeMillis(); return }
         // Main, as VoiceActivity's lifecycleScope runs it.
         scope.launch(Dispatchers.Main) {
             // Same rule as the voice screen: never act for whoever is talking to a locked
@@ -475,6 +477,7 @@ class AmbientListenService : Service() {
             try { fallbackBrain().run(request) }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { android.util.Log.w("UltraAmbient", "command failed: ${e.message}") }
+            finally { lastCommandDoneAt = System.currentTimeMillis() }
         }
     }
 
@@ -555,6 +558,22 @@ class AmbientListenService : Service() {
         @Volatile var lastTranscribedAt = 0L
             private set
         val dropped = java.util.concurrent.atomic.AtomicInteger(0)
+
+        // For the Feature check's live wake test (this process only; 0 = not yet): when Jarvis
+        // last woke and how ("sound" = the acoustic gate, "words" = the transcript), and the
+        // last command it passed to the brain, with when that run finished.
+        @Volatile var lastWakeAt = 0L
+            private set
+        @Volatile var lastWakeBy = ""
+            private set
+        @Volatile var lastCommandAt = 0L
+            private set
+        @Volatile var lastCommand = ""
+            private set
+        @Volatile var lastCommandDoneAt = 0L
+            private set
+
+        private fun woke(by: String) { lastWakeBy = by; lastWakeAt = System.currentTimeMillis() }
 
         /** Starts listening if it can. A service started with startForegroundService must call
          * startForeground, and without the mic permission it can't (microphone type): Android

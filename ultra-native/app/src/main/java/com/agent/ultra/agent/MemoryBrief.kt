@@ -28,12 +28,47 @@ object MemoryBrief {
     /** (query, nowMs) -> brief text; set by the memory search (MemoryRecall). Null: no brief. */
     @Volatile var provider: (suspend (query: String, nowMs: Long) -> String?)? = null
 
+    /** (nowMs) -> the newest notes and heard lines, for "what do you remember?" ([Decision.overview]):
+     *  a search on those words finds nothing useful. Set beside [provider]. */
+    @Volatile var overviewProvider: (suspend (nowMs: Long) -> String?)? = null
+
+    /** The brief when memory was searched and nothing came back: the model is told so, rather
+     *  than getting no block and answering that it has no memory. */
+    const val NOTHING_FOUND = "Nothing on this was found in what I heard or in my notes."
+
     const val HEADER = "What I remember (from listening and notes) — may be incomplete:"
     const val MAX_CHARS = 600
     /** A search that takes longer than this is skipped; the answer goes ahead without it. */
     const val TIMEOUT_MS = 4000L
 
-    data class Decision(val search: Boolean, val reason: String)
+    /** [overview]: the request asks what Jarvis remembers in general ("what do you remember?",
+     *  "what notes do you have?"): answer it from the newest memory, not a search. */
+    data class Decision(val search: Boolean, val reason: String, val overview: Boolean = false)
+
+    /**
+     * Questions about Jarvis's memory itself, matched whole (lowercased, punctuation and a
+     * leading "hey jarvis" / "jarvis" removed). None of them matched any rule below, so the
+     * brain got no memory and said it had none (owner, 2026-10-07).
+     */
+    private val OVERVIEW = listOf(
+        "(what|anything) (do|can|did) you (remember|recall)( (about me|about us|from today|from (this|last) week|recently|lately|so far))?",
+        "what do you know about (me|us|my life)",
+        "what (have|did) you (hear|heard|overhear|overheard|notice|noticed|learn|learned|learnt|pick up|picked up)" +
+            "( (today|recently|lately|so far|about me|this week))?",
+        "(what s|what is|whats) in your (memory|memories|notes)",
+        "(read me|show me|tell me|what are|list) (your|my|the) (notes|memories)",
+        "do you have (a |any )?(memory|memories|notes)( (of|about) (me|us))?",
+        "(can|do) you remember (things|stuff|anything|me|what i said|what we talked about)",
+    ).map { Regex(it) }
+
+    private val leadIn = Regex("^(?:(?:hey|ok|okay|hi) )?(?:jarvis )?")
+
+    /** True for a question about Jarvis's memory as a whole ([OVERVIEW]). Pure. */
+    fun isOverview(request: String): Boolean {
+        val t = HistoryPolicy.instructionPart(request).lowercase().replace(Regex("[^a-z0-9 ]+"), " ")
+            .replace(Regex("\\s+"), " ").trim().replace(leadIn, "").trim()
+        return OVERVIEW.any { it.matches(t) }
+    }
 
     private val searchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -78,6 +113,7 @@ object MemoryBrief {
         // The first word is capitalised by the keyboard, not because it is a name.
         val afterFirst = t.substringAfter(' ', "")
         return when {
+            isOverview(t) -> Decision(true, "asks what Jarvis remembers", overview = true)
             whoSaid.containsMatchIn(t) || remindMeBare.containsMatchIn(t) -> Decision(true, "asks what was said or noted")
             pastTime.containsMatchIn(t) -> Decision(true, "past time")
             nameNearSpeech.containsMatchIn(afterFirst) -> Decision(true, "a person's name")
@@ -119,9 +155,19 @@ object MemoryBrief {
      */
     suspend fun recall(query: String, nowMs: Long = System.currentTimeMillis(), timeoutMs: Long = TIMEOUT_MS): String? {
         val p = provider ?: return null
+        return bounded(timeoutMs) { p(query, nowMs) }
+    }
+
+    /** The newest memory ([overviewProvider]), bounded like [recall]. */
+    suspend fun recallOverview(nowMs: Long = System.currentTimeMillis(), timeoutMs: Long = TIMEOUT_MS): String? {
+        val p = overviewProvider ?: return null
+        return bounded(timeoutMs) { p(nowMs) }
+    }
+
+    private suspend fun bounded(timeoutMs: Long, search: suspend () -> String?): String? {
         // Detached, so a provider that blocks without checking cancellation cannot hold the
         // answer past the timeout; it finishes (and is dropped) in the background.
-        val job = searchScope.async { p(query, nowMs) }
+        val job = searchScope.async { search() }
         val text = try {
             withTimeoutOrNull(timeoutMs) { job.await() }
         } catch (e: CancellationException) {

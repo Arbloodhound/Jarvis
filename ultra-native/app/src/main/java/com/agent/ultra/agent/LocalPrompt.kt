@@ -4,14 +4,21 @@ package com.agent.ultra.agent
  * Prompt for the on-device Qwen3 Thinking model (ChatML). Pure Kotlin, JVM-tested.
  *
  * The cloud brain gets the full system prompt + tool loop. Offline, the big local
- * model answers directly, so it gets the reasoning rules that matter without
- * tools (grounding, novelty, verification, provenance; system-prompt rules 13-16),
- * and nothing that names tools it can't call.
+ * model answers directly: it gets the reasoning rules (grounding, novelty, verification,
+ * provenance; system-prompt rules 13-16) and a true account of what Jarvis can do around it
+ * (memory arrives as a "What I remember" block; phone actions are run by the app's own tool
+ * step, not from this reply). It used to be told only "you cannot use tools", so asked about
+ * its memory or notes it said it had none (owner, 2026-10-07).
  */
 object LocalPrompt {
 
     val OFFLINE_RULES = """
-You are Jarvis, a private assistant running entirely on this phone, offline. You cannot browse or use tools in this mode.
+You are Jarvis, a private assistant running entirely on this phone, offline. What you can do (all true; never deny it):
+- When ambient listening is on, you listen in the background and remember what is said near the phone. While the phone charges, a smaller memory model sorts that into notes (people, plans, to-dos).
+- When a question is about the past or about what you remember, the app searches that memory and gives you what it found in a "What I remember" block. Use it, with its times. If the block says nothing was found, say you have nothing on that in your memory. Never say you have no memory.
+- The app carries out phone actions when the user asks in plain words: flashlight, Wi-Fi, Bluetooth, Do Not Disturb, volume, alarms, notes, opening apps, battery level, clipboard, and simple steps inside apps. You can't run them from this reply: if the user wants one, tell them to just ask for it, e.g. "turn on the flashlight".
+- The current date and time are in the "Now" line. You cannot browse the web in this mode.
+How to answer:
 - Reason from your own knowledge and answer. Never stall or apologize for lacking the web.
 - If the user describes their own work or a new idea, reason it through from first principles. Not knowing about it is not evidence they are wrong.
 - For non-trivial factual or technical claims, check the premises that would have to be true, then give the conclusion and how confident you are. Keep that concise.
@@ -25,11 +32,14 @@ You are Jarvis, a private assistant running entirely on this phone, offline. You
      * ChatML prompt ending in an opened <think> block, exactly like the model's own
      * template with add_generation_prompt=true. Pass startsInThink=true to ThinkBudget.
      * History turns are stripped of reasoning; oldest are dropped past [historyChars].
-     * A non-blank [memory] ([MemoryBrief]) goes in its own labelled system block after the
-     * history and before the user turn, so the system + history prefix stays the same
-     * whether or not this turn has a brief.
+     * A non-blank [memory] ([MemoryBrief]) and [now] (the date and time, "Now: …") go in one
+     * late system block after the history and before the user turn, so the system + history
+     * prefix stays the same (and reusable in the KV cache) whatever the time or the brief.
      */
-    fun build(system: String, history: List<Turn>, user: String, historyChars: Int = 3000, memory: String? = null): String {
+    fun build(
+        system: String, history: List<Turn>, user: String, historyChars: Int = 3000, memory: String? = null,
+        now: String? = null,
+    ): String {
         val kept = ArrayDeque<Turn>(); var used = 0
         for (t in history.asReversed()) {
             val text = if (t.fromUser) t.text.trim() else ThinkBudget.stripForHistory(t.text)
@@ -43,14 +53,21 @@ You are Jarvis, a private assistant running entirely on this phone, offline. You
                 append("<|im_start|>").append(if (t.fromUser) "user" else "assistant").append('\n')
                 append(t.text).append("<|im_end|>\n")
             }
-            if (!memory.isNullOrBlank()) {
-                append("<|im_start|>system\n").append(MemoryBrief.HEADER).append('\n')
-                append(MemoryBrief.cap(memory)).append("<|im_end|>\n")
+            if (!memory.isNullOrBlank() || !now.isNullOrBlank()) {
+                append("<|im_start|>system\n")
+                if (!now.isNullOrBlank()) append("Now: ").append(now.trim()).append('\n')
+                if (!memory.isNullOrBlank()) append(MemoryBrief.HEADER).append('\n').append(MemoryBrief.cap(memory)).append('\n')
+                setLength(length - 1)
+                append("<|im_end|>\n")
             }
             append("<|im_start|>user\n").append(user.trim()).append("<|im_end|>\n")
             append("<|im_start|>assistant\n<think>\n")
         }
     }
+
+    /** The "Now" line's text: "Tuesday 7 October 2026, 2:05 PM". */
+    fun nowLine(ms: Long = System.currentTimeMillis(), zone: java.util.TimeZone = java.util.TimeZone.getDefault()): String =
+        java.text.SimpleDateFormat("EEEE d MMMM yyyy, h:mm a", java.util.Locale.UK).apply { timeZone = zone }.format(java.util.Date(ms))
 
     /** Qwen3's soft switch: in the user turn it asks for an answer without reasoning. */
     const val NO_THINK = "/no_think"

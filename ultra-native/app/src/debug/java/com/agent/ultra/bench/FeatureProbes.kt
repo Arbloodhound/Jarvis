@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.util.Locale
 import java.time.ZoneId
 
 /**
@@ -438,7 +439,7 @@ object FeatureProbes {
             FeatureGrade.byScore(top3, n),
             if (emb == null) Verdict.WARN else if (cosOk) Verdict.PASS else Verdict.FAIL,
         )
-        val search = Result("Memory search", searchVerdict,
+        val search = Result("Memory search (test data)", searchVerdict,
             "top-1 $top1/$n, top-3 $top3/$n, $cosNumbers, ${avgMs} ms/query, embedder ${if (emb != null) "on" else "OFF"}",
             when {
                 emb == null && !downloaded -> "meaning search model ${DownloadPlan.MISSING_HINT}; words and day only"
@@ -598,55 +599,156 @@ object FeatureProbes {
     }
 
     /**
-     * The wake phrase in the owner's own voice: the probe above can only use Jarvis's synthetic
-     * voice, which the "Hey Jarvis" model and whisper may hear differently from a person. Records
-     * [OWN_WAKE_MS] from the mic (ambient muted meanwhile, as voice enrolment does), then runs the
-     * same acoustic gate and ambient's own whisper decode and text match on it.
+     * The real thing, end to end: the owner says "Hey Jarvis, what time is it?" to the phone while
+     * ambient listening runs, and nothing here touches the audio. Passes when the running service
+     * woke (beep), passed the command to the brain, and the spoken answer has the right time.
+     * Read from the service's own markers ([AmbientListenService.lastWakeAt] …) and the chat.
      */
-    suspend fun wakeOwnVoice(env: ProbeEnv): List<Result> {
+    suspend fun liveWake(env: ProbeEnv): List<Result> {
         val ctx = env.ctx
-        val feature = "Wake phrase (your voice)"
-        if (!WhisperNative.available || !LocalWhisper.modelPresent(ctx))
-            return listOf(Result(feature, Verdict.MISSING, "speech model missing", speechFix()))
-        if (ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
-            return listOf(Result(feature, Verdict.WARN, "microphone not allowed", "allow the microphone for Jarvis (Settings → VOICE → Ambient listening)"))
-        if (!env.confirm("Your voice: tap Yes, then straight away say \"$WAKE_SENTENCE\" in your normal voice, " +
-                "about an arm's length from the phone. It records ${OWN_WAKE_MS / 1000} seconds. Tap No to skip."))
+        val feature = "Live wake: \"Hey Jarvis\" (real listening)"
+        if (!AmbientConfig(ctx).enabled)
+            return listOf(Result(feature, Verdict.FAIL, "ambient listening is off", "turn it on: Settings → VOICE → Ambient listening"))
+        AmbientListenService.resumeIfOff(ctx)
+        val up = withTimeoutOrNull(8_000) { while (!(AmbientListenService.instance?.capturing ?: false)) delay(250); true } ?: false
+        if (!up) return listOf(Result(feature, Verdict.FAIL, "listening service not running", "the phone isn't listening, so it can't hear its name"))
+        if (!env.confirm("Real listening test: tap Yes, then say \"$WAKE_SENTENCE\" to the phone in your normal voice. " +
+                "Jarvis should beep, then answer out loud. Tap No to skip."))
             return listOf(Result(feature, Verdict.WARN, "skipped (you tapped No)", "not tested"))
-        env.status("Recording: say \"$WAKE_SENTENCE\" now")
-        val (clip, viaAmbient) = com.agent.ultra.listen.VoicePrints.recordMuted(OWN_WAKE_MS)
-        if (clip == null) return listOf(Result(feature, Verdict.FAIL, "the microphone gave no audio", "couldn't record"))
-        env.status("Wake phrase (your voice): checking the recording")
-        val db = CueAudio.frameDb(clip)
-        val loudest = db.maxOrNull() ?: -120f
-        // The gate needs ~2 s of audio before a phrase to fill its window: silence in front, as
-        // the synthetic test pads it (ambient's gate has been running long before anyone speaks).
-        val (acoustic, maxScore, placement) = gateOn(ctx, ShortArray(AmbientConfig.SAMPLE_RATE * 2) + clip)
-        val name = AmbientConfig(ctx).wakeName
-        val heard = ambientWhisper(ctx) { h -> ambientTranscribe(h, clip, WhisperNative.verbatimPrompt(name), true) }
-        val command = heard?.let { WakeFilter.addressedCommand(it.text, name) }
-        val textWake = command != null
+        val t0 = System.currentTimeMillis()
+        env.status("Live wake: say \"$WAKE_SENTENCE\" now")
+        val woke = withTimeoutOrNull(25_000) { while (AmbientListenService.lastWakeAt < t0) delay(200); true } ?: false
+        val commanded = woke && (withTimeoutOrNull(45_000) { while (AmbientListenService.lastCommandAt < t0) delay(250); true } ?: false)
+        if (commanded) env.status("Live wake: Jarvis is answering")
+        val done = commanded && (withTimeoutOrNull(ASK_TIMEOUT_MS) {
+            while (AmbientListenService.lastCommandDoneAt < AmbientListenService.lastCommandAt) delay(500); true } ?: false)
+        val command = if (commanded) com.agent.ultra.agent.IntentRouter.requestPart(AmbientListenService.lastCommand) else ""
+        val answer = if (done) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            com.agent.ultra.ui.ChatStore.messages.lastOrNull { !it.fromUser && it.timestamp >= t0 }?.text
+        }.orEmpty() else ""
+        val timeRight = answer.isNotBlank() && FeatureGrade.saysTime(answer, System.currentTimeMillis(), java.util.TimeZone.getDefault())
         val v = when {
-            acoustic == true && textWake -> Verdict.PASS
-            acoustic == true || textWake -> Verdict.WARN
+            !woke -> Verdict.FAIL
+            commanded && timeRight -> Verdict.PASS
+            else -> Verdict.WARN
+        }
+        return listOf(Result(feature, v,
+            "woke ${if (woke) "yes (by ${AmbientListenService.lastWakeBy}, ${secs(AmbientListenService.lastWakeAt - t0)})" else "NO"}" +
+                ", command ${if (commanded) "\"${oneLine(command, 50)}\"" else "none"}, answer has the time ${yn(timeRight)}",
+            when {
+                !woke -> "the running service didn't wake to your \"Hey Jarvis\""
+                !commanded -> "it woke but no command reached the brain"
+                !done -> "the command reached the brain but no answer came in time"
+                !timeRight -> "it woke and answered, but the answer didn't give the right time"
+                else -> "heard its name, beeped, and answered with the right time"
+            },
+            listOf("asked to say: $WAKE_SENTENCE", "command passed to the brain: ${command.ifBlank { "-" }}",
+                "answer: ${oneLine(FeatureGrade.visible(answer).ifBlank { "-" }, 200)}",
+                "now: ${LocalPrompt.nowLine()}")))
+    }
+
+    // ── Real memory through the real chat (the owner's own stored speech and notes, read only) ──
+
+    /** The memory model's notes, newest first (the owner's real ones; read only). */
+    private object MemoryNotesAccess {
+        suspend fun newest(ctx: Context, n: Int): List<String> = newestWithTime(ctx, n).map { it.first }
+        suspend fun newestWithTime(ctx: Context, n: Int): List<Pair<String, Long>> =
+            com.agent.ultra.listen.MemoryNotes.get(ctx).search("", n).map { it.text to it.ts }
+    }
+
+    private fun memoryDenied(feature: String, answer: String, detail: List<String>) = Result(feature, Verdict.FAIL,
+        "the brain said it has no memory", "it doesn't know it remembers (system prompt or memory block missing)",
+        detail + "answer: ${oneLine(FeatureGrade.visible(answer), 200)}")
+
+    /** "What do you remember?" asked in the real chat: it must not deny having memory, and should
+     *  bring back something from the newest real notes or heard lines. */
+    suspend fun memoryOverviewReal(env: ProbeEnv): List<Result> {
+        val feature = "Memory in chat: \"what do you remember?\""
+        if (!thinker(env).modelPresent) return listOf(missingThinker(feature))
+        val ctx = env.ctx
+        val notes = MemoryNotesAccess.newest(ctx, 6)
+        val heard = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { AmbientMemory.get(ctx).newest(6) }.map { it.text }
+        val expect = (notes + heard).mapNotNull { FeatureCases.recallTarget(it) }.flatMap { listOf(it.ask) + it.expect }.distinct()
+        env.newChat()
+        env.status("Memory in chat: asking what it remembers")
+        val q = "What do you remember?"
+        val a = withTimeoutOrNull(ASK_TIMEOUT_MS) { env.askBrain(q) }
+        val detail = listOf("path: the real chat", "memory has ${notes.size} newest notes, ${heard.size} newest heard lines",
+            "Q: $q")
+        if (a == null) return listOf(Result(feature, Verdict.FAIL, "no answer in time", "the chat didn't answer", detail))
+        if (FeatureGrade.deniesMemory(a)) return listOf(memoryDenied(feature, a, detail))
+        val hit = FeatureGrade.mentions(a, expect)
+        val v = when {
+            expect.isEmpty() -> Verdict.WARN
+            hit.isNotEmpty() -> Verdict.PASS
+            else -> Verdict.WARN
+        }
+        return listOf(Result(feature, v,
+            if (expect.isEmpty()) "nothing stored yet to remember" else "mentions real memory: ${hit.take(3).joinToString().ifBlank { "no" }}",
+            when {
+                expect.isEmpty() -> "memory is empty: leave listening on for a while, then test again"
+                hit.isNotEmpty() -> "it knows it remembers, and tells you what from your real notes and speech"
+                else -> "it didn't deny having memory, but named nothing from it"
+            },
+            detail + "answer: ${oneLine(FeatureGrade.visible(a), 240)}"))
+    }
+
+    /** A real stored line or note, asked about by its rarest word in the real chat: the answer
+     *  should bring back another word from it. */
+    suspend fun memoryRecallReal(env: ProbeEnv): List<Result> {
+        val feature = "Memory in chat: recall a real memory"
+        if (!thinker(env).modelPresent) return listOf(missingThinker(feature))
+        val ctx = env.ctx
+        val weekAgo = System.currentTimeMillis() - 7 * 86_400_000L
+        val candidates = MemoryNotesAccess.newest(ctx, 20) + kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            AmbientMemory.get(ctx).newest(200).filter { it.ts >= weekAgo }.map { it.text }
+        }
+        val target = candidates.firstNotNullOfOrNull { FeatureCases.recallTarget(it) }
+            ?: return listOf(Result(feature, Verdict.WARN, "nothing stored yet to ask about",
+                "memory is empty: leave listening on for a while, then test again"))
+        env.newChat()
+        val q = "What do you remember about ${target.ask}?"
+        env.status("Memory in chat: \"$q\"")
+        val a = withTimeoutOrNull(ASK_TIMEOUT_MS) { env.askBrain(q) }
+        val detail = listOf("path: the real chat", "memory used: \"${oneLine(target.text, 160)}\"", "Q: $q",
+            "a right answer repeats one of: ${target.expect.joinToString()}")
+        if (a == null) return listOf(Result(feature, Verdict.FAIL, "no answer in time", "the chat didn't answer", detail))
+        if (FeatureGrade.deniesMemory(a)) return listOf(memoryDenied(feature, a, detail))
+        val hit = FeatureGrade.mentions(a, target.expect)
+        return listOf(Result(feature, if (hit.isNotEmpty()) Verdict.PASS else Verdict.FAIL,
+            "asked about \"${target.ask}\", answer repeats: ${hit.joinToString().ifBlank { "none" }}",
+            if (hit.isNotEmpty()) "it found the real memory and told you what was in it"
+            else "the memory exists but the answer didn't bring it back",
+            detail + "answer: ${oneLine(FeatureGrade.visible(a), 240)}"))
+    }
+
+    /** The memory model's work on real speech: notes made from what was actually heard. */
+    suspend fun realNotes(env: ProbeEnv): List<Result> {
+        val feature = "Notes from your real speech"
+        val ctx = env.ctx
+        val notes = MemoryNotesAccess.newestWithTime(ctx, 50)
+        val weekAgo = System.currentTimeMillis() - 7 * 86_400_000L
+        val recent = notes.filter { it.second >= weekAgo }
+        val (heardWeek, queued) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val m = AmbientMemory.get(ctx)
+            m.newest(500).count { it.ts >= weekAgo } to m.librarianQueue(500).size
+        }
+        val newest = recent.maxByOrNull { it.second }
+        val v = when {
+            recent.isNotEmpty() -> Verdict.PASS
+            heardWeek == 0 -> Verdict.WARN
             else -> Verdict.FAIL
         }
         return listOf(Result(feature, v,
-            "acoustic ${when (acoustic) { true -> "fired"; false -> "did NOT fire"; null -> "n/a (wake models missing)" }} " +
-                "(max score ${FeatureGrade.f2(maxScore.toDouble())}), text match ${if (textWake) "yes" else "NO"}, " +
-                "heard \"${oneLine(heard?.text ?: "(nothing)", 80)}\"",
-            when (v) {
-                Verdict.PASS -> "your \"Hey Jarvis\" is caught both by sound and by the words"
-                Verdict.WARN -> "your \"Hey Jarvis\" is caught one way only, so it still wakes"
-                else -> "your \"Hey Jarvis\" was not recognised"
+            "${recent.size} notes this week (newest ${newest?.let { "%.1f".format(Locale.ROOT, (System.currentTimeMillis() - it.second) / 3_600_000.0) + " h ago" } ?: "-"}), " +
+                "$heardWeek lines heard this week, $queued waiting to be sorted",
+            when {
+                recent.isNotEmpty() -> "the memory model is turning what it hears into notes"
+                heardWeek == 0 -> "nothing heard this week yet, so nothing to sort"
+                else -> "speech was heard but no notes were made: it sorts while charging and idle"
             },
-            listOf("asked to say: $WAKE_SENTENCE", "heard (ambient decode): ${heard?.text ?: "(nothing)"} " +
-                "(confidence ${FeatureGrade.f2((heard?.confidence ?: 0f).toDouble())})",
-                "command after wake: ${command ?: "-"}", "loudest frame ${FeatureGrade.f1(loudest.toDouble())} dB, " +
-                    "audio from ${if (viaAmbient) "ambient capture" else "own recorder"}, gate placement=${placement.ifBlank { "-" }}")))
+            recent.sortedByDescending { it.second }.take(5).map { "  note: ${oneLine(it.first, 140)}" }))
     }
-
-    private const val OWN_WAKE_MS = 5_000L
 
     // ── 3 + 6. Memory model (librarian) ────────────────────────────────────────────────────
 
@@ -659,7 +761,7 @@ object FeatureProbes {
 
     suspend fun librarian(env: ProbeEnv): List<Result> {
         val (lib, missing) = librarianReady(env, "Memory model (librarian)")
-        if (lib == null) return listOf(missing!!, missing.copy(feature = "Librarian notes"))
+        if (lib == null) return listOf(missing!!, missing.copy(feature = "Librarian notes (test data)"))
         val detail = mutableListOf("model=${lib.modelLabel}")
         val wasLoaded = lib.loaded
         env.status("Memory model: loading")
@@ -668,7 +770,7 @@ object FeatureProbes {
         val loadMs = ms(t0)
         if (!loaded) {
             val r = Result("Memory model (librarian)", Verdict.FAIL, "did not load", "the memory model could not load (memory full, or it gave way to the main model)")
-            return listOf(r, r.copy(feature = "Librarian notes", numbers = "not run"))
+            return listOf(r, r.copy(feature = "Librarian notes (test data)", numbers = "not run"))
         }
         env.status("Memory model: a short answer")
         val t1 = System.currentTimeMillis()
@@ -690,11 +792,11 @@ object FeatureProbes {
         val raw = lib.complete(LibrarianPrompt.build(chunk, zone, patterns), LibrarianPrompt.maxTokens(patterns))
         val notesMs = ms(t2)
         val text = raw.getOrNull()
-            ?: return listOf(model, Result("Librarian notes", Verdict.FAIL, "model failed: ${raw.exceptionOrNull()?.message}", "no notes came out"))
+            ?: return listOf(model, Result("Librarian notes (test data)", Verdict.FAIL, "model failed: ${raw.exceptionOrNull()?.message}", "no notes came out"))
         val parsed = NoteParser.parse(text, chunk)
         val found = FeatureCases.notesFound(parsed.notes)
         val hit = found.count { it.ok }
-        val notes = Result("Librarian notes", FeatureGrade.byScore(hit, found.size, pass = 1.0, warn = 0.6),
+        val notes = Result("Librarian notes (test data)", FeatureGrade.byScore(hit, found.size, pass = 1.0, warn = 0.6),
             "$hit/${found.size} expected notes, ${parsed.notes.size} written, ${parsed.rejected} rejected, ${secs(notesMs)}",
             when (hit) {
                 found.size -> "turns overheard talk into the right notes (person, plan with time, to-do)"
@@ -708,7 +810,7 @@ object FeatureProbes {
     }
 
     suspend fun patternNotes(env: ProbeEnv): List<Result> {
-        val feature = "Pattern notes"
+        val feature = "Pattern notes (test data)"
         val (lib, missing) = librarianReady(env, feature)
         if (lib == null) return listOf(missing!!)
         val zone = ZoneId.systemDefault()

@@ -279,4 +279,42 @@ object FeatureCases {
     }
 
     private fun yn(b: Boolean) = if (b) "yes" else "no"
+
+    // ── Real memory, through the real chat ─────────────────────────────────────────────────
+
+    private val COMMON = setOf(
+        "about", "after", "again", "also", "because", "been", "before", "being", "could", "didn", "doesn", "doing",
+        "don't", "from", "going", "gonna", "have", "having", "here", "into", "just", "know", "like", "make", "maybe",
+        "more", "much", "need", "only", "other", "really", "right", "said", "should", "some", "something", "still",
+        "sure", "than", "that", "that's", "their", "them", "then", "there", "these", "they", "thing", "things", "think",
+        "this", "those", "time", "today", "very", "want", "wanna", "well", "were", "what", "when", "where", "which",
+        "while", "will", "with", "would", "yeah", "your", "you're", "okay", "pause", "speaker", "fast", "slow", "loud",
+        "quiet", "unknown", "overlap", "laughs",
+    )
+
+    private val TIME_WORDS = setOf(
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "tomorrow", "yesterday", "tonight",
+        "morning", "afternoon", "evening", "january", "february", "march", "april", "june", "july", "august",
+        "september", "october", "november", "december", "week", "weekend", "month", "year",
+    )
+
+    /** A real memory to ask about: the word to ask with and the words a right answer would bring back. */
+    data class RecallTarget(val text: String, val ask: String, val expect: List<String>)
+
+    /**
+     * From a real note or heard line: its rarest-looking word (longest, not common) to ask
+     * about, and up to 4 other content words, one of which a right answer repeats. Tags
+     * ("[pause 1.7s]", "[Me]") are dropped first. Null when the line has too little content. Pure.
+     */
+    fun recallTarget(text: String): RecallTarget? {
+        val clean = text.replace(Regex("\\[[^\\]]*\\]"), " ").replace(Regex("\\s+"), " ").trim()
+        val words = clean.lowercase().split(Regex("[^\\p{L}\\p{N}']+"))
+            .map { it.trim('\'') }.filter { it.length >= 4 && it !in COMMON && it.any(Char::isLetter) }.distinct()
+        if (words.size < 3) return null
+        // Asked about by a thing, not a day or month: "about thursday" would be read as a time window.
+        val askable = words.filter { it !in TIME_WORDS }.ifEmpty { return null }
+        val ask = askable.maxWith(compareBy<String> { it.length }.thenBy { -words.indexOf(it) })
+        val expect = words.filter { it != ask }.sortedByDescending { it.length }.take(4)
+        return RecallTarget(clean, ask, expect)
+    }
 }

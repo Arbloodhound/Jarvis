@@ -109,4 +109,19 @@ class MemoryBriefTest {
         assertEquals("what did Sarah say about the lease", MemoryBrief.query("what did Sarah say about the lease", "hi"))
         assertEquals("what did he say", MemoryBrief.query("what did he say", null))
     }
+
+    /** "What do you remember?" and the like: answered from the newest memory, not a search. */
+    @Test fun questionsAboutItsMemoryGetAnOverview() {
+        for (q in listOf("What do you remember?", "Hey Jarvis, what do you know about me?", "what have you heard today",
+                "What's in your memory?", "read me your notes", "Do you have any memories of me?",
+                "Can you remember things?", "What did you hear?")) {
+            val d = MemoryBrief.wants(q)
+            assertTrue(q, d.search && d.overview)
+        }
+        // specific questions still search; general knowledge gets nothing
+        assertFalse(MemoryBrief.wants("do you remember what Sam said about Friday").overview)
+        assertTrue(MemoryBrief.wants("do you remember what Sam said about Friday").search)
+        for (q in listOf("what do you know about Python", "what is memory", "how do notes work in music"))
+            assertFalse(q, MemoryBrief.wants(q).overview)
+    }
 }

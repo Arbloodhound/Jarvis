@@ -52,7 +52,10 @@ object FeatureCheck {
         Probe("Thinker model", 6 * 60_000, FeatureProbes::thinkerSpeed),
         Probe("Thinker quality", 15 * 60_000, FeatureProbes::thinkerQuality),
         Probe("Thinker no-copying (Q8/Q11)", 10 * 60_000, FeatureProbes::thinkerRegression),
-        Probe("Wake phrase (your voice)", 3 * 60_000, FeatureProbes::wakeOwnVoice),
+        Probe("Notes from your real speech", 30_000, FeatureProbes::realNotes),
+        Probe("Memory in chat: what do you remember", 6 * 60_000, FeatureProbes::memoryOverviewReal),
+        Probe("Memory in chat: recall a real memory", 6 * 60_000, FeatureProbes::memoryRecallReal),
+        Probe("Live wake (real listening)", 8 * 60_000, FeatureProbes::liveWake),
         Probe("Offline phone control (live)", 6 * 60_000, FeatureProbes::offlineNavLive),
     )
 

@@ -38,6 +38,15 @@ class UltraApplication : Application() {
             val r = com.agent.ultra.listen.MemoryRecall
             r.brief(r.relevant(ctx, q, now)).substringAfter('\n', "").ifBlank { null }
         }
+        // "What do you remember?": the newest notes and heard lines (notes first under the char cap).
+        com.agent.ultra.agent.MemoryBrief.overviewProvider = { _ ->
+            val notes = com.agent.ultra.listen.MemoryNotes.get(ctx).search("", 6)
+                .map { com.agent.ultra.listen.RecallHit(it.ts, it.text, 1f, "note") }
+            val heard = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.agent.ultra.listen.AmbientMemory.get(ctx).newest(6)
+            }.map { com.agent.ultra.listen.RecallHit(it.ts, it.text, 0.5f, "heard") }
+            com.agent.ultra.listen.MemoryRecall.brief(notes + heard).substringAfter('\n', "").ifBlank { null }
+        }
     }
 
     companion object {

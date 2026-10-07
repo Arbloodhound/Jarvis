@@ -3,6 +3,33 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-07 (session 01BUKa) — the brain is told it has memory, notes and phone actions; real-feature checks
+Owner: "speaking to the model, it doesn't know it has memories or notes … is it in its system prompt? … the
+feature test should test the actual features, not sims." (Results file sent again = the 21:02 one, unchanged.)
+Root cause (PROVEN from source): `LocalPrompt.OFFLINE_RULES` said "You cannot browse or use tools in this mode"
+and nothing about listening, memory, notes or phone actions; memory reached the model only when `MemoryBrief.wants`
+matched (who-said / past-time / name rules) — "what do you remember?", "what do you know about me", "what notes do
+you have", "what did you hear" matched none, so the model got no block and said it had no memory; and the model was
+never given the date/time. Changes (A brain, C memory):
+- OFFLINE_RULES states what is true: background listening + memory, librarian notes while charging, memory arrives
+  in a "What I remember" block, "never say you have no memory", the app runs phone actions (it can't from this
+  reply), a "Now" line has the date/time, no web. Prose answers still can't call tools; device commands are routed
+  to `LocalToolCall` before this (unchanged).
+- `LocalPrompt.build(now=)`: "Now: Wednesday 7 October 2026, 2:05 pm" in the late system block with the memory brief
+  (after history; the KV prefix is unchanged). Brain passes `LocalPrompt.nowLine()`.
+- `MemoryBrief.isOverview` (whole-question patterns) → `Decision.overview` → `MemoryBrief.recallOverview()` = newest
+  6 notes + newest 6 heard lines (UltraApplication `overviewProvider`). A search that finds nothing now gives the
+  block `NOTHING_FOUND` instead of no block.
+- Feature check (F): new REAL probes — "Notes from your real speech" (real notes this week, queue), "Memory in chat:
+  what do you remember" and "…recall a real memory" (the owner's newest real note/line, asked in the real chat by
+  its rarest non-time word; FAIL if the answer denies memory or doesn't repeat another word from it), "Live wake
+  (real listening)" (owner speaks to the running service; PASS = woke + command reached the brain + the answer has
+  the right time; service markers lastWakeAt/lastCommandAt/lastCommandDoneAt). Replaces the recorded own-voice probe.
+  Sandbox probes renamed "… (test data)". Pure graders `FeatureGrade.deniesMemory/mentions/saysTime`,
+  `FeatureCases.recallTarget` (JVM-tested). 1181 JVM tests, 0 failures.
+Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN (nothing run on the phone; the model may still answer badly with a
+correct prompt — that is what the new real probes measure).
+
 ## 2026-10-07 (session 01BUKa) — 21:02 results: still an old build; listening after restart/update; "Hey Joris"
 `Jarvis-results-20261006-2102.txt`: new runs (pid 1922 = phone just restarted) but still an OLD build ("THINKER
 ... threads=6" without "pool=", no own-voice probe, no app version). Feature check PASS 16 / WARN 2 / FAIL 2.

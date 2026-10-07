@@ -162,6 +162,56 @@ object FeatureGrade {
         // ── Ranking ────────────────────────────────────────────────────────────────────────────
 
     /** 1-based rank of the first hit containing [expected] (case-insensitive), or null. */
+    /** The brain says it has no memory, can't remember or can't keep notes: what it said before it
+     *  was told about its memory (owner, 2026-10-07). */
+    private val DENIES_MEMORY = Regex(
+        "\\bi(?:'m| am)?\\s+(?:do not|don't|cannot|can't|not able to|unable to|have no way to)\\s+" +
+            "(have|access|store|keep|retain|remember|recall|save|hold)\\b[^.]{0,40}\\b(memor|notes?|past conversations?|previous conversations?|personal)" +
+            "|\\bi (have|'ve got) no (memory|memories|notes|access to (your|any) (past|previous|personal))" +
+            "|\\b(no|without) (persistent |long-term )?memory\\b",
+        RegexOption.IGNORE_CASE,
+    )
+
+    fun deniesMemory(answer: String): Boolean = DENIES_MEMORY.containsMatchIn(visible(answer).replace('’', '\''))
+
+    /** Which of [words] the answer contains (whole words, case and punctuation aside). */
+    fun mentions(answer: String, words: Collection<String>): List<String> {
+        val have = words(visible(answer)).toSet()
+        return words.filter { w -> words(w).firstOrNull()?.let { it in have } == true }
+    }
+
+    /**
+     * Whether [answer] states the time [nowMs] (in [zone]) to within [slackMin] minutes: "2:05",
+     * "14:05", "2 pm", "five past two" not attempted (numbers only). Pure.
+     */
+    fun saysTime(answer: String, nowMs: Long, zone: java.util.TimeZone, slackMin: Int = 10): Boolean {
+        val cal = java.util.Calendar.getInstance(zone).apply { timeInMillis = nowMs }
+        val nowMin = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+        val t = visible(answer).lowercase()
+        fun near(h24: Int, m: Int): Boolean {
+            val d = kotlin.math.abs(h24 * 60 + m - nowMin)
+            return minOf(d, 1440 - d) <= slackMin
+        }
+        for (mm in Regex("\\b(\\d{1,2})[:.](\\d{2})\\s*(a\\.?m\\.?|p\\.?m\\.?)?").findAll(t)) {
+            val h = mm.groupValues[1].toInt(); val m = mm.groupValues[2].toInt()
+            if (h > 23 || m > 59) continue
+            val ap = mm.groupValues[3]
+            val cands = when {
+                ap.startsWith("a") -> listOf(h % 12)
+                ap.startsWith("p") -> listOf(h % 12 + 12)
+                h in 1..12 -> listOf(h % 12, h % 12 + 12)
+                else -> listOf(h)
+            }
+            if (cands.any { near(it, m) }) return true
+        }
+        for (mm in Regex("\\b(\\d{1,2})\\s*(a\\.?m\\.?|p\\.?m\\.?)").findAll(t)) {
+            val h = mm.groupValues[1].toInt(); if (h !in 1..12) continue
+            val h24 = if (mm.groupValues[2].startsWith("a")) h % 12 else h % 12 + 12
+            if (near(h24, 0) || kotlin.math.abs(h24 * 60 - nowMin) <= 60) return true
+        }
+        return false
+    }
+
     fun rankOf(hits: List<String>, expected: String): Int? =
         hits.indexOfFirst { it.contains(expected, ignoreCase = true) }.takeIf { it >= 0 }?.plus(1)
 }

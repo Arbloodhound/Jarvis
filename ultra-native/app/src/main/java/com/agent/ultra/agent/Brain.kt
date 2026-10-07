@@ -617,14 +617,17 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                     // The search can take up to MemoryBrief.TIMEOUT_MS: show it, not an empty bubble.
                     val searching = ChatStore.setStatus(ChatStatus.Phase.THINKING)
                     try {
-                        MemoryBrief.recall(MemoryBrief.query(userInput, past.lastOrNull { it.fromUser }?.text))
+                        (if (wantsMemory.overview) MemoryBrief.recallOverview()
+                            else MemoryBrief.recall(MemoryBrief.query(userInput, past.lastOrNull { it.fromUser }?.text)))
+                            ?: MemoryBrief.NOTHING_FOUND   // searched, found nothing: say so, not "no memory"
                     } finally {
                         ChatStore.clearStatus(searching)
                     }
                 }
                 android.util.Log.d("UltraRoute", "memory reason=${wantsMemory.reason} provider=${MemoryBrief.provider != null} " +
                     "briefChars=${memory?.length ?: 0}")
-                val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput, historyChars, memory)
+                val prompt = LocalPrompt.build(LocalPrompt.OFFLINE_RULES, history, userInput, historyChars, memory,
+                    now = LocalPrompt.nowLine())
                 val reserve = LocalPrompt.answerReserve(level)
                 val speed = local.decodeTokPerSec
                 val depth = com.agent.ultra.ui.UltraPrefs.thinkingDepth(appContext)

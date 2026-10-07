@@ -95,7 +95,7 @@ Stay on Wi‑Fi and keep the phone plugged in for this part.
 | **5 · Feature check** | 20–40 min | every feature: PASS / WARN / FAIL / MISSING, with a score |
 
 4. During **5 · Feature check**:
-   - Near the end it asks you to say the wake phrase. Tap **Yes**, then straight away say **"Hey Jarvis, what time is it?"** in your normal voice, about an arm's length from the phone. It records 5 seconds. This tests your real voice; the earlier wake test can only use Jarvis's own voice.
+   - Near the end it asks you to say the wake phrase. Tap **Yes**, then say **"Hey Jarvis, what time is it?"** to the phone in your normal voice. This is the real thing: Jarvis's own listening should beep and then answer out loud with the time. Wait for the answer.
    - When it asks about the flashlight, tap **Yes, go ahead**. It turns the light on and off by itself to test phone control.
    - If one part looks stuck for more than about 5 minutes, tap **Skip this part**. Don't tap Stop unless you want to end the whole run.
 5. When it finishes, tap **4 · Save results to Downloads + share**.
@@ -104,6 +104,10 @@ Stay on Wi‑Fi and keep the phone plugged in for this part.
 ✅ Done when you've sent me the results file.
 
 ### What the Feature check covers
+Parts marked **(test data)** check one piece with fixed sample input. The rest use the real thing: your real memory and notes (read only), the real chat, real listening and the real flashlight.
+- **Real memory in chat:** asks the chat "What do you remember?" and about something it really heard; fails if it says it has no memory.
+- **Notes from your real speech:** how many notes the memory model made this week.
+- **Live wake:** you say "Hey Jarvis, what time is it?"; it must beep and answer with the right time.
 - **Brains:** load time, speed, a 6-question quiz, and the "copies old answers" bug check.
 - **Memory model:** does it turn a sample conversation into the right notes?
 - **Memory search:** does it find the right memory by meaning, keyword and "yesterday"?
