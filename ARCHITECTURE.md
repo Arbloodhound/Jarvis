@@ -329,3 +329,99 @@ flowchart LR
     F3["voice folders (Kokoro, Piper)"]
   end
 ```
+
+## Verification tree
+
+How each path from a request to an action is checked. Every request enters through `Brain.run` → `runUnlocked` (`agent/Brain.kt`), whose branches run in the order drawn. The one exception is Confirm on a paused action: `Brain.resolvePending` takes the run lock itself and resumes `runLoop` directly, so the per-request steps at the top of `runUnlocked` (stale-pause cancel, `forgetScreenSecrets`, correction, scam warning) do not run again for it. Each leaf names the automated test that checks it (JVM, `./gradlew testDebugUnitTest`), or `phone-only → <probe>` for the on-phone check in `app/src/debug/java/com/agent/ultra/bench/` (`FeatureProbes`, `RealUseProbes`, run from the Test kit). `BrainLoopTest` drives the real `Brain` against a scripted OpenAI-compatible server (`FakeChatServer`) with no on-device model; it is the only test that constructs `Brain`. A classifier test (for example `UserNotesTest`) checks the decision, not the branch that acts on it; the table says which.
+
+```mermaid
+flowchart TD
+  HJ["Hey Jarvis<br/>AmbientListenService<br/>WakeFilterTest, InterruptTest, EchoGuardTest, SegmenterTest<br/>phone-only → RealUseProbes.loopback, FeatureProbes.liveWake"] --> RUN
+  AB["Assistant button<br/>VoiceActivity<br/>phone-only → RealUseProbes.spokenAnswer, RealUseProbes.stop"] --> RUN
+  TY["Typed text<br/>ChatScreen<br/>ScreensTest (screen only)"] --> RUN
+  RUN["Brain.run → runUnlocked<br/>BrainLoopTest"] --> STALE["stale pause cancelled<br/>BrainLoopTest"]
+  STALE --> CORR["Experience.correction<br/>ExperienceTest"]
+  CORR --> SCAM["scam in the request: warning first<br/>ScamSignalsTest + BrainLoopTest"]
+  SCAM --> REC{"tryRecipeShortcut<br/>RecipeResolveTest, RecipeLookupTest, RecipeGuardTest"}
+  REC -- recipe --> RR["runRecipe / RoutePlayer<br/>RoutePlayerTest, ScreenJourneyTest"]
+  REC -- no --> SC{"deterministic shortcuts"}
+  SC -- "Speaker 2 is Sam" --> NV["nameVoice<br/>NameInferenceTest + BrainLoopTest"]
+  SC -- "save that as a note" --> LA["last answer noted<br/>NotesFromMemoryTest + BrainLoopTest"]
+  SC -- "note: …" --> UN["UserNotes → createNote<br/>UserNotesTest + BrainLoopTest"]
+  SC -- "how did I talk today" --> CI["ConversationInsights<br/>ConversationInsightsTest + BrainLoopTest"]
+  SC -- "open my notes" --> OS["screenRequest<br/>MemoryFocusTest + BrainLoopTest"]
+  SC -- none --> CL{"cloud provider configured<br/>and NetPolicy.cloudAllowed (Offline only off)?<br/>NetPolicyTest + BrainLoopTest"}
+  CL -- "no, no model" --> NB["'I have no brain yet'<br/>BrainLoopTest"]
+  CL -- "Offline only on, no model" --> OO["'Offline-only mode is on …', no cloud request<br/>BrainLoopTest<br/>phone-only → RealUseProbes.offlineOnly"]
+  CL -- "no, model loaded" --> OFF{"offline routing"}
+  OFF -- "memory / notes focus" --> EF["emitLocal + MemoryBrief<br/>MemoryFocusTest, MemoryBriefTest<br/>phone-only → FeatureProbes.memoryRecallReal, FeatureProbes.memoryOverviewReal"]
+  OFF -- "device command" --> RLL["runLocalLoop → thinkingToolCall / runLocalCall<br/>LocalToolCallTest, LocalIntentTest (routing)<br/>phone-only → FeatureProbes.offlineNavLive"]
+  OFF -- "multi-step screen job" --> ON["runOfflineNav → OfflineNavigator<br/>OfflineNavTest (planning)<br/>phone-only, no live probe"]
+  OFF -- other --> EL["emitLocal: web brief / plain answer<br/>WebNeedTest, WebResearchTest, LocalPromptTest, ThinkBudgetTest, HistoryPolicyTest<br/>phone-only → FeatureProbes.thinkerQuality, FeatureProbes.thinkerRegression"]
+  CL -- yes --> FP{"isSimpleLocalIntent and a small model"}
+  FP -- yes --> RLL
+  FP -- no --> LOOP["runLoop: cloud tool loop<br/>BrainLoopTest"]
+  LOOP -- "plain text" --> ANS["answer → onAnswer<br/>BrainLoopTest"]
+  LOOP -- "HTTP error, no local model" --> ERR["'Error: model call failed — …'<br/>BrainLoopTest"]
+  LOOP -- "HTTP error, local model" --> FB["on-device fallback<br/>phone-only, no probe"]
+  LOOP -- "cut-off call" --> CUT["re-ask<br/>ModelOutputTest + BrainLoopTest"]
+  LOOP -- "text on any turn after the first, action asked" --> PUSH["push once<br/>BrainLoopTest"]
+  LOOP -- "tool call" --> GATE{"Gate.enforceCall<br/>GateTest, ScamGateTest, ToolWiringTest, SharedVectorsTest, RiskScorerTest"}
+  GATE -- undeclared --> BLK["STATUS: blocked fed back<br/>BrainLoopTest"]
+  GATE -- confirmable --> PC["pendingConfirm → resolvePending<br/>BrainLoopTest"]
+  PC -- "yes, Offline only now on" --> PCO["cancelled, cloud run not resumed<br/>BrainLoopTest"]
+  PC -- yes --> EX
+  GATE -- allowed --> EX{"Tools.execute"}
+  EX -- "missing or unreadable args" --> TA["refused, never guessed<br/>ToolArgsTest, ToolsArgsTest"]
+  EX -- "personal data off" --> PD["refused, resultFeedback STATUS: failed<br/>BrainLoopTest"]
+  EX -- "secret in an argument" --> SE["refused<br/>SecretEgressTest, ScreenSecretsTest"]
+  EX -- "battery_status etc." --> SYS["AgentController read → buildFeedback / resultFeedback<br/>data inside UNTRUSTED DATA markers<br/>BrainHelpersTest + BrainLoopTest"]
+  EX -- "toggles, alarms, volume" --> TG["AgentController + verifyAction<br/>UNTESTED on the cloud path<br/>(FeatureProbes.offlineNavLive checks the offline runLocalCall path only)"]
+  EX -- "app_launch" --> AL["AppMatch.find<br/>AppMatchTest"]
+  EX -- "react_navigate" --> RN["ReActNavigator + ActionGate<br/>NavigatorFixesTest, NavigatorPromptTest, NavPlanTest, ActionGateTest, DirectRequestTest"]
+  EX -- "screen reads" --> SR["ScreenStructure / OcrLayout<br/>ScreenStructureTest, OcrLayoutTest, RealPageTest, NativeAppTest, AllFixturesTest"]
+  EX -- "web_search" --> WS["WebResearch<br/>WebResearchTest"]
+  EX -- "ambient_recall" --> AR["MemoryRecall<br/>RecallScoreTest, MemoryVectorsTest<br/>phone-only → FeatureProbes.memoryScale (scan at 40k synthetic lines)"]
+  EX -- "recipe_*" --> RCP["Recipes<br/>RecipeGuardTest"]
+  RUN -. "every route taken" .-> AUD["routing audit GateAuditLog.recordRoute<br/>(cloud, local_answer, local_tool, offline_nav, web, cloud_fallback_local)<br/>GateAuditLogRotateTest + BrainLoopTest"]
+```
+
+Not a branch of `Brain`, but checked alongside it: what leaves the phone in a backup (`res/xml/data_extraction_rules.xml`) is pinned by `DataExtractionRulesTest`.
+
+The native shims under the on-device branches (`ultra_llm.cpp`, `ultra_vlm.cpp`, `ultra_whisper.cpp`) are also driven off the phone by `ultra-native/tools/host-harness` (`run.sh`, `vlm/run_vlm.sh`, `whisper/run_whisper.sh`) with tiny random-weight models: they prove the code paths, never answer quality.
+
+Status words are the honesty statuses of `CLAUDE.md`, tied to how the check runs: **PROVEN (by test)**: a JVM test drives this branch end to end. **PARTIALLY PROVEN**: the decision or the parts are tested, but the branch that acts on them is not driven end to end. **CANNOT VERIFY FROM CURRENT ARTIFACTS (phone-only)**: it needs the real phone (native generation, microphone, accessibility, real settings); the named probe checks it there, and nothing off the phone can. **UNTESTED**: no test and no probe.
+
+| Branch (`Brain.kt`) | How it is verified | Status |
+|---|---|---|
+| `run` → `runUnlocked`, answer through `onAnswer` | `BrainLoopTest` | PROVEN (by test) |
+| Stale `pendingConfirm` cancelled by a new request | `BrainLoopTest.aNewRequestCancelsAStalePause` | PROVEN (by test) |
+| `Experience.correction` → lessons | `ExperienceTest` (the decision); the save in `Brain` is not driven | PARTIALLY PROVEN |
+| Scam in the request: warning shown and said first | `ScamSignalsTest`; `BrainLoopTest.aScamInTheRequestIsWarnedAboutBeforeTheAnswer` | PROVEN (by test) |
+| `tryRecipeShortcut` → `runRecipe` | `RecipeResolveTest`, `RecipeLookupTest`, `RecipeGuardTest`, `RoutePlayerTest`; no test runs a saved recipe through `Brain` | PARTIALLY PROVEN |
+| `nameVoice`, last answer noted, insights, open notes/memory screen | `NameInferenceTest`, `NotesFromMemoryTest`, `ConversationInsightsTest`, `MemoryFocusTest`; `BrainLoopTest.theDeterministicShortcutsAnswerWithoutCallingTheModel` drives only the empty-store answers ("I don't have a Speaker 2", "There's no answer to save yet", no conversation yet) and the screen request; renaming a real voice, noting a real answer and insights with data are not driven | PARTIALLY PROVEN |
+| `UserNotes.command` → `createNote` | `UserNotesTest`; `BrainLoopTest.aNoteCommandIsSavedWithoutCallingTheModel` | PROVEN (by test) |
+| No provider and no on-device model: "I have no brain yet" | `BrainLoopTest.noProviderAndNoLocalModelTellsTheOwnerWhereToGetABrain` | PROVEN (by test) |
+| Offline only on (key set, no on-device model): no cloud request, own message | `NetPolicyTest` (truth table); `BrainLoopTest.offlineOnlyNeverCallsTheCloudEvenWithAKey` | PROVEN (by test) |
+| Offline only on with an on-device model: nothing reaches the cloud or the web | `RealUseProbes.offlineOnly` (reads the routing audit back) | CANNOT VERIFY FROM CURRENT ARTIFACTS (phone-only → `RealUseProbes.offlineOnly`) |
+| Offline only switched on while an action waits: Confirm does not resume the cloud run | `BrainLoopTest.offlineOnlySwitchedOnDuringAPauseDoesNotResumeTheCloudRun` | PROVEN (by test) |
+| Routing audit (`GateAuditLog.recordRoute`) | `GateAuditLogRotateTest` (line format, fixed route words, rotation); `BrainLoopTest` reads back `cloud/request` for a cloud answer and no cloud/web line with Offline only on. The on-device routes (`local_answer`, `local_tool`, `offline_nav`, `cloud_fallback_local`) are not driven off the phone | PARTIALLY PROVEN |
+| Offline memory/notes focus → `emitLocal` | `MemoryFocusTest`, `MemoryBriefTest` (prompt parts); generation is native | CANNOT VERIFY FROM CURRENT ARTIFACTS (phone-only → `FeatureProbes.memoryRecallReal`, `FeatureProbes.memoryOverviewReal`) |
+| `runLocalLoop` / `runLocalCall` / `thinkingToolCall` (offline, and the cloud fast path) | `LocalToolCallTest`, `LocalIntentTest`, `BrainHelpersTest` (bare-call on/off and volume fail closed); generation is native | CANNOT VERIFY FROM CURRENT ARTIFACTS (phone-only → `FeatureProbes.offlineNavLive`) |
+| `runOfflineNav` → `OfflineNavigator` | `OfflineNavTest`; `FeatureProbes.offlineNavRules` scores the reply parser only | UNTESTED end to end (no live probe) |
+| `emitLocal` (web brief, plain on-device answer) | `WebNeedTest`, `WebResearchTest`, `LocalPromptTest`, `ThinkBudgetTest`, `HistoryPolicyTest`, `NetPolicyTest` (no web with Offline only); generation is native | CANNOT VERIFY FROM CURRENT ARTIFACTS (phone-only → `FeatureProbes.thinkerQuality`, `FeatureProbes.thinkerRegression`) |
+| `runLoop`: plain answer, tool call + `buildFeedback`, re-ask on a cut-off call, push once | `BrainLoopTest` | PROVEN (by test) |
+| Tool data to the cloud inside `[UNTRUSTED DATA …]` … `[END UNTRUSTED DATA]` (`resultFeedback`) | `BrainHelpersTest` (format, cap, spoofed markers removed); `BrainLoopTest` (the real second request carries it) | PROVEN (by test) |
+| `runLoop`: HTTP error with no on-device model | `BrainLoopTest.serverErrorWithNoLocalModelSaysTheModelCallFailed` | PROVEN (by test) |
+| `runLoop`: HTTP error with an on-device model → on-device fallback | none | UNTESTED |
+| Gate: undeclared tool fed back as `STATUS: blocked` | `GateTest`, `ToolWiringTest`; `BrainLoopTest.undeclaredToolIsFedBackAsBlocked` | PROVEN (by test) |
+| Gate: confirmable block → `pendingConfirm` → `resolvePending` (cancel and confirm) | `GateTest`, `ScamGateTest`; `BrainLoopTest` (both) | PROVEN (by test) |
+| `Tools.execute`: personal data off | `BrainLoopTest` (the refusal comes back as `STATUS: failed`) | PROVEN (by test) |
+| `Tools.execute`: secret in an argument | `SecretEgressTest`, `ScreenSecretsTest` (the parts, not through `Brain`) | PARTIALLY PROVEN |
+| `Tools.execute`: missing or unreadable arguments refused, never guessed | `ToolArgsTest`, `ToolsArgsTest` (not through `Brain`) | PARTIALLY PROVEN |
+| Device actions (toggles, alarms, volume) + `verifyAction` on the cloud path | none; `FeatureProbes.offlineNavLive` checks the offline `runLocalCall` path only (and skips when the phone is online) | UNTESTED |
+| `react_navigate` (ReActNavigator, ActionGate) | `NavigatorFixesTest`, `NavigatorPromptTest`, `NavPlanTest`, `ActionGateTest`, `DirectRequestTest`; not driven through `Brain` | PARTIALLY PROVEN |
+| Screen reads, web search, ambient recall, recipes | `ScreenStructureTest`, `OcrLayoutTest`, `RealPageTest`, `NativeAppTest`, `AllFixturesTest`, `WebResearchTest`, `RecallScoreTest`, `MemoryVectorsTest`, `RecipeGuardTest` (the parts, not through `Brain`); recall speed on the phone → `FeatureProbes.memoryScale` (40k synthetic lines) | PARTIALLY PROVEN |
+| Hey Jarvis → `AmbientListenService` → `Brain.run` | `WakeFilterTest`, `InterruptTest`, `EchoGuardTest`, `SegmenterTest` (parts) | CANNOT VERIFY FROM CURRENT ARTIFACTS (phone-only → `RealUseProbes.loopback`, `FeatureProbes.liveWake`) |
+| Assistant button → `VoiceActivity` | none | CANNOT VERIFY FROM CURRENT ARTIFACTS (phone-only → `RealUseProbes.spokenAnswer`, `RealUseProbes.stop`; these build `Brain` directly, not through `VoiceActivity`) |
+| Typed text → `ChatScreen` | `ScreensTest` (the screen renders; sending is not driven) | PARTIALLY PROVEN |
