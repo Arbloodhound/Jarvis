@@ -8,7 +8,7 @@ read this section, then CLAUDE.md and the top of DEVLOG.md. Older sections below
   https://github.com/Arbloodhound/Jarvis/releases/tag/v2.6.33-test
 - **Branch:** `claude/new-session-t3cy17`, everything pushed. 1338 JVM tests, 0 failures; assembleDebug OK.
 - **2026-10-08 (session 01K5Mi):** reference-design gaps closed + Brain tests + Verification tree (ARCHITECTURE.md);
-  see DEVLOG top entry. Released as the next `v2.6.<run>-test` (see release log).
+  see DEVLOG top entry. Released as **`v2.6.34-test`** (run 34, Latest): https://github.com/Arbloodhound/Jarvis/releases/tag/v2.6.34-test
 - **Architecture skeleton:** `ARCHITECTURE.md` (8 Mermaid diagrams: overview, Hey Jarvis → answer, tool call through
   every gate, on-device navigation, web research, memory, native boundary, storage). The same content plus a
   Verification table is published at https://claude.ai/artifact/MKGYj5zF7VP6nk2rrxrybW (private to the owner).
@@ -132,6 +132,11 @@ read this section, then CLAUDE.md and the top of DEVLOG.md. Older sections below
 4. Keep `ARCHITECTURE.md` + the page's Verification table current; add a host-harness case for any new native code.
 
 ## Release log since the last handoff
+### LATEST+11 (session 01K5Mi, 2026-10-08 16:41 UTC)
+`v2.6.34-test` (run 34) is Latest: reference-design merge (fail-closed tool args, offline-only switch, route audit,
+backup/transfer exclusions, [UNTRUSTED DATA] label, BrainLoopTest, Verification tree, probes "Memory scan at 40k" and
+"Offline only, for real"). 1338 JVM tests. Unproven on the phone.
+
 ### LATEST+10 (session 01BUKa, 2026-10-07 late night)
 `v2.6.33-test` (run 33) is Latest: verification pass. ARCHITECTURE.md (the code skeleton, 8 Mermaid diagrams); native
 shims PROVEN on host (vision output identical to llama-mtmd-cli, ASan clean; harnesses in ultra-native/tools/host-harness);
