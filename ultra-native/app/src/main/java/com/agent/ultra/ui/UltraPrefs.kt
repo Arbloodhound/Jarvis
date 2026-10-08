@@ -61,6 +61,17 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OWN_VOICE, on).apply()
     }
 
+    private const val K_OFFLINE_ONLY = "offline_only"
+
+    /** Offline only: no cloud brain, no web search (model downloads still work). Off by default.
+     * Read through agent.NetPolicy. */
+    fun offlineOnly(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_OFFLINE_ONLY, false)
+
+    fun setOfflineOnly(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OFFLINE_ONLY, on).apply()
+    }
+
     private const val K_PRELOAD = "preload_brain"
 
     /** Load the on-device brain in the background when Jarvis opens / ambient listening starts,

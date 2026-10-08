@@ -169,6 +169,27 @@ fun SettingsScreen(
             )
         }
 
+        run {
+            var offlineOnly by remember { mutableStateOf(UltraPrefs.offlineOnly(context)) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Offline only", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "No cloud brain, no web search. Model downloads still work.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = offlineOnly, onCheckedChange = { on ->
+                    offlineOnly = on
+                    UltraPrefs.setOfflineOnly(context, on)
+                })
+            }
+        }
+
         // ── On-device model ───────────────────────────────────────────
         SectionTitle("ON-DEVICE MODEL")
         Text(
