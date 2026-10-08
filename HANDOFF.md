@@ -6,7 +6,9 @@ read this section, then CLAUDE.md and the top of DEVLOG.md. Older sections below
 ## 1. Where it is right now
 - **Latest release:** `v2.6.33-test` (Release APK run 33, 2026-10-07 23:xx UTC) —
   https://github.com/Arbloodhound/Jarvis/releases/tag/v2.6.33-test
-- **Branch:** `claude/new-session-t3cy17`, everything pushed. 1296 JVM tests, 0 failures; assembleDebug OK.
+- **Branch:** `claude/new-session-t3cy17`, everything pushed. 1338 JVM tests, 0 failures; assembleDebug OK.
+- **2026-10-08 (session 01K5Mi):** reference-design gaps closed + Brain tests + Verification tree (ARCHITECTURE.md);
+  see DEVLOG top entry. Released as the next `v2.6.<run>-test` (see release log).
 - **Architecture skeleton:** `ARCHITECTURE.md` (8 Mermaid diagrams: overview, Hey Jarvis → answer, tool call through
   every gate, on-device navigation, web research, memory, native boundary, storage). The same content plus a
   Verification table is published at https://claude.ai/artifact/MKGYj5zF7VP6nk2rrxrybW (private to the owner).
@@ -89,6 +91,13 @@ read this section, then CLAUDE.md and the top of DEVLOG.md. Older sections below
   gate (now `ToolWiringTest` checks all 40 tools vs the manifest), protected apps OCR'd during navigation, invalid UTF-8
   passed to Java, bitmap lifetimes, research run twice.
 
+- **Reference design merge (2026-10-08):** fail-closed tool arguments; offline-only switch (default off) enforced in
+  Brain/Tools; every route + on-screen tap approval in the audit log (rotates, never halves); all app data excluded
+  from backup/device transfer; [UNTRUSTED DATA] label in the cloud loop; BrainLoopTest drives the real Brain against a
+  scripted server; Feature probe "Memory scan at 40k"; Real-use probe "Offline only, for real".
+  Not built, with reasons in DEVLOG: RVQ memory, sandboxes, plugins, MCP, gateway, Playwright; deferred: Keystore key,
+  jobs table.
+
 ## 5. What the phone has actually shown (Real-use results files)
 - 2.6.27 (12:40): 28 s runaway segments, whisper on slow cores, 129 drops, prompt examples copied into notes, Kokoro
   1.4× real time → all fixed in 28.
@@ -105,13 +114,16 @@ read this section, then CLAUDE.md and the top of DEVLOG.md. Older sections below
 - whisper's initial prompt goes through GetStringUTFChars (Modified UTF-8): an emoji wake name would be malformed.
 - Dead entries left per the no-refactor rule: `file_delete` in Tools.DESTRUCTIVE, `wake_onnx` pref, `ultra_a11y` prefs,
   several uncalled AgentController / service methods (listed in the wiring audit, DEVLOG).
+- Owner question open: hide personal tool results (SMS etc.) from logcat on release builds? (Brain logs ≤2000 chars.)
+- A cloud run already in flight when Offline only is switched on finishes on the cloud (its web_search is blocked).
 - On-device gate blocks have no confirm path (runLocalCall refuses; only the cloud loop shows a confirm card).
 
 ## 7. Next steps, in order
 1. Owner installs v2.6.33-test (Obtainium), toggles Jarvis's accessibility service off and on once, then:
    (a) Settings → SCREEN VISION → Download vision model, open something with pictures, "Hey Jarvis, describe my screen";
    (b) "find me the cheapest Sony WH-1000XM5" (search + shortlist); (c) an app task ("open settings and turn on dark
-   mode") to see the overlay + Stop; (d) Jarvis Tests → ★ Real-use check → send the file.
+   mode") to see the overlay + Stop; (d) Jarvis Tests → ★ Real-use check → send the file; (e) Feature check → "Memory scan at 40k" line
+   (PASS ≤1 s decides that no memory index is needed).
 2. Read the file: first spoken word time, tok/s, whisper real-time factor, wake → command, stop time, and logcat-style
    lines `UltraVision ocr …`, `UltraVlm load/describe …` (time + memory), `UltraWeb research … pages=` and
    `search blocked` (DuckDuckGo bot check from the phone?), `GESTURE: sent … accepted=` (takeover taps).

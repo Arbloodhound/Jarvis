@@ -3,6 +3,36 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-08 (session 01K5Mi) — reference design (MVP Personal Agent) merged in: gaps closed, verification tree
+Owner: read the new handoff; merge in what the uploaded reference design (README_1/README_2, 12-layer diagram,
+blueprint) has and Jarvis lacks, unless something better is backed by evidence; use agents + an advisor; verify the
+system works without trial and error, with a diagram tree. Only READMEs were supplied (no MVP code).
+- Gap analysis (read-only agent): Jarvis already has / does better: client surfaces, approval gate (exact-params
+  confirm, 120 s deny), injection defence below the model (Fact.sourceOf LOW forces confirm before egress), browser via
+  the real browser. Not applicable on a phone / worse here: gateway, plugin registry, configurable pipeline, MCP, E2B,
+  bwrap/nsjail/docker (no user namespaces for apps), Playwright, RVQ/IVF memory (exact int8 scan over ≤40k vectors is
+  recall-optimal; RVQ 4x16 = 16 bits/vector; the sniper still needs full vectors). Advisor (Plan agent) deferred the
+  Keystore-wrapped API key (failure = silent loss of the cloud brain) and a durable jobs table (new feature).
+- Built (6 worktree units, all merged; SOURCE-FIXED BUT RUNTIME-UNPROVEN on the phone, PROVEN by JVM tests where said):
+  U1 ToolArgs: toggles/volume fail closed ({} or "off" used to turn things ON / volume 50); react_navigate needs a goal.
+  U2 data_extraction_rules: whole domains excluded from cloud backup + device transfer (ambient.db, memory_notes.db,
+     logs, prefs were not); DataExtractionRulesTest scans sources for every .db / prefs name.
+  U3 GateAuditLog rotates to gate_audit.1.jsonl instead of halving; route entries + ActionGate decisions logged (no
+     user text); NetPolicy + "Offline only" switch (Settings → AI PROVIDER, default OFF).
+  U4 Feature check "Memory scan at 40k" (FeatureProbes.memoryScale): the scan the code says was never timed on a phone.
+  U5 BrainLoopTest: the real Brain driven against a scripted local SSE server (15 tests: answer, tool → result,
+     confirm/cancel/resume, HTTP 500, truncated call re-ask, undeclared tool blocked, offline-only sends 0 requests…).
+     ARCHITECTURE.md "Verification tree": every branch of Brain.runUnlocked → its test or its phone-only probe.
+  U6 Brain: offline-only enforced (cloud client, auto web research, web_search, recipe react_navigate, paused cloud
+     confirm); recordRoute at every route; parseBareToolCall fails closed (bareOnOff/bareVolume); verifyAction skips
+     on Error/unknown; cloud-loop tool data wrapped in [UNTRUSTED DATA]…[END UNTRUSTED DATA] (spoof-stripped) + rule 17.
+     Real-use probe "Offline only, for real".
+- Env: ~/llama-android rebuilt with libmtmd (it predated the vision commit; assembleDebug failed on mtmd.h).
+1338 JVM tests, 0 failures; assembleDebug OK.
+Open: owner decision on redacting personal tool results from logcat (Brain logs up to 2000 chars); a cloud run already
+in flight when offline-only is switched on finishes on the cloud; runLocalCall/runLocalLoop/emitLocal phone-only.
+Next: owner runs ★ Real-use check + Feature check on the new release and sends the files.
+
 ## 2026-10-07 (session 01BUKa) — verification pass: architecture skeleton, upstream cross-checks, host runs
 Owner: verify all code by cross-referencing public repos, build an architecture skeleton first, make sure it works.
 - Skeleton: ARCHITECTURE.md (8 Mermaid diagrams: overview, voice, tool call + gates, navigation, web, memory, native
