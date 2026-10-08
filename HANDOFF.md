@@ -1,26 +1,146 @@
 # HANDOFF — 2026-10-08, continue exactly from here
 
-## LATEST+10 (session 01BUKa, 2026-10-07 late night) — read this first
+Covers everything since the last handoff (01K5Mi, 2026-10-07 00:45 UTC: v2.6.8, branch @ 20ee531). Self-contained:
+read this section, then CLAUDE.md and the top of DEVLOG.md. Older sections below are history.
+
+## 1. Where it is right now
+- **Latest release:** `v2.6.33-test` (Release APK run 33, 2026-10-07 23:xx UTC) —
+  https://github.com/Arbloodhound/Jarvis/releases/tag/v2.6.33-test
+- **Branch:** `claude/new-session-t3cy17`, everything pushed. 1296 JVM tests, 0 failures; assembleDebug OK.
+- **Architecture skeleton:** `ARCHITECTURE.md` (8 Mermaid diagrams: overview, Hey Jarvis → answer, tool call through
+  every gate, on-device navigation, web research, memory, native boundary, storage). The same content plus a
+  Verification table is published at https://claude.ai/artifact/MKGYj5zF7VP6nk2rrxrybW (private to the owner).
+  Check every change against it; update both when the wiring changes.
+- **Nothing since v2.6.8 has been proven on the phone** except what the two Real-use results files showed (below).
+  Everything else is SOURCE-FIXED BUT RUNTIME-UNPROVEN, or PROVEN ON HOST where said.
+
+## 2. The owner (Dafarus) — how to work with him
+- Not a professional programmer. Wants short, plain, direct answers; one consolidated release per batch (not a
+  release per fix); token-efficient work. Swears when frustrated: stay calm and concrete, no long apologies.
+- **Never change a default he chose without asking** (he was upset when the default voice was switched unilaterally;
+  Ryan is now default with Kokoro one tap away — see 4).
+- Phone: Pixel 10 Pro XL (Tensor G5, ~15 GB RAM). Asked whether ML Kit works on GrapheneOS, so assume a de-Googled
+  setup (avoid Google services). Installs with **Obtainium** (source github.com/Arbloodhound/Jarvis, prereleases on,
+  APK regex `jarvis-test\.apk`). No adb.
+- Tests by running **Jarvis Tests → ★ Real-use check** (one tap) and sending the results file
+  (`Jarvis-results-YYYYMMDD-HHMM.txt`).
+- Product direction (2026-10-07): a general assistant with a BIG emphasis on SEARCHING — intelligent web search
+  (operators, several queries, cross-checking), intelligent product finding (trusted sellers, forum consensus, best
+  price), driven by the wake name and by the screen; when Jarvis takes over the screen, a small Stop button and the
+  owner's touches frozen (not the model's). Plus the sociolinguistic/psychoanalytic notes and insights.
+- **Declined:** special dark-web tooling (marketplace navigation, vendor verification). He accepted: "I don't need it
+  to have any special skills for the dark net". General browser use (Tor Browser included) stays as it is. Don't build it.
+
+## 3. How to build and ship
+- Build + tests: `source ~/android-env.sh && cd ultra-native && flock /tmp/jarvis-gradle.lock ./gradlew --no-daemon -q testDebugUnitTest assembleDebug`
+  (first time: `bash ultra-native/ondevice-brain/fetch-sherpa.sh`; the sherpa .so is gitignored). Native libs come
+  from `~/llama-android` (llama.cpp 8345f33 **with libmtmd** for vision) and `~/whisper-android`.
+- Release: push, then GitHub MCP `actions_run_trigger` → `run_workflow`, owner `arbloodhound`, repo `jarvis`,
+  workflow `release-apk.yml`, ref `claude/new-session-t3cy17`, inputs `{"test_kit":"true"}`. It publishes
+  `v2.6.<run>-test` as Latest (newest 5 kept). Poll `api.github.com/repos/arbloodhound/jarvis/actions/runs/<id>` for
+  `conclusion`. Then add a line to this file and give the owner the link.
+- Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` +
+  `Claude-Session: https://claude.ai/code/session_01BUKaYmPgEcSV7v4FpB3hPy` (use your own session URL).
+- Container network: Hugging Face, ModelScope and DuckDuckGo are blocked for curl; the **Hugging Face MCP connector**
+  works for checking model files/sizes. raw.githubusercontent.com, PyPI and developer.android.com work;
+  github.com web pages return 403.
+- **Host harnesses** (prove native code without a phone): `ultra-native/tools/host-harness/` — `setup.sh` + `run.sh`
+  (ultra_llm), `vlm/` (ultra_vlm vs llama-mtmd-cli, ASan), `whisper/` (ultra_whisper). See its README.
+- Parallel agents: Agent tool, isolation "worktree", background; every Gradle run under the flock; workers start
+  with `git checkout -B <branch> claude/new-session-t3cy17` (worktrees can start from an old commit).
+
+## 4. What was built since v2.6.8 (releases 10 → 33), by area
+- **Voice in:** "Hey Jarvis" chime and spoken reply; misheard wake names accepted; whisper small.en with speed
+  fallback; quieter-speech gate (8 dB above floor, -62 dB minimum) + mic gain; speaker labels; a command counts by the
+  wake window open when its segment STARTED (fix from Real-use 2.6.28); 9 s command cap; barge-in ("Hey Jarvis, stop"
+  while it talks); Jarvis no longer hears itself (every Speaker mutes the listener, 700 ms echo tail).
+- **Answering:** acts first, reasons after; answers spoken sentence by sentence as they are written; spoken requests
+  think ≤ ~3–5 s ("Instant" default); stop / add-on / change mid-task (Interrupt: Stop / After / Replace / Run) from
+  chat, voice screen and Hey Jarvis; live thinking preview; prompt warm-up after the model loads.
+- **Models:** default thinker = Qwen3-4B Thinking 2507 **abliterated** Q4_K_M (owner's choice; stock 4B kept);
+  Qwen3.5-4B abliterated selectable; 4-connection resumable downloads; **speed boost (draft) default OFF** (measured
+  slower: 6.3 vs 9.3 tok/s, and a truncated answer); LLM on 4 big-core threads (measured best: 4 = 8.96 tok/s).
+- **Voice out:** voice picker (Kokoro 11 voices, 10 Piper voices incl. LibriTTS/VCTK, phone voice), speed/pitch,
+  HOW JARVIS TALKS (personality, length, spoken think, wake chime, "On it.", bare "stop", barge-in).
+  **Default voice = Ryan (Piper high)**: Kokoro measured 1.3–1.5× slower than real time on the Pixel.
+- **Memory / notes / insights:** librarian notes on its own, speaker names, follow-up links, re-reading; Insights
+  screen (talk statistics + literature: Pennebaker, Lakoff, Tannen, Brown & Levinson, Bernstein, Giles, Cialdini,
+  Aleksic's Algospeak…), 28 cue patterns with possible readings and "what you could do" tips; manipulation patterns;
+  prompt examples can no longer be copied into notes.
+- **Chat:** Copy / Edit / Branch / select text; Stop; 📝 🧠 💡 📖 buttons; in-app Guide (assets/guide.md = GUIDE.md,
+  incl. "How do I…?" and a deep dive).
+- **Search (release 31):** `WebResearch` + `WebResearchRun` — 2–4 queries with operators per request (product / how-to /
+  fact), DuckDuckGo HTML with real links, ranked by consensus + site trust (retailers, communities, reference), top 3
+  pages read, prices pulled out, numbered brief with rules (cite [n], shortlist with price/seller/trust/red flags).
+  Since run 33 it searches with a POST + Referer like ddgs / duckduckgo_search / SearXNG, and a bot check or HTTP 202
+  counts as blocked (falls back to the old instant-answer / Wikipedia / snippet path).
+- **Screen takeover (31):** full-screen accessibility overlay with a Stop pill while Jarvis drives an app; owner's
+  touches swallowed; Jarvis's own gestures pass (overlay turns not-touchable, gesture waits `TakeoverPass.SETTLE_MS`
+  120 ms); reference-counted for overlapping runs. Covers the status bar (no notification pull-down meanwhile).
+- **Screen vision (32):** `ScreenVision` = accessibility screenshot (`canTakeScreenshot`; service must be toggled off/on
+  once, or maybe just an app update on Android 15) + **ML Kit text recognition 16.0.1 bundled** (offline; no Play
+  services needed — proven from bytecode; it DOES send usage events to Firebase logging) + **Qwen2.5-VL-3B Q4_K_M +
+  mmproj Q8_0** (2.8 GB, Settings → SCREEN VISION; loads on demand, 896 px, frees after 2 min). Tools `screen_ocr`,
+  `look_at_screen`; OCR added automatically when the screen's text is thin; on-device navigator reads thin screens by
+  OCR (vision at most once a run); JavaScript-only pages opened on screen and read when HTTP gets no text.
+- **Verification pass (33):** see DEVLOG "verification pass". Native shims PROVEN ON HOST (vision output identical to
+  llama-mtmd-cli token for token, ASan clean, no leak; ultra_llm harness PASS; whisper text/timing/VAD paths). 14 bugs
+  fixed, incl.: Stop was swallowed by every tool (CancellationException caught), `ambient_recall` always refused by the
+  gate (now `ToolWiringTest` checks all 40 tools vs the manifest), protected apps OCR'd during navigation, invalid UTF-8
+  passed to Java, bitmap lifetimes, research run twice.
+
+## 5. What the phone has actually shown (Real-use results files)
+- 2.6.27 (12:40): 28 s runaway segments, whisper on slow cores, 129 drops, prompt examples copied into notes, Kokoro
+  1.4× real time → all fixed in 28.
+- 2.6.28 (13:03): room listening PASS (whisper 0.4× real time on cpus 2–7); Hey Jarvis woke but the command was filed as
+  memory; spoken answer 32 s and truncated with the draft model on; ~25 s first prefill; Kokoro 1.3× → fixed in 29.
+- **No results file since 2.6.28.** Releases 29–33 are unproven on the phone.
+
+## 6. Known, not fixed (decide with the owner if they matter)
+- Overlay covers the status bar during a takeover. TakeoverPass 120 ms is reasoned from AOSP, not measured.
+- ML Kit telemetry to firebaselogging.googleapis.com (no verified off switch). An alternative would be dropping the
+  datatransport deps or another OCR; ask before doing anything.
+- The vision model is not in DOWNLOADS → "Download all missing" (deliberate: 2.8 GB, opt-in from SCREEN VISION).
+- Models unload only manually or when the librarian yields (no onTrimMemory). Thinker + vision together in RAM unmeasured.
+- whisper's initial prompt goes through GetStringUTFChars (Modified UTF-8): an emoji wake name would be malformed.
+- Dead entries left per the no-refactor rule: `file_delete` in Tools.DESTRUCTIVE, `wake_onnx` pref, `ultra_a11y` prefs,
+  several uncalled AgentController / service methods (listed in the wiring audit, DEVLOG).
+- On-device gate blocks have no confirm path (runLocalCall refuses; only the cloud loop shows a confirm card).
+
+## 7. Next steps, in order
+1. Owner installs v2.6.33-test (Obtainium), toggles Jarvis's accessibility service off and on once, then:
+   (a) Settings → SCREEN VISION → Download vision model, open something with pictures, "Hey Jarvis, describe my screen";
+   (b) "find me the cheapest Sony WH-1000XM5" (search + shortlist); (c) an app task ("open settings and turn on dark
+   mode") to see the overlay + Stop; (d) Jarvis Tests → ★ Real-use check → send the file.
+2. Read the file: first spoken word time, tok/s, whisper real-time factor, wake → command, stop time, and logcat-style
+   lines `UltraVision ocr …`, `UltraVlm load/describe …` (time + memory), `UltraWeb research … pages=` and
+   `search blocked` (DuckDuckGo bot check from the phone?), `GESTURE: sent … accepted=` (takeover taps).
+3. Fix what the file proves, one batch, one release. Candidates depending on results: settle time, vision memory fit,
+   whether DuckDuckGo blocks the POST from the phone (then add a fallback engine), Kokoro vs Ryan.
+4. Keep `ARCHITECTURE.md` + the page's Verification table current; add a host-harness case for any new native code.
+
+## Release log since the last handoff
+### LATEST+10 (session 01BUKa, 2026-10-07 late night)
 `v2.6.33-test` (run 33) is Latest: verification pass. ARCHITECTURE.md (the code skeleton, 8 Mermaid diagrams); native
 shims PROVEN on host (vision output identical to llama-mtmd-cli, ASan clean; harnesses in ultra-native/tools/host-harness);
 14 bugs fixed (Stop swallowed by tools, ambient_recall always refused, protected-app OCR, takeover ref-count and tap
 settle, DDG POST + bot-check detection, invalid UTF-8, bitmap lifetimes…). Phone runtime still unproven. Next: owner
 runs describe-my-screen, a product search, an app task, and ★ Real-use check.
 
-## LATEST+9 (session 01BUKa, 2026-10-07 night)
+### LATEST+9 (session 01BUKa, 2026-10-07 night)
 `v2.6.32-test` (run 32) is Latest: screen vision — ML Kit OCR built in, Qwen2.5-VL 3B vision model (2.8 GB, Settings →
 SCREEN VISION), screen_ocr / look_at_screen tools, OCR in thin screens and the offline navigator, browser fallback for
 JavaScript pages. `v2.6.31-test`: search-first research engine + takeover with Stop. The accessibility service must be
 toggled once for screenshots. SOURCE-FIXED BUT RUNTIME-UNPROVEN (no image described anywhere yet). Next: owner downloads
 the vision model, says "describe my screen", runs ★ Real-use check and sends the file.
 
-## LATEST+8 (session 01BUKa, 2026-10-07 evening)
+### LATEST+8 (session 01BUKa, 2026-10-07 evening)
 `v2.6.30-test` (run 30) is Latest (Jarvis no longer hears itself: every Speaker mutes the listener). Before: `v2.6.29-test` (second Real-use fixes: window by segment start, speed boost off, prompt warm-up, Ryan default voice). Before: `v2.6.28-test` (fixes from the first Real-use check: runaway segments, slow-core whisper, copied prompt examples, Kokoro threads). Before: `v2.6.27-test` (adds Insights, literature patterns, Algospeak, tips, notes copy/share). Before: v2.6.26. Since v2.6.24: Real-use check (Jarvis Tests ★, one tap), screen tests (ScreensTest,
 Robolectric, in CI), act first, live thinking preview, Instant spoken think, transcript only when needed, chat Copy /
 Edit / Branch / select, speech in fuller pieces, Tor Browser in prompts. All SOURCE-FIXED BUT RUNTIME-UNPROVEN. Next:
 owner runs ★ Real-use check and sends the file (voice speed, first spoken word, stop time, download speed).
 
-## LATEST+7 (session 01BUKa, 2026-10-07 ~11:00 UTC)
+### LATEST+7 (session 01BUKa, 2026-10-07 ~11:00 UTC)
 `v2.6.24-test` (run 24, 31255f4) is Latest (run 23 built but failed to publish in a GitHub outage). Also since: abliterated 4B default, 4-connection model downloads, accurate-speech download from Settings. Since v2.6.20: answers spoken sentence by sentence, spoken
 requests think ≤5 s, stop / add-on / change mid-task (chat, voice screen, Hey Jarvis barge-in), whisper small.en +
 speed fallback + looser quiet-speech filters, speaker labels on by default, voice picker (Kokoro George default + 10
@@ -28,7 +148,7 @@ Piper voices + phone voice; speed, pitch), HOW JARVIS TALKS settings, in-app Gui
 All SOURCE-FIXED BUT RUNTIME-UNPROVEN. Next: owner installs, Settings → JARVIS'S VOICE (Kokoro downloads ~100 MB),
 Preview; Guide button; results file.
 
-## LATEST+6 (session 01BUKa, 2026-10-07 ~09:00 UTC)
+### LATEST+6 (session 01BUKa, 2026-10-07 ~09:00 UTC)
 `v2.6.20-test` (run 20, 5eedc70) is Latest; runs 18 and 19 were cancelled because 20 contains them. Since v2.6.17:
 Hey Jarvis no longer waits for the memory model (it stops it), live "Hey Jarvis status" + "Test Jarvis's voice"
 in Settings, speech plays as media with audio focus and speak-answers on by default, on-device brain searches the
@@ -37,14 +157,14 @@ spoken chat requests send at once, far speech: gate 8 dB above floor / -58 dB mi
 before whisper and the wake detector. All SOURCE-FIXED BUT RUNTIME-UNPROVEN. Next: owner installs 2.6.20 →
 Jarvis Tests 1 shows "App: 2.6.20" → voice test, Hey Jarvis status, Hey Jarvis screen-off, web search, far speech.
 
-## LATEST+5 (session 01BUKa, 2026-10-07 ~08:00 UTC)
+### LATEST+5 (session 01BUKa, 2026-10-07 ~08:00 UTC)
 `v2.6.17-test` (run 17, b81193e) is Latest. Since v2.6.15: notes on their own (summaries, who + tags, follow-up
 links, re-read of old memory, off-charger at ≥50%, Organise now, chat turns remembered, "make a note of what Sam
 said…"), "Hey Jarvis" speaks back ("Yes?", "On it."), locked-phone policy, full device-control tools offline,
 PEOPLE (owner name, voices) and SYSTEM PROMPT settings, voice names inferred/told. See DEVLOG. All
 SOURCE-FIXED BUT RUNTIME-UNPROVEN. Next: owner installs 2.6.17 → Jarvis Tests 1 shows "App: 2.6.17" → 3 → 5 → file.
 
-## LATEST+4 (session 01BUKa, 2026-10-07 ~07:00 UTC) — read this first
+### LATEST+4 (session 01BUKa, 2026-10-07 ~07:00 UTC)
 `v2.6.15-test` (run 15, 05abe67) is Latest. Since v2.6.13: the offline brain is told what it can do (memory,
 notes, phone actions, Now line); "what do you remember?" overview brief; nothing-found brief; REAL feature-check
 probes (memory in the real chat, notes from real speech, live wake through the running service); Notes and Memory
@@ -53,13 +173,13 @@ for …", "open my notes"), one notes store (old note files imported). All SOURC
 The owner had still not installed anything newer than ≤2.6.8 at the last results file (21:02). First check
 "App: 2.6.15" in Jarvis Tests 1.
 
-## LATEST+3 (session 01BUKa, 2026-10-07 ~04:45 UTC) — read this first
+### LATEST+3 (session 01BUKa, 2026-10-07 ~04:45 UTC)
 `v2.6.13-test` (run 13, 40d4479) is Latest: + listening resumes after restart/update (ResumeNotice, Jarvis Tests
 starts it), misspelt name after a wake word wakes ("Hey Joris"). The owner's 21:02 file was STILL an old build
 (≤2.6.8): Obtainium has not installed 2.6.10/2.6.12 (verified the 2.6.12 APK itself has the new code, versionCode
 29). Next: confirm the phone shows "App: 2.6.13" in Jarvis Tests 1 before reading any results.
 
-## LATEST+2 (session 01BUKa, 2026-10-07 ~03:00 UTC) — read this first
+### LATEST+2 (session 01BUKa, 2026-10-07 ~03:00 UTC)
 `v2.6.12-test` (run 12, 7ffe265) is the Latest release: everything below plus the wake chime, own-voice wake
 probe graded on ambient's decode, results file stamped with the app version, ambient whisper on the idle big
 cores + per-utterance whisper timing. The owner's 19:36/19:41 files were from an old build (no new tests ran).
@@ -67,7 +187,7 @@ Next: owner updates → Jarvis Tests 1 (header must say App: 2.6.12) → 3 → 5
 4 threads ≈ 9; "Wake phrase (your voice)"; pattern notes; `whisper audioMs= ms=` lines (ms < audioMs = keeps up);
 any "backlog full" lines.
 
-## LATEST+1 (session 01BUKa, 2026-10-07 ~01:30 UTC) — read this first
+### LATEST+1 (session 01BUKa, 2026-10-07 ~01:30 UTC)
 Owner's results `Jarvis-results-20261006-1758.txt`: Feature check PASS 17 / WARN 2 / FAIL 1. Commit 229dfb0
 (1167 JVM tests, 0 failures; assembleDebug OK) fixes from it: LLM decodes with 4 threads (speed test 4=8.96,
 5=7.23, 6=4.79 tok/s; pool still 6 workers), "I hate/hi/hay Jarvis" wakes, new probe "Wake phrase (your
@@ -75,6 +195,10 @@ voice)", observation without "text" kept with a plain summary. Merged `claude/qw
 PASS on a tiny qwen35 model, see DEVLOG). Then 876c4ac: wake chime (owner request). Run 9 failed in CI setup (pip download timeout, no build ran); run 10 (37556147640) for 876c4ac succeeded → published `v2.6.10-test` (Latest).
 Next: owner updates via Obtainium → Jarvis Tests 3 (speed) + 5 (Feature check, says "Hey Jarvis" when asked)
 → sends file. Check: tok/s ≈ 9 at 4 threads; own-voice wake result; pattern notes now PASS.
+
+
+---
+# History (older handoffs, superseded by the section above)
 
 ## LATEST (session 01K5Mi, 2026-10-07 ~00:45 UTC) — read this first
 **Owner status:** on the Pixel via **Obtainium** (works: fine-grained read-only PAT; app source
