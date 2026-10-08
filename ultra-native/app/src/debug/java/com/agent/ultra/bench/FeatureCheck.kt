@@ -67,6 +67,7 @@ object FeatureCheck {
         Probe("Hey Jarvis out loud", 4 * 60_000, RealUseProbes::loopback),
         Probe("Spoken answer speed", 4 * 60_000, RealUseProbes::spokenAnswer),
         Probe("Stop mid-answer", 2 * 60_000, RealUseProbes::stop),
+        Probe("Offline only, for real", 6 * 60_000, RealUseProbes::offlineOnly),
         Probe("Notes from your real speech", 30_000, FeatureProbes::realNotes),
         Probe("Model download speed", 2 * 60_000, RealUseProbes::download),
     )
