@@ -218,6 +218,9 @@ class Tools(
                     navigator?.stoppedOnDisagreement?.let { return it }
 
                     val goal = params.optString("goal")
+                    // A blank goal does not stop the navigator: with no app named it falls back
+                    // to whatever is on screen and drives it with nothing to aim at.
+                    if (goal.isBlank()) return "Error: react_navigate needs a 'goal'"
                     val hint = params.optString("appHint")
                     val nav = navigator ?: return "Error: navigator not wired"
                     // Takeover screen while the cloud navigator drives the app (Stop in the corner).
@@ -263,28 +266,33 @@ class Tools(
 
                 // ── Device control ───────────────────────────────────
                 "flashlight_toggle" -> {
-                    val on = params.optBoolean("on", true)
-                    if (controller.setFlashlight(on)) "Flashlight ${if (on) "on" else "off"}"
+                    val on = ToolArgs.bool(params, "on")
+                    if (on == null) "Error: flashlight_toggle needs \"on\": true or false"
+                    else if (controller.setFlashlight(on)) "Flashlight ${if (on) "on" else "off"}"
                     else "Error: flashlight toggle failed"
                 }
                 "wifi_toggle" -> {
-                    val on = params.optBoolean("on", true)
-                    if (controller.setWifi(on)) "Wi-Fi ${if (on) "on" else "off"}"
+                    val on = ToolArgs.bool(params, "on")
+                    if (on == null) "Error: wifi_toggle needs \"on\": true or false"
+                    else if (controller.setWifi(on)) "Wi-Fi ${if (on) "on" else "off"}"
                     else "Error: couldn't switch Wi-Fi directly (Android doesn't allow apps to); opened the Wi-Fi panel for the user"
                 }
                 "bluetooth_toggle" -> {
-                    val on = params.optBoolean("on", true)
-                    if (controller.setBluetooth(on)) "Bluetooth ${if (on) "on" else "off"}"
+                    val on = ToolArgs.bool(params, "on")
+                    if (on == null) "Error: bluetooth_toggle needs \"on\": true or false"
+                    else if (controller.setBluetooth(on)) "Bluetooth ${if (on) "on" else "off"}"
                     else "Error: couldn't switch Bluetooth directly (Android doesn't allow apps to); opened Bluetooth settings for the user"
                 }
                 "do_not_disturb" -> {
-                    val on = params.optBoolean("on", true)
-                    if (controller.setDoNotDisturb(on)) "Do Not Disturb ${if (on) "on" else "off"}"
+                    val on = ToolArgs.bool(params, "on")
+                    if (on == null) "Error: do_not_disturb needs \"on\": true or false"
+                    else if (controller.setDoNotDisturb(on)) "Do Not Disturb ${if (on) "on" else "off"}"
                     else "Error: DND toggle failed (needs notification policy access)"
                 }
                 "volume_set" -> {
-                    val pct = params.optInt("percent", 50).coerceIn(0, 100)
-                    if (controller.setVolume(android.media.AudioManager.STREAM_MUSIC, pct)) "Media volume set to $pct%"
+                    val pct = ToolArgs.int(params, "percent")?.coerceIn(0, 100)
+                    if (pct == null) "Error: volume_set needs \"percent\" 0-100"
+                    else if (controller.setVolume(android.media.AudioManager.STREAM_MUSIC, pct)) "Media volume set to $pct%"
                     else "Error: volume set failed"
                 }
 
