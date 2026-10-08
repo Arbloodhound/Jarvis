@@ -160,6 +160,50 @@ object RealUseProbes {
             listOf("said: ${oneLine(text, 200)}")))
     }
 
+    /**
+     * Offline only, for real: the switch on, the real brain asked something that wants the web
+     * ("what's the latest news today"), then the audit log read back. PASS when no line written
+     * since the start routed to the cloud or the web, and at least one routed on-device. The
+     * owner's setting is put back afterwards, whatever happens.
+     */
+    suspend fun offlineOnly(env: ProbeEnv): List<Result> {
+        val f = "Offline only, for real"
+        val engine = LocalModelEngine.shared(env.ctx)
+        if (!engine.modelPresent) return listOf(Result(f, Verdict.MISSING, "no brain downloaded", "needs the on-device model: Settings → ON-DEVICE MODEL"))
+        if (!com.agent.ultra.gate.GateAuditLog.isInitialized()) return listOf(Result(f, Verdict.FAIL, "audit log not started", "nothing to read the routes from"))
+        val was = com.agent.ultra.ui.UltraPrefs.offlineOnly(env.ctx)
+        try {
+            com.agent.ultra.ui.UltraPrefs.setOfflineOnly(env.ctx, true)
+            env.status("Loading the brain")
+            if (!engine.ensureLoaded()) return listOf(Result(f, Verdict.FAIL, "brain didn't load", "the on-device model failed to load"))
+            val brain = Brain(env.ctx, engine).also { it.recordTurns = false }
+            env.status("Offline only on: asking the brain for today's news")
+            val t0 = System.currentTimeMillis()
+            val finished = withTimeoutOrNull(5 * 60_000) { brain.run("what's the latest news today"); true } ?: false
+            if (!finished) brain.stop()
+            delay(1_500)   // the audit log is written on its own thread
+            val routes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val out = java.io.StringWriter()
+                com.agent.ultra.gate.GateAuditLog.writeEntries(java.io.File(env.ctx.filesDir, "gate_audit.jsonl"), out)
+                out.toString().lineSequence().mapNotNull { l -> try { org.json.JSONObject(l) } catch (_: Exception) { null } }
+                    .filter { it.optString("kind") == "route" && it.optLong("ts") >= t0 }
+                    .map { it.optString("route") + "/" + it.optString("reason") }.toList()
+            }
+            val net = routes.filter { it.substringBefore('/') in setOf(
+                com.agent.ultra.gate.GateAuditLog.ROUTE_CLOUD, com.agent.ultra.gate.GateAuditLog.ROUTE_WEB) }
+            val local = routes.filter { it.startsWith("local_") }
+            val v = if (net.isEmpty() && local.isNotEmpty()) Verdict.PASS else Verdict.FAIL
+            return listOf(Result(f, v, "routes: ${routes.joinToString(", ").ifBlank { "none" }}${if (finished) "" else " (timed out)"}",
+                when {
+                    net.isNotEmpty() -> "used the cloud or the web with offline only on"
+                    local.isEmpty() -> "no on-device route was recorded"
+                    else -> "stayed on the phone: no cloud, no web"
+                }))
+        } finally {
+            com.agent.ultra.ui.UltraPrefs.setOfflineOnly(env.ctx, was)
+        }
+    }
+
     /** A real run stopped mid-answer, as "stop" does: how long until the brain lets go. */
     suspend fun stop(env: ProbeEnv): List<Result> {
         val f = "\"Stop\" mid-answer"

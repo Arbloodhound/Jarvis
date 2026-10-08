@@ -705,6 +705,8 @@ class Tools(
     } catch (_: Exception) { false }
 
     private suspend fun webSearch(query: String, skipResearch: Boolean = false): String = withContext(Dispatchers.IO) {
+        // Offline only (Settings): no web at all, before anything else is checked.
+        if (!NetPolicy.webAllowed(NetPolicy.offlineOnly(context))) return@withContext NetPolicy.OFFLINE_RESULT
         if (query.isBlank()) return@withContext "Error: missing query"
         // Grounding is a tool, not a leash: offline, tell the model to use its own knowledge
         // rather than stalling. (See system-prompt rules 13-15.)
