@@ -41,7 +41,9 @@ import com.agent.ultra.local.LlmNative
 import com.agent.ultra.local.LocalModelEngine
 import com.agent.ultra.local.PageFaults
 import com.agent.ultra.ui.UltraPrefs
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -457,6 +459,138 @@ object FeatureProbes {
             else "memory goes into the wrong prompts, or none comes back for a memory question",
             decisions.map { it.line() })
         return listOf(search, brief)
+    }
+
+    // ── 4b. Memory scan at 40k (sandbox) ──────────────────────────────────────────────────
+
+    private const val SCALE_DB = "featurecheck_scale.db"
+    private const val SCALE_ROWS = MemoryRecall.SCAN_LIMIT          // 40,000: one full brute-force scan
+    private const val SCALE_CHUNK = 1_000
+    private const val SCALE_RUNS = 5
+    private const val SCALE_QUERY = "what did Sam say about painting the garden fence"
+    private val SCALE_WORDS = listOf("garden", "fence", "dentist", "Thursday", "milk", "bread", "meeting",
+        "Sarah", "Sam", "car", "train", "paint", "kitchen", "doctor", "school", "dinner", "phone", "money",
+        "weekend", "holiday", "football", "rain", "office", "birthday")
+
+    /**
+     * Is exact (brute-force) vector recall fast enough at [MemoryRecall.SCAN_LIMIT] rows? Fills a
+     * sandbox store with 40k synthetic lines and random normalised 384-d vectors, then times 5
+     * recall scans. With the sentence embedder loaded it times the real [MemoryRecall.relevant]
+     * (query embed + keyword + full vector scan); without it, a [AmbientMemory.forEachVector] +
+     * [MemoryVectors.cosine] loop against a random query (the scan alone). Thresholds are
+     * provisional: PASS ≤ 1 s, WARN ≤ 3 s, else FAIL (on the median).
+     */
+    suspend fun memoryScale(env: ProbeEnv): List<Result> {
+        val ctx = env.ctx
+        val detail = mutableListOf<String>()
+        val rt = Runtime.getRuntime()
+        fun heapMb() = (rt.totalMemory() - rt.freeMemory()) / (1024.0 * 1024.0)
+        val emb = if (SentenceEmbedder.downloaded(ctx)) SentenceEmbedder.shared(ctx) else null
+        val dim = SentenceEmbedder.DIM
+        val rnd = java.util.Random(40_000L)                 // fixed seed: the same data every run
+        fun randomVec() = MemoryVectors.normalize(FloatArray(dim) { rnd.nextGaussian().toFloat() })
+
+        ctx.deleteDatabase(SCALE_DB)                         // a run that crashed may have left one
+        val box = AmbientMemory.sandbox(ctx, SCALE_DB)
+        val runMs = mutableListOf<Long>()
+        var dbMb = 0.0
+        var heapBefore = 0.0; var heapAfter = 0.0
+        var scanned = 0
+        try {
+            env.status("Memory scan: filling a sandbox with $SCALE_ROWS lines")
+            val now = System.currentTimeMillis()
+            val spanMs = 90L * 24 * 3_600_000                // spread over the 90-day retention
+            val gen = box.generation()
+            val tFill = System.currentTimeMillis()
+            var done = 0
+            while (done < SCALE_ROWS) {
+                currentCoroutineContext().ensureActive()     // Skip / Stop cut the fill short
+                val n = minOf(SCALE_CHUNK, SCALE_ROWS - done)
+                val rows = ArrayList<AmbientMemory.Row>(n)
+                val db = box.writableDatabase
+                db.beginTransaction()
+                try {
+                    for (k in 0 until n) {
+                        val i = done + k
+                        val text = "line $i: " + List(8) { SCALE_WORDS[rnd.nextInt(SCALE_WORDS.size)] }.joinToString(" ")
+                        val ts = now - spanMs + spanMs * i / SCALE_ROWS
+                        val id = box.record(text, ts, 0.9f)
+                        check(id > 0) { "insert failed at row $i" }
+                        rows += AmbientMemory.Row(id, ts, text)
+                    }
+                    db.setTransactionSuccessful()
+                } finally { db.endTransaction() }
+                check(box.putVectors(rows, rows.map { MemoryVectors.quantize(randomVec()) }, gen)) { "sandbox was wiped mid-fill" }
+                done += n
+            }
+            val fillMs = ms(tFill)
+            val dbFile = ctx.getDatabasePath(SCALE_DB)
+            dbMb = (dbFile.length() + File(dbFile.path + "-wal").length()) / (1024.0 * 1024.0)
+            detail += "sandbox \"$SCALE_DB\": $SCALE_ROWS synthetic lines + $dim-d random vectors " +
+                "(${SCALE_ROWS / SCALE_CHUNK} chunks of $SCALE_CHUNK), filled in ${secs(fillMs)}; your real memory is not touched"
+            detail += "path: " + if (emb != null) "MemoryRecall.relevant (embedder on: query embed + keyword + full vector scan)"
+                else "forEachVector + cosine loop (embedder off: vector scan only, random query)"
+
+            System.gc()
+            heapBefore = heapMb()
+            val q = randomVec()
+            for (run in 1..SCALE_RUNS) {
+                currentCoroutineContext().ensureActive()
+                env.status("Memory scan: timing scan $run of $SCALE_RUNS")
+                val t0 = System.currentTimeMillis()
+                if (emb != null) {
+                    val hits = MemoryRecall.relevant(ctx, SCALE_QUERY, now, limit = 5, store = box, sources = emptyList())
+                    runMs += ms(t0)
+                    detail += "scan $run: ${runMs.last()} ms, ${hits.size} hits"
+                } else {
+                    var count = 0
+                    var best = -2f
+                    box.forEachVector(null, MemoryRecall.SCAN_LIMIT) { _, v ->
+                        val c = MemoryVectors.cosine(q, v) ?: return@forEachVector
+                        count++
+                        if (c > best) best = c
+                    }
+                    runMs += ms(t0)
+                    scanned = count
+                    detail += "scan $run: ${runMs.last()} ms, $count vectors, best cosine ${FeatureGrade.f2(best.toDouble())}"
+                }
+            }
+            heapAfter = heapMb()
+            if (emb != null) {
+                // relevant() silently drops to keyword-only if the embedder throws; one bare scan
+                // shows whether the times above can contain a full vector scan at all.
+                val t0 = System.currentTimeMillis()
+                var count = 0
+                box.forEachVector(null, MemoryRecall.SCAN_LIMIT) { _, v -> if (MemoryVectors.cosine(q, v) != null) count++ }
+                detail += "cross-check: bare forEachVector + cosine scan alone ${ms(t0)} ms over $count vectors " +
+                    "(if the recall times are well below this, the vector part did not run)"
+            }
+        } finally {
+            box.close()
+            ctx.deleteDatabase(SCALE_DB)
+        }
+
+        val sorted = runMs.sorted()
+        val median = sorted[sorted.size / 2]
+        val max = sorted.last()
+        val verdict = when {
+            median <= 1_000 -> Verdict.PASS
+            median <= 3_000 -> Verdict.WARN
+            else -> Verdict.FAIL
+        }
+        detail += "thresholds (provisional): PASS ≤ 1 s, WARN ≤ 3 s, FAIL above (median of $SCALE_RUNS)"
+        detail += "heap used before scans ${FeatureGrade.f1(heapBefore)} MB, after ${FeatureGrade.f1(heapAfter)} MB " +
+            "(approximate, GC-dependent)"
+        return listOf(Result("Memory scan at 40k", verdict,
+            "median $median ms, max $max ms over $SCALE_RUNS scans, DB ${FeatureGrade.f1(dbMb)} MB, " +
+                "heap Δ ${FeatureGrade.f1(heapAfter - heapBefore)} MB, " +
+                (if (emb != null) "full recall" else "scan only ($scanned vectors)") + " [thresholds provisional]",
+            when (verdict) {
+                Verdict.PASS -> "exact search over 40k memories answers within a second (provisional threshold)"
+                Verdict.WARN -> "exact search over 40k memories takes 1–3 s (provisional threshold)"
+                else -> "exact search over 40k memories takes over 3 s (provisional threshold)"
+            } + if (emb == null) "; meaning-search model not loaded, so this times the scan alone" else "",
+            detail))
     }
 
     // ── 7. Voice in and out ────────────────────────────────────────────────────────────────

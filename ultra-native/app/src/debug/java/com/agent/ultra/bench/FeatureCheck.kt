@@ -45,6 +45,7 @@ object FeatureCheck {
         Probe("Offline phone control (rules)", 10_000, FeatureProbes::offlineNavRules),
         Probe("Ambient listening", 20_000, FeatureProbes::ambient),
         Probe("Memory search", 3 * 60_000, FeatureProbes::memorySearch),
+        Probe("Memory scan at 40k", 5 * 60_000, FeatureProbes::memoryScale),
         Probe("Voice in and out", 4 * 60_000, FeatureProbes::voice),
         Probe("Transcript cues", 4 * 60_000, FeatureProbes::transcriptCues),
         Probe("Memory model (librarian)", 6 * 60_000, FeatureProbes::librarian),
