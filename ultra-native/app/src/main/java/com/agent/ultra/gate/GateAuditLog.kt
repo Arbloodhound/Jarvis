@@ -18,15 +18,36 @@ object GateAuditLog {
 
     private const val TAG = "UltraAudit"
     private const val FILE_NAME = "gate_audit.jsonl"
+    /** The previous generation: when the log passes [MAX_BYTES] it is renamed to this
+     * (replacing any older one) and a fresh log starts. At most ~2 × MAX_BYTES on disk. */
+    private const val ROTATED_NAME = "gate_audit.1.jsonl"
     private const val MAX_BYTES = 512 * 1024L
 
     enum class Outcome { ALLOWED, BLOCKED, OVERRIDDEN, AUTO_APPROVED }
+
+    // Routes for [recordRoute]: which brain path answered. Fixed words only.
+    const val ROUTE_CLOUD = "cloud"
+    const val ROUTE_LOCAL_ANSWER = "local_answer"
+    const val ROUTE_LOCAL_TOOL = "local_tool"
+    const val ROUTE_OFFLINE_NAV = "offline_nav"
+    const val ROUTE_WEB = "web"
+    const val ROUTE_CLOUD_FALLBACK_LOCAL = "cloud_fallback_local"
 
     /** File I/O off the caller's thread (Brain records from Main.immediate). One
      * thread, so lines land in the order they were recorded. */
     private val writer = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
         Thread(r, "UltraAuditWriter").apply { isDaemon = true }
     }
+
+    /** Set by [init] (UltraApplication.onCreate). [recordRoute] / [recordAction] have no
+     * Context of their own, so they do nothing until this is set. */
+    @Volatile private var appContext: Context? = null
+
+    fun init(appContext: Context) {
+        this.appContext = appContext.applicationContext ?: appContext
+    }
+
+    internal fun isInitialized(): Boolean = appContext != null
 
     /** Line count, read from disk once and kept current afterwards, so the
      * settings screen does not re-read the file on every composition. */
@@ -54,35 +75,84 @@ object GateAuditLog {
             }
             // The entry is built here, on the caller's thread: ObservationLog is
             // not thread-safe. Only the disk write moves.
-            val line = entry.toString() + "\n"
-            val f = file(context)
-            writer.execute {
-                try {
-                    f.appendText(line)
-                    cachedCount?.let { cachedCount = it + 1 }
-                    if (f.length() > MAX_BYTES) { trim(f); cachedCount = null }
-                } catch (e: Exception) {
-                    Log.w(TAG, "audit write failed: ${e.message}")
-                }
-            }
+            append(file(context), entry)
         } catch (e: Exception) {
             Log.w(TAG, "audit write failed: ${e.message}")
         }
     }
 
+    /**
+     * Which path answered a request. [reason] is a short fixed word chosen by the caller —
+     * never the user's text. No-op until [init] has run.
+     */
+    fun recordRoute(route: String, reason: String) {
+        val ctx = appContext ?: return
+        try {
+            append(file(ctx), routeEntry(route, reason, System.currentTimeMillis()))
+        } catch (e: Exception) {
+            Log.w(TAG, "audit write failed: ${e.message}")
+        }
+    }
+
+    /** Pure, JVM-tested. Exactly {ts, kind, route, reason}. */
+    internal fun routeEntry(route: String, reason: String, ts: Long): JSONObject = JSONObject().apply {
+        put("ts", ts)
+        put("kind", "route")
+        put("route", route)
+        put("reason", reason)
+    }
+
+    /**
+     * One ActionGate question, answered or not. [reasonWord] is the matched commitment word
+     * (e.g. "pay"), never the on-screen label. No-op until [init] has run.
+     */
+    fun recordAction(reasonWord: String, approved: Boolean) {
+        val ctx = appContext ?: return
+        try {
+            append(file(ctx), actionEntry(reasonWord, approved, System.currentTimeMillis()))
+        } catch (e: Exception) {
+            Log.w(TAG, "audit write failed: ${e.message}")
+        }
+    }
+
+    /** Pure, JVM-tested. Exactly {ts, kind, outcome, rule}. */
+    internal fun actionEntry(reasonWord: String, approved: Boolean, ts: Long): JSONObject = JSONObject().apply {
+        put("ts", ts)
+        put("kind", "action_gate")
+        put("outcome", if (approved) Outcome.OVERRIDDEN.name else Outcome.BLOCKED.name)
+        put("rule", "commitment:$reasonWord")
+    }
+
+    /** Queue one line for the single writer thread; rotates once the file passes [MAX_BYTES]. */
+    private fun append(f: File, entry: JSONObject) {
+        val line = entry.toString() + "\n"
+        writer.execute {
+            try {
+                f.appendText(line)
+                cachedCount?.let { cachedCount = it + 1 }
+                if (rotate(f, MAX_BYTES)) cachedCount = null
+            } catch (e: Exception) {
+                Log.w(TAG, "audit write failed: ${e.message}")
+            }
+        }
+    }
+
+    /** Entries in the current log and the rotated one. */
     fun entryCount(context: Context): Int = cachedCount ?: try {
-        val f = file(context)
-        val n = if (f.exists()) f.bufferedReader().useLines { lines -> lines.count { it.isNotBlank() } } else 0
+        val n = countEntries(file(context))
         cachedCount = n
         n
     } catch (_: Exception) { 0 }
 
+    /** Bytes in the current log and the rotated one. */
     fun fileSizeBytes(context: Context): Long = try {
-        file(context).length()
+        val f = file(context)
+        f.length() + rotatedOf(f).length()
     } catch (_: Exception) { 0L }
 
+    /** Deletes the current log and the rotated one. */
     fun delete(context: Context) {
-        file(context).delete()
+        deleteBoth(file(context))
         cachedCount = 0
     }
 
@@ -106,12 +176,7 @@ object GateAuditLog {
         // One buffered writer, not a file open/close per line.
         export.bufferedWriter().use { out ->
             out.write(header.toString() + "\n")
-            val source = file(context)
-            if (source.exists()) {
-                source.forEachLine { line ->
-                    if (line.isNotBlank()) out.write(line + "\n")
-                }
-            }
+            writeEntries(file(context), out)
         }
         return export
     }
@@ -133,9 +198,42 @@ object GateAuditLog {
 
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)
 
-    private fun trim(f: File) {
-        val lines = f.readLines()
-        f.writeText(lines.takeLast(lines.size / 2).joinToString("\n") + "\n")
+    /** The rotated generation beside [f] (gate_audit.jsonl → gate_audit.1.jsonl). */
+    internal fun rotatedOf(f: File): File = File(f.parentFile, ROTATED_NAME)
+
+    /**
+     * Once [f] is larger than [max], rename it to [rotatedOf] (replacing any older one), so the
+     * next write starts a fresh file. Nothing is cut in half. Returns true if it rotated.
+     * Pure file logic, JVM-tested; in the app it runs on the writer thread only.
+     */
+    internal fun rotate(f: File, max: Long): Boolean {
+        if (f.length() <= max) return false
+        val old = rotatedOf(f)
+        if (old.exists() && !old.delete()) Log.w(TAG, "could not remove old rotated audit log")
+        if (!f.renameTo(old)) {
+            Log.w(TAG, "audit rotate failed")
+            return false
+        }
+        return true
+    }
+
+    /** Non-blank lines in [f] and its rotated generation. */
+    internal fun countEntries(f: File): Int = listOf(rotatedOf(f), f).sumOf { g ->
+        if (g.exists()) g.bufferedReader().useLines { lines -> lines.count { it.isNotBlank() } } else 0
+    }
+
+    /** Oldest first: the rotated generation, then the current log. Blank lines dropped. */
+    internal fun writeEntries(f: File, out: java.io.Writer) {
+        for (g in listOf(rotatedOf(f), f)) {
+            if (g.exists()) g.forEachLine { line ->
+                if (line.isNotBlank()) out.write(line + "\n")
+            }
+        }
+    }
+
+    internal fun deleteBoth(f: File) {
+        f.delete()
+        rotatedOf(f).delete()
     }
 
     private fun totalRamMb(context: Context): Long = try {

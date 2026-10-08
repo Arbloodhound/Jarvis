@@ -8,6 +8,8 @@ class UltraApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Route and action-gate entries in the audit log need a Context they are not handed.
+        com.agent.ultra.gate.GateAuditLog.init(this)
         // Thermal headroom polling (API 30+; no-op below). Read via ThermalGuard.level.
         try { com.agent.ultra.agent.ThermalGuard.start(this) } catch (_: Exception) {}
         // Pre-tick apps that look like they hold money or credentials, once,

@@ -67,13 +67,24 @@ object ActionGate {
             ) ?: false
         } catch (e: Exception) { false }
         if (!drawn) bringUltraForward()
-        val ok = withTimeoutOrNull(TIMEOUT_MS) { d.await() } ?: false
+        var ok = false
+        try {
+            ok = withTimeoutOrNull(TIMEOUT_MS) { d.await() } ?: false
+        } finally {
+            // Exactly once per question, whatever the answer (approved, denied, timed out, or the
+            // run cancelled — which commits nothing, so BLOCKED). The matched word only, never the
+            // on-screen label.
+            com.agent.ultra.gate.GateAuditLog.recordAction(auditWord(reason), ok)
+        }
         try { svc?.hideGateOverlay() } catch (_: Exception) {}
         onUi { pending = null }
         waiter = null
         android.util.Log.i(TAG, "RESOLVED: ${if (ok) "approved" else "denied"} — \"$label\"")
         return ok
     }
+
+    /** The audit log's word for a match: [UNREADABLE] is a sentence, so it is logged as "unreadable". */
+    internal fun auditWord(reason: String): String = if (reason == UNREADABLE) "unreadable" else reason
 
     fun resolve(approved: Boolean) {
         waiter?.complete(approved)
