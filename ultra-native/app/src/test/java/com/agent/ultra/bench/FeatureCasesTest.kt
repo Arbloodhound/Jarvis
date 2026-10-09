@@ -1,6 +1,7 @@
 package com.agent.ultra.bench
 
 import com.agent.ultra.agent.LocalPrompt
+import com.agent.ultra.listen.LibrarianLinks
 import com.agent.ultra.listen.LibrarianPrompt
 import com.agent.ultra.listen.NoteDraft
 import com.agent.ultra.listen.NoteKind
@@ -145,7 +146,8 @@ class FeatureCasesTest {
     /** The librarian prompt's examples must not be the probe's own test case, or the probe grades
      *  a copied example: no name, place or key word of the test conversations in the prompt. */
     @Test fun librarianPromptDoesNotContainTheProbeCases() {
-        for (prompt in listOf(LibrarianPrompt.SYSTEM, LibrarianPrompt.SYSTEM_PLAIN)) {
+        // The linking prompt's instructions say "the same person", so only its examples are checked.
+        for (prompt in listOf(LibrarianPrompt.SYSTEM, LibrarianPrompt.SYSTEM_PLAIN, LibrarianLinks.EXAMPLE_TEXTS.joinToString("\n"))) {
             for (w in listOf("Priya", "Leeds", "Dentist", "Dr Lee", "passport", "Lisbon", "tomorrow at 3pm",
                     "Sam", "maybe Friday", "dinner", "book the table")) {
                 assertFalse(w, prompt.contains(w, ignoreCase = true))
