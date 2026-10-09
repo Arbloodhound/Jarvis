@@ -3,6 +3,23 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-09 (session 01K5Mi, evening) — Tor research (v3.0.37-test)
+Owner asked for Tor research with scam screening, cross-realm product/company verification, discovery crawl and a
+general investigate (case files on people, companies, topics). Built on claude/v4-tor-research (173a0d6), merged at
+683a900, released v3.0.37-test. 1445 JVM tests. All Tor-facing behaviour SOURCE-FIXED BUT RUNTIME-UNPROVEN (needs
+Orbot on the phone).
+- Settings "Onion research via Tor" and "Deep research over Tor": both default OFF; Offline-only wins. Owner's own
+  verified-onion list (empty). Orbot SOCKS 127.0.0.1:9050, name sent unresolved; normal client + DNS refuse .onion.
+- OnionSafety (v3 checksum, lookalikes, seed-phrase/private-key, impersonation); known-good list = DuckDuckGo only.
+- Phrases: "verify this product …" / "check this company …", "deep research …", "investigate …". Product briefs:
+  labelled mechanical sort, no pick or buy wording, end with a question. Investigate: sourced findings only, broker/
+  breach sites skipped, outreach drafts only (no send path, no UI yet). 40-tool manifest unchanged.
+- Not built (Claude declined): onion-marketplace listing navigation, seller ratings, checkout. Clearnet shopping
+  features (listings/seller reputation/gated checkout) were stopped by a safety check before starting; owner may
+  request them in a new session. Quant/crypto trading: owner deferred.
+- Open: open_url still hands .onion to the browser; onion address in an ordinary question still goes into the DDG
+  query text; full runs tested in parts only.
+
 ## 2026-10-09 (session 01K5Mi, later) — v4 handoff reviewed
 Owner uploaded claude-handoff_1.zip + jarvis-v4.zip (same code; v4 = their redesign on the v3.0.35 chassis). They
 adopted our review, withdrew 24/48 budgets, thinker sleep and the 0.880 claim; verify.sh/run_eval can now fail.
