@@ -24,8 +24,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 class FakeChatServer : AutoCloseable {
     sealed class Reply {
-        /** Streamed [text] in a few chunks, ending with [finishReason]. */
-        data class Text(val text: String, val finishReason: String = "stop") : Reply()
+        /** Streamed [text] in a few chunks, ending with [finishReason], after [delayMs] (a slow cloud call). */
+        data class Text(val text: String, val finishReason: String = "stop", val delayMs: Long = 0) : Reply()
         /** A plain HTTP error with [body]. */
         data class Error(val code: Int, val body: String = "internal error") : Reply()
     }
@@ -97,6 +97,7 @@ class FakeChatServer : AutoCloseable {
         when (val r = queue.poll() ?: Reply.Error(599, "fake server: no scripted reply left")) {
             is Reply.Error -> respond(r.code, "text/plain", r.body.toByteArray())
             is Reply.Text -> {
+                if (r.delayMs > 0) Thread.sleep(r.delayMs)
                 val sse = StringBuilder()
                 for (piece in r.text.chunked(7)) sse.append(frame(JSONObject().put("content", piece), null))
                 sse.append(frame(JSONObject(), r.finishReason))

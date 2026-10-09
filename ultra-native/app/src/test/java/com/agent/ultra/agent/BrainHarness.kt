@@ -24,6 +24,8 @@ class BrainHarness : AutoCloseable {
     val ctx: Context get() = ApplicationProvider.getApplicationContext()
     val server = FakeChatServer()
     val answers = CopyOnWriteArrayList<String>()
+    /** What the brain said out loud ([Brain.onSpeak]), in order. */
+    val spoken = CopyOnWriteArrayList<String>()
     val brain: Brain
 
     init {
@@ -38,6 +40,7 @@ class BrainHarness : AutoCloseable {
         com.agent.ultra.ui.UltraPrefs.setOfflineOnly(ctx, false)
         brain = Brain(ctx, LocalModelEngine(ctx))
         brain.onAnswer = { answers += it }
+        brain.onSpeak = { spoken += it }
         brain.speakTyped = { false }
     }
 

@@ -12,6 +12,7 @@ import com.agent.ultra.provider.ProviderConfig
 import com.agent.ultra.ui.ChatMessage
 import com.agent.ultra.ui.ChatStatus
 import com.agent.ultra.ui.ChatStore
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
@@ -281,7 +282,66 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     }
 
     /** Runs one request. [spoken]: it was said, not typed, so it is answered out loud and quickly. */
-    suspend fun run(userInput: String, spoken: Boolean = false) = runLock.withLock {
+    suspend fun run(userInput: String, spoken: Boolean = false) {
+        // A chat run (typed, or the chat's mic) quiet for 20 s leaves one line saying where it was
+        // (QuietStage). The voice brains have none: ambient listening logs at its own 20 s cue.
+        // When this call took the run lock (0 until then).
+        val enteredAt = java.util.concurrent.atomic.AtomicLong(0L)
+        val quiet = if (spokenAlways) null else quietWatch(enteredAt)
+        try {
+            runLock.withLock { enteredAt.set(System.currentTimeMillis()); runHoldingLock(userInput, spoken) }
+        } finally {
+            quiet?.cancel()
+        }
+    }
+
+    /** How long a chat run may show nothing before [quietWatch] records where it is. Tests shorten it. */
+    @Volatile internal var quietAfterMs = QuietStage.AFTER_MS
+
+    /** A cloud model call is open in [runLoop] (for [QuietStage]). */
+    @Volatile private var cloudCalling = false
+
+    /**
+     * Telemetry only, never cancels anything: once [quietAfterMs] has passed with nothing in the chat
+     * since this run took the run lock, one [GateAuditLog.recordQuiet] line with the stage, elapsed
+     * time and route. Cancelled when the run ends, so at most one line per run. The status line and
+     * the last route are app-wide: with two brains running at once they may be the other one's.
+     */
+    private fun quietWatch(enteredAt: java.util.concurrent.atomic.AtomicLong): kotlinx.coroutines.Job {
+        val askedAt = System.currentTimeMillis()
+        return quietScope.launch {
+            kotlinx.coroutines.delay(quietAfterMs)
+            try {
+                val entered = enteredAt.get()
+                // Still waiting for the lock: anything in the chat is another run's.
+                val (shown, status) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    (entered > 0 && ChatStore.messages.any { !it.fromUser && it.timestamp >= entered && it.text.isNotBlank() }) to
+                        ChatStore.status.value
+                }
+                if (shown) return@launch
+                GateAuditLog.recordQuiet(
+                    QuietStage.stage(entered > 0, tools.running, cloudCalling, status?.phase, status?.detail.orEmpty()),
+                    System.currentTimeMillis() - askedAt,
+                    if (entered > 0) GateAuditLog.routeSince(entered) else QuietStage.NO_ROUTE,
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A log line is never worth a crash.
+                android.util.Log.w("UltraBrain", "quiet-run line failed: ${e.message}")
+            }
+        }
+    }
+
+    /** Where this brain's run is now ([QuietStage]), or null when it has none (the ambient
+     *  service's quiet-run line). */
+    val runStage: String? get() {
+        if (!running.containsKey(this)) return null
+        val status = ChatStore.status.value
+        return QuietStage.stage(true, tools.running, cloudCalling, status?.phase, status?.detail.orEmpty())
+    }
+
+    private suspend fun runHoldingLock(userInput: String, spoken: Boolean) {
         stopRequested = false
         hushed = false
         runSpoken = spoken || spokenAlways
@@ -1174,9 +1234,14 @@ JSON:"""
             // turn ends up being a tool call (raw JSON isn't user-facing).
             val streamMsg = ChatMessage(false, "")
             ChatStore.addToState(streamMsg)
-            val reply = ai.completeStreaming(messages, maxTokens, 0.2) { piece ->
-                ChatStore.appendTo(streamMsg.id, piece)
-            }.getOrElse {
+            cloudCalling = true
+            val reply = (try {
+                ai.completeStreaming(messages, maxTokens, 0.2) { piece ->
+                    ChatStore.appendTo(streamMsg.id, piece)
+                }
+            } finally {
+                cloudCalling = false
+            }).getOrElse {
                 ChatStore.removeById(streamMsg.id)
                 // Cloud failed (offline, quota, outage) — the on-device model
                 // answers what it can rather than dying.
@@ -1841,6 +1906,10 @@ RULES:
         /** Read-only: a run in progress was talked over ([hushAll]), so it must not be spoken over
          *  (the ambient service's late "Still working on it." cue checks it). */
         val runningHushed: Boolean get() = running.keys.any { it.hushed }
+
+        /** [quietWatch]'s timers: they only wait and write a log line. */
+        private val quietScope = kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
 
         /** Stop every run in progress. True when something was running. */
         fun stopAll(): Boolean {
