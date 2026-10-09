@@ -158,26 +158,77 @@ object WebResearch {
         .let { clean(it.replace(Regex("<[^>]*>"), " ")) }
         .take(max)
 
-    private val PRICE = Regex("(?<![\\w.])(?:([£$€])\\s?(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?|\\d+(?:\\.\\d{2})?)|(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?)\\s?(USD|GBP|EUR))(?![\\d])")
+    // A symbol or code before the number ("$1,299", "A$1,299", "EUR 379.99") or after it ("379,99 €",
+    // "1,299.00 EUR"). Both "1,299.99" and "1.299,99" styles; [amount] decides which separator is the
+    // decimal point. A trailing "." or "," (end of a sentence) is allowed. A symbol after the number
+    // must not be followed by a digit, so "10 $20" reads as $20, not as 10 $.
+    private const val CUR_PRE = "(?:US|AU|A|CA|C|NZ)?\\$|£|€|USD|GBP|EUR|CAD|AUD"
+    private const val CUR_POST = "\\$|£|€|USD|GBP|EUR|CAD|AUD"
+    private const val NUM = "\\d{1,3}(?:[.,]\\d{3})*(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?"
+    private val PRICE = Regex(
+        "(?<![\\w.])(?:($CUR_PRE)\\s?($NUM)(?!\\d)|($NUM)(?!\\d)\\s?($CUR_POST)(?![A-Za-z\\d]))")
+
+    /**
+     * The value of a price number as written: the last separator followed by exactly 1–2 digits is
+     * the decimal point, a separator followed by exactly 3 digits is a thousands separator
+     * ("1.299,00" → 1299.0, "1,299" → 1299.0, "12,99" → 12.99, "299.99" → 299.99). Null when it
+     * isn't a number in either style. Pure, JVM-tested.
+     */
+    fun amount(num: String): Double? {
+        val s = num.trim()
+        if (s.isEmpty() || !s.first().isDigit() || !s.all { it.isDigit() || it == '.' || it == ',' }) return null
+        val last = s.indexOfLast { it == '.' || it == ',' }
+        if (last < 0) return s.toDoubleOrNull()
+        val tail = s.length - last - 1
+        val digits = when (tail) {
+            1, 2 -> s.substring(0, last).filter { it.isDigit() } + "." + s.substring(last + 1)
+            3 -> s.filter { it.isDigit() }
+            else -> return null
+        }
+        return digits.toDoubleOrNull()
+    }
+
+    private fun currencyLabel(sym: String): String = when (sym) {
+        "£", "GBP" -> "£"
+        "€", "EUR" -> "€"
+        "A$", "AU$", "AUD" -> "A$"
+        "C$", "CA$", "CAD" -> "C$"
+        "US$" -> "US$"
+        "NZ$" -> "NZ$"
+        else -> "$"
+    }
 
     /** Prices written in [text], in order, at most [max]. */
     fun prices(text: String, max: Int = 6): List<Price> = PRICE.findAll(text).mapNotNull { m ->
         val sym = m.groupValues[1].ifEmpty { m.groupValues[4] }
-        val num = m.groupValues[2].ifEmpty { m.groupValues[3] }.replace(",", "").toDoubleOrNull() ?: return@mapNotNull null
-        if (num <= 0.0) null else Price(num, when (sym) { "£", "GBP" -> "£"; "€", "EUR" -> "€"; else -> "$" }, m.value.trim())
+        val num = amount(m.groupValues[2].ifEmpty { m.groupValues[3] }) ?: return@mapNotNull null
+        if (num <= 0.0) null else Price(num, currencyLabel(sym), m.value.trim())
     }.take(max).toList()
+
+    private val YEAR = Regex("(?<!\\d)(20\\d{2})(?!\\d)")
+
+    /**
+     * The newest year from 2000 to [now] written in a result's [title], [snippet] or [url] (a URL like
+     * ".../2025/03/..." counts); later years are ignored. Null when none. Pure, JVM-tested.
+     */
+    fun yearOf(title: String, snippet: String, url: String, now: Int): Int? =
+        listOf(title, snippet, url).flatMap { f -> YEAR.findAll(f).map { it.groupValues[1].toInt() }.toList() }
+            .filter { it in 2000..now }.maxOrNull()
 
     /**
      * The block the brain reads: numbered sources (site, how trusted, how many searches found it,
-     * prices for products, what the page says) and how to use them.
+     * prices for products, the newest year the result mentions ([yearOf], up to [now]), what the page
+     * says) and how to use them.
      */
-    fun brief(request: String, kind: Kind, queries: List<String>, ranked: List<Ranked>, pages: Map<String, String>, max: Int = 3000): String =
+    fun brief(request: String, kind: Kind, queries: List<String>, ranked: List<Ranked>, pages: Map<String, String>, max: Int = 3000,
+              now: Int = java.time.Year.now().value): String =
         buildString {
             append("Searched: ").append(queries.joinToString(" | ")).append('\n')
             ranked.take(8).forEachIndexed { i, r ->
                 val h = r.hit
                 append('[').append(i + 1).append("] ").append(h.title).append(" — ").append(h.domain)
                 trust(h.domain)?.let { append(" (").append(it).append(')') }
+                yearOf(h.title, h.snippet, h.url, now)?.let { append(" · dated ").append(it) }
                 if (r.foundBy > 1) append(" · found by ").append(r.foundBy).append(" searches")
                 append('\n').append(h.url).append('\n')
                 val page = pages[h.url]
@@ -194,5 +245,6 @@ object WebResearch {
                 else -> "Using these: answer from what two or more sources agree on, cite them as [n], say where they disagree, " +
                     "and prefer reference and official sources over forums for facts."
             })
+            append(" Prefer recent sources for prices and specs.")
         }.let { if (it.length <= max) it else it.take(max - 1) + "…" }
 }
