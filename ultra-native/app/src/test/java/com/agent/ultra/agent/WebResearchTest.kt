@@ -158,12 +158,13 @@ class WebResearchTest {
         assertTrue(!t.contains("var x") && !t.contains("Menu"))
     }
 
-    @Test fun briefNumbersSourcesAndAsksForAShortlist() {
+    @Test fun briefNumbersSourcesAndLaysOutTheEvidence() {
         val hits = listOf(listOf(WebResearch.Hit("Best Buy", "https://www.bestbuy.com/x", "Now $329.99")))
         val b = WebResearch.brief("cheapest xm5", WebResearch.Kind.PRODUCT, listOf("xm5"), WebResearch.rank(hits, WebResearch.Kind.PRODUCT), emptyMap())
         assertTrue(b.contains("[1] Best Buy — bestbuy.com (known retailer)"))
         assertTrue(b.contains("prices seen: $329.99"))
-        assertTrue(b.contains("ranked shortlist"))
+        assertTrue(b.contains("in the price-evidence order above (sorted by price, lowest first)"))
+        assertTrue(!b.contains("ranked shortlist"))   // an order is not a pick (owner: never "buy this")
     }
 
     @Test fun ddgBotCheckAndRateLimitReadAsBlockedNotEmpty() {

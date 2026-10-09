@@ -729,7 +729,7 @@ class Tools(
         // Several targeted searches with the best pages read (WebResearch); the quick sources if it finds nothing.
         // [skipResearch]: the caller already ran the research and it found nothing.
         if (!skipResearch) try {
-            WebResearchRun.run(query, ::readPageOnScreen)?.let { return@withContext it }
+            WebResearchRun.run(query, ::readPageOnScreen, onion = OnionAccess.of(context), dir = context.filesDir)?.let { return@withContext it }
         } catch (e: kotlinx.coroutines.CancellationException) { throw e   // Stop must reach the caller
         } catch (e: Exception) { android.util.Log.w("UltraWeb", "research failed: ${e.message}") }
         instantAnswer(query)?.let { return@withContext it }

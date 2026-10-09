@@ -190,6 +190,54 @@ fun SettingsScreen(
             }
         }
 
+        run {
+            var onion by remember { mutableStateOf(UltraPrefs.onionResearch(context)) }
+            var deep by remember { mutableStateOf(UltraPrefs.deepResearch(context)) }
+            var own by remember { mutableStateOf(UltraPrefs.onionKnownGood(context)) }
+            var ownSaved by remember { mutableStateOf<String?>(null) }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Onion research via Tor", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Read .onion pages in research through Orbot (127.0.0.1:${com.agent.ultra.net.TorProxy.PORT}), " +
+                            "with phishing and scam checks. Off: onion links are skipped. Offline only wins.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = onion, onCheckedChange = { on -> onion = on; UltraPrefs.setOnionResearch(context, on) })
+            }
+            if (onion) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Deep research over Tor", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "A bounded onion link crawl, only when you say \"deep research …\" or \"investigate …\".",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                    }
+                    Switch(checked = deep, onCheckedChange = { on -> deep = on; UltraPrefs.setDeepResearch(context, on) })
+                }
+                OutlinedTextField(
+                    value = own, onValueChange = { own = it; ownSaved = null },
+                    label = { Text("Your verified onion addresses (one per line, name optional)") },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = {
+                        own = UltraPrefs.setOnionKnownGood(context, own)
+                        val n = own.lines().count { it.isNotBlank() }
+                        ownSaved = "Saved $n valid address${if (n == 1) "" else "es"}."
+                    }) { Text("Save") }
+                    ownSaved?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    }
+                }
+            }
+        }
+
         // ── On-device model ───────────────────────────────────────────
         SectionTitle("ON-DEVICE MODEL")
         Text(

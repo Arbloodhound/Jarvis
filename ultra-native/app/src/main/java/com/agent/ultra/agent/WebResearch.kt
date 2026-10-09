@@ -42,6 +42,50 @@ object WebResearch {
         else -> Kind.FACT
     }
 
+    private val VERIFY = Regex(
+        // Questions about whether something is real or a scam — not "how to clone a repo" or "is the Mona Lisa authentic".
+        "\\b(legit|legitimate|scammers?|real or fake|counterfeits?|phishing (site|clone|link|page)|trustworthy|reputable|" +
+            "(is|are) .{1,40}? (a )?scams?|(is|are) (this|that|it|the|they) (company|site|shop|store|seller|product|website) " +
+            "(real|safe|genuine))\\b|\\.onion\\b", RegexOption.IGNORE_CASE)
+
+    /**
+     * A product or company check: is it real, is the seller or site genuine, a scam, a phishing
+     * clone? Those get the verification rules in [brief] (evidence laid out, no pick, a question
+     * at the end).
+     */
+    fun verifying(request: String): Boolean = kind(request) == Kind.PRODUCT || VERIFY.containsMatchIn(request) || mode(request) != Mode.NORMAL
+
+    /**
+     * What the owner explicitly asked for. Only these phrases, at the start of the request, start
+     * the bigger runs — never anything inferred: "deep research …" (the Tor discovery crawl, also
+     * needs Settings → "Deep research over Tor"), "investigate …" (a case file), "verify this
+     * product …" / "check this company …" (the clearnet + onion product check).
+     */
+    enum class Mode { NORMAL, DEEP, INVESTIGATE, VERIFY_PRODUCT }
+
+    private const val LEAD = "^\\s*(?:(?:hey )?jarvis,?\\s+)?(?:please\\s+|can you\\s+|could you\\s+)?"
+    private val DEEP = Regex("$LEAD(?:do (?:a |some )?)?deep[- ]research(?:\\s+(?:on|into|for|about))?\\b", RegexOption.IGNORE_CASE)
+    // "investigate why my battery drains" is a question, not a case file.
+    private val INVESTIGATE = Regex("$LEAD(?:investigate(?!\\s+(?:why|how|what|whether|if|when|where)\\b)|open a case (?:on|into|about)|run an investigation (?:on|into))\\b", RegexOption.IGNORE_CASE)
+    // "verify this product", "check this company", "verify the product" — not "check the company's stock price".
+    private val VERIFY_PRODUCT = Regex("$LEAD(?:(?:verify|check) (?:this|that)|verify(?: the| a)?) (?:product|company)(?![\\w'’])(?:\\s*[:,-])?", RegexOption.IGNORE_CASE)
+
+    /** Pure, JVM-tested. */
+    fun mode(request: String): Mode = when {
+        DEEP.containsMatchIn(request) -> Mode.DEEP
+        INVESTIGATE.containsMatchIn(request) -> Mode.INVESTIGATE
+        VERIFY_PRODUCT.containsMatchIn(request) -> Mode.VERIFY_PRODUCT
+        else -> Mode.NORMAL
+    }
+
+    /** The request with its [mode] phrase taken off the front: what to research. Pure, JVM-tested. */
+    fun target(request: String): String = when (mode(request)) {
+        Mode.DEEP -> request.replaceFirst(DEEP, "")
+        Mode.INVESTIGATE -> request.replaceFirst(INVESTIGATE, "")
+        Mode.VERIFY_PRODUCT -> request.replaceFirst(VERIFY_PRODUCT, "")
+        Mode.NORMAL -> request
+    }.trim().trimEnd('?', '.', '!').trim()
+
     /** The subject of the request: polite and search words taken off the front. */
     fun subject(request: String): String =
         request.trim().trimEnd('?', '.', '!').replace(FILLER, "").replace(Regex("\\s+"), " ").trim()
@@ -62,7 +106,10 @@ object WebResearch {
                 "best $core $year",
             )
             Kind.HOWTO -> listOf(s, "$s step by step", "$s site:reddit.com OR site:stackexchange.com")
-            Kind.FACT -> listOf(s, "\"$core\" $year", "$core site:wikipedia.org OR site:reuters.com OR site:apnews.com OR site:bbc.com")
+            Kind.FACT -> listOf(s, "\"$core\" $year",
+                // Is it real / a scam: what people who dealt with it say, not an encyclopedia.
+                if (VERIFY.containsMatchIn(request)) "$core scam OR legit site:reddit.com OR site:trustpilot.com"
+                else "$core site:wikipedia.org OR site:reuters.com OR site:apnews.com OR site:bbc.com")
         }
         return q.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
     }
@@ -215,18 +262,173 @@ object WebResearch {
         listOf(title, snippet, url).flatMap { f -> YEAR.findAll(f).map { it.groupValues[1].toInt() }.toList() }
             .filter { it in 2000..now }.maxOrNull()
 
+    /** What a research run may do with a .onion link (Settings → "Onion research via Tor"). */
+    enum class OnionRoute { TOR, OFF, PROXY_DOWN, OFFLINE }
+
+    /**
+     * Pure, JVM-tested. Offline only wins over everything; then the setting; then whether Orbot's
+     * proxy answers. Only [OnionRoute.TOR] fetches, and only through the Tor proxy — an onion link
+     * is never fetched with the normal client.
+     */
+    fun onionRoute(offlineOnly: Boolean, settingOn: Boolean, proxyUp: Boolean): OnionRoute = when {
+        offlineOnly -> OnionRoute.OFFLINE
+        !settingOn -> OnionRoute.OFF
+        !proxyUp -> OnionRoute.PROXY_DOWN
+        else -> OnionRoute.TOR
+    }
+
+    /** The one line said when [n] onion links were skipped, or null when [route] reads them. */
+    fun onionSkipLine(route: OnionRoute, n: Int): String? {
+        val links = if (n == 1) "1 onion link" else "$n onion links"
+        return when (route) {
+            OnionRoute.TOR -> null
+            OnionRoute.OFFLINE -> "Note: offline only is on — skipped $links."
+            OnionRoute.OFF -> "Note: onion research via Tor is off (Settings) — skipped $links."
+            OnionRoute.PROXY_DOWN -> "Note: Tor isn't running (start Orbot) — skipped $links."
+        }
+    }
+
+    /** A LIKELY_PHISH or SCAM onion, named so the owner can recognise it — never as a link to visit. */
+    fun redFlagLine(r: OnionSafety.Result): String {
+        val what = if (r.verdict == OnionSafety.Verdict.SCAM) "a scam page" else "a likely phishing clone"
+        return "Red flag: ${OnionSafety.short(r.address)} is $what — ${r.reasons.joinToString("; ")}. " +
+            "Left out of the sources; not a link to visit."
+    }
+
+    /** An onion page read over Tor that passed screening: a source like any other, with its label. */
+    data class OnionSource(val url: String, val title: String, val label: String, val text: String)
+
+    /**
+     * Onion results for [brief]: pages read over Tor ([sources], listed first), the skip / red-flag
+     * lines ([lines]), and the onion addresses each clearnet page mentions ([claims], url →
+     * addresses) checked against [known] (address → name). With the setting off it holds at most a
+     * skip line.
+     */
+    data class OnionReport(
+        val sources: List<OnionSource> = emptyList(),
+        val lines: List<String> = emptyList(),
+        val claims: Map<String, List<String>> = emptyMap(),
+        val known: Map<String, String> = emptyMap(),
+    ) {
+        operator fun plus(o: OnionReport) = OnionReport(sources + o.sources, lines + o.lines, claims + o.claims, known + o.known)
+        val isEmpty: Boolean get() = sources.isEmpty() && lines.isEmpty() && claims.isEmpty()
+    }
+
+    /**
+     * Do the onion addresses that clearnet pages give match? [numbered] is each source's number
+     * and URL; [claims] the addresses each page mentions. A known-good address is named as such;
+     * a lookalike of one is a red flag (shortened, not a link); two pages giving addresses that
+     * look alike is a red flag (at most one is genuine); any other address counts only if the
+     * company's own site publishes it. Pure, JVM-tested.
+     */
+    fun onionIdentityLines(numbered: List<Pair<Int, String>>, claims: Map<String, List<String>>, known: Map<String, String>): List<String> {
+        val byAddr = LinkedHashMap<String, MutableList<String>>()
+        for ((n, url) in numbered) claims[url]?.forEach { a -> byAddr.getOrPut(OnionSafety.address(a)) { ArrayList() } += "[$n] ${domainOf(url)}" }
+        val knownAddr = known.keys.map(OnionSafety::address).toSet()
+        val out = ArrayList<String>()
+        for ((addr, where) in byAddr.entries.take(4)) {
+            val r = OnionSafety.classify("http://$addr/", null, known) ?: continue
+            val on = where.distinct().joinToString(", ")
+            out += when (r.verdict) {
+                OnionSafety.Verdict.TRUSTED -> "Onion identity: $addr (named on $on) is ${r.name ?: "a known-good service"}'s known-good address."
+                OnionSafety.Verdict.LIKELY_PHISH, OnionSafety.Verdict.SCAM -> "Red flag: an onion address named on $on " +
+                    "(${OnionSafety.short(addr)}) is a likely phishing clone — ${r.reasons.joinToString("; ")}. Not a link to visit."
+                OnionSafety.Verdict.UNKNOWN -> "Onion identity: $addr (named on $on) is not in the known-good list — " +
+                    "it is the company's only if the company's own site publishes this exact address."
+            }
+        }
+        val addrs = byAddr.keys.toList()
+        for (i in addrs.indices) for (j in i + 1 until addrs.size) {
+            val a = addrs[i]; val b = addrs[j]
+            if (a in knownAddr && b in knownAddr) continue
+            if (OnionSafety.lookalikeOf(a, listOf(b)) != null) out += "Red flag: ${byAddr.getValue(a).first()} and " +
+                "${byAddr.getValue(b).first()} give onion addresses that look alike but differ " +
+                "(${OnionSafety.short(a)} vs ${OnionSafety.short(b)}) — at most one is genuine."
+        }
+        return out
+    }
+
+    data class PriceSeen(val price: Price, val n: Int, val domain: String, val year: Int?)
+
+    /**
+     * Every price the sources show, sorted mechanically — by currency, then amount, lowest first —
+     * each with its source [n], site and the newest year the source mentions. Pure, JVM-tested.
+     */
+    fun priceEvidence(sources: List<Triple<Int, Hit, String?>>, now: Int, max: Int = 8): List<PriceSeen> =
+        sources.flatMap { (n, h, page) ->
+            prices(page ?: h.snippet, 3).map { PriceSeen(it, n, h.domain, yearOf(h.title, h.snippet, h.url, now)) }
+        }.distinctBy { Triple(it.n, it.price.currency, it.price.amount) }
+            .sortedWith(compareBy({ it.price.currency }, { it.price.amount })).take(max)
+
+    /**
+     * Prices far below the rest (under 60% of the median in the same currency, with at least 3
+     * prices): a red flag to check — a different item, used, or a fake shop. Pure, JVM-tested.
+     */
+    fun priceRedFlags(seen: List<PriceSeen>): List<String> = seen.groupBy { it.price.currency }.values.flatMap { same ->
+        if (same.size < 3) return@flatMap emptyList()
+        val sorted = same.map { it.price.amount }.sorted()
+        val median = if (sorted.size % 2 == 1) sorted[sorted.size / 2] else (sorted[sorted.size / 2 - 1] + sorted[sorted.size / 2]) / 2
+        same.filter { it.price.amount < median * 0.6 }.map {
+            "Red flag: ${it.price.text} at [${it.n}] ${it.domain} is far below the others " +
+                "(median ${it.price.currency}${"%.2f".format(java.util.Locale.ROOT, median)}) — check it's the same item, new, and a genuine site."
+        }
+    }
+
+    private fun PriceSeen.line() = "${price.text} [$n] $domain " + (year?.let { "($it)" } ?: "(undated)")
+
+    /** How the sources are listed — said in the brief, so the order is never read as a pick. */
+    const val ORDER_KEY = "Sources are listed by search agreement (how many searches found each, then search position), " +
+        "onion pages read over Tor first — an order, not a judgement of quality."
+
+    /** The closing question every verification answer ends with. */
+    const val NEXT_QUESTION = "End with one question asking what the owner wants next " +
+        "(for example: compare more sites, check one site, or read reviews)."
+
+    /**
+     * The rules for a product or company check ([verifying]): lay out the evidence, no pick, no
+     * purchase advice, a question at the end. No buying or recommending words in them.
+     */
+    fun verifyRules(kind: Kind): String = (if (kind == Kind.PRODUCT)
+        "Using these: lay the evidence out, option by option, in the price-evidence order above (sorted by price, lowest first) " +
+            "and say that's the order: price with its year, where (site [n]), why that source is or isn't trustworthy " +
+            "(known retailer, reviews or forum consensus, official site) and any red flags (price far below the others, " +
+            "unknown site, few or no reviews, used/refurbished). "
+    else "Using these: lay out what the evidence shows, source by source. ") +
+        "Say whether the product is real (independent sources describe it) and whether the company is real (its own site, " +
+        "reviews, how long it has been around). An onion address counts as the company's only when the company's own " +
+        "clearnet site publishes the exact same address. Say what the sources agree on and where they disagree; cite them as [n]. " +
+        "Repeat every Red flag line. No pick, no verdict on which one to get, no purchase advice — show the work. " + NEXT_QUESTION
+
     /**
      * The block the brain reads: numbered sources (site, how trusted, how many searches found it,
      * prices for products, the newest year the result mentions ([yearOf], up to [now]), what the page
-     * says) and how to use them.
+     * says) and how to use them. Onion pages read over Tor ([onion]) come first; skip, red-flag and
+     * onion-identity lines go at the top. When it's too long the sources are cut, never the lines
+     * at the top or the rules at the end.
      */
     fun brief(request: String, kind: Kind, queries: List<String>, ranked: List<Ranked>, pages: Map<String, String>, max: Int = 3000,
-              now: Int = java.time.Year.now().value): String =
-        buildString {
+              now: Int = java.time.Year.now().value, onion: OnionReport = OnionReport(), rules: Boolean = true): String {
+        val clear = ranked.take(8)
+        val first = onion.sources.size
+        val numbered = clear.mapIndexed { i, r -> (first + i + 1) to r.hit.url }
+        val verify = verifying(request)
+        val seen = if (kind == Kind.PRODUCT) priceEvidence(clear.mapIndexed { i, r -> Triple(first + i + 1, r.hit, pages[r.hit.url]) }, now) else emptyList()
+        val head = buildString {
             append("Searched: ").append(queries.joinToString(" | ")).append('\n')
-            ranked.take(8).forEachIndexed { i, r ->
+            val lines = onion.lines + onionIdentityLines(numbered, onion.claims, onion.known) + priceRedFlags(seen)
+            lines.distinct().forEach { append(it).append('\n') }
+            if (verify && (clear.isNotEmpty() || onion.sources.isNotEmpty())) append(ORDER_KEY).append('\n')
+        }
+        val body0 = buildString {
+            onion.sources.forEachIndexed { i, o ->
+                append('[').append(i + 1).append("] ").append(o.title).append(" — ")
+                    .append(OnionSafety.onionHost(o.url)?.let(OnionSafety::address).orEmpty()).append(" (").append(o.label).append(")\n")
+                append(o.url).append('\n')
+                if (o.text.isNotBlank()) append(o.text.take(600)).append('\n')
+            }
+            clear.forEachIndexed { i, r ->
                 val h = r.hit
-                append('[').append(i + 1).append("] ").append(h.title).append(" — ").append(h.domain)
+                append('[').append(first + i + 1).append("] ").append(h.title).append(" — ").append(h.domain)
                 trust(h.domain)?.let { append(" (").append(it).append(')') }
                 yearOf(h.title, h.snippet, h.url, now)?.let { append(" · dated ").append(it) }
                 if (r.foundBy > 1) append(" · found by ").append(r.foundBy).append(" searches")
@@ -238,13 +440,27 @@ object WebResearch {
                 }
                 if (text.isNotBlank()) append(text.take(if (page != null) 600 else 220)).append('\n')
             }
-            append(when (kind) {
-                Kind.PRODUCT -> "Using these: give a short ranked shortlist — price, where (site), why it's trustworthy (known retailer, " +
-                    "reviews or forum consensus) and any red flags (price far below the others, unknown site, few or no reviews, " +
-                    "used/refurbished). Say what the forums and reviews agree on. Cite sources as [n]. If prices disagree, say so."
+        }
+        // rules = false: the caller adds its own (the product check's table and question), so none here to contradict them.
+        val tail = if (!rules) "" else buildString {
+            if (seen.isNotEmpty()) append("Price evidence, sorted by price (lowest first), year = newest the source mentions: ")
+                .append(seen.joinToString(" · ") { it.line() }).append('\n')
+            append(when {
+                verify -> verifyRules(kind)
                 else -> "Using these: answer from what two or more sources agree on, cite them as [n], say where they disagree, " +
                     "and prefer reference and official sources over forums for facts."
             })
             append(" Prefer recent sources for prices and specs.")
-        }.let { if (it.length <= max) it else it.take(max - 1) + "…" }
+        }
+        // A lookalike address a page names is shown shortened everywhere, never as a link to visit.
+        val phish = onion.claims.values.flatten().map(OnionSafety::address).distinct()
+            .filter { OnionSafety.classify("http://$it/", null, onion.known)?.verdict == OnionSafety.Verdict.LIKELY_PHISH }
+        val body = OnionSafety.redact(body0, phish)
+        val room = max - head.length - tail.length
+        return when {
+            body.length <= room -> head + body + tail
+            room > 1 -> head + body.take(room - 1) + "…" + tail
+            else -> (head + tail).let { if (it.length <= max) it else it.take(max - 1) + "…" }
+        }
+    }
 }

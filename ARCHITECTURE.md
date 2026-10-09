@@ -14,7 +14,8 @@ The skeleton every change is checked against: what each part does and what it ta
 | LocalPrompt · LocalToolCall | `agent/LocalPrompt.kt, LocalToolCall.kt` | On-device prompts and the local tool catalog |
 | OfflineNavigator · OfflineNav | `agent/OfflineNavigator.kt, OfflineNav.kt` | On-device perceive, think, act, verify loop |
 | ReActNavigator | `agent/ReActNavigator.kt` | Cloud in-app navigator; owns the shared executeAction |
-| WebResearch · WebResearchRun | `agent/WebResearch.kt, WebResearchRun.kt` | Multi-query search, ranking, page reading, brief |
+| WebResearch · WebResearchRun | `agent/WebResearch.kt, WebResearchRun.kt` | Multi-query search, ranking, page reading, brief; onion policy; explicit "deep research" / "investigate" / "verify this product" runs |
+| Research over Tor | `research/Forums.kt, Contacts.kt, Discovery.kt, ProductCheck.kt, Investigation.kt` | Forum threads and wiki indexes, bounded onion crawl and link pool, product/company check, investigation case files (drafts-only outreach) |
 | Experience · Recipes | `agent/Experience.kt, Recipes.kt, RoutePlayer.kt` | Lessons from runs; saved routines |
 | Budgets | `agent/ThinkBudget.kt, WaitBudget.kt, ThermalGuard.kt` | Think tokens, wait time, heat scaling |
 
@@ -55,6 +56,7 @@ The skeleton every change is checked against: what each part does and what it ta
 | Gate | `gate/Gate.kt + Manifest, Contracts, RiskScorer` | Deterministic per-call policy |
 | ActionGate · Disagreement | `agent/ActionGate.kt, Disagreement.kt` | Confirm card for commitments; stop on contradiction |
 | ScreenSecrets · ScamWatch | `gate/ScreenSecrets.kt, ScamWatch.kt` | Codes and cards stay put; scam follow-ups blocked |
+| OnionSafety · TorProxy | `agent/OnionSafety.kt, net/TorProxy.kt` | v3 checksum, lookalike and scam screening (TRUSTED / LIKELY_PHISH / SCAM / UNKNOWN); onion pages only through Orbot's SOCKS proxy, the name never resolved on the phone |
 
 ### Voice in and out
 
@@ -246,7 +248,20 @@ flowchart TD
   BF --> PR["LocalPrompt.build<br/>3000-char research slot"]
   PR --> GEN["LocalModelEngine.generate"]
   RK -- "nothing found" --> OLD["Old path: instant answer,<br/>Wikipedia, DDG snippets"] --> PR
+  RK -- ".onion results / links in the request" --> ON{"onionRoute<br/>Offline only, setting, Orbot up?"}
+  ON -- "off or Tor down" --> SKIP["left out + one Note line<br/>(never the normal client)"] --> BF
+  ON -- "TOR" --> CLS["OnionSafety.classify<br/>address, then page"]
+  CLS -- "LIKELY_PHISH / SCAM" --> RF["Red flag line, shortened address<br/>never a source or a link"] --> BF
+  CLS -- "TRUSTED / UNKNOWN" --> TP["TorProxy.get (SOCKS5, ATYP 0x03)<br/>onion source, listed first"] --> BF
 ```
+
+The brief keeps its top lines (notes, red flags, onion identity, price red flags) and its closing rules when it has to be cut; sources are cut first. For a product or company check ("verifying") the rules lay the evidence out in a labelled mechanical order, say no pick and no purchase advice, and end with a question.
+
+Explicit phrases at the start of a request start bigger runs (`WebResearch.mode`), reached through the same `web_search` / `emitLocal` path, no new tool:
+
+- "verify this product …" / "check this company …" → `ProductCheck`: clearnet leg + onion leg (pages the owner gave, read through Tor, unlisted ones screened first), `companyCheck` (own site, onion published there or not, lookalikes, scam signals), a table sorted by trust tier then price with the key labelled, ending with a question.
+- "deep research …" → `Discovery` (needs both "Onion research via Tor" and "Deep research over Tor"): owner's thread URLs read the forums way, wiki indexes screened link by link, a bounded crawl (depth 1, 12 pages, 90 s) from the known-good set + the owner's list + the owner's pages; clean finds saved to `files/onion_link_pool.json`, flags to `files/onion_red_flags.json`. Tor down: stops with a note, no clearnet fallback.
+- "investigate …" → `Investigation`: clearnet, articles (contacts with url + snippet + time), Tor (opt-in, as above), OSINT operator queries and pivots; people-search / data-broker / breach sites skipped; case saved to `files/cases/<id>.json`; outreach drafts only, no send path.
 
 ## Memory and notes
 
@@ -327,6 +342,7 @@ flowchart LR
     F1["models/: thinker, librarian, draft,<br/>vision model + mmproj (.part resumable)"]
     F2["whisper, VAD, wake, MiniLM,<br/>TitaNet model files"]
     F3["voice folders (Kokoro, Piper)"]
+    F4["onion_link_pool.json, onion_red_flags.json,<br/>cases/&lt;id&gt;.json (research)"]
   end
 ```
 
@@ -380,7 +396,7 @@ flowchart TD
   EX -- "app_launch" --> AL["AppMatch.find<br/>AppMatchTest"]
   EX -- "react_navigate" --> RN["ReActNavigator + ActionGate<br/>NavigatorFixesTest, NavigatorPromptTest, NavPlanTest, ActionGateTest, DirectRequestTest"]
   EX -- "screen reads" --> SR["ScreenStructure / OcrLayout<br/>ScreenStructureTest, OcrLayoutTest, RealPageTest, NativeAppTest, AllFixturesTest"]
-  EX -- "web_search" --> WS["WebResearch<br/>WebResearchTest"]
+  EX -- "web_search" --> WS["WebResearch<br/>WebResearchTest, WebResearchOnionTest, OnionSafetyTest, TorProxyTest<br/>ForumsTest, DiscoveryTest, ProductCheckTest, InvestigationTest<br/>phone-only, no probe (live Tor)"]
   EX -- "ambient_recall" --> AR["MemoryRecall<br/>RecallScoreTest, MemoryVectorsTest<br/>phone-only → FeatureProbes.memoryScale (scan at 40k synthetic lines)"]
   EX -- "recipe_*" --> RCP["Recipes<br/>RecipeGuardTest"]
   RUN -. "every route taken" .-> AUD["routing audit GateAuditLog.recordRoute<br/>(cloud, local_answer, local_tool, offline_nav, web, cloud_fallback_local)<br/>GateAuditLogRotateTest + BrainLoopTest"]
@@ -422,6 +438,10 @@ Status words are the honesty statuses of `CLAUDE.md`, tied to how the check runs
 | Device actions (toggles, alarms, volume) + `verifyAction` on the cloud path | none; `FeatureProbes.offlineNavLive` checks the offline `runLocalCall` path only (and skips when the phone is online) | UNTESTED |
 | `react_navigate` (ReActNavigator, ActionGate) | `NavigatorFixesTest`, `NavigatorPromptTest`, `NavPlanTest`, `ActionGateTest`, `DirectRequestTest`; not driven through `Brain` | PARTIALLY PROVEN |
 | Screen reads, web search, ambient recall, recipes | `ScreenStructureTest`, `OcrLayoutTest`, `RealPageTest`, `NativeAppTest`, `AllFixturesTest`, `WebResearchTest`, `RecallScoreTest`, `MemoryVectorsTest`, `RecipeGuardTest` (the parts, not through `Brain`); recall speed on the phone → `FeatureProbes.memoryScale` (40k synthetic lines) | PARTIALLY PROVEN |
+| Onion links in research (`WebResearchRun.onionStep`): setting off → left out + one line; on with Orbot down → left out + one line; on and up → read through the Tor proxy only | `WebResearchOnionTest` (the three routes; a fake SOCKS5 proxy sees the onion name; the normal client refuses onion URLs), `TorProxyTest` (CONNECT uses ATYP 0x03 with the name's bytes, no local DNS lookup); live Orbot on the phone untested | SOURCE-FIXED BUT RUNTIME-UNPROVEN (JVM-proven up to a fake proxy) |
+| `OnionSafety` verdicts (v3 checksum, lookalikes, seed-phrase / doubling / impersonation) | `OnionSafetyTest` | PROVEN (by test) |
+| Verification brief: labelled order, no pick / purchase advice, closing question, red flags kept when cut | `WebResearchOnionTest`, `WebResearchTest`; what the model then says is not checked | PARTIALLY PROVEN |
+| "verify this product …" (`ProductCheck`), "deep research …" (`Discovery`, pool, red-flag log), "investigate …" (`Investigation`, case file, drafts-only outreach) | `ProductCheckTest`, `DiscoveryTest`, `ForumsTest`, `InvestigationTest` with fake fetchers; the `WebResearchRun` wiring and live Tor are not driven | PARTIALLY PROVEN |
 | Hey Jarvis → `AmbientListenService` → `Brain.run` | `WakeFilterTest`, `InterruptTest`, `EchoGuardTest`, `SegmenterTest` (parts) | CANNOT VERIFY FROM CURRENT ARTIFACTS (phone-only → `RealUseProbes.loopback`, `FeatureProbes.liveWake`) |
 | Assistant button → `VoiceActivity` | none | CANNOT VERIFY FROM CURRENT ARTIFACTS (phone-only → `RealUseProbes.spokenAnswer`, `RealUseProbes.stop`; these build `Brain` directly, not through `VoiceActivity`) |
 | Typed text → `ChatScreen` | `ScreensTest` (the screen renders; sending is not driven) | PARTIALLY PROVEN |
