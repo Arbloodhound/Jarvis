@@ -169,7 +169,7 @@ class TestKitActivity : ComponentActivity() {
         results.appendText("\n===== $section ${stamp()} · app $appVersion =====\n" + body.joinToString("\n") + "\n")
     }
 
-    /** This build's version ("2.6.10 (27)"): the results file keeps every earlier run, so each
+    /** This build's version ("3.0.35 (52)"): the results file keeps every earlier run, so each
      *  section says which build it came from (a save right after an update re-sends old runs). */
     private val appVersion: String by lazy {
         try {

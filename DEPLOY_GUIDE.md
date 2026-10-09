@@ -23,7 +23,7 @@ You need: the Pixel, Wi‑Fi, a charger, and about 1½ hours the first time (mos
 
 ## Updates in one tap with Obtainium
 
-Set this up once and you never do the zip / Extract / tap-the-APK dance again. Every time a **Release APK** build with the test kit finishes, GitHub publishes it as its own pre-release, named like **v2.6.42-test**, with two plain .apk files (not zipped): **jarvis-test.apk** (with the Jarvis Tests app) and **jarvis-release.apk**. The newest 5 are kept. Obtainium watches for them and offers the update.
+Set this up once and you never do the zip / Extract / tap-the-APK dance again. Every time a **Release APK** build with the test kit finishes, GitHub publishes it as its own pre-release, named like **v3.0.42-test** (builds up to 34 were v2.6.&lt;number&gt;-test), with two plain .apk files (not zipped): **jarvis-test.apk** (with the Jarvis Tests app) and **jarvis-release.apk**. The newest 5 are kept. Obtainium watches for them and offers the update.
 
 **1. Install Obtainium** (no Google needed): from **F-Droid**, or download the APK from its GitHub releases page (github.com/ImranR98/Obtainium/releases).
 
@@ -43,9 +43,9 @@ This token can only **read** the Jarvis repo. It cannot change anything, and it 
 - **Filter APKs by regular expression**: `jarvis-test\.apk` (the test build, with the Jarvis Tests app).
 - Tap **Add**.
 
-**After that:** Obtainium notifies you → tap **Update**. Your models and settings stay, because every build is signed with the same key. Each build has a higher version number (2.6.&lt;build number&gt;), so Android always accepts it as an update.
+**After that:** Obtainium notifies you → tap **Update**. Your models and settings stay, because every build is signed with the same key. Each build has a higher version number (3.0.&lt;build number&gt;; 2.6.&lt;build number&gt; before build 35), so Android always accepts it as an update.
 
-**Check it really installed:** Android shows its own "Update this app?" box after you tap Update in Obtainium. Tap **Update** there too, then wait for "App installed". Then open **Jarvis Tests** → **1 · Hardware check**: the first line says **App: 2.6.&lt;number&gt;**. If there's no "App:" line, the new build isn't installed. Pull down in Obtainium to refresh and try again.
+**Check it really installed:** Android shows its own "Update this app?" box after you tap Update in Obtainium. Tap **Update** there too, then wait for "App installed". Then open **Jarvis Tests** → **1 · Hardware check**: the first line says **App: 3.0.&lt;number&gt;** (2.6.&lt;number&gt; on builds before 35). If there's no "App:" line, the new build isn't installed. Pull down in Obtainium to refresh and try again.
 
 The 14-day build links (Part 1) still work too, if you ever need them.
 

@@ -43,12 +43,12 @@ android {
         minSdk = 26
         targetSdk = 35
         // release-apk.yml passes -PciBuildNumber=<run number>, so every GitHub build is a newer
-        // version (17 + N, "2.6.N") and an updater such as Obtainium sees it. Local builds: 17.
+        // version (17 + N, "3.0.N"; "2.6.N" up to run 34) and an updater such as Obtainium sees it. Local builds: 17.
         val ciBuild = (findProperty("ciBuildNumber") as String?)?.let {
             it.toIntOrNull()?.takeIf { n -> n > 0 } ?: error("ciBuildNumber must be a positive integer, got '$it'")
         }
         versionCode = 17 + (ciBuild ?: 0)
-        versionName = if (ciBuild != null) "2.6.$ciBuild" else "2.6.0-native"
+        versionName = if (ciBuild != null) "3.0.$ciBuild" else "3.0.0-native"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
