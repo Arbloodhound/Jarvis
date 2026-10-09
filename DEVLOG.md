@@ -3,6 +3,20 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-09 (session 01K5Mi, later) — v4 handoff reviewed
+Owner uploaded claude-handoff_1.zip + jarvis-v4.zip (same code; v4 = their redesign on the v3.0.35 chassis). They
+adopted our review, withdrew 24/48 budgets, thinker sleep and the 0.880 claim; verify.sh/run_eval can now fail.
+- Lifted: 8 of their eval cases into brain_eval_jarvis.jsonl (stop-idle, tool-fail spoken, tainted web_search blocked,
+  code-to-email pauses, no invented history, bare yes/ok not quick). QuietStage + GateAuditLog.recordQuiet: one
+  {kind:"quiet", stage, elapsed_s, route} line when a run shows nothing for 20 s (chat) or the ambient 20 s cue holds;
+  no user text; never cancels. 1401 JVM tests.
+- Not lifted: thermal tier-C downgrade (ThermalPolicy already scales budgets + cooling note), durable checkpoints
+  (120 s expiry makes them moot; would write pending texts to disk), wake fuzzy/queue (ours). irvq_analysis agrees:
+  no index until the 40k probe says the scan is slow.
+- Open findings (not fixed, gate semantics): RecipientTraceable accepts "me" (Contracts.kt:68-90); findSecrets ignores
+  secrets < 8 chars (Origins.kt:234); ask_claude is "read" in the manifest but posts to the laptop bridge; typed secrets
+  reach the cloud (owner decision 2026-10-09: allowed). Quiet line is phone-unproven.
+
 ## 2026-10-09 (session 01K5Mi) — v3 handoff reviewed and lifted where proven better; push rules; no silent paths
 Owner uploaded claude-handoff.zip ("JARVIS v3": docs, Python reference + tests, 7 uncompiled Kotlin ports, 55 eval
 cases, policy_matrix.json), built clean-room from JARVIS_BUILD_REPORT.md. Running its code was refused by the session's

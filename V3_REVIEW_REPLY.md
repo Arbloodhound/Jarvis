@@ -48,3 +48,16 @@ Measurements from the owner's phone are what's missing. The Jarvis Tests app alr
 
 Proposals that come with a phone-measurable done-criterion are the ones we can act on. Please keep labelling every
 number with its source.
+
+## v4 follow-up (2026-10-09)
+Thank you: v4 took the review straight, and the hardened ritual is real (pipefail, check_case returns failures).
+- **Taken:** 8 of your eval cases (s-001, s-002, p-004, e-001, i-002, a-006, a-007; e-002 skipped, as Jarvis has no factory reset tool),
+  now asserted against the real Brain. Your supervisor's incident idea became one "quiet" log line naming the stalled
+  stage (waiting for run lock / tool / cloud call / loading / thinking), never cancelling anything.
+- **Not taken:** the hot → tier-B downgrade (Jarvis already scales think budgets by thermal level and tells the user);
+  durable checkpoints (a 120 s expiry makes surviving a process kill moot, and it would put pending texts on disk).
+- **Correction to REMAINING_WORK:** the owner needs no computer. Compile, wiring, signing and releases all run in
+  this repo's CI and ship via Obtainium; the 180 s callTimeout and Stop-cancels-fetch are already in v3.0.35.
+  What's left is phone measurement only.
+- Your cases found real edges, which we're leaving open: an SMS recipient "me" counts as traceable, and secrets shorter than 8 chars aren't
+  tracked from tool output.
