@@ -1,5 +1,7 @@
 package com.agent.ultra.agent
 
+import com.agent.ultra.net.cancelOnStop
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -22,32 +24,37 @@ object WebResearchRun {
     /** Opening one page on screen and reading it. */
     const val SCREEN_MS = 15_000L
 
-    private fun get(url: String): String? = runCatching {
-        http.newCall(Request.Builder().url(url).header("User-Agent", UA).header("Accept-Language", "en").build()).execute().use { r ->
+    /** One page's HTML, or null when it failed. Stop (or the [BUDGET_MS] limit) cancels the request. */
+    internal suspend fun get(url: String): String? = try {
+        val call = http.newCall(Request.Builder().url(url).header("User-Agent", UA).header("Accept-Language", "en").build())
+        cancelOnStop(call) { call.execute().use { r ->
             if (!r.isSuccessful) null else r.body?.let { b -> if ((b.contentType()?.subtype ?: "html").contains("html")) b.string().take(600_000) else null }
-        }
-    }.getOrNull()
+        } }
+    } catch (e: CancellationException) { throw e   // Stop, not a failed page
+    } catch (_: Exception) { null }
 
     /**
      * One DuckDuckGo HTML search, sent the way the maintained scrapers send it (ddgs, duckduckgo_search
      * and SearXNG all POST the form to html.duckduckgo.com/html with this Referer): a plain GET is the
      * request most likely to get the bot check. Null when blocked ([WebResearch.ddgBlocked]) or failed.
      */
-    private fun search(q: String): String? = runCatching {
+    private suspend fun search(q: String): String? = try {
         val form = okhttp3.FormBody.Builder().add("q", q).add("b", "").build()
         val req = Request.Builder().url("https://html.duckduckgo.com/html/").post(form)
             .header("User-Agent", UA).header("Accept-Language", "en")
             .header("Referer", "https://html.duckduckgo.com/")
             .header("Sec-Fetch-Dest", "document").header("Sec-Fetch-Mode", "navigate")
             .header("Sec-Fetch-Site", "same-origin").header("Sec-Fetch-User", "?1").build()
-        http.newCall(req).execute().use { r ->
+        val call = http.newCall(req)
+        cancelOnStop(call) { call.execute().use { r ->
             val html = r.body?.string().orEmpty()
             if (!r.isSuccessful || WebResearch.ddgBlocked(r.code, html)) {
                 android.util.Log.w("UltraWeb", "search blocked or failed: HTTP ${r.code}")
                 null
             } else html
-        }
-    }.getOrNull()
+        } }
+    } catch (e: CancellationException) { throw e   // Stop, not a failed search
+    } catch (_: Exception) { null }
 
     /**
      * The research brief for [request], or null when nothing came back. [onScreen] reads a page in
