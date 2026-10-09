@@ -38,6 +38,22 @@ class ScamSignalsTest {
         assertTrue("missed ${missed.size}/${all.size}:\n" + missed.joinToString("\n") { it.second }, missed.size * 10 <= all.size)
     }
 
+    /** Shapes a review found missed: each must be flagged, not just fall inside the 10% allowance. */
+    @Test fun feeDebtDoublingJobAndHeldParcelShapesAreFlagged() {
+        val cases = mapOf(
+            "Your parcel is held. Pay \$2.99 now at bit.ly/p9z" to Sign.HELD,
+            "Congratulations! You won a cruise. Claim with a \$49 fee" to Sign.MONEY_REQUEST,
+            "Double your crypto! Send 0.1 BTC and get 0.2 back" to Sign.DOUBLING,
+            "IRS: you owe \$1840. Pay immediately or a warrant is issued" to Sign.MONEY_REQUEST,
+            "Work from home, \$900/week! Just pay the \$75 training fee first" to Sign.JOB,
+        )
+        for ((t, sign) in cases) {
+            val a = ScamSignals.assess("+1 555 333 7170", t)
+            assertTrue("$t <- ${a.reasons}", a.scam)
+            assertTrue("$t <- ${a.reasons}", sign in a.signs)
+        }
+    }
+
     @Test fun reasonsArePlainAndAskFirst() {
         val a = ScamSignals.assess("+1 555", "Buy Google Play cards and send me pictures of the codes. Don't tell anyone.")
         assertTrue(a.scam)

@@ -38,7 +38,12 @@
     {"from": "+1 555 222 9090", "text": "PayPal: your account has been limited. Restore access by confirming your login details at paypal-resolution-center.site"},
     {"from": "Unknown", "text": "Hi mom, new number, old phone broke. Can you text me back? Need a quick favour, I have to pay something urgently and my banking app isn't working."},
     {"from": "+1 555 333 7171", "text": "FedEx: we attempted delivery. Your package will be returned unless you confirm your address and pay the $2.00 fee within 24 hours: fedex-reschedule.link"},
-    {"from": "+1 555 333 7172", "text": "Venmo: you've received $750! To claim your payment, verify your account at venmo-claims.top"}
+    {"from": "+1 555 333 7172", "text": "Venmo: you've received $750! To claim your payment, verify your account at venmo-claims.top"},
+    {"from": "+1 555 333 7173", "text": "Your parcel is held. Pay $2.99 now at bit.ly/p9z"},
+    {"from": "+1 555 333 7174", "text": "Congratulations! You won a cruise. Claim with a $49 fee"},
+    {"from": "+1 555 333 7175", "text": "Double your crypto! Send 0.1 BTC and get 0.2 back"},
+    {"from": "+1 555 333 7176", "text": "IRS: you owe $1840. Pay immediately or a warrant is issued"},
+    {"from": "+1 555 333 7177", "text": "Work from home, $900/week! Just pay the $75 training fee first"}
   ],
   "benign": [
     {"from": "Google", "text": "G-482913 is your Google verification code. Don't share it with anyone."},
@@ -100,6 +105,16 @@
     {"from": "Work", "text": "Reminder: security training due by Friday. Log in at training.company.com"},
     {"from": "Bank", "text": "Your debit card was declined for a $12.00 purchase at CAFE. Reply 1 if you made this purchase."},
     {"from": "Grandson", "text": "Hey grandpa, I lost my phone at the game but found it! All good now"},
-    {"from": "Carrier", "text": "Your data plan renews today. You've used 4.2GB of 10GB."}
+    {"from": "Carrier", "text": "Your data plan renews today. You've used 4.2GB of 10GB."},
+    {"from": "Chase", "text": "Chase: your account verification code is 482913. Don't share it."},
+    {"from": "Friend", "text": "We won the game! I'll pay for pizza"},
+    {"from": "Work", "text": "Your job training starts Monday at 9"},
+    {"from": "Partner", "text": "Did the work deposit come through?"},
+    {"from": "Clinic", "text": "Your appointment is tomorrow, reply immediately to confirm: https://bit.ly/abc"},
+    {"from": "Store", "text": "Your package is on hold at the pickup point until Friday."},
+    {"from": "Library", "text": "Late fee: you owe $12 on your library account."},
+    {"from": "Friend", "text": "I'll double your money back if you don't like it"},
+    {"from": "Colleague", "text": "Working from home today, call me at 555-201-3344"},
+    {"from": "Neighbour", "text": "Babysitter needed, $15/hour, call 555-201-3344"}
   ]
 }
