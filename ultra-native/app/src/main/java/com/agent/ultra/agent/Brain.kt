@@ -1838,6 +1838,10 @@ RULES:
          *  to Jarvis over its answer, and the rest of it must not talk over them. */
         fun hushAll() { for (b in running.keys) b.hushed = true }
 
+        /** Read-only: a run in progress was talked over ([hushAll]), so it must not be spoken over
+         *  (the ambient service's late "Still working on it." cue checks it). */
+        val runningHushed: Boolean get() = running.keys.any { it.hushed }
+
         /** Stop every run in progress. True when something was running. */
         fun stopAll(): Boolean {
             val any = running.isNotEmpty()

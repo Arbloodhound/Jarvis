@@ -753,15 +753,16 @@ class Tools(
         }
     }
 
-    private fun instantAnswer(query: String): String? {
+    private suspend fun instantAnswer(query: String): String? {
         return try {
         val url = "https://api.duckduckgo.com/?q=" + URLEncoder.encode(query, "UTF-8") +
             "&format=json&no_html=1&skip_disambig=1"
         val req = Request.Builder().url(url)
             .header("User-Agent", "AgentUltra/2.0").build()
-        http.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) return null
-            val j = JSONObject(resp.body?.string() ?: return null)
+        val call = http.newCall(req)
+        com.agent.ultra.net.cancelOnStop(call) { call.execute().use { resp ->
+            if (!resp.isSuccessful) return@cancelOnStop null
+            val j = JSONObject(resp.body?.string() ?: return@cancelOnStop null)
             val out = mutableListOf<String>()
             j.optString("Answer").takeIf { it.isNotBlank() }?.let { out += "Answer: $it" }
             j.optString("AbstractText").takeIf { it.isNotBlank() }?.let { abs ->
@@ -779,33 +780,37 @@ class Tools(
             }
             if (out.isEmpty()) null
             else "Search results for \"$query\":\n" + out.joinToString("\n")
-        }
+        } }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e   // Stop, not "no answer"
         } catch (_: Exception) { null }
     }
 
-    private fun wikipedia(query: String): String? {
+    private suspend fun wikipedia(query: String): String? {
         return try {
         val searchUrl = "https://en.wikipedia.org/w/api.php?action=opensearch&limit=3&format=json&search=" +
             URLEncoder.encode(query, "UTF-8")
         val req = Request.Builder().url(searchUrl)
             .header("User-Agent", "AgentUltra/2.0").build()
-        val title = http.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) return null
-            val arr = org.json.JSONArray(resp.body?.string() ?: return null)
+        val call = http.newCall(req)
+        val title = com.agent.ultra.net.cancelOnStop(call) { call.execute().use { resp ->
+            if (!resp.isSuccessful) return@cancelOnStop null
+            val arr = org.json.JSONArray(resp.body?.string() ?: return@cancelOnStop null)
             arr.optJSONArray(1)?.optString(0)
-        }
+        } }
         if (title.isNullOrBlank()) return null
         val sumUrl = "https://en.wikipedia.org/api/rest_v1/page/summary/" +
             URLEncoder.encode(title, "UTF-8")
         val req2 = Request.Builder().url(sumUrl)
             .header("User-Agent", "AgentUltra/2.0").build()
-        http.newCall(req2).execute().use { resp2 ->
-            if (!resp2.isSuccessful) return null
-            val j = JSONObject(resp2.body?.string() ?: return null)
+        val call2 = http.newCall(req2)
+        com.agent.ultra.net.cancelOnStop(call2) { call2.execute().use { resp2 ->
+            if (!resp2.isSuccessful) return@cancelOnStop null
+            val j = JSONObject(resp2.body?.string() ?: return@cancelOnStop null)
             val extract = j.optString("extract")
             if (extract.isBlank()) null
             else "Search results for \"$query\":\n$extract\nSource: en.wikipedia.org/wiki/${title.replace(" ", "_")}"
-        }
+        } }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e   // Stop, not "no answer"
         } catch (_: Exception) { null }
     }
 
@@ -818,9 +823,10 @@ class Tools(
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
                 .build()
-            http.newCall(req).execute().use { resp ->
+            val call = http.newCall(req)
+            com.agent.ultra.net.cancelOnStop(call) { call.execute().use { resp ->
                 val html = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) return@withContext "Error: search HTTP ${resp.code}"
+                if (!resp.isSuccessful) return@cancelOnStop "Error: search HTTP ${resp.code}"
                 val results = extractResults(html)
                 if (results.isNotEmpty())
                     "Search results for \"$query\":\n" + results.joinToString("\n")
@@ -834,7 +840,9 @@ class Tools(
                     if (textOnly.length > 50) "Search results for \"$query\" (raw):\n$textOnly"
                     else "Error: no results extracted"
                 }
-            }
+            } }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e   // Stop must reach the caller, not come back as "Error: search failed"
         } catch (e: Exception) {
             "Error: search failed: ${e.message}"
         }

@@ -1,13 +1,9 @@
 package com.agent.ultra.provider
 
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.Call
+import com.agent.ultra.net.cancelOnStop
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -177,22 +173,6 @@ class OpenAiClient(
             ensureActive()
             Result.failure(e)
         }
-    }
-
-    /**
-     * Runs [block] (the blocking execute and body read of [call]) and cancels [call] if the
-     * calling coroutine is cancelled meanwhile. A blocking OkHttp call ignores coroutine
-     * cancellation, so Stop kept the stream (and the run) going until it ended by itself.
-     * The cancelled call throws an IOException in [block], which the callers' catch turns into
-     * a failed Result as for any other network failure.
-     */
-    private suspend fun <T> cancelOnStop(call: Call, block: () -> T): T = coroutineScope {
-        // Unconfined: the cancel runs on the thread that cancels, not after a wait for a free IO
-        // thread. Cancelling a call that already finished does nothing.
-        val watcher = launch(Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
-            try { awaitCancellation() } finally { call.cancel() }
-        }
-        try { block() } finally { watcher.cancel() }
     }
 
     private fun finishReasonOf(choice: JSONObject): String? =

@@ -136,7 +136,11 @@ class VoiceActivity : ComponentActivity() {
                             } catch (e: kotlinx.coroutines.CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                say("Something went wrong: ${e.message}")
+                                // Never "…: null"; trimmed for speech; no detail on a locked
+                                // phone (the run may outlast the unlock, and the detail can
+                                // carry private content).
+                                val km = getSystemService(android.app.KeyguardManager::class.java)
+                                say(com.agent.ultra.listen.CommandFailure.reply(e, withDetail = km?.isKeyguardLocked != true))
                             } finally {
                                 running = false
                                 if (!speech.busy && state == "working") state = "done"

@@ -571,8 +571,10 @@ class AmbientListenService : Service() {
                 android.util.Log.i("UltraAmbient", "add-on heard mid-run: runs after it")
                 answeredAt = System.currentTimeMillis()
                 say("Okay, after this.")
-                pendingCommands.trySend(commandSeq.incrementAndGet() to d.request)
+                val seq = commandSeq.incrementAndGet()
+                pendingCommands.trySend(seq to d.request)
                 ensureCommandRunner()
+                lateCue(seq)
                 return
             }
             is com.agent.ultra.agent.Interrupt.Decision.Replace -> {
@@ -588,10 +590,38 @@ class AmbientListenService : Service() {
         // "On it." from when the command was heard, not from when it got its turn: a wait counts.
         val heard = System.currentTimeMillis()
         scope.launch {
-            kotlinx.coroutines.delay(ACK_AFTER_MS)
+            kotlinx.coroutines.delay(WaitCue.ON_IT_AFTER_MS)
             if (answeredAt < heard && com.agent.ultra.ui.VoicePrefs.sayOnIt(this@AmbientListenService)) say(WORKING_REPLY)
         }
-        pendingCommands.trySend(commandSeq.incrementAndGet() to request)
+        val seq = commandSeq.incrementAndGet()
+        pendingCommands.trySend(seq to request)
+        lateCue(seq)
+    }
+
+    /** The command the runner last started, and when (the late cue's "is it running yet"). */
+    @Volatile private var startedSeq = 0L
+    @Volatile private var startedAt = 0L
+
+    /**
+     * Once, [WaitCue.LATE_AFTER_MS] after command [seq] was heard: "Still working on it." if it is
+     * running with nothing said yet, or "I'm still busy with the last thing…" if it is still
+     * queued behind a run. Speaks only: the run and the queue are left as they are.
+     */
+    private fun lateCue(seq: Long) {
+        scope.launch {
+            kotlinx.coroutines.delay(WaitCue.LATE_AFTER_MS)
+            val now = System.currentTimeMillis()
+            val cue = WaitCue.late(
+                seq, clearedUpTo.get(), startedSeq, startedAt, answeredAt, lastCommandDoneAt,
+                hushed = com.agent.ultra.agent.Brain.runningHushed,
+                talking = WaitCue.talking(com.agent.ultra.ui.SpeechQueue.anyBusy, answeredAt, now),
+                onItEnabled = com.agent.ultra.ui.VoicePrefs.sayOnIt(this@AmbientListenService),
+            )
+            WaitCue.text(cue)?.let {
+                android.util.Log.i("UltraAmbient", "late cue for command $seq: $cue")
+                say(it)
+            }
+        }
     }
 
     @Synchronized private fun ensureCommandRunner() {
@@ -604,6 +634,7 @@ class AmbientListenService : Service() {
                 // A stopped run lets go of the engine at its next token but may still be unwinding.
                 while (com.agent.ultra.agent.Brain.anyRunning) delay(100)
                 if (seq <= clearedUpTo.get()) continue
+                startedAt = System.currentTimeMillis(); startedSeq = seq
                 dispatchNow(r)
             }
         }
@@ -775,7 +806,6 @@ class AmbientListenService : Service() {
         /** An open segment longer than this when the wake model fires holds other sound: cut it first. */
         private const val WAKE_CUT_MS = 2_500
         const val WORKING_REPLY = "On it."
-        private const val ACK_AFTER_MS = 2_500L
         private const val CHANNEL = "ambient_listen"
         private const val NOTIF_ID = 7101
         private const val MAX_MIC_FAILURES = 3
