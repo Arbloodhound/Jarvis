@@ -97,7 +97,7 @@ object UltraPrefs {
     private const val K_SPEED_BOOST = "speed_boost_draft"
 
     /** Speed boost: speculative decoding with the small draft model ([com.agent.ultra.local.DraftModel])
-     * beside the brain. On by default; it only takes effect once the draft is downloaded, and
+     * beside the brain. Off by default; when on, it only takes effect once the draft is downloaded, and
      * the engine skips it when memory is short. Same answers either way. */
     fun speedBoost(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_SPEED_BOOST, false)   // off: on the Pixel it made decoding slower (6.3 vs 9.3 tok/s) and an answer came back cut short (Real-use check 2.6.28)

@@ -89,7 +89,7 @@ object LibrarianPrompt {
         "Tom is Maria's cousin and works at the hospital",
         "Alex hedged about the new budget",
         "I guess it could sort of work, we'll see",
-    )
+    ) + LibrarianLinks.EXAMPLE_TEXTS   // the linking pass's examples, parsed by the same NoteParser
 
     /** [text] is (nearly) one of the prompt's own examples. */
     fun copiesExample(text: String): Boolean = EXAMPLE_TEXTS.any { NoteMerge.similarity(it, text) >= 0.8 }

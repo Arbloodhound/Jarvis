@@ -90,7 +90,7 @@ class NotesFromMemoryTest {
         val prompts = ArrayList<String>()
         val model = SmallModel { p, _ ->
             prompts += p
-            Result.success("{\"kind\":\"todo\",\"text\":\"The boiler repair Sam raised on Mon 5 Oct is still not booked\",\"who\":\"Sam\",\"tags\":[\"home\"]}")
+            Result.success("{\"kind\":\"todo\",\"text\":\"Sam has a plumber's price now but the boiler repair from Mon 5 Oct is still not booked\",\"who\":\"Sam\",\"tags\":[\"home\"]}")
         }
         val r = LibrarianLinks.run(s, model, zone, since = at(7, 0), now = { at(7, 12) }, keepGoing = { true })
         assertEquals(1, r.looked)
@@ -99,6 +99,31 @@ class NotesFromMemoryTest {
         val link = s.notes.last()
         assertEquals(listOf("follow-up", "home"), link.tags)
         assertEquals(listOf(9L), link.sourceIds)
+    }
+
+    @Test fun aLinkNoteCopiedFromThePromptExamplesIsDropped() = runBlocking {
+        val s = Store()
+        s.insert(Note(kind = NoteKind.TODO, text = "Sam needs to book the boiler repair", whenTs = null, whenEnd = null,
+            heardTs = at(5, 10), sourceIds = listOf(1), createdTs = at(5, 11), updatedTs = at(5, 11), who = "Sam"))
+        s.insert(Note(kind = NoteKind.SUMMARY, text = "Sam talked about the boiler again and the plumber's price",
+            whenTs = null, whenEnd = null, heardTs = at(7, 9), sourceIds = listOf(9), createdTs = at(7, 10), updatedTs = at(7, 10)))
+        // The model echoes both examples of its prompt (one lightly altered) instead of linking what it was shown.
+        val out = "{\"kind\":\"todo\",\"text\":\"The gutter clearing Nadia raised on Tue 6 Oct is still not done\",\"who\":\"Nadia\",\"tags\":[\"home\"]}\n" +
+            "{\"kind\":\"fact\",\"text\":\"Omar mentioned the allotment plot again, he first said it on Mon 5 Oct\",\"who\":\"Omar\",\"tags\":[\"garden\"]}"
+        val before = s.notes.size
+        val r = LibrarianLinks.run(s, SmallModel { _, _ -> Result.success(out) }, zone,
+            since = at(7, 0), now = { at(7, 12) }, keepGoing = { true })
+        assertEquals(1, r.looked)
+        assertEquals(0, r.added)
+        assertEquals(0, r.merged)
+        assertEquals(before, s.notes.size)
+    }
+
+    @Test fun linkPromptExamplesAreInItsPromptAndCountAsExamples() {
+        for (t in LibrarianLinks.EXAMPLE_TEXTS) {
+            assertTrue(t, LibrarianLinks.SYSTEM.contains(t))
+            assertTrue(t, LibrarianPrompt.copiesExample(t))
+        }
     }
 
     @Test fun noOlderNotesNoLinkCall() = runBlocking {
