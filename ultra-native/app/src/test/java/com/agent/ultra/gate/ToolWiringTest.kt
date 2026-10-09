@@ -25,5 +25,8 @@ class ToolWiringTest {
         val declared = (0 until tools.length()).map { tools.getJSONObject(it).getString("name") }.toSortedSet()
         assertEquals("handled but not in the manifest", emptySet<String>(), handled - declared)
         assertEquals("in the manifest but not handled", emptySet<String>(), declared - handled)
+        // The on-device loop's catalog: a tool it offers but the gate doesn't declare is always blocked.
+        assertEquals("offered on-device but not in the manifest", emptySet<String>(),
+            com.agent.ultra.agent.LocalToolCall.TOOLS.toSortedSet() - declared)
     }
 }

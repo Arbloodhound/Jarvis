@@ -230,15 +230,30 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         /** What the run had done before it paused, so resuming it keeps the record. */
         internal val sequence: List<Triple<String, JSONObject, Boolean>> = emptyList(),
         internal val steps: List<Experience.Step> = emptyList(),
+        /** When the pause began ([android.os.SystemClock.elapsedRealtime]): a card left too long
+         *  is not acted on ([pauseExpired]), like the on-screen tap gate's 120 s. */
+        internal val createdAtMs: Long = android.os.SystemClock.elapsedRealtime(),
     )
 
     /** The operator's decision on a paused action. */
     suspend fun resolvePending(approved: Boolean) = runLock.withLock {
         val p = pendingConfirm ?: return@withLock
         pendingConfirm = null
-        val ai = client ?: return@withLock
         if (!approved) {
             answer("Cancelled: ${p.description}")
+            return@withLock
+        }
+        // A card confirmed long after it was raised: the situation it described may be gone.
+        if (pauseExpired(p.createdAtMs, android.os.SystemClock.elapsedRealtime())) {
+            GateAuditLog.record(appContext, p.tool, GateAuditLog.Outcome.BLOCKED, "confirm_expired", p.episode.observations)
+            android.util.Log.i("UltraGate", "EXPIRED pause ${p.tool}: confirmed too late")
+            answer("Cancelled: ${p.description} (it waited over ${PAUSE_TIMEOUT_MS / 60_000} minutes — ask again)")
+            return@withLock
+        }
+        // The cloud brain was removed while the action waited (its key cleared in Settings: this
+        // Brain is kept while a pause is open, so its client is the old one): say so, not nothing.
+        val ai = client?.takeIf { ProviderConfig.load(appContext).isUsable } ?: run {
+            answer("Cancelled: ${p.description} — the cloud brain isn't set up any more.")
             return@withLock
         }
         // Offline-only switched on while the action waited: the cloud run is not resumed.
@@ -396,6 +411,16 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             ?: screenAsk?.let { MemoryFocus.Ask(if (it == "memory") MemoryFocus.Focus.MEMORY else MemoryFocus.Focus.NOTES, "") }
         val menuFocus = com.agent.ultra.ui.ChatStore.focus.value.takeIf { it != MemoryFocus.Focus.NORMAL }
             ?.let { MemoryFocus.Ask(it, MemoryFocus.query(IntentRouter.requestPart(userInput))) }
+
+        // "hi", "thanks", "what time is it": answered with no model, before any route or model load,
+        // so it works with no brain at all and with offline-only on (QuickReply). Not while the
+        // owner has the chat focused on memory or notes: that question goes to them as before.
+        if (spokenFocus == null && menuFocus == null) QuickReply.reply(userInput, java.time.ZonedDateTime.now())?.let {
+            GateAuditLog.recordRoute(GateAuditLog.ROUTE_LOCAL_ANSWER, "quick")
+            answer(it)
+            android.util.Log.i("UltraBrain", "RUN COMPLETE (quick reply)")
+            return
+        }
 
         // Offline only (Settings): the cloud brain is not used even when one is configured.
         val offlineOnly = NetPolicy.offlineOnly(appContext)
@@ -812,7 +837,10 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         // Spoken as it is written, a sentence at a time. Not a note: its text is replaced at the end.
         val chunker = if (speaksThisRun && onSpeak != null && !noteMode &&
             com.agent.ultra.ui.VoicePrefs.speakAsWritten(appContext)) SpeechChunker() else null
+        // The answer text the model wrote (the message may also hold a cooling note ahead of it).
+        val visible = StringBuilder()
         val onPiece: (String) -> Unit = { piece ->
+            visible.append(piece)
             if (piece.isNotEmpty()) shown?.let { ChatStore.clearStatus(it); shown = null }
             ChatStore.appendTo(msg.id, piece)
             chunker?.push(piece)?.forEach { speakPart(it) }
@@ -932,8 +960,13 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         result.onFailure {
             ChatStore.setText(msg.id, "Error: on-device model failed — ${it.message}")
         }
-        streamTail = if (result.isFailure) ChatStore.messageById(msg.id)?.text else chunker?.flush()
+        // Nothing visible came out (e.g. `</think>` then end of text): say so rather than nothing.
+        val emptyAnswer = if (result.isSuccess && !noteMode) blankAnswerFallback(visible.toString()) else null
+        if (emptyAnswer != null) ChatStore.setText(msg.id, emptyAnswer)
+        streamTail = if (result.isFailure) ChatStore.messageById(msg.id)?.text else (emptyAnswer ?: chunker?.flush())
         var finalMsg = ChatStore.messageById(msg.id) ?: msg
+        // setText reaches the list on the UI thread; this run may be ahead of it.
+        if (emptyAnswer != null) finalMsg = finalMsg.copy(text = emptyAnswer)
         if (noteMode && result.isSuccess) {
             // "Make a note of what Sam said …": the model wrote the note; the app files it.
             val note = com.agent.ultra.listen.MemoryNoteRequest.noteText(finalMsg.text)
@@ -1738,6 +1771,21 @@ RULES:
 
         /** How much of a tool result reaches the cloud model. */
         internal const val FEEDBACK_DATA_CHARS = 2500
+
+        /** Pure, JVM-tested. A paused action older than [timeoutMs] (or with a clock that went
+         *  backwards) is not carried out when confirmed. */
+        internal fun pauseExpired(createdAtMs: Long, nowMs: Long, timeoutMs: Long = PAUSE_TIMEOUT_MS) =
+            nowMs - createdAtMs !in 0..timeoutMs
+
+        /** How long a policy-gate pause can be confirmed: the on-screen tap gate's 120 s (ActionGate). */
+        internal const val PAUSE_TIMEOUT_MS = 120_000L
+
+        /** Pure, JVM-tested. What an on-device answer says when the model wrote nothing visible
+         *  (e.g. `</think>` then end of text): a line, never silence; null when [visible] has text. */
+        internal fun blankAnswerFallback(visible: String): String? =
+            if (visible.isBlank()) EMPTY_LOCAL_ANSWER else null
+
+        internal const val EMPTY_LOCAL_ANSWER = "Sorry, I didn't get an answer out — try asking again."
 
         private val SPOOF_MARKERS = listOf(
             Regex("\\[\\s*END\\s+UNTRUSTED\\s+DATA\\s*]", RegexOption.IGNORE_CASE),
