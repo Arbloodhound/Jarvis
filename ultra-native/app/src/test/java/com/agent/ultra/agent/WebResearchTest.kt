@@ -93,6 +93,65 @@ class WebResearchTest {
         assertEquals(null, WebResearch.trust("super-deals-xm5.shop"))
     }
 
+    private fun amounts(text: String) = WebResearch.prices(text).map { it.amount }
+
+    @Test fun pricesInEuropeanAndPrefixedFormats() {
+        assertEquals(listOf(379.99), amounts("379,99 €"))
+        assertEquals(listOf(1299.0), amounts("€1.299,00"))
+        assertEquals(listOf(1299.0), amounts("€1.299"))
+        assertEquals(listOf(1299.0), amounts("1.299 €"))
+        assertEquals(listOf(1299.99), amounts("1.299,99 € inkl. MwSt."))
+        assertEquals(listOf(1299.0), amounts("$1,299"))
+        assertEquals(listOf(12.99), amounts("$12,99"))
+        assertEquals(listOf(299.99), amounts("Now $299.99."))
+        assertEquals(listOf(349.0, 399.0), amounts("$349.00, was $399.00."))
+        assertEquals(listOf(1299.0), amounts("A$1,299"))
+        assertEquals(listOf(799.0), amounts("US$799"))
+        assertEquals(listOf(379.99), amounts("EUR 379.99"))
+        assertEquals(listOf(279.0), amounts("£279, delivered"))
+        assertEquals(emptyList<Double>(), amounts("version 3.5"))
+        assertEquals(emptyList<Double>(), amounts("call 555 0199"))
+        assertEquals(listOf(10.0, 20.0), amounts("€10 $20"))
+        assertEquals(listOf(20.0), amounts("only 10 $20 left"))
+    }
+
+    @Test fun pricesKeepTheCurrencyAsWritten() {
+        assertEquals(listOf("€", "€", "A$", "US$", "$", "£"),
+            WebResearch.prices("379,99 € or EUR 5, A$1,299, US$799, $5, £3").map { it.currency })
+        assertEquals("379,99 €", WebResearch.prices("now 379,99 € inkl.")[0].text)
+    }
+
+    @Test fun amountReadsBothSeparatorStyles() {
+        assertEquals(1299.0, WebResearch.amount("1.299,00")!!, 0.0)
+        assertEquals(1299.0, WebResearch.amount("1,299")!!, 0.0)
+        assertEquals(1299.0, WebResearch.amount("1.299")!!, 0.0)
+        assertEquals(12.99, WebResearch.amount("12,99")!!, 0.0)
+        assertEquals(299.5, WebResearch.amount("299.5")!!, 0.0)
+        assertEquals(1234567.89, WebResearch.amount("1,234,567.89")!!, 0.0)
+        assertEquals(42.0, WebResearch.amount("42")!!, 0.0)
+        assertEquals(null, WebResearch.amount("1.2345"))
+        assertEquals(null, WebResearch.amount("abc"))
+        assertEquals(null, WebResearch.amount(""))
+    }
+
+    @Test fun yearOfTakesTheNewestPastYear() {
+        assertEquals(2025, WebResearch.yearOf("Best headphones 2024", "Updated March 2025", "https://x.com/a", 2026))
+        assertEquals(2023, WebResearch.yearOf("Sony XM5 review", "", "https://www.rtings.com/2023/05/xm5", 2026))
+        assertEquals(2024, WebResearch.yearOf("Best phones of 2031 (predictions) and 2024", "", "https://x.com", 2026))
+        assertEquals(null, WebResearch.yearOf("Sony WH-1000XM5", "Now $329.99, sku 120265", "https://x.com/p?id=20251", 2026))
+    }
+
+    @Test fun briefTagsDatedSourcesAndAsksForRecent() {
+        val hits = listOf(listOf(
+            WebResearch.Hit("Best headphones 2025", "https://www.rtings.com/headphones/2025", "Updated for 2025"),
+            WebResearch.Hit("Best Buy", "https://www.bestbuy.com/x", "Now $329.99"),
+        ))
+        val b = WebResearch.brief("cheapest xm5", WebResearch.Kind.PRODUCT, listOf("xm5"), WebResearch.rank(hits, WebResearch.Kind.PRODUCT), emptyMap(), now = 2026)
+        assertTrue(b.contains("— rtings.com (community / reviews) · dated 2025\n"))
+        assertTrue(b.contains("— bestbuy.com (known retailer)\n"))
+        assertTrue(b.contains("Prefer recent sources for prices and specs."))
+    }
+
     @Test fun pageTextDropsScriptsAndTags() {
         val t = WebResearch.pageText("<html><script>var x=1</script><nav>Menu</nav><h1>Title</h1><p>Body &amp; text</p></html>")
         assertTrue(t.contains("Title")); assertTrue(t.contains("Body & text"))
