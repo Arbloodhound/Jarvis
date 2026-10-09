@@ -19,7 +19,7 @@ package com.agent.ultra.agent
  * really does send links. So this flags only:
  *
  * - an ask no legitimate sender makes — gift cards as payment, or sharing a code
- *   you were sent;
+ *   you were sent, or doubling the crypto you send;
  * - any ask together with heavy pressure;
  * - payment by wire / crypto / payment app together with urgency.
  *
@@ -43,12 +43,15 @@ object ScamSignals {
         LOOKALIKE("has a link pretending to be a company it isn't", ask = true, heavy = true),
         MONEY_REQUEST("asks you to send or pay money", ask = true),
         CALL_NUMBER("asks you to call a number", ask = true),
+        DOUBLING("promises to double your crypto or investment", ask = true),
         URGENCY("says it's urgent"),
         THREAT("threatens your account, or legal action", heavy = true),
         AUTHORITY("claims to be a bank, tax office, delivery firm or government", heavy = true),
         FAMILY("says it's family in trouble or on a new number", heavy = true),
         PRIZE("says you've won or are owed money", heavy = true),
         SECRECY("asks you to keep it secret", heavy = true),
+        JOB("offers a work-from-home wage", heavy = true),
+        HELD("says a parcel is held or undeliverable", heavy = true),
     }
 
     data class Assessment(
@@ -79,6 +82,12 @@ object ScamSignals {
     // A money noun or an amount is required: "send it over" and "move it to Friday" are not
     // asks for money. Only "pay" keeps "it"/"something" ("I have to pay something urgently").
     private val MONEY_ASK = rx("""\b(pay|transfer|send|wire|lend|move)\b(\s+\w+){0,3}?\s+((money|cash|funds|bills?|rent|fees?|fines?|payments?|deposit)\b|[£$€]\s?\d[\d,.]*|\d[\d,.]*\s?(dollars|pounds|euros|bucks|quid)\b)|\bpay\b(\s+\w+){0,2}?\s+(something|it)\b""")
+    // An amount tied to a fee ("a $49 fee", "fee of $3") or a debt ("you owe $1840") is an ask
+    // without a pay verb. "Late fee: you owe $12" alone is still not a scam: it needs heavy pressure.
+    private val FEE_ASK = rx("""[£$€]\s?\d[\d,.]*\s+(\w+\s+){0,2}?(fee|charge)s?\b|\b(fee|charge)\s+of\s+[£$€]\s?\d""")
+    private val OWE_ASK = rx("""\byou\s+owe\s+[£$€]\s?\d""")
+    // Decisive: nobody legitimate doubles what you send. Not "money": "I'll double your money back" is a guarantee.
+    private val DOUBLE = rx("""\b(double|triple|2x|3x|10x)\s+(your\s+)?(crypto|bitcoin|btc|eth|investment|deposit)\b""")
     private val PERSONAL = rx("""\b(confirm(ing)?|verify(ing)?|updat(e|ing)|validat(e|ing)|re-?enter(ing)?|unlock(ing)?|restor(e|ing))\b(\s+\w+){0,3}?\s+(account|card|bank|banking|password|login|log-in|details|information|identity|ssn|social security|medicare number)\b""")
     private val CALL = rx("""\bcall\b(\s+\w+){0,3}?\s+(\+?\d[\d\s().-]{6,}\d)""")
 
@@ -90,6 +99,11 @@ object ScamSignals {
     // Not "hi mum" alone — real children text that every day. The new-number story is the tell.
     private val FAMILY = rx("""(\bnew number\b|\b(old |my )?phone (broke|is broken|died|got stolen)\b|\b(lost|broke|dropped|cracked) my phone\b|\bin jail\b|\bbail (money|out)\b|\bpost(ing)? bail\b)""")
     private val PRIZE = rx("""\b(you('ve| have)? won|you are a winner|(you('re| are)|lucky|selected|declared|prize|lottery|jackpot|cash) winner|(been |are )?awarded (a|with|£|\$)|selected (2|to) receive|(cash|bonus|caller) prize|prize (reward|jackpot|draw)|guaranteed (a )?(£|\$|cash|prize)|claim (your )?(prize|reward|refund|gift|payment|money|funds|cash)|lottery|sweepstakes?|unclaimed|you('re| are) owed|owed a refund)\b""")
+    // Both halves together: "working from home today, call me" and "babysitter, $15/hour, call" are ordinary.
+    private val WORK_FROM_HOME = rx("""\bwork(ing)? from home\b""")
+    private val WAGE = rx("""[£$€]\s?\d[\d,]*\s*(/|per |a )(week|day|hour|hr)\b""")
+    // "Your package is on hold at the pickup point" matches too; it carries no ask, so it stays clean.
+    private val HELD = rx("""(parcel|package|shipment)\b(\s+\w+){0,3}?\s+(held|on hold|undeliverable|could not be delivered)\b""")
     private val SECRET = rx("""\b((don'?t|do not) (tell|say anything to|mention (this|it) to) (anyone|anybody|mum|mom|dad|your family|the bank)|keep (this|it) (between us|secret|quiet|to yourself)|(don'?t|do not) hang up)\b""")
 
     private val URL = rx("""\b((https?://)?((\d{1,3}\.){3}\d{1,3}|[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,24})(/\S*)?)""")
@@ -115,18 +129,21 @@ object ScamSignals {
         val foreign = hosts.filterNot { official(it) }
         if (foreign.isNotEmpty()) signs += Sign.LINK
         if (foreign.any { lookalike(it) }) signs += Sign.LOOKALIKE
-        if (MONEY_ASK.containsMatchIn(body)) signs += Sign.MONEY_REQUEST
+        if (MONEY_ASK.containsMatchIn(body) || FEE_ASK.containsMatchIn(body) || OWE_ASK.containsMatchIn(body)) signs += Sign.MONEY_REQUEST
         if (CALL.containsMatchIn(body)) signs += Sign.CALL_NUMBER
+        if (DOUBLE.containsMatchIn(body)) signs += Sign.DOUBLING
         if (URGENT.containsMatchIn(body)) signs += Sign.URGENCY
         if (THREAT.containsMatchIn(body)) signs += Sign.THREAT
         if (AUTHORITY.containsMatchIn(body) || AUTHORITY_CAPS.containsMatchIn(body)) signs += Sign.AUTHORITY
         if (FAMILY.containsMatchIn(text) || FAMILY.containsMatchIn(title)) signs += Sign.FAMILY
         if (PRIZE.containsMatchIn(body)) signs += Sign.PRIZE
         if (SECRET.containsMatchIn(body)) signs += Sign.SECRECY
+        if (WORK_FROM_HOME.containsMatchIn(body) && WAGE.containsMatchIn(body)) signs += Sign.JOB
+        if (HELD.containsMatchIn(body)) signs += Sign.HELD
 
         val asks = signs.filter { it.ask }
         val heavy = signs.filter { it.heavy }
-        val scam = giftSend || Sign.CODE_REQUEST in signs ||
+        val scam = giftSend || Sign.CODE_REQUEST in signs || Sign.DOUBLING in signs ||
             (Sign.GIFT_CARDS in signs && (Sign.URGENCY in signs || heavy.isNotEmpty())) ||
             (asks.isNotEmpty() && heavy.isNotEmpty()) ||
             (Sign.ODD_PAYMENT in signs && Sign.URGENCY in signs)
