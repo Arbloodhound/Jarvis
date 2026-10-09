@@ -955,9 +955,9 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                     try {
                         // Several targeted searches, the best pages read, sources numbered (WebResearch);
                         // the old single search when that finds nothing.
-                        WebResearchRun.run(IntentRouter.requestPart(userInput), tools::readPageOnScreen) { s ->
+                        WebResearchRun.run(IntentRouter.requestPart(userInput), tools::readPageOnScreen, onStatus = { s ->
                             val next = ChatStore.setStatus(ChatStatus.Phase.THINKING, s); ChatStore.clearStatus(searching); searching = next
-                        } ?: tools.execute("web_search", org.json.JSONObject().put("query", q).put("skipResearch", true))
+                        }, onion = OnionAccess.of(appContext), dir = appContext.filesDir) ?: tools.execute("web_search", org.json.JSONObject().put("query", q).put("skipResearch", true))
                             .takeIf { !it.startsWith("OFFLINE") && !it.startsWith("Error") && it.isNotBlank() }
                             ?.let { WebNeed.brief(q, it) }
                     } catch (e: kotlinx.coroutines.CancellationException) { throw e

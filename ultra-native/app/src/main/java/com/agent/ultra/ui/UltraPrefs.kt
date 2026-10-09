@@ -72,6 +72,44 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OFFLINE_ONLY, on).apply()
     }
 
+    private const val K_ONION = "onion_research"
+
+    /** Onion research via Tor: .onion links in research are read through Orbot's SOCKS proxy
+     * (net.TorProxy), with phishing/scam screening (agent.OnionSafety). Off by default; off means
+     * onion links are skipped with one line. Offline only wins over it. */
+    fun onionResearch(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_ONION, false)
+
+    fun setOnionResearch(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_ONION, on).apply()
+    }
+
+    private const val K_DEEP = "deep_research_tor"
+
+    /** Deep research over Tor: the bounded onion discovery crawl (research.Discovery), run only
+     * when the owner says "deep research …" or "investigate …", and only with onion research on.
+     * Off by default. */
+    fun deepResearch(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_DEEP, false)
+
+    fun setDeepResearch(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_DEEP, on).apply()
+    }
+
+    private const val K_ONION_KNOWN = "onion_known_good"
+
+    /** The owner's own verified onion addresses, one "address [name]" per line. Empty by default;
+     * trusted like the built-in directory (agent.OnionSafety.knownGood). */
+    fun onionKnownGood(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(K_ONION_KNOWN, "").orEmpty()
+
+    /** Stores only lines with a valid v3 address (agent.OnionSafety.cleanOwn); returns what was kept. */
+    fun setOnionKnownGood(context: Context, text: String): String {
+        val clean = com.agent.ultra.agent.OnionSafety.cleanOwn(text)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(K_ONION_KNOWN, clean).apply()
+        return clean
+    }
+
     private const val K_PRELOAD = "preload_brain"
 
     /** Load the on-device brain in the background when Jarvis opens / ambient listening starts,
