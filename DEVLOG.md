@@ -3,6 +3,35 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-09 (session 01K5Mi) — v3 handoff reviewed and lifted where proven better; push rules; no silent paths
+Owner uploaded claude-handoff.zip ("JARVIS v3": docs, Python reference + tests, 7 uncompiled Kotlin ports, 55 eval
+cases, policy_matrix.json), built clean-room from JARVIS_BUILD_REPORT.md. Running its code was refused by the session's
+safety classifier, so it was reviewed by reading (3 agents). Owner rule: keep everything unless removing it makes
+functional sense; freezes are not OK, fast thinking is.
+- Push rules (owner chose only these): .gitignore blocks models/keys/results files/audit logs; PR template with
+  evidence labels; releases v3.0.<run>-test (versionName 3.0.N, versionCode still 17+N), cleanup spans v2.6/v3.0 tags,
+  release notes carry evidence labels.
+- Lifted (all merged, JVM-PROVEN where said, phone SOURCE ONLY):
+  QuickReply: hi/thanks/bye/time/date answered with no model (whole utterance only; not ok/yes/no; skipped under a
+  memory/notes focus). Policy-gate pause expires after 120 s (confirm_expired audited). Confirm with the cloud key gone
+  says so. Blank on-device answer says "try asking again". ToolWiringTest: LocalToolCall.TOOLS ⊆ manifest.
+  BrainEvalTest + brain_eval_jarvis.jsonl: 14 v3 cases translated to Jarvis tool names, driven through the real Brain.
+  OpenAiClient: 180 s callTimeout + Stop cancels the OkHttp call (net/CancellableCall, also on every web fetch in
+  Tools/WebResearchRun; cancellation rethrown, never "Error:"). Ambient brain failures spoken (CommandFailure; no detail
+  when locked); VoiceActivity uses it. WaitCue: "Still working on it." at 20 s / "I'm still busy with the last thing —
+  … or say stop." for a queued command; never cancels anything. Price parsing: €1.299,00 / 379,99 € / A$ / EUR read
+  right (was €1 / missed); briefs tag each source "dated <year>". ScamSignals: parcel-held, prize fee, crypto doubling,
+  you-owe, work-from-home wage (43/43 scams, 0/70 benign on the corpus). LibrarianLinks examples can't be saved as notes.
+- Rejected with evidence: v3 think budgets 24/48 tokens (typed would be 6–8x less than now: kills reasoning); thinker
+  sleep after 120 s (copied from the vision unload; would bring back the ~25 s cold prompt); v3 watchdog (cooperative —
+  can't catch a real hang — and discards correct answers > 5 s; a measured good spoken answer took 7 s); policy matrix
+  as enforcement (changes decisions, deny-shadowing bug); runtime checkManifest (CI already); durable resume after kill
+  (would persist codes); v3 wake fuzzy / echo / queue / thermal / librarian guards (each looser or buggy vs Jarvis);
+  tiny-model tool driving (0.880 claim unsourced). v3's "55/55" is vacuous: run_eval.check_case never returns failures.
+- Owner decisions (2026-10-09): codes in tool results still go to the cloud model; no extra confirm for setting changes
+  after untrusted reads; logcat keeps full tool results. Don't ask again.
+1388 JVM tests, 0 failures; assembleDebug OK.
+
 ## 2026-10-08 (session 01K5Mi) — reference design (MVP Personal Agent) merged in: gaps closed, verification tree
 Owner: read the new handoff; merge in what the uploaded reference design (README_1/README_2, 12-layer diagram,
 blueprint) has and Jarvis lacks, unless something better is backed by evidence; use agents + an advisor; verify the

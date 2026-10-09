@@ -98,6 +98,11 @@ read this section, then CLAUDE.md and the top of DEVLOG.md. Older sections below
   Not built, with reasons in DEVLOG: RVQ memory, sandboxes, plugins, MCP, gateway, Playwright; deferred: Keystore key,
   jobs table.
 
+- **v3 handoff (2026-10-09):** reviewed by reading (its code may not be run here); proven-better parts lifted —
+  quick replies, pause expiry, never-silent fixes (cloud deadline, Stop cancels cloud + web, spoken failures, still-
+  working / still-busy cues), price parsing, scam phrases, link-example guard, translated eval cases. Rejected parts
+  and reasons: DEVLOG 2026-10-09. Reply for the other model: V3_REVIEW_REPLY.md. Releases are now v3.0.<run>-test.
+
 ## 5. What the phone has actually shown (Real-use results files)
 - 2.6.27 (12:40): 28 s runaway segments, whisper on slow cores, 129 drops, prompt examples copied into notes, Kokoro
   1.4× real time → all fixed in 28.
@@ -114,7 +119,8 @@ read this section, then CLAUDE.md and the top of DEVLOG.md. Older sections below
 - whisper's initial prompt goes through GetStringUTFChars (Modified UTF-8): an emoji wake name would be malformed.
 - Dead entries left per the no-refactor rule: `file_delete` in Tools.DESTRUCTIVE, `wake_onnx` pref, `ultra_a11y` prefs,
   several uncalled AgentController / service methods (listed in the wiring audit, DEVLOG).
-- Owner question open: hide personal tool results (SMS etc.) from logcat on release builds? (Brain logs ≤2000 chars.)
+- Owner DECIDED (2026-10-09): keep full tool results in logcat; codes still reach the cloud model; no extra confirm for
+  setting changes after untrusted reads. Rule: keep everything unless removing it makes functional sense.
 - A cloud run already in flight when Offline only is switched on finishes on the cloud (its web_search is blocked).
 - On-device gate blocks have no confirm path (runLocalCall refuses; only the cloud loop shows a confirm card).
 
