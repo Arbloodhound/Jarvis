@@ -635,7 +635,14 @@ class AmbientListenService : Service() {
             }
             try { fallbackBrain().run(run) }
             catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (e: Exception) { android.util.Log.w("UltraAmbient", "command failed: ${e.message}") }
+            catch (e: Exception) {
+                // Said out loud, as the voice screen does: the owner heard "On it." and must not
+                // be left with silence. Stop (a CancellationException) is rethrown above, unspoken.
+                android.util.Log.w("UltraAmbient", "command failed: ${e.message}")
+                answeredAt = System.currentTimeMillis()
+                // Locked: no detail, it can carry private content (LockedPolicy strips it too).
+                say(CommandFailure.reply(e, withDetail = km?.isKeyguardLocked != true))
+            }
             finally { lastCommandDoneAt = System.currentTimeMillis() }
         }
     }
@@ -865,4 +872,20 @@ class AmbientListenService : Service() {
 /** Decouples the service from the agent. VoiceActivity/Brain set onCommand. */
 object AmbientBridge {
     @Volatile var onCommand: ((String) -> Unit)? = null
+}
+
+/** What the ambient service says when a command's run throws. Pure, JVM-tested. */
+object CommandFailure {
+    private const val MAX_DETAIL = 120
+    const val GENERIC = "Something went wrong."
+
+    /** "Something went wrong: …" (as VoiceActivity says it), the detail trimmed for speech;
+     *  without [withDetail] (a locked phone) just "Something went wrong." */
+    fun reply(e: Throwable, withDetail: Boolean = true): String {
+        if (!withDetail) return GENERIC
+        val detail = e.message?.lineSequence()?.firstOrNull()?.trim().orEmpty()
+            .ifBlank { e.javaClass.simpleName }
+            .let { if (it.length > MAX_DETAIL) it.take(MAX_DETAIL).trimEnd() + "…" else it }
+        return "Something went wrong: $detail"
+    }
 }
