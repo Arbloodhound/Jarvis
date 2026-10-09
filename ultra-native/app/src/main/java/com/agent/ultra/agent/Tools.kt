@@ -34,7 +34,21 @@ class Tools(
     var recipes: Recipes? = null
     var recipeRunner: (suspend (String) -> String)? = null
 
+    /** The tool running now (its name only), for the quiet-run line ([QuietStage]); null between tools. */
+    @Volatile var running: String? = null
+        private set
+
     suspend fun execute(tool: String, params: JSONObject): String {
+        val outer = running   // a recipe step runs inside recipe_run
+        running = tool
+        try {
+            return executeNow(tool, params)
+        } finally {
+            running = outer
+        }
+    }
+
+    private suspend fun executeNow(tool: String, params: JSONObject): String {
         // Messages, contacts and location reach Android's own providers, so
         // the app-access list does not cover them — that list gates what the
         // accessibility service sees on screen, and reading the SMS database

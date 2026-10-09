@@ -86,12 +86,46 @@ object GateAuditLog {
      * never the user's text. No-op until [init] has run.
      */
     fun recordRoute(route: String, reason: String) {
+        val now = System.currentTimeMillis()
+        lastRoute = "$route/$reason" to now
         val ctx = appContext ?: return
         try {
-            append(file(ctx), routeEntry(route, reason, System.currentTimeMillis()))
+            append(file(ctx), routeEntry(route, reason, now))
         } catch (e: Exception) {
             Log.w(TAG, "audit write failed: ${e.message}")
         }
+    }
+
+    /** The last route recorded ("route/reason") and when, for [recordQuiet]'s route field. */
+    @Volatile private var lastRoute: Pair<String, Long>? = null
+
+    /** The route recorded since [sinceMs] (when a request came in), else "undecided". */
+    fun routeSince(sinceMs: Long): String = lastRoute.let {
+        com.agent.ultra.agent.QuietStage.route(it?.first, it?.second ?: 0L, sinceMs)
+    }
+
+    /**
+     * A run has been quiet a while ([com.agent.ultra.agent.QuietStage]): where it was ([stage]: fixed
+     * words or a tool name), for how long, and its route. Never the user's text or a tool's
+     * arguments. No-op until [init] has run.
+     */
+    fun recordQuiet(stage: String, elapsedMs: Long, route: String) {
+        val ctx = appContext ?: return
+        Log.i(TAG, "QUIET ${elapsedMs / 1000}s stage=$stage route=$route")
+        try {
+            append(file(ctx), quietEntry(stage, elapsedMs, route, System.currentTimeMillis()))
+        } catch (e: Exception) {
+            Log.w(TAG, "audit write failed: ${e.message}")
+        }
+    }
+
+    /** Pure, JVM-tested. Exactly {ts, kind, stage, elapsed_s, route}. */
+    internal fun quietEntry(stage: String, elapsedMs: Long, route: String, ts: Long): JSONObject = JSONObject().apply {
+        put("ts", ts)
+        put("kind", "quiet")
+        put("stage", stage)
+        put("elapsed_s", elapsedMs / 1000)
+        put("route", route)
     }
 
     /** Pure, JVM-tested. Exactly {ts, kind, route, reason}. */

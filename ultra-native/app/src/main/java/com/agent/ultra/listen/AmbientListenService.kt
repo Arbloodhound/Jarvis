@@ -608,15 +608,29 @@ class AmbientListenService : Service() {
      * queued behind a run. Speaks only: the run and the queue are left as they are.
      */
     private fun lateCue(seq: Long) {
+        val heard = System.currentTimeMillis()
         scope.launch {
             kotlinx.coroutines.delay(WaitCue.LATE_AFTER_MS)
             val now = System.currentTimeMillis()
-            val cue = WaitCue.late(
+            // Worked out as if "On it." were on: a quiet command is logged either way.
+            val quiet = WaitCue.late(
                 seq, clearedUpTo.get(), startedSeq, startedAt, answeredAt, lastCommandDoneAt,
                 hushed = com.agent.ultra.agent.Brain.runningHushed,
                 talking = WaitCue.talking(com.agent.ultra.ui.SpeechQueue.anyBusy, answeredAt, now),
-                onItEnabled = com.agent.ultra.ui.VoicePrefs.sayOnIt(this@AmbientListenService),
+                onItEnabled = true,
             )
+            // Quiet for 20 s: one line in the exportable log saying where (QuietStage). Only this
+            // service's own brain: the voice screen answers its commands itself (no cue then).
+            if (quiet != WaitCue.Cue.NONE) com.agent.ultra.gate.GateAuditLog.recordQuiet(
+                if (quiet == WaitCue.Cue.STILL_BUSY) com.agent.ultra.agent.QuietStage.QUEUED
+                else brainRef?.runStage ?: com.agent.ultra.agent.QuietStage.WORKING,
+                now - heard,
+                if (quiet == WaitCue.Cue.STILL_BUSY) com.agent.ultra.agent.QuietStage.NO_ROUTE
+                else com.agent.ultra.gate.GateAuditLog.routeSince(startedAt),
+            )
+            // "On it." off: "Still working on it." stays unsaid (WaitCue.late); the busy line is said.
+            val cue = if (quiet == WaitCue.Cue.STILL_WORKING &&
+                !com.agent.ultra.ui.VoicePrefs.sayOnIt(this@AmbientListenService)) WaitCue.Cue.NONE else quiet
             WaitCue.text(cue)?.let {
                 android.util.Log.i("UltraAmbient", "late cue for command $seq: $cue")
                 say(it)

@@ -69,6 +69,16 @@ class GateAuditLogRotateTest {
         assertEquals("no_client", e.getString("reason"))
     }
 
+    @Test fun quietEntryHasExactlyTheAllowedKeys() {
+        val e = GateAuditLog.quietEntry("tool:web_search", 20_499L, "cloud/request", 42L)
+        assertEquals(setOf("ts", "kind", "stage", "elapsed_s", "route"), e.keySet())
+        assertEquals(42L, e.getLong("ts"))
+        assertEquals("quiet", e.getString("kind"))
+        assertEquals("tool:web_search", e.getString("stage"))
+        assertEquals(20L, e.getLong("elapsed_s"))
+        assertEquals("cloud/request", e.getString("route"))
+    }
+
     @Test fun routeConstantsAreTheFixedWords() {
         assertEquals(
             listOf("cloud", "local_answer", "local_tool", "offline_nav", "web", "cloud_fallback_local"),
