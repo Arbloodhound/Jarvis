@@ -138,6 +138,10 @@ read this section, then CLAUDE.md and the top of DEVLOG.md. Older sections below
 4. Keep `ARCHITECTURE.md` + the page's Verification table current; add a host-harness case for any new native code.
 
 ## Release log since the last handoff
+### LATEST+12 (session 01K5Mi, 2026-10-09 02:07 UTC)
+`v3.0.35-test` (run 35) is Latest: first v3.0 tag. v3 handoff lifts (quick replies, pause expiry, never-silent fixes,
+price parsing, scam phrases, link-example guard, eval cases) + push rules. 1388 JVM tests. Unproven on the phone.
+
 ### LATEST+11 (session 01K5Mi, 2026-10-08 16:41 UTC)
 `v2.6.34-test` (run 34) is Latest: reference-design merge (fail-closed tool args, offline-only switch, route audit,
 backup/transfer exclusions, [UNTRUSTED DATA] label, BrainLoopTest, Verification tree, probes "Memory scan at 40k" and
