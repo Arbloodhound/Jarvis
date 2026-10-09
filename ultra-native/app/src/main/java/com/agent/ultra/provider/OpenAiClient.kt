@@ -1,7 +1,13 @@
 package com.agent.ultra.provider
 
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -15,7 +21,15 @@ import java.util.concurrent.TimeUnit
  * the assistant's text back. Matches the contract the brain was proven against
  * (Venice llama-3.3-70b, /chat/completions, no streaming).
  */
-class OpenAiClient(private val config: ProviderConfig) {
+class OpenAiClient(
+    private val config: ProviderConfig,
+    /**
+     * Deadline for the whole call, connect to last byte. The read timeout alone never fires on a
+     * stream that trickles a byte now and then, so without this a call could run forever.
+     * Tests pass about a second.
+     */
+    callTimeoutMs: Long = DEFAULT_CALL_TIMEOUT_MS,
+) {
 
     val modelName: String get() = config.model
 
@@ -23,6 +37,7 @@ class OpenAiClient(private val config: ProviderConfig) {
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(callTimeoutMs, TimeUnit.MILLISECONDS)
         .build()
 
     data class ChatMessage(val role: String, val content: String)
@@ -64,10 +79,11 @@ class OpenAiClient(private val config: ProviderConfig) {
                 .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
                 .build()
 
-            http.newCall(req).execute().use { resp ->
+            val call = http.newCall(req)
+            cancelOnStop(call) { call.execute().use { resp ->
                 val body = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
-                    return@withContext Result.failure(
+                    return@cancelOnStop Result.failure(
                         Exception("HTTP ${resp.code}: ${body.take(300)}")
                     )
                 }
@@ -80,8 +96,10 @@ class OpenAiClient(private val config: ProviderConfig) {
                     .optString("content", "")
                 if (text.isBlank()) Result.failure(Exception("empty model response"))
                 else Result.success(text)
-            }
+            } }
         } catch (e: Exception) {
+            // Stopped: the cancelled call's IOException is the Stop, not a model failure.
+            ensureActive()
             Result.failure(e)
         }
     }
@@ -117,10 +135,11 @@ class OpenAiClient(private val config: ProviderConfig) {
                 .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
                 .build()
 
-            http.newCall(req).execute().use { resp ->
+            val call = http.newCall(req)
+            cancelOnStop(call) { call.execute().use { resp ->
                 if (!resp.isSuccessful) {
                     val body = resp.body?.string().orEmpty()
-                    return@withContext Result.failure(Exception("HTTP ${resp.code}: ${body.take(300)}"))
+                    return@cancelOnStop Result.failure(Exception("HTTP ${resp.code}: ${body.take(300)}"))
                 }
                 val full = StringBuilder()
                 var finish: String? = null
@@ -135,7 +154,7 @@ class OpenAiClient(private val config: ProviderConfig) {
                         // already on the wire. Swallowing it returned the partial text as a
                         // complete reply.
                         streamError(frame)?.let { msg ->
-                            return@withContext Result.failure(Exception("stream error: $msg"))
+                            return@cancelOnStop Result.failure(Exception("stream error: $msg"))
                         }
                         val choice = frame.optJSONArray("choices")?.optJSONObject(0) ?: continue
                         finishReasonOf(choice)?.let { finish = it }
@@ -152,10 +171,28 @@ class OpenAiClient(private val config: ProviderConfig) {
                 }
                 if (full.isBlank()) Result.failure(Exception("empty stream"))
                 else Result.success(full.toString())
-            }
+            } }
         } catch (e: Exception) {
+            // Stopped: the cancelled call's IOException is the Stop, not a model failure.
+            ensureActive()
             Result.failure(e)
         }
+    }
+
+    /**
+     * Runs [block] (the blocking execute and body read of [call]) and cancels [call] if the
+     * calling coroutine is cancelled meanwhile. A blocking OkHttp call ignores coroutine
+     * cancellation, so Stop kept the stream (and the run) going until it ended by itself.
+     * The cancelled call throws an IOException in [block], which the callers' catch turns into
+     * a failed Result as for any other network failure.
+     */
+    private suspend fun <T> cancelOnStop(call: Call, block: () -> T): T = coroutineScope {
+        // Unconfined: the cancel runs on the thread that cancels, not after a wait for a free IO
+        // thread. Cancelling a call that already finished does nothing.
+        val watcher = launch(Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+            try { awaitCancellation() } finally { call.cancel() }
+        }
+        try { block() } finally { watcher.cancel() }
     }
 
     private fun finishReasonOf(choice: JSONObject): String? =
@@ -186,5 +223,10 @@ class OpenAiClient(private val config: ProviderConfig) {
             "venice_parameters",
             JSONObject().put("include_venice_system_prompt", false)
         )
+    }
+
+    companion object {
+        /** Production deadline for one model call (connect to last streamed byte). */
+        const val DEFAULT_CALL_TIMEOUT_MS = 180_000L
     }
 }
