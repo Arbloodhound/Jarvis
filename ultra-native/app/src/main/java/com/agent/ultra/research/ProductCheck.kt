@@ -10,11 +10,13 @@ import com.agent.ultra.agent.WebResearch
  * identities match, what's the price evidence, any scam signals — across clearnet and onion. It
  * lays the evidence out and asks; it never says buy, never permits or forbids.
  *
- * ## Scope (owner, 2026-10-09)
+ * ## Scope (owner, 2026-10-09; reconciled with shopping module 2026-10-09)
  * Product and company verification across clearnet and onion (owner's example: headphones), and
- * reading wikis and forums through Tor with scam screening. Explicitly OUT of scope ("I don't need
- * special skills for the dark net", "I don't wanna find illegal items"): marketplace navigation,
- * vendor or seller reputation or vetting, and any purchasing. There is no seller rating here and
+ * reading wikis and forums through Tor with scam screening. Explicitly OUT of scope here
+ * ("I don't need special skills for the dark net", "I don't wanna find illegal items"):
+ * marketplace navigation and any purchasing. Seller reputation is a GENERAL capability and
+ * lives in the shopping module (research/ShoppingListings.kt, SellerReputation.kt,
+ * ShoppingCheckout.kt) — not in this verification leg. There is no seller rating here and
  * no recommendation field; rows are evidence with their source.
  *
  * Legs: clearnet (the normal research run: pages, prices, sites) and onion ([onionLeg]: the onion
