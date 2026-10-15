@@ -344,3 +344,85 @@ the bounty rules.
 
 Sources: [Let's Data Science, Friedman on OpenClaw](https://letsdatascience.com/news/meta-product-chief-says-muse-was-built-from-scratch-but-insp-9d892c79) ·
 [Lenny's "How I AI": How Meta designed Muse](https://www.lennysnewsletter.com/p/how-meta-designed-muse-an-ai-agent)
+
+---
+
+## 10. The owner's reference pack from their own Muse (53 files, 2026-10-15)
+
+Product docs (`~/docs/`), skills, the Gmail and Shopify-UCP connector docs, the `muse.db` schema (17 schemas, 194
+tables), background jobs, and approvals and memory explained with a live `memory_explain`. Label **OWN-MUSE**. The
+owner's personal records (their crons, names, memories) are deliberately **not** copied into this repo.
+
+### 10.1 Approvals as they really work (privacy-and-credentials.md)
+- Scopes actually offered: **Allow once**; **always-allow for a website** (a website default can also be "always
+  ask"); **recipient-scoped**: a Gmail send, Calendar invite or Drive share to *one* person can be allowed for that
+  recipient from that account (Messenger: one conversation); **task/artifact-scoped**: a scheduled task that sends
+  mail can get a lasting allow for that task only. **Purchases never get a lasting allow anywhere.**
+- An ordinary browser form submit is allowed by default.
+- **The agent can't see the approval card** (layout, buttons, wording) and can't promise which choice stops prompts.
+  It can only list pending approvals and can't revoke anything; revoking is on a settings page.
+- **Browser permission suite** (Settings → Connectors → Browser): visit sites / submit a form or POST / download /
+  upload / fill saved credentials, each **Allow, Ask or Deny**.
+- Everything goes to an Activity view + approvals History that "can't be secretly erased". There's no incognito
+  mode; Reset is the only full wipe.
+
+### 10.2 One-time codes never reach the model
+- Codes in Gmail results appear as `[credential:<id>]`. In general, a code from connected mail or synced texts reaches
+  the agent only as an opaque reference that **authd holds for ~10 minutes**. With a **fresh one-time approval**,
+  authd delivers it straight into the browser's code field. The agent never unwraps or types it, and it never
+  covers reset/recovery flows or magic links.
+
+### 10.3 Memory internals
+- `MEMORY.md` (curated) + daily notes `memory/YYYY-MM-DD.md` + a runtime-managed `memory/bank/` with four files:
+  `experience.md`, `opinions.md`, `reflections.md`, `world.md`. Each bullet carries a `(src: path:line)` marker.
+- A **claim** record: kind (preference/finding/request/completion), **salience**, speaker, status, **confidence
+  that decays** (the live example started at 0.70 and is now 0.65), first learned, last reinforced, the source
+  line, and the **evidence message id**. DB tables `memory.claims`, `memory.entries`, `memory.embeddings`.
+- Hourly upkeep folds new conversation in; newer claims supersede older ones; daily notes keep the trail.
+
+### 10.4 Background "self-improvement" (self_improvement.md + jobs)
+Memory upkeep (hourly) · relationships pages (hourly) · a quiet-moment pass after a conversation goes quiet · idea
+curation (daily; the DB shows a **multi-armed bandit**: `ideas.bandit_arm_state`) · skill review (daily; skills
+that don't measurably help are retired) · studying for goals (nightly) · **dreaming** (nightly: what worked, what
+ruptured, repair threads, alignment synthesis) · feed (hourly) · `deterministic-doctor` health pass (hourly) · a
+30-minute heartbeat. Rule: **a successful run doesn't prove delivery.** Work is traced run → handoff → mailbox →
+message.
+
+### 10.5 The data model (muse.db, structure only)
+Postgres schemas: `activity`, `agent` (sessions, compactions, a message mailbox, recovery owners, restart
+checkpoints, pinned context), `chat`, `device`, `feed`, `goals`, `health`, `ideas`, `ingest`, `media`, `memory`,
+`podcasts`, `runtime` (tool_calls, tool_outputs, browser_tasks, work_items, **checkout_spend_checkpoints**,
+**stripe_link_spend_requests**), `scheduler` (jobs, job_runs, delivery_outbox, terminal_signals, scheduled
+resumes), `self_improvement` (runs, leases, calibration records, **connector_read_audit**), `shell`, `spaces`.
+It reads as a durable, resumable agent runtime: every tool call, output and delivery is a row.
+
+### 10.6 Skills and connectors
+- ~55 bundled skills (shopping, marketplaces, groceries, flight/hotel booking, wide-research, forget,
+  self-awareness, home-control, health-review…).
+- ~60 connectors. **Most wrap the vendor's official MCP server as a CLI in `/opt/hatch/bin/`** (Asana, Box,
+  Canva, Dropbox, Figma, GitHub, Linear, Notion, Slack, Stripe, Zapier, Zoom…); Google goes through one
+  `hatch_gws_cli`. Shopping: Meta Catalog search + Shopify UCP direct checkout + Link / Shop Pay wallets.
+
+### 10.7 The shopping skill's rules (worth copying)
+- Search sources in parallel (catalog + browser tasks capped at **3 merchants / 10 products**). The browser brief
+  is self-contained, because the task can't see the chat.
+- **Never show a price, availability or URL taken from search results**: open each product page and drop anything
+  that isn't a dedicated page showing **in stock**.
+- Rank by fit, well-known sellers first. "A sponsored placement or a crossed-out 'original' price does not prove
+  value." Compare **delivered total** (shipping, tax, fees), arrival date, return terms and seller.
+- Results are kept as structured JSON (`result_id`) written verbatim, never rebuilt from prose.
+- Checkout: the browser task prepares up to the final review → a labelled review (order, contact, address, shipping,
+  price, payment, terms) → check wallet limits → **native** final approval. **If an outcome is unknown, never
+  retry** (duplicate-payment risk). One fresh task per order; check the cart is empty first.
+
+### 10.8 What Jarvis should take from the pack (owner decides)
+1. **Stop quoting prices from search snippets (a real gap).** `WebResearch.priceEvidence` falls back to
+   `h.snippet` when a page wasn't read. Muse forbids exactly this. Mark snippet prices "unverified" or drop them,
+   and require an in-stock product page.
+2. **Delivered total**, not sticker price, in the listings table (shipping/fees when the page shows them).
+3. **Browser permission suite** in Settings: open site / submit form / download / upload / fill, each Allow/Ask/Deny.
+4. **Recipient-scoped allow** for texts ("always allow texts to Mom"), revocable; never for money.
+5. **Claims with confidence, salience and evidence** in the Librarian's notes, plus "how do you know that?"
+6. **Codes as opaque references**: Jarvis's `ScreenSecrets` already blocks codes moving between apps. Also keep
+   them out of what goes to the cloud model.
+7. **Unknown outcome = don't retry** in checkout prep and any send.
