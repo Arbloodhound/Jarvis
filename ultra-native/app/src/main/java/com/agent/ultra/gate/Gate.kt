@@ -258,9 +258,11 @@ class Gate(private val manifest: Manifest) {
     }
 
     companion object {
-        /** Tools that may carry a flagged target without a confirm: looking it up is safe. */
-        private val SCAM_FREE = setOf("web_search")
-        private val LOW_EGRESS_FREE = setOf("web_search")
+        /** Tools that may carry a flagged target without a confirm: looking it up is safe. A plain
+         * search or a shopping lookup only reads; web_browse actively fetches and follows links, so a
+         * scam-flagged target must still ask first (it is not here). */
+        private val SCAM_FREE = setOf("web_search", "shop_search")
+        private val LOW_EGRESS_FREE = setOf("web_search", "shop_search", "web_browse")
 
         fun renderBlock(verdict: Verdict): String {
             if (verdict.rule == "scam_followup") {

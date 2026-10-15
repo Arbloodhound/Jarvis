@@ -1778,6 +1778,8 @@ JSON:"""
     private fun describeAction(tool: String, params: JSONObject): String = when (tool) {
         "sms_send" -> "Send a text to ${params.optString("to").ifBlank { "unknown" }}: \"${params.optString("message")}\""
         "file_delete" -> "Delete file: ${params.optString("filename").ifBlank { params.optString("path") }}"
+        "shop_checkout_prep" -> "Prepare (not place) an order: ${params.optString("title").ifBlank { "an item" }}" +
+            params.optString("seller").let { if (it.isBlank()) "" else " from $it" }
         else -> "Execute $tool"
     }
 
@@ -2038,10 +2040,25 @@ APPS & NAVIGATION (use app_launch to just open, react_navigate to open AND inter
 
 INFORMATION (fast, no UI needed):
   web_search — search internet, returns text results directly. params: {query}
+    Pass the user's own words. It also handles "verify this product …" / "check this company …",
+    "investigate …" and "deep research …": a sourced brief, never a buy recommendation. Onion
+    sources are read only when the owner opted in (Settings) and are screened first.
   ambient_recall — search everything the phone has overheard (your long-term ambient memory). Use when the user refers to past conversations, things said earlier, "what did I/they say about…". params: {query, limit?}
   system_info — model, Android version, battery, AND whether Wi-Fi / Bluetooth / DND / dark mode /
     location are on, volume, free storage. Use it to ANSWER questions about the phone.
   device_info, battery_status, device_location
+
+SHOPPING & DEEP BROWSING (web; informs and asks, never recommends a buy):
+  shop_search — "find me / cheapest / compare / reviews of …": candidate pages read, one row per
+    seller-offer, seller reputation ranked, a sortable table. params: {query, sort?: price|year}
+    Onion marketplace rows are excluded. It never says which to buy.
+  shop_checkout_prep — lay out an order for the owner's confirmation. PREPARATION ONLY: it never
+    buys, pays, or places an order; crypto details are display-only. params:
+    {title, seller?, price?, currency?, qty?, link?, sourceUrl?, cryptoAmount?, cryptoAddress?}
+    The actual pay/checkout tap still goes through the on-screen confirm card.
+  web_browse — autonomous browsing within hard bounds for an open-ended task. params: {task}
+    The onion leg runs only when the owner opted in (Settings) and Tor is reachable; blocked onions
+    are never fetched; no marketplace navigation.
 
 THE OWNER'S LAPTOP (Claude, with his notes, projects and memory — read-only, slow: 30-60 s):
   ask_claude {question} — for anything about his work, files, projects, notes or code, or a

@@ -278,6 +278,21 @@ class Tools(
                     }
                 }
 
+                // ── Shopping & autonomous browsing ───────────────────
+                "shop_search" -> {
+                    val q = params.optString("query")
+                    // Only the two mechanical sorts exist; anything else falls back to price rather
+                    // than discarding the fetched pages (compareTable refuses an unknown sort).
+                    val sort = if (params.optString("sort").lowercase() == "year") "year" else com.agent.ultra.research.ShoppingRun.SORT_PRICE
+                    if (q.isBlank()) "Error: shop_search needs a 'query'" else shopSearch(q, sort)
+                }
+                "web_browse" -> {
+                    val task = params.optString("task")
+                    if (task.isBlank()) "Error: web_browse needs a 'task'"
+                    else webBrowse(task)
+                }
+                "shop_checkout_prep" -> checkoutPrep(params)
+
                 // ── Device control ───────────────────────────────────
                 "flashlight_toggle" -> {
                     val on = ToolArgs.bool(params, "on")
@@ -880,6 +895,79 @@ class Tools(
             }
         }
         return results
+    }
+
+    /**
+     * "find me / cheapest / compare / reviews of …": candidate pages read on the ordinary web path,
+     * one row per seller-offer, seller reputation merged and ranked, laid out as a sortable table
+     * ([com.agent.ultra.research.ShoppingRun]). Onion marketplace rows are the one carve-out that is
+     * excluded (inside ShoppingRun). No pick, no buy language.
+     */
+    private suspend fun shopSearch(query: String, sort: String): String = withContext(Dispatchers.IO) {
+        if (!NetPolicy.webAllowed(NetPolicy.offlineOnly(context))) return@withContext NetPolicy.OFFLINE_RESULT
+        if (!isOnline()) return@withContext "OFFLINE: no network. Tell the user shopping needs a connection; " +
+            "do not treat this as the product being unavailable."
+        try {
+            com.agent.ultra.research.ShoppingRun.run(query, onion = OnionAccess.of(context), sort = sort)
+                ?: "No shopping listings found for \"$query\"."
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e   // Stop must reach the caller
+        } catch (e: Exception) { android.util.Log.w("UltraShop", "shop_search failed: ${e.message}"); "Error: shopping search failed: ${e.message}" }
+    }
+
+    /**
+     * "browse …" / "research deeply …": autonomous browsing within hard bounds
+     * ([com.agent.ultra.research.BrowseRun]). The onion leg runs only when onion research is opted in
+     * and Tor is reachable; blocked onions are never fetched; there is no clearnet fallback.
+     */
+    private suspend fun webBrowse(task: String): String = withContext(Dispatchers.IO) {
+        if (!NetPolicy.webAllowed(NetPolicy.offlineOnly(context))) return@withContext NetPolicy.OFFLINE_RESULT
+        if (!isOnline()) return@withContext "OFFLINE: no network. Answer from your own knowledge; " +
+            "do not treat this as the fact being unavailable."
+        try {
+            com.agent.ultra.research.BrowseRun.run(task, onion = OnionAccess.of(context))
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e   // Stop must reach the caller
+        } catch (e: Exception) { android.util.Log.w("UltraBrowse", "web_browse failed: ${e.message}"); "Error: browse failed: ${e.message}" }
+    }
+
+    /**
+     * Gated checkout PREPARATION only ([com.agent.ultra.research.ShoppingCheckout]): it lays out the
+     * order and, when given, the DISPLAY-ONLY crypto details {amount, address}. It never buys, pays,
+     * places an order, or touches keys — there is no purchase path here. The real commitment (a
+     * pay/checkout tap) still goes through the on-screen confirm card (ActionGate).
+     */
+    private fun checkoutPrep(params: JSONObject): String {
+        val title = params.optString("title")
+        if (title.isBlank()) return "Error: shop_checkout_prep needs a 'title'"
+        val amount = params.optDouble("price", 0.0)
+        val currency = params.optString("currency").ifBlank { "USD" }
+        val qty = params.optInt("qty", 1)
+        val price = if (amount > 0) WebResearch.Price(amount, currency, "%s %.2f".format(currency, amount)) else null
+        val row = com.agent.ultra.research.ShoppingListings.Row(
+            title, price, null, params.optString("seller"), "", "", "",
+            params.optString("link"), params.optString("sourceUrl"), "",
+        )
+        val plan = com.agent.ultra.research.ShoppingCheckout.prepareOrder(row, qty)
+        return buildString {
+            append("Order prepared — NOT placed, nothing was bought:\n")
+            append("- ").append(plan.title).append('\n')
+            if (plan.seller.isNotBlank()) append("- Seller: ").append(plan.seller).append('\n')
+            if (plan.unitPrice > 0) append("- ${plan.qty} × ${plan.currency} ${"%.2f".format(plan.unitPrice)} = ${plan.currency} ${"%.2f".format(plan.total)}\n")
+            else append("- Quantity: ${plan.qty}\n")
+            if (plan.link.isNotBlank()) append("- Link: ").append(plan.link).append('\n')
+            val addr = params.optString("cryptoAddress")
+            if (addr.isNotBlank()) {
+                // Never guess the crypto amount from the fiat total — the units differ. Show the
+                // address, and the amount only when it was actually given, for the owner to verify.
+                val camt = params.optDouble("cryptoAmount", 0.0)
+                val cp = com.agent.ultra.research.ShoppingCheckout.cryptoPrep(camt, addr)
+                append("- Crypto (display only, for you to verify independently — I never touch keys or send anything): ")
+                append(if (camt > 0) "${cp.amount} (in the coin's own units) to ${cp.address}\n"
+                    else "pay to ${cp.address} (amount not given — check it yourself)\n")
+            }
+            append("I have not paid, sent anything, or placed any order; this only lays out what a purchase would be. ")
+            append("Completing it is your own action, and any pay/checkout tap asks you first. ")
+            append(com.agent.ultra.research.ShoppingCheckout.DIRECTION_QUESTION)
+        }
     }
 
     companion object {

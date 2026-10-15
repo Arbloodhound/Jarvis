@@ -95,6 +95,53 @@
       ]
     },
     {
+      "name": "shop_search",
+      "effects": [
+        "egress"
+      ],
+      "requires": [
+        {
+          "kind": "not_tainted",
+          "arg": "query"
+        },
+        {
+          "kind": "spoof_check"
+        }
+      ]
+    },
+    {
+      "name": "web_browse",
+      "effects": [
+        "egress"
+      ],
+      "requires": [
+        {
+          "kind": "not_tainted",
+          "arg": "task"
+        },
+        {
+          "kind": "spoof_check"
+        }
+      ]
+    },
+    {
+      "name": "shop_checkout_prep",
+      "effects": [
+        "mutate"
+      ],
+      "requires": [
+        {
+          "kind": "any_arg_traceable",
+          "args": [
+            "title",
+            "seller",
+            "link",
+            "sourceUrl"
+          ]
+        }
+      ]
+    },
+    {
       "name": "device_info",
       "effects": [
         "read"
