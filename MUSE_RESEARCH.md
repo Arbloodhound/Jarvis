@@ -426,3 +426,42 @@ It reads as a durable, resumable agent runtime: every tool call, output and deli
 6. **Codes as opaque references**: Jarvis's `ScreenSecrets` already blocks codes moving between apps. Also keep
    them out of what goes to the cloud model.
 7. **Unknown outcome = don't retry** in checkout prep and any send.
+
+---
+
+## 11. OpenClaw: the acknowledged inspiration, read in code
+
+Full report: **`OPENCLAW_FINDINGS.md`** (github.com/openclaw/openclaw @ `129049bb`, 2026-10-15, **MIT license**: we
+may borrow with attribution). Each claim is labelled: read in code, read only in OpenClaw's docs, or inferred. I
+spot-checked the headline items myself.
+
+- **The relationship runs both ways now:** OpenClaw ships a `muse` plugin (`extensions/muse`,
+  `docs/plugins/muse.md`) that runs Meta's **Muse Code** CLI (`muse serve`, the Muse Session Protocol,
+  `@muse-code/sdk`) as one of its agent runtimes. The conventions Muse shares with it are exact: the same workspace
+  files, `memory_search`/`memory_get`, and a near-identical `process` action set.
+- **Memory:** SQLite FTS5 + optional sqlite-vec, hybrid score 0.7 vector + 0.3 keyword, a 30-day half-life on daily
+  notes, a diversity re-rank. Each chunk carries an origin class (owner / agent / untrusted / system). Before
+  compaction, a silent "flush" turn writes durable facts to today's note.
+- **Approvals:** allow-once / allow-always **bound to the exact argv + working directory** / deny, plus an optional
+  LLM reviewer. Expiring grants only for scheduled jobs. Sandboxing is off by default.
+- **Credential surrogates** exist (`src/secrets/sentinel.ts`): sealed tokens swapped by a loopback egress proxy,
+  **only for hosts bound to that secret**. That's Muse's surrogate idea in open code.
+- **Missing compared with Muse:** interactive egress approval, tainted egress (its "turn taint" only affects memory
+  trust), an isolated browser sub-agent, memory trash, a forget plan/confirm step, and a provenance tool.
+  These are the parts Meta built on top.
+- **Most useful for Jarvis: its Kotlin Android app (`apps/android`)**:
+  - `AccessibilityActionExecutor.kt` ties every action to a **screen snapshot id**: a node from an older snapshot
+    → `target_stale`; an unverifiable foreground app → re-observe first; **typing into a password field is
+    refused** (lines 172, 249, 280–286, verified).
+  - `InvokeDispatcher.kt`: one command table decides what the model is offered **and** gates it (foreground
+    requirements, dangerous commands like `sms.send` denied unless explicitly allowed).
+  - The notification feed to the agent is filtered by **package allowlist → quiet hours → rate limit**.
+
+### 11.1 Jarvis lifts from OpenClaw (owner decides)
+1. **Snapshot-bound taps** in the navigator: refuse a tap whose target came from a screen that's since changed.
+   Jarvis matches by view id/label today.
+2. **Refuse typing into password fields** (unless the owner typed the text themselves).
+3. **Notification feed filter**: allowlisted apps, quiet hours, rate limit before anything reaches the model.
+4. **Hybrid memory scoring with decay on daily notes**, compared against Jarvis's int8 scan (measure first).
+5. **Pre-compaction flush** of durable facts.
+6. **Exact-operation approvals**: a grant names the exact action and target, as the ActionGate card already does.
