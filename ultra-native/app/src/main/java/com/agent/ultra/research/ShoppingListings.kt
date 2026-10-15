@@ -49,8 +49,13 @@ object ShoppingListings {
     private val HEADING = Regex("<h[1-3][^>]*>(.*?)</h[1-3]>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
     private val PRICE_RE = Regex("(\\$|€|£)\\s?([\\d,]+(?:\\.\\d{2})?)")
     private val YEAR_RE = Regex("\\b(19|20)\\d{2}\\b")
+    // Capture the seller name up to the end of its own field (HTML tag, newline, or a
+    // following field label), so it never swallows the next block's "In stock" / "Only 3 left".
     private val SELLER_RE = Regex(
-        "(?i:sold by|seller|vendor|offered by)\\s*[:\\-–—]?\\s*([A-Z0-9][\\w&'\\-]*(?:\\s+[A-Z0-9][\\w&'\\-]*){0,3})")
+        "(?i:sold by|seller|vendor|offered by)\\s*[:\\-–—]?\\s*([^<\\n|•·]{1,60})")
+    private val SELLER_TAIL = Regex(
+        "(?i)\\s+(?:in stock|out of stock|only\\s|available|pre[\\- ]?order|backorder|" +
+            "new\\b|used\\b|refurbished|open box|pre[\\- ]?owned|condition\\b|ships?\\b|from\\b|\\$).*$")
     private val STOCK_RE = Regex(
         "(?i)\\b(in stock|out of stock|only \\d+ left(?: in stock)?|available|pre[\\- ]?order|backorder)\\b")
     private val CONDITION_RE = Regex(
@@ -90,7 +95,7 @@ object ShoppingListings {
             val price = parsePrice(chunk) ?: continue
             val title = HEADING.find(block)?.let { clean(it.groupValues[1]) }
                 ?: chunk.take(80)
-            val seller = SELLER_RE.find(chunk)?.groupValues?.get(1)?.trim().orEmpty()
+            val seller = SELLER_RE.find(chunk)?.groupValues?.get(1)?.replace(SELLER_TAIL, "")?.trim().orEmpty()
             val stock = STOCK_RE.find(chunk)?.groupValues?.get(1).orEmpty()
             val condition = CONDITION_RE.find(chunk)?.groupValues?.get(1).orEmpty()
             val location = LOCATION_RE.find(chunk)?.groupValues?.get(1)?.trim().orEmpty()
