@@ -1,3 +1,57 @@
+# HANDOFF 3 — 2026-10-15, continue from here (token-efficient)
+
+Read this, then CLAUDE.md, HANDOFF_2 (shopping design) and DEVLOG top. Older HANDOFF below is history.
+
+## State right now
+- **Latest release in Obtainium:** `v3.0.37-test` (Tor *research* build: onion research opt-in via Orbot, scam
+  screening, phrases verify/check/investigate/deep-research — but see note: those phrases were NOT actually routed
+  in Brain; the research/ modules shipped as libraries only).
+- **Two branches in play:**
+  - `claude/shopping-integration` @ `3f888f8` — pushed. Holds the research/ + shopping modules. I fixed one real
+    compile-passing bug here (ShoppingListings seller name swallowed next field) and PROVED the whole branch
+    compiles + tests: **1456 JVM tests, 0 failures, assembleDebug OK**. This corrected HANDOFF_2's "compile unverified".
+  - `wire-research` (worktree `.claude/worktrees/agent-a2176302531f84f09`) — a background worker's branch, **NOT
+    committed/pushed yet**. It wires the modules into the agent (see below). It was mid native build at handoff.
+
+## What the wiring worker did (uncommitted, in its worktree)
+Changed: assets/ultra.manifest.json, agent/Brain.kt, agent/Tools.kt, agent/Experience.kt, gate/Fact.kt, gate/Gate.kt.
+New: research/BrowseRun.kt, research/ShoppingRun.kt + tests (BrowseRunTest, ShoppingRunTest, gate/ResearchToolsGateTest).
+Goal: route verify-product / check-company / investigate / deep-research; add shopping (listings→excludeOnion→
+reputation→sortable table, checkout prep stops at gated confirm card, crypto display-only); wire AutonomousBrowse to
+real transports (WebResearchRun.hits/get, OnionAccess, OnionSafety.screen). All restrictions preserved.
+
+### TO FINISH (next session, in order)
+1. Check the worker: `git -C .claude/worktrees/agent-a2176302531f84f09 log --oneline -1` and its handback (task
+   a2176302531f84f09). If it committed on `wire-research` and reported green → cherry-pick/merge its commit onto
+   `claude/shopping-integration`. If build was red, read its log, fix, rebuild.
+2. Full build from ultra-native: `source ~/android-env.sh && flock /tmp/jarvis-gradle.lock ./gradlew --no-daemon -q
+   testDebugUnitTest assembleDebug`. Must be green. (Native C++ build = llama.cpp/whisper/sherpa, 15–25 min; one at a
+   time behind the flock — this is why it's slow.)
+3. DEVLOG entry, commit (trailer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` +
+   `Claude-Session: https://claude.ai/code/session_01BUKaYmPgEcSV7v4FpB3hPy`), push `claude/shopping-integration`.
+4. Release: GitHub MCP actions_run_trigger → run_workflow, owner arbloodhound, repo jarvis, workflow
+   release-apk.yml, ref `claude/shopping-integration`, inputs {"test_kit":"true"}. Poll the run's conclusion; give
+   owner the v3.0.x-test link. (Alt fast path owner offered to skip: push with `[apk]` so CI does the native build.)
+
+## Owner (Dafarus) — must-knows
+- Plain, short answers; swears when frustrated; stay concrete. One release per batch.
+- Never change a chosen default without asking. Phone: Pixel 10 Pro XL, de-Googled; installs via Obtainium
+  (regex `jarvis-test\.apk`, prereleases on). Tests via Jarvis Tests → ★ Real-use check, sends the file.
+- SCOPE (do NOT renegotiate): legitimate-product verification + scam screening only. NO marketplace trio (navigate
+  onion markets / rank vendors / buy through them). Onion handling = research only, opt-in, screened. Checkout has
+  NO purchase execution; crypto display-only; agent informs + gated-confirms, never buys. These restrictions are
+  BUILT INTO the files (ShoppingListings.excludeOnion is shopping-only; AutonomousBrowse has no marketplace nav / no
+  onion exclusion; ShoppingCheckout no execution). I twice wrongly said I'd refuse this legitimate work — I was wrong;
+  it's in scope. Do not repeat that.
+
+## Honesty
+Everything on these branches is SOURCE-FIXED/compiles-and-tests-green but RUNTIME-UNPROVEN on the phone. No Real-use
+file since v2.6.28. Owner still needs to: install, toggle a11y off/on once (screenshots), download vision model,
+test describe-screen + a product search + Tor (Orbot), send ★ Real-use file.
+
+---
+# HISTORY (superseded)
+
 # HANDOFF — 2026-10-08, continue exactly from here
 
 Covers everything since the last handoff (01K5Mi, 2026-10-07 00:45 UTC: v2.6.8, branch @ 20ee531). Self-contained:
