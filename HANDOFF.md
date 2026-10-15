@@ -1,6 +1,13 @@
 # HANDOFF 4 — 2026-10-15, continue from here (token-efficient)
 
 ## DO FIRST
+**Run 38665897524 FAILED — not the code**: build, tests, signing, 16 KB and CPU-variant checks all passed; the
+upload-artifact step hit GitHub's artifact storage quota (82 old artifacts, ~3.5 GB, 14-day retention). Fix pushed:
+release artifacts keep 1 day and the publish job deletes its own run's artifacts after publishing. Bulk-deleting the
+old artifacts was blocked by the session's permission check → owner to approve that (or delete them at
+github.com/Arbloodhound/Jarvis/actions → old runs → Artifacts), then re-trigger release-apk.yml (ref
+claude/shopping-integration, test_kit=true). Quota is recalculated every 6–12 h, so a re-run straight after may still fail.
+
 Release is BUILDING: run 38665897524 on `claude/shopping-integration` @ db4ce0c (1468 tests/0, wiring merged).
 Poll: `curl -s https://api.github.com/repos/arbloodhound/jarvis/actions/runs/38665897524 | grep conclusion`.
 When success → give owner the newest v3.0.x-test release link (it's Latest in Obtainium). If FAILED → GitHub MCP
