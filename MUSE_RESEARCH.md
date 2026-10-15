@@ -311,3 +311,36 @@ show, so this is the clearest view yet of how Hatch keeps the model on a leash.
 4. **Tracked items** (medium): orders and deliveries from `OrderTrack` become tracked items that close themselves
    when "delivered" is seen, with the reason shown.
 5. **Spending limits** (small, if crypto/checkout prep ever widens): per-purchase and daily caps shown on the card.
+
+---
+
+## 9. What's still missing, and how to get each piece
+
+New since section 8: **Meta's product head Nat Friedman said on 2026-09-22 that Muse was "built from scratch but
+heavily inspired by OpenClaw as a product"** (reported by TechCrunch and Quartz; no code reuse established). That
+confirms the workspace-layout match from section 6. Meta's design director Alex Cornell has explained the UI in
+public (Lenny's "How I AI", 2026-10-12): an avatar instead of chat bubbles, a three-layer status display (an emoji,
+a task list, raw logs), no visible chain-of-thought, generative UI with a fixed layout and changing content. There's
+also a newer **"Muse Wonder"** model (Oct 2026), not yet researched.
+
+| Gap | How to get it |
+|---|---|
+| Product docs (`~/docs/*`): approvals, privacy, payments, scheduling, memory, self-improvement | **MUSE_PROMPT.md** steps 1, 6, 7: your own Muse sends them |
+| Skills (shopping, browser, goals, memory) | MUSE_PROMPT.md step 3 |
+| Connector design (email filter, shopping flow) | MUSE_PROMPT.md step 4 |
+| Data model (Postgres tables behind Hatch) | MUSE_PROMPT.md step 5: `muse.db`, structure only |
+| Memory pipeline + provenance format | MUSE_PROMPT.md step 8 |
+| Persona/workspace conventions | MUSE_PROMPT.md step 2 |
+| How approvals feel in practice (scopes offered, wording) | Tests T1–T8 (section 4), logged |
+| Sentinel policy language, classifier models, thresholds | **Not public.** Only Meta knows. The bug bounty is the sanctioned way to probe it. |
+| Contemplating-mode orchestration, Muse Spark architecture | Not public. Watch Meta's blog; the open-weights release on Meta's roadmap would answer the model part. |
+| Model behaviour hands-on | Meta Model API (dev.meta.ai): run Muse Spark 1.3 yourself, e.g. on AgentDojo |
+| Design reasoning | Alex Cornell's Threads posts + the Lenny's episode; Meta's "How We Designed Muse" post (open it in a browser and paste the text here; I couldn't find its address) |
+| OpenClaw (the acknowledged inspiration) | Its open-source repo shows the workspace/memory/exec patterns in real code. **Worth reading next; it's legal and the closest thing to Muse's harness.** |
+| Muse Wonder model | Not researched yet |
+
+Out of bounds (unchanged): decompiling Meta's app, extracting hidden prompts, attacking the live service outside
+the bounty rules.
+
+Sources: [Let's Data Science, Friedman on OpenClaw](https://letsdatascience.com/news/meta-product-chief-says-muse-was-built-from-scratch-but-insp-9d892c79) ·
+[Lenny's "How I AI": How Meta designed Muse](https://www.lennysnewsletter.com/p/how-meta-designed-muse-an-ai-agent)
