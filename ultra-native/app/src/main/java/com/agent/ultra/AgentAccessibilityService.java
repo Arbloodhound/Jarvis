@@ -27,6 +27,12 @@ public class AgentAccessibilityService extends AccessibilityService {
     private static AgentAccessibilityService instance;
     private static final Object instanceLock = new Object();
     private String currentPackage = "";
+    // Harness screen guard (harness/ScreenGuard.kt, adapted from OpenClaw, MIT): every flat screen
+    // read is a snapshot; uiEpoch moves on each window change, so an action bound to an older
+    // snapshot can be refused (preflightSnapshot). Password fields are never typed into (performText).
+    private final com.agent.ultra.harness.ScreenGuard screenGuard = new com.agent.ultra.harness.ScreenGuard();
+    private volatile long uiEpoch = 0L;
+    private volatile String lastSnapshotId = null;
     private static final Set<String> allowedPackages = Collections.synchronizedSet(new HashSet<String>());
     private static final Set<String> blockedPackages = new java.util.concurrent.ConcurrentSkipListSet<>();
     public interface UiTreeListener {
@@ -573,7 +579,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                     .apply();
             } catch (Exception e) {}
         }
-        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) refreshImePackages();
+        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { refreshImePackages(); uiEpoch++; }
         if (event.getPackageName() != null) {
             String evtPkg = event.getPackageName().toString();
             // The keyboard, the status bar and the notification shade all emit
@@ -856,6 +862,25 @@ public class AgentAccessibilityService extends AccessibilityService {
         }
     }
 
+    /** The snapshot id of the last flat screen read (harness ScreenGuard), or null. */
+    public String getScreenSnapshotId() { return lastSnapshotId; }
+
+    /**
+     * Null when an action bound to [snapshotId] may run; otherwise why not (the screen changed or
+     * the foreground app changed since that read) — the caller reads the screen again.
+     */
+    public String preflightSnapshot(String snapshotId) {
+        synchronized (screenGuard) {
+            try {
+                screenGuard.preflight(snapshotId, uiEpoch, currentPackage);
+                return null;
+            } catch (Exception e) {
+                // StaleTarget (a Kotlin exception, so Java can't name it in a catch here).
+                return e.getMessage() != null ? e.getMessage() : "Observe again before acting";
+            }
+        }
+    }
+
     public String getScreenContentFlat() {
         AtomicReference<String> result = new AtomicReference<>("[]");
         CountDownLatch latch = new CountDownLatch(1);
@@ -916,6 +941,9 @@ public class AgentAccessibilityService extends AccessibilityService {
                         }
                     }
                     result.set(flat.toString());
+                    synchronized (screenGuard) {
+                        lastSnapshotId = screenGuard.observe(uiEpoch, rootPkg != null ? rootPkg.toString() : "");
+                    }
                 } else {
                     Log.i(TAG, "SCREEN_FLAT: root=null");
                 }
@@ -1764,8 +1792,18 @@ public class AgentAccessibilityService extends AccessibilityService {
         boolean result = false;
         if (target != null) {
             Bundle args = new Bundle();
-            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
-            result = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+            boolean secure = false;
+            try {
+                screenGuard.requireNotPassword(target.getInputType(), target.isPassword(), "");
+            } catch (Exception e) {
+                // SecureContentRefused: the field is a password field.
+                secure = true;
+                Log.i(TAG, "TEXT: refused — password field");
+            }
+            if (!secure) {
+                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                result = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+            }
             target.recycle();
         }
         if (root != null) root.recycle();

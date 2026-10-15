@@ -30,7 +30,7 @@ class SkillStore(private val allowlist: Set<String>? = null) {
                 .forEach { f ->
                     val fm = parseFrontmatter(f)
                     val name = fm["name"]
-                        ?: f.parentFile.name.takeIf { it.isNotEmpty() } ?: continue
+                        ?: f.parentFile.name.takeIf { it.isNotEmpty() } ?: return@forEach
                     if (name in entries) return@forEach
                     entries[name] = Entry(name, fm["description"] ?: "", f)
                 }

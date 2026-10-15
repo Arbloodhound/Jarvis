@@ -3,6 +3,30 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-15 (session 01UX5qeo) — v5 delta port: harness wire-ins + missing features (branch muse/v5-delta-port)
+Spec: HANDOFF_V5_MISSING.md. Built on the 6 harness files (not rewritten). 1514 JVM tests, 0 failures (46 new).
+compileDebugKotlin + compileDebugJavaWithJavac OK locally; assembleDebug not run here (no native llama/whisper libs in
+this container) — CI must build it. Everything below is SOURCE + JVM-TESTED, RUNTIME-UNPROVEN on the phone.
+- §0 wire-ins (the only existing files touched): UltraDatabase v7→v8 adds memory_claims + approval_grants
+  (MIGRATION_7_8; test proves its tables equal Room's generated ones) + claims()/claimForget()/grants() DAOs;
+  SchedulerRuntime fires the job book with one inexact AlarmManager alarm (manifest receiver; armed from
+  UltraApplication; re-armed on boot) — jobs are added only when a module registers a handler (no idle wake-ups);
+  AgentAccessibilityService: every flat screen read is a ScreenGuard snapshot (uiEpoch bumps on window change),
+  preflightSnapshot(id) available, and performText refuses password fields.
+- Base fixes needed to compile (minimal): MemoryClaims used non-existent kotlin.math.ln2 → ln(2.0); SkillStore used
+  `continue` inside a lambda (Kotlin 2.0) → return@forEach.
+- §1 connectors (harness/connectors): Connector + ConnectorRegistry (status first → NeedsConnect and stop; reads no
+  approval, sends recipient grant or exact-call approval token, writes approve-once, purchases always ask);
+  CredentialVault (Keystore AES-GCM; opaque host-bound handles); AuthedTransport (token swapped in only for bound
+  https hosts); SecretScrubber (codes, reset/magic links → [credential:id], held 10 min); Gmail, Calendar, Drive,
+  Docs over REST (no Google SDK); docs in assets/connectors/. Needs an owner-registered Google OAuth client ID.
+- §2 Trash, §3 Forget (plan → summary → app-minted confirmation → delete → re-search report; claims/notes/files
+  sources), §4 SubagentOrchestrator (spawn/send/interrupt/resume/close/list; children get no spawn; verify before use),
+  §5 Feed, Ideas, Artifacts (versions, share needs consent, delete → trash), Proactivity (send/skip with reasons).
+- Not built / not wired (see report): Google OAuth redirect activity; spotify/plaid/stripe; replacing existing delete
+  call sites with Trash; tool/manifest/Brain wiring of the new modules; navigator snapshot preflight enforcement;
+  LLM runners/generators for subagents, feed and ideas; settings UI for grants/trash.
+
 ## 2026-10-09 (session 01K5Mi, evening) — Tor research (v3.0.37-test)
 Owner asked for Tor research with scam screening, cross-realm product/company verification, discovery crawl and a
 general investigate (case files on people, companies, topics). Built on claude/v4-tor-research (173a0d6), merged at

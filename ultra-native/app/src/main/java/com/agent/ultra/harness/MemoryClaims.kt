@@ -8,7 +8,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import kotlin.math.exp
-import kotlin.math.ln2
+import kotlin.math.ln
 
 /**
  * Memory claims — the unit the agent remembers. Not blobs: each claim has a
@@ -85,7 +85,7 @@ object MemoryClaimScoring {
         if (c.evergreen) return 1.0
         val ageDays = (nowMs - c.reinforcedAt) / 86_400_000.0
         if (ageDays <= 0) return 1.0
-        return exp(-ln2() * ageDays / HALF_LIFE_DAYS)
+        return exp(-ln(2.0) * ageDays / HALF_LIFE_DAYS)
     }
 
     private fun tokens(s: String) = s.lowercase().split(Regex("\\s+"))

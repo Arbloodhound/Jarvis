@@ -16,6 +16,8 @@ class UltraApplication : Application() {
         // before the agent has a chance to read anything.
         try { com.agent.ultra.ui.ProtectedApps.seedIfUnset(this) } catch (_: Exception) {}
         wireMemory()
+        // Harness scheduler: arm the next tick for the jobs already scheduled (harness/SchedulerRuntime.kt).
+        try { com.agent.ultra.harness.SchedulerRuntime.start(this) } catch (_: Exception) {}
         // Foreground service keeps the process alive when backgrounded —
         // on this device class (3.5GB Samsung) backgrounded processes lose
         // their accessibility binding and get reclaimed.

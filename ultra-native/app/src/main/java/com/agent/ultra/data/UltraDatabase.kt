@@ -10,8 +10,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [ConversationEntity::class, MessageEntity::class,
         TaskShortcutEntity::class, ToolReliabilityEntity::class,
-        RecipeEntity::class, ScreenMemoryEntity::class, LessonEntity::class],
-    version = 7,
+        RecipeEntity::class, ScreenMemoryEntity::class, LessonEntity::class,
+        com.agent.ultra.harness.ClaimEntity::class, com.agent.ultra.harness.GrantEntity::class],
+    version = 8,
 )
 abstract class UltraDatabase : RoomDatabase() {
     abstract fun conversations(): ConversationDao
@@ -19,6 +20,9 @@ abstract class UltraDatabase : RoomDatabase() {
     abstract fun recipes(): RecipeDao
     abstract fun screenMemory(): ScreenMemoryDao
     abstract fun lessons(): LessonDao
+    abstract fun claims(): com.agent.ultra.harness.ClaimDao
+    abstract fun claimForget(): com.agent.ultra.harness.ClaimForgetDao
+    abstract fun grants(): com.agent.ultra.harness.GrantDao
 
     companion object {
         @Volatile private var instance: UltraDatabase? = null
@@ -92,10 +96,35 @@ abstract class UltraDatabase : RoomDatabase() {
             }
         }
 
+        /** v7 → v8 adds the harness tables: memory claims (harness/MemoryClaims.kt) and durable
+         * approval grants (harness/ApprovalGrants.kt). Columns and indices match what Room
+         * generates for those entities (UltraDatabaseMigrationTest compares them). */
+        internal val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `memory_claims` (" +
+                        "`id` TEXT NOT NULL, `text` TEXT NOT NULL, `kind` TEXT NOT NULL, " +
+                        "`salience` TEXT NOT NULL, `confidence` REAL NOT NULL, `speaker` TEXT NOT NULL, " +
+                        "`sourceMessage` TEXT NOT NULL, `quote` TEXT NOT NULL, `supersedes` TEXT NOT NULL, " +
+                        "`firstSeen` INTEGER NOT NULL, `reinforcedAt` INTEGER NOT NULL, `status` TEXT NOT NULL, " +
+                        "`evergreen` INTEGER NOT NULL, `invalidatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_memory_claims_status` ON `memory_claims` (`status`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_memory_claims_kind` ON `memory_claims` (`kind`)")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `approval_grants` (" +
+                        "`id` TEXT NOT NULL, `level` TEXT NOT NULL, `scopeKey` TEXT NOT NULL, `tool` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, `singleUse` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_approval_grants_level` ON `approval_grants` (`level`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_approval_grants_scopeKey` ON `approval_grants` (`scopeKey`)")
+            }
+        }
+
         fun get(context: Context): UltraDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, UltraDatabase::class.java, "ultra.db"
-            ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             // Only the pre-migration dev schema (v1) may be wiped. A future version
             // bump without its migration now fails loudly instead of silently
             // deleting every lesson, task and screen the user built up.
