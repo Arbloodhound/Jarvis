@@ -1,6 +1,11 @@
 # HANDOFF 4 — 2026-10-15, continue from here (token-efficient)
 
 ## DO FIRST
+**RELEASED 2026-10-15 03:38 UTC: v3.0.40-test** (run 38675679758 @ 7974947, Latest) —
+https://github.com/Arbloodhound/Jarvis/releases/tag/v3.0.40-test. Artifact fix proven: the run's own artifacts were
+deleted after publish. Repo moved to the Arbloodhound org (private): Obtainium needs a PAT (fine-grained, resource owner
+Arbloodhound, Jarvis, Contents read). Next: owner installs → ★ Real-use check → sends the file. Notes below are history.
+
 **Run 38665897524 FAILED — not the code**: build, tests, signing, 16 KB and CPU-variant checks all passed; the
 upload-artifact step hit GitHub's artifact storage quota (82 old artifacts, ~3.5 GB, 14-day retention). Fix pushed:
 release artifacts keep 1 day and the publish job deletes its own run's artifacts after publishing. Bulk-deleting the
