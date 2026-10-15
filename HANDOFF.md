@@ -1,4 +1,16 @@
-# HANDOFF 3 — 2026-10-15, continue from here (token-efficient)
+# HANDOFF 4 — 2026-10-15, continue from here (token-efficient)
+
+## DO FIRST
+Release is BUILDING: run 38665897524 on `claude/shopping-integration` @ db4ce0c (1468 tests/0, wiring merged).
+Poll: `curl -s https://api.github.com/repos/arbloodhound/jarvis/actions/runs/38665897524 | grep conclusion`.
+When success → give owner the newest v3.0.x-test release link (it's Latest in Obtainium). If FAILED → GitHub MCP
+get_job_logs for the run, fix, push claude/shopping-integration, re-trigger release-apk.yml (test_kit=true).
+Shipped this build: cloud tools shop_search / web_browse / shop_checkout_prep (checkout prep only, crypto
+display-only, ActionGate-gated); verify/investigate/deep already live since v3.0.37. All compile-green, phone-UNPROVEN.
+After release: owner installs → ★ Real-use check → sends file.
+
+---
+# HANDOFF 3 (superseded)
 
 Read this, then CLAUDE.md, HANDOFF_2 (shopping design) and DEVLOG top. Older HANDOFF below is history.
 
