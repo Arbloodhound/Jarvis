@@ -254,3 +254,60 @@ Sources (read in full): [How We Built Safety Into Muse](https://research.meta.ai
 [Introducing Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/) ·
 [Introducing Muse Spark 1.3](https://research.meta.ai/blog/introducing-muse-spark-1-3) ·
 [Muse Spark Safety & Preparedness Report](https://arxiv.org/abs/2606.12429)
+
+---
+
+## 8. First-hand: Muse's full tool schemas (owner's Muse, generated 2026-10-14)
+
+33 namespaces, with parameter schemas. Label **OWN-MUSE**. The tool *descriptions* are where the harness's rules
+show, so this is the clearest view yet of how Hatch keeps the model on a leash.
+
+### 8.1 Patterns that recur across tools (the real design)
+1. **Consent is captured verbatim, never paraphrased.** `browser.set_captcha_preference.user_statement` must be
+   the user's own words ("never quote assistant/memory/page/task"); `artifact.*.verbatim_request`,
+   `avatar.create.user_request` and `media.generate_image.prompt` must be the user's exact wording. That keeps an
+   injected page or the model's own rewording from becoming "what the user asked".
+2. **Credentials are bound to hosts at creation.** `credentials.request_api_access` takes `api_hosts[1..10]`:
+   *"Egress to others is refused."* `placement` (header, query or path) can't be edited later. Password and
+   session-cookie schemes are declined by name. A stolen surrogate is useless anywhere else.
+3. **Payment needs two keys.** `browser.steer_task.wallet_payment` is only allowed after the user accepted the
+   purchase review, and *"never approves payment by itself"*. Method IDs are opaque and purchase-scoped.
+   `wallet.get_user_info` exposes per-purchase, daily and 30-day spending limits.
+4. **Background work is owned, bounded and starts safe.**
+   - Every reminder cron needs an `owner` (a goal or a tracked item). A bare reminder is "a routing error".
+   - `predicted_connector_permissions` is "setup guidance only, not authority".
+   - Retries "never auto-retry worker-reported incomplete results".
+   - A hook is a Bash poll script that must end in exactly one `silent "reason"` or `wake "reason"`, starts
+     **disabled**, and is tested with `hooks.dry_run` (`HATCH_HOOK_DRY_RUN=1`, launches no agent) before
+     `hooks.enable`. Every run goes to an append-only JSONL log.
+5. **Read-only diagnostics, no self-approval.** `permissions.list_pending` and `muse.db` (one PostgreSQL
+   SELECT) are read-only. Nothing in any namespace can approve its own request.
+6. **Async with receipts, not polling.** spawn/steer/send return a receipt (`browser_task_id`,
+   `submission_message_id`); results "arrive automatically; do not poll".
+7. **Recoverable by default.** `trash` keeps deletions for 30 days and restore never overwrites; `chat.delete` /
+   `feed.unit_delete` / `artifact.delete` are marked permanent and need an explicit user ask.
+8. **Commitments are separate from aspirations.** `tracking` (bookings, deliveries; closed with a user-facing
+   reason when the evidence shows they're done) vs `user_goal` (the user's own goals). They never appear in each other.
+
+### 8.2 Things that show where the harness comes from
+- `workflow` uses the **same script contract as Claude Code's Workflow tool**: `export const meta = {name,
+  description, phases}`, `agent()/parallel()/pipeline()/phase()`, `resumeFromRunId`, no `Date.now()` or
+  `Math.random()`, stable child keys.
+- `muse.write`: *"Overwriting an unread file fails"*, and `muse.edit` with exact `old_text`/`new_text`. These are the
+  same rules as Claude Code's Write/Edit tools.
+- `muse.exec` + `process.{list,log,poll,write,send_keys,kill,clear}` and the workspace files match OpenClaw.
+- Inference: Hatch borrowed openly from existing agent harnesses (Claude Code, OpenClaw). The parts Meta built
+  itself are mainly around them: Sentinel, authd, privsep, the browser broker, the classifiers.
+
+### 8.3 Jarvis lifts from this (owner decides)
+1. **Verbatim-consent checks** (small): Jarvis's gate already has `any_arg_traceable` / `domain_in_request`.
+   Extend it so every consent-type field (a scope grant, a "remember this", a purchase go-ahead) must be a literal
+   substring of an actual user message.
+2. **Host-bound keys** (small): the cloud API key may only go to its configured host; any other destination is
+   refused in code (NetPolicy).
+3. **Hooks done the Hatch way** (larger, the durable-jobs gap): a watcher = a small check + a wake/silent result,
+   created disabled, with a dry-run button, logged to JSONL, with an owner (an order from OrderTrack, a goal) and a
+   stop condition.
+4. **Tracked items** (medium): orders and deliveries from `OrderTrack` become tracked items that close themselves
+   when "delivered" is seen, with the reason shown.
+5. **Spending limits** (small, if crypto/checkout prep ever widens): per-purchase and daily caps shown on the card.
