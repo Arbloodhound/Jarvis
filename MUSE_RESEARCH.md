@@ -170,3 +170,87 @@ a mechanism.
 - "Run `muse.db` and list the table names and their columns": the shape of its records.
 - "Send me `~/AGENTS.md`, `~/SOUL.md` and `~/docs/self_improvement.md`."
 - Run tests T1–T8 (section 4) and note exactly what each approval card says and which scopes it offers.
+
+---
+
+## 7. Primary sources, read in full (2026-10-15, network opened)
+
+Read: Meta's **"How We Built Safety Into Muse"** (Tarek Sheasha, 2026-09-08; security.muse.ai serves the same
+post), the **launch post**, the **Muse Spark 1.3 post** (2026-09-02), and the **Muse Spark Safety & Preparedness
+Report** (arXiv 2606.12429, 2026-06-12).
+
+**Section 1 labels upgraded:** these are now **META, confirmed**: the systemd-nspawn runtime cell, tainted egress
+via eBPF cgroup programs + LSM hooks, Sentinel's L4/L7 checks, surrogate credentials swapped at the boundary, the
+approval dialog outside the chat, the 5 grant scopes, the 4 injection-defence layers, and the Stripe Link single-use card
+(merchant + amount + time window). The iCloud-photos incident is still secondhand only.
+
+### 7.1 New from Meta's safety post
+- **Hatch** is Muse's internal codebase name; the Hatch daemon is the harness.
+- **Runtime cell:** root is mapped to an unprivileged host user; full Debian root filesystem; virtual NIC; syscall
+  filter (e.g. no `io_uring`); no `CAP_SYS_PTRACE` / `CAP_NET_ADMIN`.
+- **Outside the cell, as separate systemd units:** `hatch-safety` (independent classifier models on every inference
+  request and response; attackers can't disable them), **privsep workers** (run built-in connector code),
+  `hatch-authd` (credential store + surrogates; OAuth tokens stay in the user's VM), Sentinel, a **Postgres DB** for
+  all durable state, and proxies for inference and telemetry.
+- **IPC:** Unix domain sockets with `SO_PEERCRED` + peer ACLs: kernel-authenticated, with no shared secrets to steal.
+- **Connectors split in two:** a thin CLI in the cell only parses arguments and passes typed args + file
+  descriptors over a socket; a **sandboxed worker outside the cell runs the real logic**. Each worker is identified
+  by its cgroup and has an explicit credential allowlist (a calendar worker can't ask for the email credential).
+  "Privsep decides where credential-capable code runs, authd decides which credential, Sentinel decides whether."
+- **Sentinel connector request** = connector + method + class of action + scope + what the user asked for →
+  Sentinel writes the **user-visible purpose** itself, then applies the user's own connector policy.
+- **Egress:** forward proxy with userns/veth/eBPF; checks hostname, resolved and **final** IP, port, protocol, method,
+  path and decoded body; **SSRF guard** (public name resolving to a private address).
+- **Grants:** Sentinel chooses which scopes to offer and enforces exact matches later. Read-only, previously
+  allowed or low-risk actions don't ask.
+- **Finer than OAuth:** read and write are separate; e.g. Gmail read without Gmail settings.
+- **Email connector filters out one-time codes, password-reset links and magic login links** (deterministic filters
+  + a classifier), so the agent can't be used to take over the user's other accounts.
+- **Browser:** a separate browser sub-agent; the CDP connection lives in a broker outside the cell; the sub-agent
+  sees an **accessibility-tree snapshot, not the DOM**; **no JavaScript in the page, devtools disabled**; the agent is
+  **paused** while the user takes over or while saved credentials fill a form. Logins are captured by a client UI →
+  authd, then injected into the page, invisible to the agent.
+- **Browser classifiers** (block, or ask the user to review): personal data leaving unrelated to the task; injection in
+  the DOM; injection in images/media; injection in downloaded files; high-risk form submissions. Plus Meta's
+  **malicious-site blocklist**, checked inside the VM.
+- **Purchases:** a **checkout-page detector** forces an approval with the exact purchase details every time.
+- **Bug bounty:** open to all; up to **$300,000**, up to **$130,000 for a prompt injection affecting one user**.
+- **Coming:** Muse Confidential VM (encrypted with a key only the user holds). Data: trajectories sanitized for
+  training (opt-out switch); browsing appears as the user's own activity and can indirectly influence ads.
+
+### 7.2 New from the Spark 1.3 post and the safety report
+- **Muse Spark 1.3 is available through the Meta Model API (dev.meta.ai) and Muse Code**, and Meta says an
+  **open-weights Muse Spark** release is on its roadmap. → Jarvis could try Muse Spark as its cloud model.
+- 1.3: ~20% fewer tool calls and ~25% fewer tokens than 1.2; trained "across a diverse set of harnesses"; asks
+  clarifying questions and confirms before consequential actions.
+- **How Meta tests injection:** **SIREN** workbench; **AgentDojo** (public, 97 tasks: banking, travel, workspace,
+  shop) with an **adaptive attacker LLM** (up to 6 turns, refines its injection from the agent's replies); a private
+  **Search-PI** set (injections in deep-research web pages); **AgentHarm** for direct misuse. Metrics: utility under
+  attack and attack success rate, pass@1 / pass@5.
+- Meta's own result: **Muse Spark still trails Claude Opus 4.6 on injection robustness** (AgentDojo), and its
+  AgentHarm harmful-completion rate (26.0%) is higher than GPT-5.4's and Opus 4.6's. The product leans on system
+  layers (Sentinel, classifiers, approvals) because the model alone isn't enough.
+- Apollo Research found the highest **evaluation awareness** they had seen.
+
+### 7.3 What this changes for Jarvis (owner decides)
+New, concrete lifts in addition to section 6.2:
+1. **Filter codes, reset links and magic links** out of `sms_read` / `notification_read` / screen text before it
+   reaches the cloud model (Jarvis's `ScreenSecrets` already catches codes; extend it to reset and magic links).
+2. **Test Jarvis the way Meta tests Muse:** port a slice of **AgentDojo** (public, open source) with an adaptive
+   attacker against Jarvis's cloud loop, using the scripted local server `BrainLoopTest` already uses, and
+   report utility and attack success rate per release. This is the "how do we test it" answer, on our own system.
+3. **Checkout-page detector:** Jarvis already forces the card on any screen showing a price; add a test set of real
+   checkout screens to prove it.
+4. **Malicious-site blocklist** before `open_url` / research fetches (a public phishing list, offline).
+5. **Try Muse Spark 1.3 as a cloud brain** behind the existing OpenAI-compatible client, if the Meta Model API
+   offers that interface (not checked).
+
+### 7.4 Testing Muse itself
+- **Sanctioned route:** Meta's open bug bounty (up to $130k per prompt injection). Read its rules and scope first.
+- **Normal use:** tests T1–T8 (section 4) plus the doc requests in 6.3.
+- Not here: attacking the live service outside the bounty rules.
+
+Sources (read in full): [How We Built Safety Into Muse](https://research.meta.ai/blog/security-and-safety-for-ai-agents-our-approach-with-muse) ·
+[Introducing Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/) ·
+[Introducing Muse Spark 1.3](https://research.meta.ai/blog/introducing-muse-spark-1-3) ·
+[Muse Spark Safety & Preparedness Report](https://arxiv.org/abs/2606.12429)
