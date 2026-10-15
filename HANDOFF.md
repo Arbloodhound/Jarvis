@@ -10,8 +10,12 @@ Read this, then CLAUDE.md, HANDOFF_2 (shopping design) and DEVLOG top. Older HAN
   - `claude/shopping-integration` @ `3f888f8` — pushed. Holds the research/ + shopping modules. I fixed one real
     compile-passing bug here (ShoppingListings seller name swallowed next field) and PROVED the whole branch
     compiles + tests: **1456 JVM tests, 0 failures, assembleDebug OK**. This corrected HANDOFF_2's "compile unverified".
-  - `wire-research` (worktree `.claude/worktrees/agent-a2176302531f84f09`) — a background worker's branch, **NOT
-    committed/pushed yet**. It wires the modules into the agent (see below). It was mid native build at handoff.
+  - `wire-research` worker FINISHED (commit 01bc3e3, 1468 tests/0). I cherry-picked it onto
+    `claude/shopping-integration` → **merged @ db4ce0c, pushed**, and TRIGGERED release-apk.yml (test_kit) on
+    that branch. NEXT: poll the run's conclusion; when success, give owner the v3.0.x-test link. If CI fails,
+    read the job log, fix, re-push, re-trigger. New cloud tools: shop_search, web_browse, shop_checkout_prep
+    (checkout prep only, display-only crypto, gated by ActionGate confirm card). Item 1 (verify/investigate/deep)
+    was already wired since v3.0.37. Shopping/browse are cloud-tool only (no on-device auto-route).
 
 ## What the wiring worker did (uncommitted, in its worktree)
 Changed: assets/ultra.manifest.json, agent/Brain.kt, agent/Tools.kt, agent/Experience.kt, gate/Fact.kt, gate/Gate.kt.
