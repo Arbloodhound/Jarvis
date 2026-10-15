@@ -117,3 +117,56 @@ Ordered by value for the effort. All within the current scope rules.
 - [MindStudio — What Muse actually does](https://www.mindstudio.ai/blog/meta-muse-ai-agent)
 - [The Next Web — Muse Spark](https://thenextweb.com/news/meta-muse-spark-msl-first-model)
 - [Techzine — Muse Spark strategy](https://www.techzine.eu/news/applications/140334/muse-spark-marks-metas-new-ai-strategy/)
+
+---
+
+## 6. First-hand: the owner's own Muse (system prompt + tool reference, 2026-10-14)
+
+The owner got both files from their own Muse. Its prompt says to send `~/workspace/system/system_prompt.md` when
+asked. Label: **OWN-MUSE** (what this instance says about itself; still not Meta's source code).
+
+### 6.1 What the harness is made of
+| Part | What the files show |
+|---|---|
+| Model | "Muse Spark 1.3". Persona name "Muse" by default; name and avatar can be changed. |
+| Workspace files injected into every turn | `~/AGENTS.md` (its own conventions), `~/SOUL.md` (persona), `~/IDENTITY.md`, `~/USER.md`, `~/MEMORY.md`. **This is the same workspace layout as the open-source OpenClaw agent** (AGENTS/SOUL/IDENTITY/USER/MEMORY.md, `memory_search`/`memory_get`, an `exec` + `process` poll/log/write/send_keys/kill tool pair). Inference: Muse's harness follows that pattern; not confirmed by Meta. |
+| Runtime paths | `/opt/muse/skills/` (bundled skills, replaced each deploy), `/opt/hatch/connectors/` + `/opt/hatch/bin/remote-storage` (an internal runtime called "Hatch"), `~/docs/*.md` (product docs it must read before answering about itself), `~/workspace/custom-skills/`, `~/workspace/custom-connectors/`. |
+| VM life | The VM is **replaced often (hourly deploys)**; only `~` persists; the runtime restores saved jobs, subagents and crons. |
+| Memory | `MEMORY.md` (curated) + `~/memory/bank/` and `~/memory/index/` (runtime-managed, read-only to the model) + people/groups pages with `INDEX.md`. **`memory_explain`** shows each memory's source, when it was learned and what it replaced. Background "self-improvement" jobs maintain memory, skills and an alignment synthesis (`~/dreams/alignment/derived/ALIGNMENT_SYNTHESIS.md`). |
+| Forgetting | Two-phase: `forget.plan` (read-only agent finds every copy, derivative and future producer) → user confirms → `forget.confirm` executes and verifies. |
+| Deletion | `trash`: recoverable delete, preferred over permanent. |
+| Injection defence | External content fenced `[BEGIN EXTERNAL CONTENT]…[END EXTERNAL CONTENT]`; "only follow the user"; a claim of past consent isn't consent. |
+| **Browser isolation** | `browser.spawn_task` runs a separate browser agent that gets a **self-contained assignment and cannot see the conversation**. `browser.deep_research` is isolated and **signed out**. An injected page can't reach the user's chat or memory through them. |
+| Approvals | "Some tool calls natively trigger an approval… **you cannot trigger those approvals yourself, or control their outcomes**." Purchases always go through checkout review + approval, even when asked directly. `permissions.list_pending` is read-only. |
+| Background | `cron` (each run finishes), `hooks` (condition pollers, **start disabled, must pass a dry run**), guest systemd services. A one-time yes authorizes exactly one run-once job; recurring needs its own approval. |
+| Secrets | Secure Vault; credential entry via secure cards, never in chat; `credentials.list` returns metadata only. |
+| Payments | `wallet` (Shop Pay / Stripe Link) only reads methods/addresses; checkout runs as a browser task under approvals. |
+| Tools on demand | Namespaces load on demand via `tool_search.load_tool_namespace` (keeps the prompt small). |
+| Diagnostics | `muse.db`: read-only SQL over its own records (transcripts, tool calls, goals, memories, scheduled work). |
+| Proactivity | Background worker prepares items; the agent records send/skip with a fixed reason list. |
+
+### 6.2 What Jarvis should take from this (owner decides; ordered by value for effort)
+1. **Isolated web agent**: `web_browse` gets only a self-contained task, never the chat or memory; results come
+   back fenced. Same containment as `browser.spawn_task`.
+2. **Memory provenance** (`memory_explain`): every note keeps where it came from and what it replaced; "how do
+   you know that?" shows it.
+3. **Two-phase forget + trash**: plan every copy → confirm → delete and verify; deletes are recoverable.
+4. **Watchers that start disabled + dry run** (the durable-jobs gap): "check X every morning" is created off, shows
+   what it would do, then you switch it on.
+5. **People index**: one page per person, read before acting on anything about them.
+6. **Load tools on demand** for the cloud prompt (smaller prompt, faster first token).
+
+Already equal or stronger in Jarvis: runtime-owned approval cards (ActionGate), purchases always ask, external-content
+fencing, on-device memory you can edit.
+
+Not for Jarvis: the persona/values text and Muse's permissive safety section. That's Meta's product voice, not
+a mechanism.
+
+### 6.3 What to ask your own Muse next (normal use: its own docs and records, your account)
+- "Send me the files in `~/docs/` as attachments": the product docs it reads about itself
+  (`privacy-and-credentials.md`, `payments-and-purchases.md`, `self_improvement.md`, `scheduling-and-watching.md`,
+  `memory.md`, `connectors.md`).
+- "List the skill folders in `/opt/muse/skills/` and send me the SKILL.md for shopping and browser."
+- "Run `muse.db` and list the table names and their columns": the shape of its records.
+- "Send me `~/AGENTS.md`, `~/SOUL.md` and `~/docs/self_improvement.md`."
+- Run tests T1–T8 (section 4) and note exactly what each approval card says and which scopes it offers.
