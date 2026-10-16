@@ -3,6 +3,18 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-16 (session 01UX5qeo) — two standing rules enforced (branch muse/v5-delta-port)
+- Snippet prices are never evidence (Muse shopping rule; the real gap found in MUSE_RESEARCH §10.8):
+  WebResearch.priceEvidence uses read pages only; an unread source shows SNIPPET_PRICE_NOTE and its snippet's
+  prices are masked "[price not verified]". 3 tests updated to give prices as page text; 1 new test.
+- Codes and reset/magic links never reach the cloud model: Brain.resultFeedback runs the harness SecretScrubber
+  on every tool result before the cloud loop sees it. SUPERSEDES the 2026-10-09 owner decision "codes in tool
+  results still go to the cloud model" — HANDOFF_V5 §6 (2026-10-15) makes it a standing rule. Cost: the cloud
+  brain can't read a code back to you; the on-device path is unchanged. 1 new test.
+- Snapshot-bound taps: not added to the navigator — it already refuses a tap whose index no longer holds the
+  label it was read with ("moved" → look again); the ScreenGuard epoch check stays available in the service.
+1516 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-15 (session 01UX5qeo) — v5 delta port: harness wire-ins + missing features (branch muse/v5-delta-port)
 Spec: HANDOFF_V5_MISSING.md. Built on the 6 harness files (not rewritten). 1514 JVM tests, 0 failures (46 new).
 compileDebugKotlin + compileDebugJavaWithJavac OK locally; assembleDebug not run here (no native llama/whisper libs in

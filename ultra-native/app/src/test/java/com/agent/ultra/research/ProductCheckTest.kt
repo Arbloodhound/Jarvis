@@ -59,7 +59,7 @@ class ProductCheckTest {
     @Test fun tableIsSortedMechanicallyWithTheKeyLabelledAndEndsWithAQuestion() {
         val hitA = WebResearch.Hit("XM5", "https://www.bestbuy.com/x", "$329.99")
         val hitB = WebResearch.Hit("XM5", "https://cheap.example/x", "$199.00")
-        val seen = WebResearch.priceEvidence(listOf(Triple(1, hitA, null), Triple(2, hitB, null)), 2026)
+        val seen = WebResearch.priceEvidence(listOf(Triple(1, hitA, "XM5 now \$329.99"), Triple(2, hitB, "XM5 \$199.00")), 2026)
         val leg = ProductCheck.OnionLeg(
             listOf(ProductCheck.Mention("http://$ddg/", "", "", "XM5 $300", WebResearch.prices("XM5 $300"), null, ProductCheck.Tier.KNOWN_GOOD_ONION)),
             listOf(ProductCheck.Blocked(clone, Verdict.LIKELY_PHISH, listOf("1 character away from DuckDuckGo's known address"))), emptyList())

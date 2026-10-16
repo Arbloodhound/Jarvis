@@ -160,11 +160,22 @@ class WebResearchTest {
 
     @Test fun briefNumbersSourcesAndLaysOutTheEvidence() {
         val hits = listOf(listOf(WebResearch.Hit("Best Buy", "https://www.bestbuy.com/x", "Now $329.99")))
-        val b = WebResearch.brief("cheapest xm5", WebResearch.Kind.PRODUCT, listOf("xm5"), WebResearch.rank(hits, WebResearch.Kind.PRODUCT), emptyMap())
+        val pages = mapOf("https://www.bestbuy.com/x" to "Sony WH-1000XM5 — Now \$329.99, in stock")
+        val b = WebResearch.brief("cheapest xm5", WebResearch.Kind.PRODUCT, listOf("xm5"), WebResearch.rank(hits, WebResearch.Kind.PRODUCT), pages)
         assertTrue(b.contains("[1] Best Buy — bestbuy.com (known retailer)"))
         assertTrue(b.contains("prices seen: $329.99"))
         assertTrue(b.contains("in the price-evidence order above (sorted by price, lowest first)"))
         assertTrue(!b.contains("ranked shortlist"))   // an order is not a pick (owner: never "buy this")
+    }
+
+    @Test fun aSnippetPriceIsNeverEvidence() {
+        val hit = WebResearch.Hit("Best Buy", "https://www.bestbuy.com/x", "Now \$329.99")
+        assertTrue(WebResearch.priceEvidence(listOf(Triple(1, hit, null)), 2026).isEmpty())
+        val b = WebResearch.brief("cheapest xm5", WebResearch.Kind.PRODUCT, listOf("xm5"),
+            WebResearch.rank(listOf(listOf(hit)), WebResearch.Kind.PRODUCT), emptyMap())
+        assertTrue(b.contains(WebResearch.SNIPPET_PRICE_NOTE))
+        assertTrue(b.contains("search snippet (page not read): Now [price not verified]"))
+        assertTrue(!b.contains("329.99"))
     }
 
     @Test fun ddgBotCheckAndRateLimitReadAsBlockedNotEmpty() {

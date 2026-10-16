@@ -1854,6 +1854,9 @@ RULES:
 
         internal const val EMPTY_LOCAL_ANSWER = "Sorry, I didn't get an answer out — try asking again."
 
+        /** Codes and reset links out of everything the cloud loop is handed back. */
+        private val CLOUD_SCRUBBER = com.agent.ultra.harness.connectors.SecretScrubber()
+
         private val SPOOF_MARKERS = listOf(
             Regex("\\[\\s*END\\s+UNTRUSTED\\s+DATA\\s*]", RegexOption.IGNORE_CASE),
             Regex("\\[\\s*UNTRUSTED\\s+DATA", RegexOption.IGNORE_CASE),
@@ -1865,9 +1868,13 @@ RULES:
          * then [tail] (what to do next). Markers already in the data are removed first, until none
          * are left (so a nested one can't reassemble): a web page or screen can't close the block
          * early and write text that looks like it came from outside it.
+         *
+         * Standing rule (HANDOFF_V5 §6, 2026-10-15; supersedes the 2026-10-09 "codes still go to the
+         * cloud" decision): one-time codes, password-reset and magic sign-in links in a tool result
+         * never reach the cloud model — they become `[credential:<id>]` (harness SecretScrubber).
          */
         internal fun resultFeedback(tool: String, failed: Boolean, data: String, tail: String): String {
-            var clean = data
+            var clean = CLOUD_SCRUBBER.scrub(data).text
             while (true) {
                 val next = SPOOF_MARKERS.fold(clean) { acc, rx -> rx.replace(acc, "") }
                 if (next == clean) break

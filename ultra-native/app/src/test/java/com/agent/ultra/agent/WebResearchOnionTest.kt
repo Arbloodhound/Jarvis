@@ -81,7 +81,9 @@ class WebResearchOnionTest {
             assertTrue(rules.contains("End with one question asking what the owner wants next"))
             assertTrue(b.contains(WebResearch.ORDER_KEY))
         }
-        val p = WebResearch.brief("cheapest xm5", WebResearch.Kind.PRODUCT, listOf("q"), WebResearch.rank(hits, WebResearch.Kind.PRODUCT), emptyMap(), now = 2026)
+        val read = mapOf("https://www.bestbuy.com/x" to "Now \$329.99", "https://cheap-audio.shop/x" to "Only \$99.00",
+            "https://www.amazon.com/x" to "\$349.99 2026")
+        val p = WebResearch.brief("cheapest xm5", WebResearch.Kind.PRODUCT, listOf("q"), WebResearch.rank(hits, WebResearch.Kind.PRODUCT), read, now = 2026)
         assertTrue(p.contains("Price evidence, sorted by price (lowest first)"))
         assertTrue(p.indexOf("$99.00 [3]") < p.indexOf("$329.99 [1]"))
         assertTrue(p.contains("Red flag: $99.00 at [3] cheap-audio.shop is far below the others"))

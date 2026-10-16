@@ -47,6 +47,15 @@ class BrainHelpersTest {
         assertTrue(Brain.resultFeedback("x", true, "Error: no", "t").startsWith("[RESULT: x] STATUS: failed\n"))
     }
 
+    @Test fun resultFeedbackNeverHandsTheCloudACodeOrResetLink() {
+        val fb = Brain.resultFeedback("sms_read", false,
+            "Bank: your verification code is 482913. Reset here: https://bank.example/reset?token=Zx81kQpLm2", "t")
+        assertTrue(!fb.contains("482913"))
+        assertTrue(!fb.contains("token=Zx81"))
+        assertTrue(fb.contains("[credential:"))
+        assertTrue(Brain.resultFeedback("sms_read", false, "Lunch at 12:30, table for 4", "t").contains("Lunch at 12:30, table for 4"))
+    }
+
     @Test fun resultFeedbackKeepsTheCap() {
         val fb = Brain.resultFeedback("read_screen_deep", false, "§".repeat(10_000), "t")
         assertEquals(Brain.FEEDBACK_DATA_CHARS, fb.count { it == '§' })
