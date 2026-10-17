@@ -362,7 +362,9 @@ fun ChatScreen(
                     ) {
                         androidx.compose.foundation.text.selection.SelectionContainer {
                             Text(
-                                text = msg.text,
+                                // The model's Markdown drawn (bold, code, bullets…); the owner's words as typed.
+                                text = if (msg.fromUser) androidx.compose.ui.text.AnnotatedString(msg.text)
+                                    else remember(msg.text) { ChatMarkdown.render(msg.text) },
                                 color = if (msg.fromUser) MaterialTheme.colorScheme.onPrimary
                                 else MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
