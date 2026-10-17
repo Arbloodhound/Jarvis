@@ -741,6 +741,27 @@ fun SettingsScreen(
         SectionTitle("CONNECTORS")
         ConnectorsSettings(context)
 
+        SectionTitle("FILES JARVIS MADE")
+        run {
+            var trashLine by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(Unit) {
+                trashLine = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val n = com.agent.ultra.agent.Workspace.trash(context).list().size
+                    val a = com.agent.ultra.agent.Workspace.artifacts(context).list().size
+                    "$a artifact${if (a == 1) "" else "s"} · $n in the trash (Jarvis can restore but never empty it)"
+                }
+            }
+            trashLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) }
+            OutlinedButton(onClick = {
+                scope.launch {
+                    val n = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        com.agent.ultra.harness.TrashAdmin.empty(com.agent.ultra.agent.Workspace.trash(context))
+                    }
+                    trashLine = "Emptied the trash ($n item${if (n == 1) "" else "s"} deleted for good)."
+                }
+            }) { Text("Empty trash") }
+        }
+
         // ── Recipes ───────────────────────────────────────────────────
         SectionTitle("ROUTINES")
         val recipeDao = remember { com.agent.ultra.data.UltraDatabase.get(context).recipes() }

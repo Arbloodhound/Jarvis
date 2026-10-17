@@ -137,6 +137,19 @@
       "effects": ["mutate"]
     },
     {
+      "name": "artifact",
+      "effects": ["mutate"]
+    },
+    {
+      "name": "trash",
+      "effects": ["mutate"]
+    },
+    {
+      "name": "delegate",
+      "effects": ["egress"],
+      "requires": [{"kind": "not_tainted", "arg": "tasks"}, {"kind": "spoof_check"}]
+    },
+    {
       "name": "shop_checkout_prep",
       "effects": [
         "mutate"

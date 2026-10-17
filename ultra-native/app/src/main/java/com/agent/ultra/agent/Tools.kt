@@ -296,6 +296,9 @@ class Tools(
                 "shop_checkout_prep" -> checkoutPrep(params)
                 "forget" -> forget(params.optString("subject"))
                 "connector" -> connector(params)
+                "artifact" -> artifact(params)
+                "trash" -> trash(params)
+                "delegate" -> delegate(params)
                 // Starts Tor (Orbot) for the onion route; never turns onion research on.
                 "tor_connect" -> when {
                     NetPolicy.offlineOnly(context) -> "Offline-only mode is on, so Tor stays off. Nothing was started."
@@ -1033,6 +1036,99 @@ class Tools(
                 r.why + " The owner connects Google in Settings → CONNECTORS → Connect Google."
             is com.agent.ultra.harness.connectors.CallResult.Failed -> "Error: ${r.reason}"
             is com.agent.ultra.harness.connectors.CallResult.NeedsApproval -> "Not done: it still needs the owner's approval."
+        }
+    }
+
+    /** Documents, pages and data the agent makes for the owner (harness Artifacts): versioned, delete → trash. */
+    private suspend fun artifact(params: JSONObject): String = withContext(Dispatchers.IO) {
+        val arts = Workspace.artifacts(context)
+        val slug = params.optString("slug")
+        try {
+            when (params.optString("action")) {
+                "create" -> {
+                    val kind = runCatching { com.agent.ultra.harness.Artifacts.Kind.valueOf(params.optString("kind", "DOCUMENT").uppercase()) }
+                        .getOrDefault(com.agent.ultra.harness.Artifacts.Kind.DOCUMENT)
+                    val a = arts.create(params.optString("name").ifBlank { "Untitled" }, kind, params.optString("content"))
+                    "Created \"${a.name}\" (slug ${a.slug}, version 1)."
+                }
+                "edit" -> arts.edit(slug, params.optString("content")).let { "Saved \"${it.name}\" as version ${it.versions}." }
+                "read" -> arts.content(slug, params.optInt("version").takeIf { it > 0 }) ?: "Error: no artifact '$slug'"
+                "delete" -> "Moved to the trash (id ${arts.delete(slug)}); the owner can restore it."
+                "share" -> {
+                    val a = arts.get(slug) ?: return@withContext "Error: no artifact '$slug'"
+                    val ok = withContext(Dispatchers.Main) {
+                        ActionGate.approve("share", a.name, "Jarvis", "share",
+                            title = "Share \u201C${a.name.take(60)}\u201D?", body = "Opens the share sheet with its current text. Nothing is sent unless you pick where.")
+                    }
+                    if (!ok) "Not shared: the owner didn't confirm."
+                    else {
+                        arts.share(arts.userAskedToShare(slug))
+                        val text = arts.content(slug).orEmpty()
+                        withContext(Dispatchers.Main) {
+                            context.startActivity(android.content.Intent.createChooser(
+                                android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                                    .putExtra(android.content.Intent.EXTRA_SUBJECT, a.name).putExtra(android.content.Intent.EXTRA_TEXT, text),
+                                "Share ${a.name}").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }
+                        "Opened the share sheet for \"${a.name}\"; the owner picks where it goes."
+                    }
+                }
+                else -> arts.list().takeIf { it.isNotEmpty() }?.joinToString("\n") { "- ${it.slug}: ${it.name} (${it.kind.name.lowercase()}, ${it.versions} version${if (it.versions == 1) "" else "s"})" }
+                    ?: "No artifacts yet."
+            }
+        } catch (e: Exception) { "Error: ${e.message ?: e.javaClass.simpleName}" }
+    }
+
+    /** The trash: list and restore. Emptying it is the owner's, in Settings. */
+    private suspend fun trash(params: JSONObject): String = withContext(Dispatchers.IO) {
+        val t = Workspace.trash(context)
+        try {
+            when (params.optString("action")) {
+                "restore" -> "Restored to ${t.restore(params.optString("id")).name}."
+                else -> t.list().takeIf { it.isNotEmpty() }?.joinToString("\n") {
+                    "- ${it.id}: ${java.io.File(it.originalPath).name} (${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it.trashedAtMs))})"
+                } ?: "The trash is empty."
+            }
+        } catch (e: Exception) { "Error: ${e.message ?: e.javaClass.simpleName}" }
+    }
+
+    /**
+     * Research in parallel (harness SubagentOrchestrator, HANDOFF_V5 §4): one child per task, each a
+     * web research run; children can't spawn. Every result comes back as a handoff the parent checks
+     * (found something with a source, or not) before it's used.
+     */
+    private suspend fun delegate(params: JSONObject): String {
+        val tasks = params.optJSONArray("tasks")?.let { a -> (0 until a.length()).map { a.optString(it) } }
+            ?.map { it.trim() }?.filter { it.isNotBlank() }?.distinct()?.take(4).orEmpty()
+        if (tasks.isEmpty()) return "Error: delegate needs 'tasks' (a list of up to 4 research questions)"
+        val handoffs = java.util.concurrent.ConcurrentLinkedQueue<com.agent.ultra.harness.Handoff>()
+        return kotlinx.coroutines.coroutineScope {
+            val done = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val o = com.agent.ultra.harness.SubagentOrchestrator(this, { h ->
+                handoffs += h
+                if (handoffs.size == tasks.size) done.complete(Unit)
+            }, verify = { _, r ->
+                val ok = r.isNotBlank() && !r.startsWith("Error") && Regex("https?://").containsMatchIn(r)
+                ok to if (ok) "has sources" else "no sourced result"
+            })
+            val runner = object : com.agent.ultra.harness.AgentRunner {
+                override suspend fun run(task: String, inbox: kotlinx.coroutines.channels.ReceiveChannel<String>,
+                                         ctx: com.agent.ultra.harness.ChildContext): String {
+                    ctx.report("researching")
+                    return executeNow("web_search", JSONObject().put("query", task))
+                }
+            }
+            tasks.forEach { o.spawn(it, runner) }
+            kotlinx.coroutines.withTimeoutOrNull(120_000) { done.await() }
+            o.list().filter { it.status == com.agent.ultra.harness.ChildStatus.RUNNING }.forEach { o.close(it.id) }
+            tasks.joinToString("\n\n") { t ->
+                val h = handoffs.firstOrNull { it.task == t }
+                "### $t\n" + when {
+                    h == null -> "(no result within 2 minutes — closed)"
+                    h.result == null -> "(failed: ${h.error})"
+                    else -> (if (h.verified) "" else "[unverified: ${h.verifyNote}]\n") + h.result.take(3000)
+                }
+            }
         }
     }
 

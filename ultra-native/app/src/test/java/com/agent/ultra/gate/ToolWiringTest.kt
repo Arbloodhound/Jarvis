@@ -18,7 +18,10 @@ import java.io.File
 class ToolWiringTest {
     @Test fun everyHandledToolIsInTheManifestAndViceVersa() {
         val src = File("src/main/java/com/agent/ultra/agent/Tools.kt").readText()
-        val body = src.substring(src.indexOf("return try {\n            when (tool) {"))
+        val start = src.indexOf("return try {\n            when (tool) {")
+        // Only the dispatch itself: tool functions below it have `when`s of their own.
+        val end = src.indexOf("\n    private ", start).let { if (it < 0) src.length else it }
+        val body = src.substring(start, end)
         val handled = Regex("^ {16}((?:\"[a-z_]+\"(?:,\\s*)?)+)\\s*->", RegexOption.MULTILINE).findAll(body)
             .flatMap { m -> Regex("\"([a-z_]+)\"").findAll(m.groupValues[1]).map { it.groupValues[1] } }.toSortedSet()
         val tools = JSONObject(File("src/main/assets/ultra.manifest.json").readText()).getJSONArray("tools")
