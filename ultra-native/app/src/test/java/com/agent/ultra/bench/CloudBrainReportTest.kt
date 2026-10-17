@@ -21,11 +21,11 @@ class CloudBrainReportTest {
     @Test fun theRealCatalogNamesOnlyRealTools() {
         val offered = CloudBrainReport.named(Brain.TOOL_CATALOG, manifest)
         assertTrue("the catalog offers tools", offered.size >= 30)
-        // Argument values are snake_case too (global_action's actions, connector ids); not tools.
-        val actionValues = setOf("app_switcher", "notification_shade", "quick_settings",
-            "google_calendar", "google_drive", "google_docs")
+        // Argument values (global_action's actions, connector ids) are not flagged: the phone report
+        // listed them as unknown tools (results 2026-10-17 14:32).
         assertEquals("named in the cloud catalog but not a real tool", emptySet<String>(),
-            CloudBrainReport.unknownNames(Brain.TOOL_CATALOG, manifest) - actionValues)
+            CloudBrainReport.unknownNames(Brain.TOOL_CATALOG, manifest))
+        assertTrue(CloudBrainReport.ARG_VALUES.none { it in manifest })
         println("real tools never offered to the cloud: ${manifest - offered}")
     }
 

@@ -13,10 +13,14 @@ object CloudBrainReport {
     fun named(text: String, manifest: Set<String>): Set<String> =
         manifest.filter { word(it).containsMatchIn(text) }.toSortedSet()
 
+    /** snake_case argument values the catalog names (global_action's actions, connector ids): not tools. */
+    val ARG_VALUES = setOf("app_switcher", "notification_shade", "quick_settings",
+        "google_calendar", "google_drive", "google_docs")
+
     /** snake_case words in [text] that look like tool names but are not real tools. */
     fun unknownNames(text: String, manifest: Set<String>): Set<String> =
         Regex("(?<![A-Za-z_])[a-z]+(?:_[a-z]+)+(?![A-Za-z_])").findAll(text)
-            .map { it.value }.filter { it !in manifest }.toSortedSet()
+            .map { it.value }.filter { it !in manifest && it !in ARG_VALUES }.toSortedSet()
 
     /**
      * The question the live check sends, with the real system prompt in front of it. It is

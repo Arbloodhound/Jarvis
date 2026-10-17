@@ -4553,3 +4553,9 @@ The phone had the debug-signed build, which a release-signed APK can't replace.
 Uninstalled on Dafarus's go-ahead (app data wiped, Venice key must be re-entered
 in Settings), then installed 2.3.2. The APK pulled back off the phone is
 byte-identical to the build; the app launches, no crash in the crash buffer.
+
+## 2026-10-17 — phone results (v3.0.49, Pixel 10 Pro XL)
+- Cloud brain check ran 3×. Run 1: accessibility off → the report correctly listed 6 screen tools as dead. Runs 2–3: everything on.
+- Live check: 401 "Invalid Anthropic API Key" (key is already trimmed on save in SettingsScreen, so the key itself was rejected), then a 20 s connect timeout to api.anthropic.com (network). Owner action: paste a fresh key from console.anthropic.com. PROVEN from the log; no code fault found.
+- Fixed: the report flagged global_action values and connector ids (app_switcher, google_drive…) as "not a real tool". The exclusion now lives in CloudBrainReport.ARG_VALUES, so the phone report matches the JVM test.
+- Open: ambient whisper-small dropped 37 utterances ("backlog full"). On the A520 cores it ran 11–45× slower than speech; on 4 big cores at 6–7% battery / WARM it was still 1.7–4× slower. Cause is load/throttling in that state; AsrSpeed should fall back to base after 8 slow runs. Not changed (no proof the fallback itself misfired; the log starts mid-run).
