@@ -1115,7 +1115,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                         // On the main thread these dispatch without waiting (see performTap).
                         ok = longPress
                             ? performSwipe(b.centerX(), b.centerY(), b.centerX(), b.centerY(), 900)
-                            : performTap(b.centerX(), b.centerY());
+                            : performTapBound(b.centerX(), b.centerY(), b);
                         Log.i(TAG, "CLICK_INDEX: fell back to a gesture at " + b.centerX() + "," + b.centerY()
                             + " accepted=" + ok);
                     }
@@ -1641,10 +1641,29 @@ public class AgentAccessibilityService extends AccessibilityService {
         Log.i(TAG, "GATE: PASSED pkg=" + target);
         return true;
     }
+    /**
+     * A raw-coordinate tap (the model picked x,y). The coordinate is bound to a live element:
+     * the deepest node in an app window the agent may act in that contains the point. No such
+     * node (off-screen, outside every window, in a protected window) means the tap is refused.
+     */
     public boolean performTap(int x, int y) {
+        return performTapBound(x, y, nodeBoundsAt(x, y));
+    }
+
+    /**
+     * A tap at (x,y) that was derived from [nodeBounds], the element it was read from. Refused
+     * (returns false, nothing dispatched) when harness ScreenGuard.requireScreenBound says the
+     * coordinate is not inside that element, or when there is no element.
+     */
+    public boolean performTapBound(int x, int y, Rect nodeBounds) {
         if (!checkPackageAllowed()) {
             emitA11yLog("A11Y_TAP", "{\"action\":\"BLOCKED\",\"x\":" + x + ",\"y\":" + y + ",\"pkg\":\"" + currentPackage + "\"}");
             Log.i(TAG, "TAP: BLOCKED x=" + x + " y=" + y + " pkg=" + currentPackage);
+            return false;
+        }
+        if (!tapIsScreenBound(x, y, nodeBounds)) {
+            emitA11yLog("A11Y_TAP", "{\"action\":\"UNBOUND\",\"x\":" + x + ",\"y\":" + y + ",\"pkg\":\"" + currentPackage + "\"}");
+            Log.i(TAG, "TAP: UNBOUND (refused) x=" + x + " y=" + y + " pkg=" + currentPackage);
             return false;
         }
         emitA11yLog("A11Y_TAP", "{\"action\":\"DISPATCH\",\"x\":" + x + ",\"y\":" + y + ",\"pkg\":\"" + currentPackage + "\"}");
@@ -1688,6 +1707,74 @@ public class AgentAccessibilityService extends AccessibilityService {
         if (!result) { emitA11yLog("A11Y_TAP", "{\"action\":\"TIMEOUT_OR_FAIL\",\"x\":" + x + ",\"y\":" + y + "}"); Log.i(TAG, "TAP: TIMEOUT_OR_FAIL x=" + x + " y=" + y); }
         return result;
     }
+    /** Harness ScreenGuard gate for coordinate taps. True only when (x,y) is inside [nodeBounds]. */
+    private boolean tapIsScreenBound(int x, int y, Rect nodeBounds) {
+        com.agent.ultra.harness.ScreenBounds.Rect nb = nodeBounds == null ? null
+            : new com.agent.ultra.harness.ScreenBounds.Rect(
+                nodeBounds.left, nodeBounds.top, nodeBounds.right, nodeBounds.bottom);
+        synchronized (screenGuard) {
+            try {
+                screenGuard.requireScreenBound(x, y, nb, null);
+                return true;
+            } catch (Exception e) {
+                // UnboundTap (a Kotlin exception, caught as Exception for the same reason as above).
+                Log.i(TAG, "TAP: " + e.getMessage());
+                return false;
+            }
+        }
+    }
+
+    /** Bounds of the deepest node containing (x,y) in an app window the agent may act in; null if none. */
+    private Rect nodeBoundsAt(int x, int y) {
+        try {
+            java.util.List<AccessibilityWindowInfo> windows = getWindows();
+            if (windows == null) return null;
+            AccessibilityWindowInfo top = null;
+            for (AccessibilityWindowInfo w : windows) {
+                if (w.getType() != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
+                Rect wb = new Rect();
+                w.getBoundsInScreen(wb);
+                if (!wb.contains(x, y)) continue;
+                if (top == null || w.getLayer() > top.getLayer()) top = w;
+            }
+            if (top == null) return null;
+            AccessibilityNodeInfo wRoot = top.getRoot();
+            if (wRoot == null) return null;
+            try {
+                if (!mayActIn(wRoot)) return null;
+                int[] budget = {400};
+                return deepestBoundsAt(wRoot, x, y, 0, budget);
+            } finally {
+                wRoot.recycle();
+            }
+        } catch (Exception e) {
+            Log.i(TAG, "TAP: node lookup failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private Rect deepestBoundsAt(AccessibilityNodeInfo node, int x, int y, int depth, int[] budget) {
+        Rect b = new Rect();
+        node.getBoundsInScreen(b);
+        if (!b.contains(x, y)) return null;
+        Rect best = b;
+        if (depth < 40) {
+            for (int i = 0; i < node.getChildCount() && budget[0] > 0; i++) {
+                AccessibilityNodeInfo c = node.getChild(i);
+                if (c == null) continue;
+                budget[0]--;
+                try {
+                    if (!c.isVisibleToUser()) continue;
+                    Rect cb = deepestBoundsAt(c, x, y, depth + 1, budget);
+                    if (cb != null) best = cb;
+                } finally {
+                    c.recycle();
+                }
+            }
+        }
+        return best;
+    }
+
     public boolean performSwipe(int x1, int y1, int x2, int y2, int durationMs) {
         if (!checkPackageAllowed()) return false;
         Log.i(TAG, "SWIPE: " + x1 + "," + y1 + " -> " + x2 + "," + y2 + " pkg=" + currentPackage);

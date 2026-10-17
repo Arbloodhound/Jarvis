@@ -3,6 +3,21 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-17 (session 01BUKaYm) — harness guards wired into device paths (branch v5-guards)
+Subsystems: D (device control), E (security), F (notification log). Scope: wiring only, no refactors.
+- ScreenGuard.requireScreenBound: AgentAccessibilityService.performTap(x,y) now resolves the deepest live node under the
+  point (nodeBoundsAt: app windows the agent may act in, visible nodes) and refuses the tap (returns false, logs A11Y_TAP
+  UNBOUND) when none / outside bounds. performTapBound(x,y,bounds) is the node-derived form (actByIndex fallback).
+  requireNotPassword was ALREADY enforced in performText (confirmed, not changed).
+- OtpScrubber: Tools.kt notification_read / sms_read results are scrubbed; UltraNotificationService scrubs title/text
+  before they are written to notifications.log (EventTrigger still sees raw text; ScreenSecrets/outboundSecret untouched).
+- BanditArmState/BanditFeedback: NOT wired. harness/Ideas.kt and Proactivity.kt have no production callers (only
+  SurfacesTest), so there is no accept/dismiss surface to hook; inventing one would be drift.
+- Tests: GuardWiringTest (6). Full suite 1585 pass, 0 fail; assembleDebug OK. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+- Open: the node lookup makes a raw tap bound to "whatever element is there" (refuses off-screen/blocked-window/no-node
+  taps; cannot detect a guessed coordinate that lands on a real element). Canvas/webview taps with no node are now refused
+  — watch for that on device. performSwipe / tapAtPoint / IME-enter gesture are not bound-checked.
+
 ## 2026-10-16 (session 01UX5qeo) — two standing rules enforced (branch muse/v5-delta-port)
 - Snippet prices are never evidence (Muse shopping rule; the real gap found in MUSE_RESEARCH §10.8):
   WebResearch.priceEvidence uses read pages only; an unread source shows SNIPPET_PRICE_NOTE and its snippet's
