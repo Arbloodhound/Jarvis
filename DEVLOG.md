@@ -3,6 +3,22 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-17 (session 01UX5qeo) — cloud brain check (Jarvis Tests button 6)
+Subsystems: F (diagnostics) + a read-only hook in A (Brain). Owner asked for a diagnostic of the API brain: what the
+model sees, what it has access to and what it doesn't.
+- bench/CloudBrainReport.kt (pure, JVM-tested): catalog vs real tools, offered tools whose access is off, what the
+  cloud never gets, request summary, and the self-check that compares the model's own tool list with what it was offered.
+- TestKitActivity (debug only): button 6 reports provider/model/key-set (never the key), system prompt size and full
+  text, tools offered vs real, live access (a11y, notification access, SMS read/send, contacts, location), dead tools,
+  last real cloud request; then, after a Yes, one request (system prompt + PROBE) straight to the provider — nothing in
+  the reply is run.
+- Brain (read-only hooks): TOOL_CATALOG private→internal; diagnosticSystemPrompt(); companion lastCloudRequest set
+  before each cloud call (memory only). No behaviour change.
+- Finding (not changed — owner's call): global_action is a real tool but is never offered to the cloud model. The cloud
+  prompt tells the model it has full phone access even when accessibility etc. are off.
+- 1584 JVM tests, 0 failures; compileDebugKotlin OK. RUNTIME-UNPROVEN. Claude keys should work through the
+  OpenAI-compatible endpoint (base URL https://api.anthropic.com/v1) — not tested here.
+
 ## 2026-10-17 (session 01UX5qeo) — owner rejected three non-Muse additions; removed
 - Owner: keep Muse's code as it was (optimize only); "don't keep any" of the additions beyond Muse.
 - Removed: OtpScrubber (on-device sms_read/notification_read + notifications.log + readSms), the raw-tap node binding
