@@ -345,7 +345,7 @@ class TestKitActivity : ComponentActivity() {
             // Test questions are not the owner's words: keep them out of memory and notes.
             brain.recordTurns = false
             try { brain.run(q) } finally { ChatStore.thinking.value = false; brain.recordTurns = true }
-            ChatStore.messages.lastOrNull { !it.fromUser }?.text.orEmpty()
+            ChatStore.messages.lastOrNull { !it.fromUser }?.id?.let(ChatStore::textOf).orEmpty()
         }
     }
 

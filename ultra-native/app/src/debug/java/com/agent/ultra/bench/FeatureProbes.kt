@@ -758,7 +758,7 @@ object FeatureProbes {
             while (AmbientListenService.lastCommandDoneAt < AmbientListenService.lastCommandAt) delay(500); true } ?: false)
         val command = if (commanded) com.agent.ultra.agent.IntentRouter.requestPart(AmbientListenService.lastCommand) else ""
         val answer = if (done) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-            com.agent.ultra.ui.ChatStore.messages.lastOrNull { !it.fromUser && it.timestamp >= t0 }?.text
+            com.agent.ultra.ui.ChatStore.messages.lastOrNull { !it.fromUser && it.timestamp >= t0 }?.id?.let(com.agent.ultra.ui.ChatStore::textOf)
         }.orEmpty() else ""
         val timeRight = answer.isNotBlank() && FeatureGrade.saysTime(answer, System.currentTimeMillis(), java.util.TimeZone.getDefault())
         val v = when {

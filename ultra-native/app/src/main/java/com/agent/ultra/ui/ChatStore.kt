@@ -161,26 +161,58 @@ object ChatStore {
 
     /** Append a streamed piece to a bubble, addressed by id rather than index —
      * indices shift when anything else is added or removed mid-stream. */
-    fun appendTo(id: String, piece: String) = onUi {
-        val i = messages.indexOfFirst { it.id == id }
-        if (i >= 0) messages[i] = messages[i].copy(text = messages[i].text + piece)
+    fun appendTo(id: String, piece: String) {
+        // Pieces are batched: one redraw per [STREAM_FLUSH_MS] instead of one main-thread hop and
+        // one bubble rebuild per token (CROSSEVAL_OPENCLAW §2). [textOf]/[messageById] include
+        // what is still pending, so nothing reading the bubble sees it short.
+        val sb = pendingPieces.getOrPut(id) { StringBuilder() }
+        synchronized(sb) { sb.append(piece) }
+        if (!flushScheduled) {
+            flushScheduled = true
+            ui.launch { kotlinx.coroutines.delay(STREAM_FLUSH_MS); flushPieces() }
+        }
     }
 
-    /** Replace a bubble's whole text. */
-    fun setText(id: String, text: String) = onUi {
-        val i = messages.indexOfFirst { it.id == id }
-        if (i >= 0) messages[i] = messages[i].copy(text = text)
+    private val pendingPieces = java.util.concurrent.ConcurrentHashMap<String, StringBuilder>()
+    @Volatile private var flushScheduled = false
+    private const val STREAM_FLUSH_MS = 40L
+
+    private fun pendingOf(id: String): String = pendingPieces[id]?.let { synchronized(it) { it.toString() } }.orEmpty()
+
+    /** Main thread: moves batched pieces into their bubbles. */
+    private fun flushPieces() {
+        flushScheduled = false
+        for ((id, sb) in pendingPieces) {
+            val add = synchronized(sb) { sb.toString().also { sb.setLength(0) } }
+            if (add.isEmpty()) { pendingPieces.remove(id, sb); continue }
+            val i = messages.indexOfFirst { it.id == id }
+            if (i >= 0) messages[i] = messages[i].copy(text = messages[i].text + add)
+        }
     }
 
-    fun removeById(id: String) = onUi {
-        val i = messages.indexOfFirst { it.id == id }
-        if (i >= 0) messages.removeAt(i)
+    /** Replace a bubble's whole text (pieces still pending for it are dropped: the text replaces them). */
+    fun setText(id: String, text: String) {
+        pendingPieces.remove(id)
+        onUi {
+            val i = messages.indexOfFirst { it.id == id }
+            if (i >= 0) messages[i] = messages[i].copy(text = text)
+        }
     }
 
-    /** Current text of a bubble, or empty if it is gone. */
-    fun textOf(id: String): String = messages.firstOrNull { it.id == id }?.text ?: ""
+    fun removeById(id: String) {
+        pendingPieces.remove(id)
+        onUi {
+            val i = messages.indexOfFirst { it.id == id }
+            if (i >= 0) messages.removeAt(i)
+        }
+    }
 
-    fun messageById(id: String): ChatMessage? = messages.firstOrNull { it.id == id }
+    /** Current text of a bubble (with pieces not yet drawn), or empty if it is gone. */
+    fun textOf(id: String): String = messages.firstOrNull { it.id == id }?.text?.plus(pendingOf(id)) ?: ""
+
+    fun messageById(id: String): ChatMessage? = messages.firstOrNull { it.id == id }?.let { m ->
+        pendingOf(id).takeIf { it.isNotEmpty() }?.let { m.copy(text = m.text + it) } ?: m
+    }
 
     /** Insert-or-replace a message row (used for final streamed content). */
     fun persist(msg: ChatMessage) {
