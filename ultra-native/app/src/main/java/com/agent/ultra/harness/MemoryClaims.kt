@@ -110,6 +110,92 @@ object MemoryClaimScoring {
 /** Claim lifecycle over a [ClaimDao]. Suspend functions; call off the main thread. */
 class MemoryClaims(private val dao: ClaimDao) {
 
+    companion object {
+        /** Most stale claims one staged claim may retire. */
+        const val MAX_SUPERSEDES = 3
+    }
+
+    /** What [writeVerified] did with a staged claim. */
+    sealed class WriteOutcome {
+        /** Promoted as claim [id]; [superseded] are the stale claims it replaced (may be empty). */
+        data class Written(val id: String, val superseded: List<String>) : WriteOutcome()
+        /** A duplicate of active claim [id]: nothing added, that claim reinforced. */
+        data class Reinforced(val id: String) : WriteOutcome()
+        /** Not stored; [reason] says why. */
+        data class Rejected(val reason: String) : WriteOutcome()
+    }
+
+    /**
+     * Verify-before-store: runs [ClaimVerifier] over the staged claim and the active claims'
+     * embeddings, then acts on the verdict. PASS writes; SUPERSEDE writes and marks the stale
+     * claim superseded (re-checked up to [MAX_SUPERSEDES] times so one correction can retire
+     * several contradicted claims); NO_CHANGE reinforces the existing claim; FAIL skips and logs.
+     *
+     * [embedding] is the staged claim's vector, from the same model as the stored ones
+     * ([modelName]); empty means "no vector": lens (b) then finds no related neighbor and the
+     * claim is checked by lens (a) only. The verifier makes blocking NLI calls, so it runs on
+     * Dispatchers.IO. A written claim also gets its embedding stored (when non-empty).
+     *
+     * This is the single promotion entry point. No caller in the app writes claims yet
+     * (MemoryClaims.write has no call site outside harness/), so nothing is wired to it.
+     */
+    suspend fun writeVerified(
+        text: String, kind: String, speaker: String, sourceMessage: String,
+        nli: NliHead, embeddings: EmbeddingDao,
+        embedding: FloatArray = FloatArray(0), modelName: String = "",
+        grounded: Boolean = false, evidenceHandles: List<String> = emptyList(),
+        resolveHandle: (String) -> String? = { null },
+        salience: String = "medium", confidence: Double = 0.7,
+        quote: String = "", evergreen: Boolean = false,
+        log: (String) -> Unit = { msg -> runCatching { android.util.Log.i("UltraClaims", msg) } },
+    ): WriteOutcome {
+        val staged = StagedClaim(claimText = text, quote = quote, speaker = speaker,
+            grounded = grounded, evidenceHandles = evidenceHandles, embedding = embedding)
+        val active = dao.active()
+        val vectors = embeddings.allActiveWithEmbedding().associate { it.claimId to it.embedding }
+        val retired = LinkedHashSet<String>()
+        var verdict: ClaimVerifier.Verdict
+        while (true) {
+            val neighbors = active.filter { it.id !in retired }.mapNotNull { c ->
+                val vec = vectors[c.id]?.let { b -> runCatching { Embeddings.fromBytes(b) }.getOrNull() }
+                    ?: return@mapNotNull null
+                NeighborClaim(c.id, c.text, c.speaker, vec)
+            }
+            verdict = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                ClaimVerifier.verify(staged, resolveHandle, neighbors, nli)
+            }
+            val sup = verdict as? ClaimVerifier.Verdict.Supersede ?: break
+            retired += sup.oldId
+            if (retired.size >= MAX_SUPERSEDES) break
+        }
+        val v = verdict
+        return when {
+            v is ClaimVerifier.Verdict.Fail -> {
+                log("claim rejected (${v.reason}): ${text.take(80)}")
+                WriteOutcome.Rejected(v.reason)
+            }
+            // A supersede already decided: a later NO_CHANGE/PASS must not drop the correction.
+            retired.isEmpty() && v is ClaimVerifier.Verdict.NoChange -> {
+                reinforce(v.reinforceId)
+                log("claim duplicates ${v.reinforceId}, reinforced")
+                WriteOutcome.Reinforced(v.reinforceId)
+            }
+            else -> {
+                val stale = retired.toList()
+                val id = write(text, kind, speaker, sourceMessage, salience, confidence, quote,
+                    supersedes = stale.firstOrNull().orEmpty(), evergreen = evergreen)
+                // [write] retires the first; the other contradicted claims go too.
+                val now = System.currentTimeMillis()
+                for (extra in stale.drop(1)) dao.markSuperseded(extra, now)
+                if (embedding.isNotEmpty()) {
+                    embeddings.upsert(MemoryEmbeddingEntity(id, modelName, Embeddings.toBytes(embedding)))
+                }
+                if (stale.isNotEmpty()) log("claim $id supersedes $stale")
+                WriteOutcome.Written(id, stale)
+            }
+        }
+    }
+
     suspend fun write(
         text: String, kind: String, speaker: String, sourceMessage: String,
         salience: String = "medium", confidence: Double = 0.7,
