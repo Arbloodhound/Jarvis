@@ -50,6 +50,26 @@ How to answer:
 
     data class Turn(val fromUser: Boolean, val text: String)
 
+    /** The turns [build] keeps: reasoning stripped from replies, empties dropped, oldest dropped past [historyChars]. */
+    internal fun keptHistory(history: List<Turn>, historyChars: Int): List<Turn> {
+        val kept = ArrayDeque<Turn>(); var used = 0
+        for (t in history.asReversed()) {
+            val text = if (t.fromUser) t.text.trim() else ThinkBudget.stripForHistory(t.text)
+            if (text.isEmpty()) continue
+            if (used + text.length > historyChars) break
+            kept.addFirst(Turn(t.fromUser, text)); used += text.length
+        }
+        return kept.toList()
+    }
+
+    /** [kept] ([keptHistory]) as ChatML turns, exactly as [build] writes them after the system block. */
+    internal fun renderHistory(kept: List<Turn>): String = buildString {
+        for (t in kept) {
+            append("<|im_start|>").append(if (t.fromUser) "user" else "assistant").append('\n')
+            append(t.text).append("<|im_end|>\n")
+        }
+    }
+
     /**
      * ChatML prompt ending in an opened <think> block, exactly like the model's own
      * template with add_generation_prompt=true. Pass startsInThink=true to ThinkBudget.
@@ -62,19 +82,10 @@ How to answer:
         system: String, history: List<Turn>, user: String, historyChars: Int = 3000, memory: String? = null,
         now: String? = null, memoryCap: Int = MemoryBrief.MAX_CHARS, memoryHeader: String = MemoryBrief.HEADER,
     ): String {
-        val kept = ArrayDeque<Turn>(); var used = 0
-        for (t in history.asReversed()) {
-            val text = if (t.fromUser) t.text.trim() else ThinkBudget.stripForHistory(t.text)
-            if (text.isEmpty()) continue
-            if (used + text.length > historyChars) break
-            kept.addFirst(Turn(t.fromUser, text)); used += text.length
-        }
+        val kept = keptHistory(history, historyChars)
         return buildString {
             append("<|im_start|>system\n").append(system.trim()).append("<|im_end|>\n")
-            for (t in kept) {
-                append("<|im_start|>").append(if (t.fromUser) "user" else "assistant").append('\n')
-                append(t.text).append("<|im_end|>\n")
-            }
+            append(renderHistory(kept))
             if (!memory.isNullOrBlank() || !now.isNullOrBlank()) {
                 append("<|im_start|>system\n")
                 if (!now.isNullOrBlank()) append("Now: ").append(now.trim()).append('\n')

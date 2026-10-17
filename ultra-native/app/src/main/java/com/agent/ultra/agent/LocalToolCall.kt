@@ -1,5 +1,8 @@
 package com.agent.ultra.agent
 
+import com.agent.ultra.harness.PromptFragment
+import com.agent.ultra.harness.SessionEnvelope
+import com.agent.ultra.harness.ToolNamespaceStore
 import org.json.JSONObject
 
 /**
@@ -59,10 +62,13 @@ object LocalToolCall {
      * model that adds a sentence. Not [LocalPrompt.answerReserve] — that is for prose answers. */
     const val ANSWER_RESERVE = 160
 
-    val SYSTEM = """
+    /** Core persona fragment of the tool prompt. */
+    private val PERSONA = """
 You are Jarvis, an Android agent running entirely on this phone, offline. Decide whether the user's message is a command one of these tools carries out, and reply with EXACTLY one JSON object and nothing else.
+""".trim()
 
-TOOLS:
+    /** The always-full tool lines: every tool in [TOOLS], unchanged from the fixed catalog. */
+    private val CORE_TOOLS_TEXT = """
 flashlight_toggle {"on":true|false}
 wifi_toggle {"on":true|false}
 bluetooth_toggle {"on":true|false}
@@ -85,7 +91,10 @@ device_location {}
 sms_read {"limit":5}   (read my texts / messages)
 contacts_read {"name":"..."}   (a contact's number or details)
 system_info {}   (storage, Wi-Fi, Bluetooth, battery, phone details)
+""".trim()
 
+    /** After the tool list: the way out and the worked examples. */
+    private val TRAILER = """
 If no tool above does what the message asks (a question, chat, a timer, anything else), reply {"tool":"none","params":{}}.
 
 EXAMPLES:
@@ -108,12 +117,47 @@ how much storage do I have -> {"tool":"system_info","params":{}}
 set a timer for 5 minutes -> {"tool":"none","params":{}}
 """.trim()
 
+    /** The model asks for a deferred tool namespace's schemas with this (handled in Brain, not a Tools tool). */
+    const val LOAD_NAMESPACE = "load_tool_namespace"
+
+    /**
+     * Deferred namespaces (namespace → full schema block). EMPTY on purpose: every tool in
+     * [TOOLS] stays fully described, exactly as before, so no existing command needs an extra
+     * load turn. Put a block here to make that group a one-line stub until the model loads it.
+     */
+    val DEFERRED_SCHEMAS: Map<String, String> = emptyMap()
+
+    /** A fresh per-session store: [TOOLS] are core (always full); [deferred] start as stubs. */
+    fun newNamespaceStore(deferred: Map<String, String> = DEFERRED_SCHEMAS): ToolNamespaceStore =
+        ToolNamespaceStore(
+            deferred,
+            // Only mention load_tool_namespace when there is something to load.
+            if (deferred.isEmpty()) CORE_TOOLS_TEXT
+            else CORE_TOOLS_TEXT + "\n$LOAD_NAMESPACE {\"namespace\":\"name\"}   (load a deferred tool group listed below)",
+            TOOLS,
+        )
+
+    /** The four-fragment envelope of the tool prompt. Tool schemas (core + loaded + stubs, then
+     * the examples) are one fragment, so a namespace load changes only that one. No profile or
+     * history: a device command stands alone. */
+    fun envelope(store: ToolNamespaceStore): SessionEnvelope = SessionEnvelope(
+        LocalEnvelope.fragments(PERSONA, "", "TOOLS:\n" + store.promptBlock() + "\n\n" + TRAILER, ""),
+        store.activeNamespaces().map { PromptFragment.sha256Hex(it) },
+    )
+
+    /** The system text for [store]'s current state. With no deferred namespaces this equals [SYSTEM]. */
+    fun systemFor(store: ToolNamespaceStore): String = LocalEnvelope.systemText(envelope(store).fragments, "\n\n")
+
+    val SYSTEM: String = systemFor(newNamespaceStore())
+
     /** ChatML prompt in the model's own template, ending in the opened <think> block
      * (pass startsInThink = true). No history: a device command stands on its own, and
-     * every prompt token is prefill time on the phone. */
-    fun prompt(request: String, recalled: String? = null): String {
-        val system = if (recalled.isNullOrBlank()) SYSTEM
-            else "$SYSTEM\n\nA request like this previously worked with: $recalled"
+     * every prompt token is prefill time on the phone. [store] carries the namespaces
+     * loaded so far this session; null means the plain [SYSTEM]. */
+    fun prompt(request: String, recalled: String? = null, store: ToolNamespaceStore? = null): String {
+        val base = if (store == null) SYSTEM else systemFor(store)
+        val system = if (recalled.isNullOrBlank()) base
+            else "$base\n\nA request like this previously worked with: $recalled"
         return LocalPrompt.build(system, emptyList(), IntentRouter.requestPart(request))
     }
 
@@ -122,6 +166,8 @@ set a timer for 5 minutes -> {"tool":"none","params":{}}
         /** The whole reply is one offered tool's name and nothing else; params come from the
          * request. A name mentioned inside prose or JSON is not this. */
         data class BareName(val tool: String) : Parsed()
+        /** The model asked for a deferred tool namespace's schemas; not a device action. */
+        data class LoadNamespace(val namespace: String) : Parsed()
         /** The model said this is not a device command. */
         object Declined : Parsed()
         /** No usable call: prose, broken JSON, or a tool outside [TOOLS]. */
@@ -153,6 +199,9 @@ set a timer for 5 minutes -> {"tool":"none","params":{}}
         val tool = call.first.trim()
         return when {
             tool.equals(NONE, ignoreCase = true) -> Parsed.Declined
+            tool == LOAD_NAMESPACE -> call.second.let { p ->
+                Parsed.LoadNamespace(p.optString("namespace", p.optString("name", "")).trim())
+            }
             tool in TOOLS -> Parsed.Call(tool, call.second)
             else -> Parsed.Unparsed
         }

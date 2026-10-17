@@ -29,6 +29,18 @@ import java.util.Locale
  */
 class Brain(private val appContext: Context, private val local: com.agent.ultra.local.LocalModelEngine) {
 
+    // The last on-device prompt's fragments (answer or tool path share one native KV cache, so one
+    // record matches it), and this session's on-device tool namespaces (see LocalToolCall).
+    private var promptEnvelope: com.agent.ultra.harness.SessionEnvelope? = null
+    private val toolNamespaces = LocalToolCall.newNamespaceStore()
+
+    /** Log how many leading fragments match the previous on-device prompt (fragment-level estimate). */
+    private fun trackPromptEnvelope(env: com.agent.ultra.harness.SessionEnvelope) {
+        val n = LocalEnvelope.reusableFragments(promptEnvelope, env)
+        android.util.Log.i("UltraPrompt", "reusable fragments=$n/${LocalEnvelope.TOTAL}")
+        promptEnvelope = env
+    }
+
     private val controller = AgentController(appContext)
     private val tools: Tools
     private val client: OpenAiClient?
@@ -965,8 +977,13 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 }
                 if (webQuery != null) GateAuditLog.recordRoute(GateAuditLog.ROUTE_WEB, if (web != null) "found" else "empty")
                 android.util.Log.d("UltraRoute", "web query=${webQuery?.take(60)} found=${web != null}")
-                val system = LocalPrompt.offlineSystem(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
-                    TalkStyle.combine(com.agent.ultra.ui.VoicePrefs.styleInstructions(appContext), com.agent.ultra.ui.UltraPrefs.customInstructions(appContext)))
+                // System block from the fixed-order fragments (persona, profile, tools, history):
+                // byte-identical to LocalPrompt.offlineSystem, tracked for KV prefix reuse.
+                val envelope = LocalEnvelope.answer(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
+                    TalkStyle.combine(com.agent.ultra.ui.VoicePrefs.styleInstructions(appContext), com.agent.ultra.ui.UltraPrefs.customInstructions(appContext)),
+                    history, historyChars)
+                trackPromptEnvelope(envelope)
+                val system = LocalEnvelope.systemText(envelope.fragments, "\n")
                 val prompt = LocalPrompt.build(system, history, userInput, historyChars,
                     memory = listOfNotNull(memory, web).joinToString("\n\n").ifBlank { null },
                     now = LocalPrompt.nowLine(),
@@ -1129,9 +1146,10 @@ JSON:"""
      * text is parsed. One attempt — every attempt is a full prefill plus a trace on the phone.
      * Null when the model declined (not a device command) or gave nothing usable.
      */
-    private suspend fun thinkingToolCall(userInput: String, recalled: String?): Pair<String, JSONObject>? {
+    private suspend fun thinkingToolCall(userInput: String, recalled: String?, reloads: Int = 1): Pair<String, JSONObject>? {
         val level = ThermalGuard.level
-        val prompt = LocalToolCall.prompt(userInput, recalled)
+        trackPromptEnvelope(LocalToolCall.envelope(toolNamespaces))
+        val prompt = LocalToolCall.prompt(userInput, recalled, toolNamespaces)
         val reserve = LocalToolCall.ANSWER_RESERVE
         // Act first (Settings → HOW JARVIS TALKS, on by default): the tool is picked without a
         // hidden think, so the action happens at once; the result is said after it.
@@ -1161,6 +1179,13 @@ JSON:"""
             is LocalToolCall.Parsed.Call -> parsed.tool to parsed.params
             // A reply that is only a tool's name; params shaped from the request.
             is LocalToolCall.Parsed.BareName -> parseBareToolCall(parsed.tool, IntentRouter.requestPart(userInput))
+            // Deferred namespace requested: load it, then ask once more with its schemas in the prompt.
+            // Stays loaded for the session, so later prompts keep the same (stable) tool fragment.
+            is LocalToolCall.Parsed.LoadNamespace -> {
+                val loaded = toolNamespaces.load(parsed.namespace)
+                android.util.Log.i("UltraPrompt", "load_tool_namespace ${parsed.namespace} loaded=$loaded")
+                if (loaded && reloads > 0) thinkingToolCall(userInput, recalled, reloads - 1) else null
+            }
             LocalToolCall.Parsed.Declined, LocalToolCall.Parsed.Unparsed -> null
         }
     }

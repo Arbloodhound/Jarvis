@@ -13,16 +13,17 @@ package com.agent.ultra.harness
  * Pure: the namespace → full-schema map is injected, so the JVM suite checks that
  * a namespace shows only its stub before [load] and its full schema after.
  *
- * Wire-in note (NOT done here): the full tool catalogue today is the static
- * `TOOL_CATALOG` string in agent/Brain.kt. The clean hook would be to render the
- * tool section via [promptBlock] with that catalogue split into namespaces, so
- * unused namespaces cost one line each. That rewire is non-trivial (Brain builds
- * one prompt string) and is deliberately left to a focused change with its own
- * tests.
+ * Wire-in: the on-device tool loop (agent/LocalToolCall + Brain.thinkingToolCall) builds its
+ * tool section from one of these per Brain session. The cloud brain's static `TOOL_CATALOG`
+ * in agent/Brain.kt is NOT routed through it.
  */
 class ToolNamespaceStore(
     /** namespace → its full schema block (core namespaces excluded). */
     private val schemas: Map<String, String>,
+    /** The always-full block. Defaults to the generic core list; the on-device loop passes its own. */
+    private val coreBlock: String = CORE_BLOCK,
+    /** Names that can never be loaded/deferred. */
+    private val core: Set<String> = CORE,
 ) {
     private val active = LinkedHashSet<String>()
 
@@ -31,10 +32,13 @@ class ToolNamespaceStore(
      * @return true if it exists and was newly loaded; false if unknown or already active.
      */
     fun load(namespace: String): Boolean {
-        if (namespace in CORE) return false
+        if (namespace in core) return false
         if (namespace !in schemas) return false
         return active.add(namespace)
     }
+
+    /** True when at least one namespace is deferrable (so the model has something to load). */
+    val hasDeferred: Boolean get() = schemas.isNotEmpty()
 
     fun isActive(namespace: String): Boolean = namespace in active
 
@@ -43,7 +47,7 @@ class ToolNamespaceStore(
     /** core full schemas + active full schemas + one-line stubs for the rest. */
     fun promptBlock(): String {
         val sb = StringBuilder()
-        sb.append(CORE_BLOCK)
+        sb.append(coreBlock)
         for (ns in schemas.keys) {
             if (ns in active) {
                 sb.append('\n').append(schemas.getValue(ns).trimEnd())
