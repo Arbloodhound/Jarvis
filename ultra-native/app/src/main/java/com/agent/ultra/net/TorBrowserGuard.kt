@@ -12,7 +12,7 @@ import android.net.NetworkCapabilities
  * local proxy for its research only and never touches Tor Browser.
  */
 object TorBrowserGuard {
-    private val NAMES = Regex("tor\\s*browser|torbrowser|org\\.torproject\\.torbrowser", RegexOption.IGNORE_CASE)
+    private val NAMES = Regex("\\btor\\s*browser|\\btorbrowser|org\\.torproject\\.torbrowser", RegexOption.IGNORE_CASE)
 
     /** Pure. Does [text] (an app target, hint or goal) name Tor Browser? */
     fun mentionsTorBrowser(text: String): Boolean = NAMES.containsMatchIn(text)
