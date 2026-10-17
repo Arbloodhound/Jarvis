@@ -738,6 +738,9 @@ fun SettingsScreen(
             }
         }
 
+        SectionTitle("CONNECTORS")
+        ConnectorsSettings(context)
+
         // ── Recipes ───────────────────────────────────────────────────
         SectionTitle("ROUTINES")
         val recipeDao = remember { com.agent.ultra.data.UltraDatabase.get(context).recipes() }

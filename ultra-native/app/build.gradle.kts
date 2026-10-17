@@ -181,6 +181,9 @@ dependencies {
     // Tor inside the app (net.EmbeddedTor): Guardian Project's tor-android, BSD-3, the Tor library
     // Orbot is built on; 16 KB-aligned natives. Its classes are Java, so its Kotlin 2.3 stdlib
     // dependency (newer than this project's compiler reads) is left out. 0.4.9.5: later releases need compileSdk 37.
+    // Google sign-in for the Gmail / Calendar / Drive / Docs connectors: Google's own Android
+    // authorization API (custom-scheme browser redirects are retired for Android OAuth clients).
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
     implementation("info.guardianproject:tor-android:0.4.9.5") {
         exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")
     }

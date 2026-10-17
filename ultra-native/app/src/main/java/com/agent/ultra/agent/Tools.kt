@@ -295,6 +295,7 @@ class Tools(
                 }
                 "shop_checkout_prep" -> checkoutPrep(params)
                 "forget" -> forget(params.optString("subject"))
+                "connector" -> connector(params)
                 // Starts Tor (Orbot) for the onion route; never turns onion research on.
                 "tor_connect" -> when {
                     NetPolicy.offlineOnly(context) -> "Offline-only mode is on, so Tor stays off. Nothing was started."
@@ -1001,6 +1002,38 @@ class Tools(
             body = plan.summary().take(600))
         if (!ok) return "Nothing was forgotten: the owner didn't confirm.\n" + plan.summary()
         return f.execute(f.userConfirmed(plan.id)).summary()
+    }
+
+    /**
+     * The connectors (Gmail, Calendar, Drive, Docs — HANDOFF_V5 §1): status first, then the
+     * registry's approval rule; a write or send the grants don't cover goes to the owner's confirm
+     * card, and only their tap mints the token the call needs. Codes in results are scrubbed.
+     */
+    private suspend fun connector(params: JSONObject): String {
+        val reg = com.agent.ultra.harness.connectors.AppConnectors.registry(context)
+        val id = params.optString("connector")
+        val op = params.optString("op")
+        if (id.isBlank() || op.isBlank() || op == "list") return "Connectors:\n" + reg.directory()
+        val args = params.optJSONObject("args")?.let { o -> o.keys().asSequence().associateWith { o.optString(it) } } ?: emptyMap()
+        if (id in com.agent.ultra.harness.connectors.GoogleAccess.CONNECTORS) {
+            com.agent.ultra.harness.connectors.GoogleAccess.refresh(context,
+                com.agent.ultra.harness.connectors.AppConnectors.vault(context),
+                com.agent.ultra.harness.connectors.AppConnectors.google(context))
+        }
+        var r = reg.call(id, op, args)
+        if (r is com.agent.ultra.harness.connectors.CallResult.NeedsApproval) {
+            val ok = ActionGate.approve("connector", "$id.$op", id, "approval",
+                title = "Allow Jarvis: $id — $op?", body = r.action.take(600))
+            if (!ok) return "Not done: the owner didn't approve.\n${r.action}"
+            r = reg.call(id, op, args, approval = reg.approve(r.key))
+        }
+        return when (r) {
+            is com.agent.ultra.harness.connectors.CallResult.Ok -> r.text
+            is com.agent.ultra.harness.connectors.CallResult.NeedsConnect ->
+                r.why + " The owner connects Google in Settings → CONNECTORS → Connect Google."
+            is com.agent.ultra.harness.connectors.CallResult.Failed -> "Error: ${r.reason}"
+            is com.agent.ultra.harness.connectors.CallResult.NeedsApproval -> "Not done: it still needs the owner's approval."
+        }
     }
 
     companion object {

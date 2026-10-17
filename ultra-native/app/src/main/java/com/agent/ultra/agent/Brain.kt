@@ -2200,6 +2200,12 @@ RECIPES (the user's saved routines — replay a whole sequence by name):
   recipe_list — list saved routines
   recipe_delete — delete one. params: {name}
 
+CONNECTORS (the owner's Google account, once connected in Settings):
+  connector {connector, op, args?} — connector: gmail | google_calendar | google_drive | google_docs.
+    op "list" shows each one, whether it's connected, and its operations. Reads run at once; a send
+    or write shows the owner a confirm card first, and only their tap lets it through. Not
+    connected → say so and point to Settings → CONNECTORS; never promise the outcome.
+
 FORGET (privacy):
   forget {subject} — "forget X": finds every copy in memory and notes, shows the owner the plan
     on a confirm card, deletes only after they tap yes, then searches again and reports what's

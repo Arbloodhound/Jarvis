@@ -133,6 +133,10 @@
       "effects": ["mutate"]
     },
     {
+      "name": "connector",
+      "effects": ["mutate"]
+    },
+    {
       "name": "shop_checkout_prep",
       "effects": [
         "mutate"
