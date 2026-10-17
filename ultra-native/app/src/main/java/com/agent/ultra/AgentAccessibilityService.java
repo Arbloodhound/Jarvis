@@ -891,10 +891,27 @@ public class AgentAccessibilityService extends AccessibilityService {
         }
     }
 
+    /**
+     * The worker that reads the screen tree (getScreenContentFlat). Node reads are binder calls and
+     * work from any thread; on the main thread a full tree walk froze Jarvis's own UI for up to
+     * 4 s per read (CROSSEVAL_OPENCLAW §3; OpenClaw reads on a background dispatcher). One thread,
+     * so reads stay in order.
+     */
+    private static Handler readHandler;
+
+    private static synchronized Handler readHandler() {
+        if (readHandler == null) {
+            android.os.HandlerThread t = new android.os.HandlerThread("ultra-a11y-read");
+            t.start();
+            readHandler = new Handler(t.getLooper());
+        }
+        return readHandler;
+    }
+
     public String getScreenContentFlat() {
         AtomicReference<String> result = new AtomicReference<>("[]");
         CountDownLatch latch = new CountDownLatch(1);
-        new Handler(Looper.getMainLooper()).post(() -> {
+        readHandler().post(() -> {
             try {
                 // Find the target app window, not Jarvis's own window
                 // Topmost, not first: an open menu is a window above the page,

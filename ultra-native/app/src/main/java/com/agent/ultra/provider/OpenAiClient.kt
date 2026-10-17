@@ -108,6 +108,34 @@ class OpenAiClient(
         messages: List<ChatMessage>,
         maxTokens: Int,
         temperature: Double,
+        /**
+         * Native tool definitions (OpenAI "tools"). A native call comes back as the same text a
+         * text-protocol call is — {"tool":"name","params":{...}} — so callers parse one format.
+         * A provider that rejects "tools" gets the request again without them, and never again
+         * from this client ([nativeToolsRejected]).
+         */
+        tools: JSONArray? = null,
+        onToken: (String) -> Unit,
+    ): Result<String> {
+        val useTools = tools != null && !nativeToolsRejected
+        val r = streamOnce(messages, maxTokens, temperature, if (useTools) tools else null, onToken)
+        if (useTools && r.exceptionOrNull()?.message?.let { NativeTools.rejectedTools(it) } == true) {
+            nativeToolsRejected = true
+            android.util.Log.i("UltraProvider", "provider rejected native tools; text protocol from now on")
+            return streamOnce(messages, maxTokens, temperature, null, onToken)
+        }
+        return r
+    }
+
+    /** True once the provider refused a request with "tools" in it. */
+    @Volatile var nativeToolsRejected = false
+        private set
+
+    private suspend fun streamOnce(
+        messages: List<ChatMessage>,
+        maxTokens: Int,
+        temperature: Double,
+        tools: JSONArray?,
         onToken: (String) -> Unit,
     ): Result<String> = withContext(Dispatchers.IO) {
         lastFinishReason = null
@@ -123,6 +151,7 @@ class OpenAiClient(
                 .put("temperature", temperature)
                 .put("stream", true)
                 .also { applyVeniceParameters(it) }
+            if (tools != null) bodyJson.put("tools", tools).put("tool_choice", "auto")
 
             val req = Request.Builder()
                 .url(config.baseUrl.trimEnd('/') + "/chat/completions")
@@ -138,6 +167,7 @@ class OpenAiClient(
                     return@cancelOnStop Result.failure(Exception("HTTP ${resp.code}: ${body.take(300)}"))
                 }
                 val full = StringBuilder()
+                val calls = NativeTools.CallAccumulator()
                 var finish: String? = null
                 resp.body!!.source().use { source ->
                     while (!source.exhausted()) {
@@ -154,6 +184,7 @@ class OpenAiClient(
                         }
                         val choice = frame.optJSONArray("choices")?.optJSONObject(0) ?: continue
                         finishReasonOf(choice)?.let { finish = it }
+                        choice.optJSONObject("delta")?.optJSONArray("tool_calls")?.let { calls.add(it) }
                         val delta = choice.optJSONObject("delta")?.optString("content", "") ?: ""
                         if (delta.isNotEmpty()) {
                             full.append(delta)
@@ -162,6 +193,8 @@ class OpenAiClient(
                     }
                 }
                 lastFinishReason = finish
+                // A native call wins over any text around it: the loop runs one tool per turn.
+                calls.asTextCall()?.let { return@cancelOnStop Result.success(it) }
                 if (finish == "length") {
                     android.util.Log.w("UltraProvider", "reply cut off at max_tokens=$maxTokens (finish_reason=length)")
                 }

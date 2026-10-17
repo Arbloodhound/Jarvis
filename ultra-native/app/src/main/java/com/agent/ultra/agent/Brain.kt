@@ -1266,7 +1266,7 @@ JSON:"""
             cloudCalling = true
             lastCloudRequest = messages.map { it.role to it.content }
             val reply = (try {
-                ai.completeStreaming(messages, maxTokens, 0.2) { piece ->
+                ai.completeStreaming(messages, maxTokens, 0.2, tools = cloudToolDefs) { piece ->
                     ChatStore.appendTo(streamMsg.id, piece)
                 }
             } finally {
@@ -1822,6 +1822,31 @@ JSON:"""
         return resultFeedback(tool, failed, result, tail)
     }
 
+    /** The cloud brain's native tool list: every tool the gate declares and the catalog names. */
+    private val cloudToolDefs: org.json.JSONArray by lazy {
+        val names = loadManifest(appContext).names()
+            .filter { Regex("(?<![a-z_])${Regex.escape(it)}(?![a-z_])").containsMatchIn(TOOL_CATALOG) }
+        com.agent.ultra.provider.NativeTools.definitions(names, TOOL_CATALOG)
+    }
+
+    /**
+     * What is really switched on right now, for the system prompt: the screen, notifications, SMS and
+     * contacts need the owner's grants. Off parts are named so the model says so instead of trying.
+     */
+    private fun accessNow(): String {
+        fun granted(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(appContext, p) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        val listeners = android.provider.Settings.Secure.getString(appContext.contentResolver, "enabled_notification_listeners").orEmpty()
+        val off = buildList {
+            if (!com.agent.ultra.AgentAccessibilityService.isRunning()) add("the accessibility service (screen reading, tapping, app control)")
+            if (!listeners.contains(appContext.packageName)) add("notification access")
+            if (!granted(android.Manifest.permission.READ_SMS)) add("reading SMS")
+            if (!granted(android.Manifest.permission.SEND_SMS)) add("sending SMS")
+            if (!granted(android.Manifest.permission.READ_CONTACTS)) add("contacts")
+        }
+        return if (off.isEmpty()) "everything is on." else "OFF: ${off.joinToString(", ")}. Those can't work until the owner turns them on in Settings — say so plainly instead of trying."
+    }
+
     /** The Tor Browser part of the system prompt's app list: true for this phone right now. */
     private fun torBrowserNote(): String = when {
         !com.agent.ultra.net.TorConnect.installed(appContext, com.agent.ultra.net.TorConnect.TOR_BROWSER) ->
@@ -1845,7 +1870,8 @@ JSON:"""
 
         val owner = LocalPrompt.ownerSection(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
             TalkStyle.combine(com.agent.ultra.ui.VoicePrefs.styleInstructions(appContext), com.agent.ultra.ui.UltraPrefs.customInstructions(appContext))).let { if (it.isEmpty()) "" else "\n$it\n" }
-        return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have unrestricted access to it and everything on it through its accessibility service: you can see and use the screen (read, tap, type, scroll), every app (any browser, ${torBrowserNote()}), messages, contacts, notifications, settings, screenshots. Never say you can't see the screen or can't access or control the phone.
+        return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have unrestricted access to it and everything on it through its accessibility service: you can see and use the screen (read, tap, type, scroll), every app (any browser, ${torBrowserNote()}), messages, contacts, notifications, settings, screenshots. Never say you can't see the screen or can't access or control the phone, unless the ACCESS NOW line says that part is off.
+ACCESS NOW: ${accessNow()}
 PHONE STATE: $env
 TODAY: $date at $time
 $owner
@@ -2160,6 +2186,8 @@ SCREEN:
     Use this whenever the answer is in a LIST, FEED, ARTICLE, SEARCH RESULTS,
     PRICES, or anything below the fold. read_text_on_screen sees the header only.
   describe_screen, screenshot, notification_read
+  global_action {action: home|back|app_switcher|notification_shade|quick_settings|lock} — the
+    system buttons and shades, instantly.
   screen_ocr — reads the words in a PICTURE of the screen (games, maps, images, pages with
     little accessible text). read_text_on_screen already adds it when the screen is thin.
   look_at_screen — the on-device vision model looks at the screen and describes it, or answers
