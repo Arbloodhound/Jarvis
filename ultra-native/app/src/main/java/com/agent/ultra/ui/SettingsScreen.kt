@@ -199,7 +199,7 @@ fun SettingsScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Onion research via Tor", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "Read .onion pages in research through Orbot (127.0.0.1:${com.agent.ultra.net.TorProxy.PORT}), " +
+                        "Read .onion pages in research through Tor (built into the app; Orbot is used if it already runs), " +
                             "with phishing and scam checks. Off: onion links are skipped. Offline only wins.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -207,33 +207,40 @@ fun SettingsScreen(
                 }
                 Switch(checked = onion, onCheckedChange = { on -> onion = on; UltraPrefs.setOnionResearch(context, on) })
             }
-            // Manual Tor start (Orbot). The owner's own tap, so it works with onion research off too;
-            // the tor_connect tool only works with it on.
+            // Manual Tor start (the in-app Tor). The owner's own tap, so it works with onion research
+            // off too; the tor_connect tool only works with it on.
             run {
                 val scope = rememberCoroutineScope()
                 var torLine by remember { mutableStateOf<String?>(null) }
                 var torBusy by remember { mutableStateOf(false) }
+                var torOn by remember { mutableStateOf(false) }
                 LaunchedEffect(Unit) {
-                    torLine = when {
-                        !com.agent.ultra.net.TorConnect.installed(context) -> "Orbot isn't installed."
-                        com.agent.ultra.net.TorConnect.connected() -> "Tor is connected."
-                        else -> "Tor isn't running."
-                    }
+                    val via = com.agent.ultra.net.TorConnect.connectedVia()
+                    torOn = via != null
+                    torLine = if (via != null) "Tor is connected ($via)." else "Tor isn't running."
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(enabled = !torBusy, onClick = {
                         torBusy = true
-                        torLine = "Connecting to Tor… (up to a minute)"
+                        torLine = "Connecting to Tor… (up to a minute or two)"
                         scope.launch {
-                            val o = com.agent.ultra.net.TorConnect.connect(context, openOrbot = true)
+                            val o = com.agent.ultra.net.TorConnect.connect(context)
                             torLine = com.agent.ultra.net.TorConnect.describe(o)
+                            torOn = o.state == com.agent.ultra.net.TorConnect.State.ON
                             torBusy = false
                         }
                     }) { Text("Connect to Tor") }
-                    torLine?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    if (torOn && com.agent.ultra.net.EmbeddedTor.started) {
+                        TextButton(enabled = !torBusy, onClick = {
+                            com.agent.ultra.net.EmbeddedTor.stop(context)
+                            torOn = false
+                            torLine = "In-app Tor stopped."
+                        }) { Text("Disconnect") }
                     }
+                }
+                torLine?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 }
             }
             if (onion) {

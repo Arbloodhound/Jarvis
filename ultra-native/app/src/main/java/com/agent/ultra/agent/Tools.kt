@@ -210,6 +210,7 @@ class Tools(
                 // ── Apps & navigation ────────────────────────────────
                 "app_launch" -> {
                     val target = params.optString("target")
+                    com.agent.ultra.net.TorBrowserGuard.check(context, target, params.optBoolean("vpnOk"))?.let { return it }
                     val pkg = controller.findPackage(target)
                     when {
                         pkg == null -> "Error: no launchable app matching '$target'"
@@ -236,6 +237,7 @@ class Tools(
                     // to whatever is on screen and drives it with nothing to aim at.
                     if (goal.isBlank()) return "Error: react_navigate needs a 'goal'"
                     val hint = params.optString("appHint")
+                    com.agent.ultra.net.TorBrowserGuard.check(context, "$hint $goal", params.optBoolean("vpnOk"))?.let { return it }
                     val nav = navigator ?: return "Error: navigator not wired"
                     // Takeover screen while the cloud navigator drives the app (Stop in the corner).
                     val svc = com.agent.ultra.AgentAccessibilityService.getInstance()
@@ -297,7 +299,7 @@ class Tools(
                     NetPolicy.offlineOnly(context) -> "Offline-only mode is on, so Tor stays off. Nothing was started."
                     !com.agent.ultra.ui.UltraPrefs.onionResearch(context) ->
                         "Onion research via Tor is off in Settings, so Tor stays off — the owner can turn it on there. Nothing was started."
-                    else -> com.agent.ultra.net.TorConnect.describe(com.agent.ultra.net.TorConnect.connect(context, openOrbot = true))
+                    else -> com.agent.ultra.net.TorConnect.describe(com.agent.ultra.net.TorConnect.connect(context))
                 }
 
                 // ── Device control ───────────────────────────────────

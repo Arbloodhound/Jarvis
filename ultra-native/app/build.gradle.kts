@@ -178,6 +178,12 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.28.0")
     // Text in a picture of the screen (ScreenVision): the bundled Latin model, inside the APK, offline.
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    // Tor inside the app (net.EmbeddedTor): Guardian Project's tor-android, BSD-3, the Tor library
+    // Orbot is built on; 16 KB-aligned natives. Its classes are Java, so its Kotlin 2.3 stdlib
+    // dependency (newer than this project's compiler reads) is left out. 0.4.9.5: later releases need compileSdk 37.
+    implementation("info.guardianproject:tor-android:0.4.9.5") {
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")
+    }
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)

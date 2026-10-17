@@ -264,8 +264,9 @@ ACTION:"""
         val pkg = named ?: controller.foregroundPackage()?.takeIf { it != OWN_PACKAGE }
             ?: return NavResult(false, "no app matching '$appHint' and nothing on screen", 0)
         if (named != null || pkg != controller.foregroundPackage()) {
+            val launched = ScreenSettle.mark()
             if (!controller.launchApp(pkg)) return NavResult(false, "could not launch $pkg", 0)
-            delay(2500)
+            ScreenSettle.await(launched, maxMs = 2500, quietMs = 500, minMs = 800)
         } else {
             android.util.Log.i("UltraNav", "no app matching '$appHint'; working on what's on screen ($pkg)")
         }
@@ -422,8 +423,9 @@ ACTION:"""
                 ?.let { n -> labelled.firstOrNull { it.second == n }?.first }
             android.util.Log.i("UltraNav", "step $iter action: $action" +
                 (if (tappedWords != null) "  = \"$tappedWords\"" else "") + (if (byLabel != null) "  <- $said" else ""))
+            val acted = ScreenSettle.mark()
             val ok = executeAction(action, observation)
-            delay(900)
+            ScreenSettle.await(acted, maxMs = 900)
             observation = observe()
             // The list of things to tap is not the whole screen. A timer keypad looks the same
             // after every digit while the display above it changes; judged by the list alone,
@@ -728,11 +730,12 @@ ACTION:"""
             android.util.Log.i("UltraWalk", "cannot walk back: an earlier hop is still unknown")
             return false
         }
+        val launched = ScreenSettle.mark()
         if (!controller.launchApp(route.first().pkg)) {
             android.util.Log.i("UltraWalk", "cannot walk back: ${route.first().pkg} would not open")
             return false
         }
-        delay(2500)
+        ScreenSettle.await(launched, maxMs = 2500, quietMs = 500, minMs = 800)
         for (w in needed) {
             // Wait for the door to appear rather than demanding it now.
             //
@@ -1310,8 +1313,9 @@ ACTION:"""
                 }
                 (if (said.startsWith("long_press")) "long_press" else "tap") + "($idx)"
             }
+            val acted = ScreenSettle.mark()
             val ok = executeAction(action, before)
-            delay(900)
+            ScreenSettle.await(acted, maxMs = 900)
             val after = observe()
             val changed = after != before || screenText(lastFlat) != textBefore
             val refusal = lastRefusal

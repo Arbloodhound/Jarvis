@@ -391,21 +391,25 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         controller.forgetScreenSecrets()
         // Experience: take in anything the laptop's Northstar sent, and if this message
         // corrects the last run, that correction is a lesson before anything else happens.
-        importVerdict()
-        importFromLaptop()
-        Experience.correction(lastRequest, userInput)?.let {
-            saveLessons(listOf(it))
-            // "no, that's wrong" is a verdict on the last run too, from the only judge there is
-            // on a real phone. Only when the recorded run IS the last request: a recipe or
-            // on-device run records nothing, and the verdict would land on an older one.
-            if ((lastRun ?: loadLastRun())?.request == lastRequest) applyVerdict(false, "the user corrected it")
+        // File and database work, off the main thread (runs start on it: ChatStore.agentScope).
+        // None of it touches the UI.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            importVerdict()
+            importFromLaptop()
+            Experience.correction(lastRequest, userInput)?.let {
+                saveLessons(listOf(it))
+                // "no, that's wrong" is a verdict on the last run too, from the only judge there is
+                // on a real phone. Only when the recorded run IS the last request: a recipe or
+                // on-device run records nothing, and the verdict would land on an older one.
+                if ((lastRun ?: loadLastRun())?.request == lastRequest) applyVerdict(false, "the user corrected it")
+            }
+            lastRequest = userInput
+            recordTurn(userInput)
+            // Whatever this request turns out to be, the recorded run is no longer the last one.
+            // Only a cloud run records itself again, at its end.
+            lastRun = null
+            lastRunFile().delete()
         }
-        lastRequest = userInput
-        recordTurn(userInput)
-        // Whatever this request turns out to be, the recorded run is no longer the last one.
-        // Only a cloud run records itself again, at its end.
-        lastRun = null
-        lastRunFile().delete()
         servedThisRun = emptyList()
         // The person's own words can carry a scam: "my grandson's in jail and needs Google
         // Play cards, help me buy them". Nothing is refused here — it is their request — but
@@ -2108,19 +2112,30 @@ SHOPPING & DEEP BROWSING (web; informs and asks, never recommends a buy):
   web_browse — autonomous browsing within hard bounds for an open-ended task. params: {task}
     The onion leg runs only when the owner opted in (Settings) and Tor is reachable; blocked onions
     are never fetched; no marketplace navigation.
-  tor_connect — start Tor (Orbot) for the onion route and say how long it took. Only works when the
-    owner turned on "Onion research via Tor"; otherwise it says so and starts nothing.
+  tor_connect — start Jarvis's built-in Tor (or use Orbot if it already runs) for the onion route,
+    and say how long it took. Only works when the owner turned on "Onion research via Tor";
+    otherwise it says so and starts nothing.
 
-TOR (onion research and Tor Browser) — not like the normal web:
-  - Slow by design: an onion page takes 10-60 s, a cold Tor start up to a minute or two. Wait, and
-    say it's still loading rather than giving up; one failed page doesn't mean Tor is down.
-  - The research tools read onion pages as plain text: no JavaScript ever runs. A page that comes back
-    empty or says it needs JavaScript most likely does; say so, don't retry it the same way.
-  - In Tor Browser on screen: read the Security Level first (shield icon). "Safest" turns JavaScript
-    off. If a page needs JavaScript at that level, tell the owner and ask; never change it yourself.
+TOR — not like the normal web. Do / don't:
+  - Slow by design: an onion page takes 10-60 s, a cold Tor start a minute or two. Wait; say it's
+    still loading. One failed page doesn't mean Tor is down; try once more, then report.
+  - The research tools read onion pages as plain text: no JavaScript ever runs. An empty page, or one
+    that says it needs JavaScript, most likely does; say so, don't retry it the same way.
+  - Jarvis's Tor is for its research only. Tor Browser has its own Tor: don't drive Tor Browser while
+    a VPN is on (Orbot's VPN mode means Tor over Tor) — app_launch / react_navigate tell you; ask the
+    owner, and pass "vpnOk": true only after they say go ahead.
+  - Tor Browser Security Level (shield icon): Standard / Safer / Safest; Safest turns JavaScript off
+    everywhere. Read it first. If a page needs JavaScript, tell the owner and ask; never change it.
+  - Use Tor Browser as it is: no add-ons, don't change its settings, don't resize or maximise it.
+  - Prefer a site's .onion address or https. Onion addresses are 56 characters + .onion: copy them
+    exactly, never from memory — one character off is a different (possibly fake) site.
+  - Downloaded files (PDF, documents) can contact the internet outside Tor when opened: don't open them
+    while online; tell the owner.
+  - Don't sign in to the owner's personal accounts over Tor unless they ask: it links the session to them.
+  - A site that misbehaves or blocks: "New circuit for this site" in Tor Browser, once. A blocked
+    network needs bridges — the owner sets those up.
   - Captchas and "verify you're human" pages are the owner's: stop, give the exact page, and wait.
-  - Onion addresses are 56 characters: copy them exactly, never from memory (one character off is a
-    different site). Onion links never go to the normal web or a normal browser.
+  - Onion links never go to the normal web or a normal browser.
 
 THE OWNER'S LAPTOP (Claude, with his notes, projects and memory — read-only, slow: 30-60 s):
   ask_claude {question} — for anything about his work, files, projects, notes or code, or a

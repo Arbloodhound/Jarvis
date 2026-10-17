@@ -365,6 +365,11 @@ public class AgentAccessibilityService extends AccessibilityService {
 
     public static boolean isAllowlistMode() { return allowlistMode; }
 
+    private static volatile long lastOtherAppEventUptime = 0L;
+
+    /** Monotonic ms (System.nanoTime) of the last accessibility event from an app other than Jarvis. */
+    public static long lastOtherAppEventUptime() { return lastOtherAppEventUptime; }
+
     /** The single question every read and every action must ask. */
     public static boolean agentMayUse(String pkg) {
         if (pkg == null) return false;
@@ -568,6 +573,11 @@ public class AgentAccessibilityService extends AccessibilityService {
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
+        // When another app's screen last changed (agent.ScreenSettle): Jarvis's own window
+        // (its chat streaming while the navigator works) doesn't count.
+        if (event.getPackageName() != null && !getPackageName().contentEquals(event.getPackageName())) {
+            lastOtherAppEventUptime = System.nanoTime() / 1_000_000L;
+        }
         long evtNow = System.currentTimeMillis();
         if (evtNow - lastEventPersistedAt >= LAST_EVENT_PERSIST_MS) {
             lastEventPersistedAt = evtNow;

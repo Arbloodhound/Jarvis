@@ -3,6 +3,23 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-17 (session 01UX5qeo) — in-app Tor, Tor Browser VPN check, Tor do/don'ts, two speed fixes
+Owner: "build and push it all". Subsystems: D/net (Tor), A (prompts), D (navigator waits), A (run start).
+- In-app Tor: Guardian Project tor-android 0.4.9.5 (BSD-3, Orbot's Tor library; arm64 libtor 16 KB-aligned;
+  later releases need compileSdk 37; its kotlin-stdlib 2.3 excluded — its classes are Java). net/EmbeddedTor binds
+  TorService (SOCKS 9050 if free, else auto); TorProxy.current() follows the in-app port, else Orbot's 9050;
+  TorConnect.connect starts it and waits for bootstrap 100% (90 s cap). Orbot is used if it already runs.
+  Settings: Connect / Disconnect. tor_connect tool unchanged in rules (needs onion research on; never turns it on).
+- TorBrowserGuard: app_launch / react_navigate naming Tor Browser with a VPN on return a note (Tor over Tor with
+  Orbot VPN) instead of acting; the model passes "vpnOk": true only after the owner says go ahead.
+- Cloud prompt TOR do/don't list (condensed from Tor Project guidance, not fetched): slow loads, no JS on the tool
+  route, Security Level (never change it), no add-ons/resizing, exact 56-char onion addresses, don't open downloads
+  online, no personal logins, new circuit once, bridges are the owner's, captchas are the owner's. Local prompt: one line.
+- Speed (CROSSEVAL_OPENCLAW top 5, #1 and #2): navigator waits after a step / app launch end when the other app's
+  screen has changed and gone quiet (ScreenSettle; cap = the old 0.9 s / 2.5 s); run-start file+DB work
+  (importVerdict, importFromLaptop, lessons, recordTurn, last-run file) moved to Dispatchers.IO.
+- 1593 JVM tests, 0 failures; compileDebugKotlin OK. All RUNTIME-UNPROVEN (in-app Tor bootstrap, settle timings).
+
 ## 2026-10-17 (session 01UX5qeo) — cloud brain check (Jarvis Tests button 6)
 Subsystems: F (diagnostics) + a read-only hook in A (Brain). Owner asked for a diagnostic of the API brain: what the
 model sees, what it has access to and what it doesn't.
