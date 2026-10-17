@@ -3,6 +3,14 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-17 (session 01UX5qeo) — owner rejected three non-Muse additions; removed
+- Owner: keep Muse's code as it was (optimize only); "don't keep any" of the additions beyond Muse.
+- Removed: OtpScrubber (on-device sms_read/notification_read + notifications.log + readSms), the raw-tap node binding
+  (performTapBound/nodeBoundsAt) and ScreenBounds/requireScreenBound (ScreenGuard.kt restored to Muse's 53503c3).
+  Files restored are byte-identical to ff9d15d. Tests removed: GuardWiringTest, ScreenBoundsTest, OtpScrubberTest.
+- Cloud model still never gets codes (Brain.resultFeedback SecretScrubber, Muse §6). Email item dropped (not Jarvis).
+- 1578 JVM tests, 0 failures; compileDebugJavaWithJavac OK. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-17 (session 01UX5qeo) — handoff update; Muse's decisions locked
 - Owner: "I WANT EVERY DECISION THAT MUSE MADE TO STAY AS IT WAS." Recorded as MUSE_HANDOFF.md §0: everything in
   HANDOFF_V5_MISSING.md and Muse's six harness base files is locked; conflicts go to the owner, no session decides.

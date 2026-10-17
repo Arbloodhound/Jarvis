@@ -133,7 +133,7 @@ class Tools(
                     if (controller.takeScreenshot()) "Screenshot taken — saved to the device gallery"
                     else "Error: screenshot failed (accessibility service not running)"
                 }
-                "notification_read" -> com.agent.ultra.harness.OtpScrubber.scrub(controller.readNotifications(params.optInt("limit", 15)))
+                "notification_read" -> controller.readNotifications(params.optInt("limit", 15))
                 "global_action" -> {
                     val action = params.optString("action")
                     if (controller.globalAction(action)) "Done: $action"
@@ -344,7 +344,7 @@ class Tools(
                         else -> "Error: SMS send failed"
                     }
                 }
-                "sms_read" -> com.agent.ultra.harness.OtpScrubber.scrub(controller.readSms(params.optInt("limit", 10)))
+                "sms_read" -> controller.readSms(params.optInt("limit", 10))
                 "contacts_read" -> controller.readContacts(params.optString("name"))
 
                 // ── Location / clipboard / media / alarms / notes ────

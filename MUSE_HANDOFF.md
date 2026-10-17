@@ -3,37 +3,31 @@
 Read this first, then HANDOFF_V5_MISSING.md (§6 standing rules), CLAUDE.md and the top of DEVLOG.md.
 Checked against GitHub on 2026-10-17.
 
-## 0. LOCKED — every decision Muse made stays as it was (owner, 2026-10-17)
-The owner's words: "I WANT EVERY DECISION THAT MUSE MADE TO STAY AS IT WAS."
-- What counts as Muse's decisions: everything in `HANDOFF_V5_MISSING.md` (§0 wire-ins, §1–§5 designs, §6 standing
-  rules, §7 verification discipline) and the six harness base files Muse delivered (`MemoryClaims`,
-  `ApprovalGrants`, `Scheduler`, `SkillStore`, `NotificationForwardingPolicy`, `ScreenGuard`).
-- Do not change, soften, tighten, "improve" or reinterpret any of them. No session decides on its own that a later
-  rule supersedes one of Muse's. If something seems to conflict, **stop and ask the owner** — do not pick a side.
-- New work builds on top of Muse's decisions; it does not replace them.
-
-### Places where shipped code goes beyond what Muse wrote (owner to decide — nothing changed yet)
-These were built by Claude sessions, not by Muse. They are listed so the owner can keep or revert them:
-1. **On-device model can't see codes either.** Muse's rule: codes/reset links never reach the *cloud* model.
-   Commit `fddb02c` also scrubs `sms_read` and `notification_read` results for **every** path (`Tools.kt`), and
-   `readSms` (`AgentController.kt`, `79a438b`), so the on-device model can no longer read a code back to you.
-2. **Notification log scrubbed.** `UltraNotificationService` now removes codes from `notifications.log` before
-   writing it (`fddb02c`). Triggers still see the raw text. Muse did not ask for this.
-3. **Raw-coordinate taps refused when nothing is under the point** (`fddb02c`). Muse's rule is "screen actions
-   bound to the screen they were read from; stale screens refused". The new check also refuses taps in games,
-   canvas/drawing apps and some web views where nothing on screen is listed. Possible regression — watch on device.
-4. **Email for project use.** §6 says only `raffleraffle1528@gmail.com`, never `@arbloodhound.xyz`. A later
-   memory note said `raffleraffle@arbloodhound.xyz`. Per the lock, §6 (Muse) is what stands until the owner says
-   otherwise.
+## 0. LOCKED — Muse's code stays as Muse made it (owner, 2026-10-17)
+The owner: "I WANT EVERY DECISION THAT MUSE MADE TO STAY AS IT WAS" and "make sure Muse's code stays mostly the
+same unless need to optimize — we rebuilt the app on top of OpenClaw."
+- Muse's work = everything in `HANDOFF_V5_MISSING.md` and the six harness base files (`MemoryClaims`,
+  `ApprovalGrants`, `Scheduler`, `SkillStore`, `NotificationForwardingPolicy`, `ScreenGuard`). The app is built on
+  OpenClaw (MIT); keep attribution.
+- Keep Muse's code and decisions as they are. Change them only to optimize (same behaviour, faster/leaner), never to
+  add rules Muse didn't make. Anything that would change behaviour → ask the owner first.
+- 2026-10-17: the owner rejected three additions another session made beyond Muse; all removed (commit after
+  `8eb2ecd`): code-hiding on the on-device path and in `notifications.log` (OtpScrubber), and refusing raw taps with
+  nothing listed under them (ScreenBounds/requireScreenBound; `ScreenGuard.kt` back to Muse's version). The cloud
+  model still never gets codes (Muse's rule, `Brain.resultFeedback`).
+- Still in Muse's files from other sessions (additive, kept): `MemoryClaims.writeVerified` (+ minimal compile fixes
+  in `MemoryClaims`/`SkillStore`).
 
 ## 1. State right now
 - **Latest release: `v3.0.41-test`** — https://github.com/Arbloodhound/Jarvis/releases/tag/v3.0.41-test
   - Release APK run 38999016649 (success) from `muse/v5-delta-port` @ `79a438b`.
 - **Branch:** `muse/v5-delta-port`. Draft PR #13 → base `claude/shopping-integration`. PR #12
   (`claude/shopping-integration`) still open too. Both wait on the owner.
-- Full JVM suite at `79a438b`: 1610 tests, 0 failures (reported by session 01BUKaYm; CI release build passed).
+- Full JVM suite after the removal: 1578 tests, 0 failures (was 1610; the 32 removed tests covered the removed code).
+  v3.0.41-test still contains the removed code — the next release won't.
 
 ## 2. What's on the branch (newest first)
+- (next commit) Removed the three additions the owner rejected (§0).
 - `79a438b` readSms: codes scrubbed before the 160-char cut (so a code at the cut can't slip past).
 - `fddb02c` ScreenGuard tap binding + OtpScrubber wired into device paths (see §0 items 1–3).
 - `c28f861` On-device prompt in a fixed fragment order (log line `UltraPrompt reusable fragments=N/4`);
@@ -57,12 +51,9 @@ These were built by Claude sessions, not by Muse. They are listed so the owner c
 - Google OAuth redirect activity (needs an owner-registered client ID); Spotify/Plaid/Stripe connectors.
 - LLM runners/generators for subagents, feed and ideas.
 - Notification filter (allowlist → quiet hours → rate limit): waiting on the owner's yes/no and quiet hours.
-- `performSwipe`, `tapAtPoint` and the IME-enter gesture are not bound-checked.
 
 ## 5. Owner to do
-- Install v3.0.41-test → Jarvis Tests → **★ Real-use check** → send the results file. Watch for refused taps in
-  games/drawing apps/web views.
-- Decide §0 items 1–4.
+- Install the next release → Jarvis Tests → **★ Real-use check** → send the results file.
 - Review/merge PR #13 and PR #12.
 - Obtainium (repo is private): fine-grained PAT, owner **Arbloodhound**, only repo **Jarvis**, **Contents:
   Read-only**; Add App `https://github.com/Arbloodhound/Jarvis`, prereleases on, filter `jarvis-test\.apk`.

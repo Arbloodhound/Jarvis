@@ -48,17 +48,12 @@ class UltraNotificationService : NotificationListenerService() {
             // this check every banking alert, message preview and two-factor
             // code lands in a log on disk.
             if (!com.agent.ultra.ui.UltraPrefs.captureNotifications(this)) return
-            // One-time codes never reach the log (and so never the model): scrubbed before the
-            // length cut so a code is not half-cut into something the scrubber no longer sees.
-            // The triggers above ran on the raw text; only the stored copy is scrubbed.
-            val logTitle = com.agent.ultra.harness.OtpScrubber.scrub(title)
-            val logText = com.agent.ultra.harness.OtpScrubber.scrub(text)
             val line = buildString {
                 append(sbn.postTime)
                 append(" | ").append(sbn.packageName)
                 if (warned != null) append(" | [LOOKS LIKE A SCAM: ").append(warned).append("]")
-                if (logTitle.isNotBlank()) append(" | ").append(logTitle.take(60))
-                if (logText.isNotBlank()) append(" | ").append(logText.take(120))
+                if (title.isNotBlank()) append(" | ").append(title.take(60))
+                if (text.isNotBlank()) append(" | ").append(text.take(120))
                 append("\n")
             }
             val f = File(filesDir, "notifications.log")

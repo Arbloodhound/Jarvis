@@ -33,10 +33,6 @@ package com.agent.ultra.harness
  *   foreground package changes since the observe.
  * - Password fields: text entry is refused outright (node password flag
  *   or password input-type variation), before any action runs.
- * - Screen-bound taps: a tap coordinate must fall inside the element it was
- *   read from (accessibility node bounds, corroborated by vision bounds when
- *   available), or it is refused as unbound — see [ScreenBounds] /
- *   [ScreenGuard.requireScreenBound].
  *
  * Adapted from OpenClaw's AccessibilityActionExecutor.kt (act,
  * actionPreflight, TargetStale) and AccessibilitySnapshotter.kt
@@ -47,35 +43,6 @@ package com.agent.ultra.harness
  */
 class StaleTarget(message: String) : Exception(message)
 class SecureContentRefused(message: String) : Exception(message)
-class UnboundTap(message: String) : Exception(message)
-
-/**
- * Screen-bound tap check. A tap coordinate is only allowed when it falls inside
- * the element it was derived from — the accessibility node's bounds, and, when a
- * vision read is also available, the vision model's bounds for the same target.
- * A tap outside those bounds is unbound (a guessed or stale coordinate) and is
- * refused. Pure geometry; no Android deps (the service supplies the rects).
- */
-object ScreenBounds {
-    /** A screen rectangle in pixels; [right]/[bottom] are exclusive. */
-    data class Rect(val left: Int, val top: Int, val right: Int, val bottom: Int) {
-        val valid: Boolean get() = right > left && bottom > top
-        fun contains(x: Int, y: Int): Boolean =
-            valid && x >= left && x < right && y >= top && y < bottom
-    }
-
-    /**
-     * True when (tapX, tapY) is inside [nodeBounds] and — when supplied — also
-     * inside [visionBounds]. Both null, or an invalid/missing node rect, is false:
-     * a tap with no bounds to confirm it is never screen-bound.
-     */
-    fun withinBounds(tapX: Int, tapY: Int, nodeBounds: Rect?, visionBounds: Rect? = null): Boolean {
-        val node = nodeBounds ?: return false
-        if (!node.contains(tapX, tapY)) return false
-        if (visionBounds != null && !visionBounds.contains(tapX, tapY)) return false
-        return true
-    }
-}
 
 /** Minimal snapshot handle; the real node tree stays in the service. */
 data class ScreenSnapshot(
@@ -143,20 +110,6 @@ class ScreenGuard {
             throw SecureContentRefused(
                 "Text entry into password fields is refused" +
                     (if (fieldLabel.isNotEmpty()) " ($fieldLabel)" else ""))
-        }
-    }
-
-    /**
-     * Refuse a tap whose coordinate is not bound to the element it came from.
-     * @throws UnboundTap when the tap falls outside the node (and vision) bounds.
-     * @see ScreenBounds.withinBounds
-     */
-    fun requireScreenBound(
-        tapX: Int, tapY: Int,
-        nodeBounds: ScreenBounds.Rect?, visionBounds: ScreenBounds.Rect? = null,
-    ) {
-        if (!ScreenBounds.withinBounds(tapX, tapY, nodeBounds, visionBounds)) {
-            throw UnboundTap("Tap ($tapX,$tapY) is outside the element it was read from; re-observe before acting")
         }
     }
 
