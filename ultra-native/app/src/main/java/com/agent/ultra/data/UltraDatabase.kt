@@ -11,8 +11,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [ConversationEntity::class, MessageEntity::class,
         TaskShortcutEntity::class, ToolReliabilityEntity::class,
         RecipeEntity::class, ScreenMemoryEntity::class, LessonEntity::class,
-        com.agent.ultra.harness.ClaimEntity::class, com.agent.ultra.harness.GrantEntity::class],
-    version = 8,
+        com.agent.ultra.harness.ClaimEntity::class, com.agent.ultra.harness.GrantEntity::class,
+        com.agent.ultra.harness.MemoryEmbeddingEntity::class,
+        com.agent.ultra.harness.BanditArmEntity::class],
+    version = 9,
 )
 abstract class UltraDatabase : RoomDatabase() {
     abstract fun conversations(): ConversationDao
@@ -23,6 +25,8 @@ abstract class UltraDatabase : RoomDatabase() {
     abstract fun claims(): com.agent.ultra.harness.ClaimDao
     abstract fun claimForget(): com.agent.ultra.harness.ClaimForgetDao
     abstract fun grants(): com.agent.ultra.harness.GrantDao
+    abstract fun embeddings(): com.agent.ultra.harness.EmbeddingDao
+    abstract fun banditArms(): com.agent.ultra.harness.BanditArmDao
 
     companion object {
         @Volatile private var instance: UltraDatabase? = null
@@ -121,10 +125,33 @@ abstract class UltraDatabase : RoomDatabase() {
             }
         }
 
+        /** v8 → v9 adds two harness tables: memory claim embeddings (harness/ClaimVerifier.kt,
+         * the two-lens verifier's similarity search) and bandit arm state (harness/BanditArmState.kt,
+         * the proactive-surface reward counters). Columns and indices match what Room generates for
+         * those entities (HarnessDatabaseV9Test compares them). */
+        internal val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `memory_embeddings` (" +
+                        "`claim_id` TEXT NOT NULL, `model_name` TEXT NOT NULL, " +
+                        "`embedding` BLOB NOT NULL, `created_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`claim_id`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `bandit_arm_state` (" +
+                        "`policy_id` TEXT NOT NULL, `domain` TEXT NOT NULL, `lane` TEXT NOT NULL, " +
+                        "`decision_points` INTEGER NOT NULL, `terminal_rewards` INTEGER NOT NULL, " +
+                        "`terminal_observations` INTEGER NOT NULL, `fast_reward_sum` REAL NOT NULL, " +
+                        "`fast_observations` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`policy_id`, `domain`, `lane`))"
+                )
+            }
+        }
+
         fun get(context: Context): UltraDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, UltraDatabase::class.java, "ultra.db"
-            ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
             // Only the pre-migration dev schema (v1) may be wiped. A future version
             // bump without its migration now fails loudly instead of silently
             // deleting every lesson, task and screen the user built up.

@@ -143,4 +143,50 @@ object ShoppingListings {
         }
         return Filtered(kept, excluded, kept.size)
     }
+
+    // ------------------------------------------------- price provenance
+    // Standing rule: a price whose only source is a search-engine snippet is
+    // never quoted or ranked. A price counts only after a full page read
+    // (rendered + OCR + DOM). Snippet-sourced prices are labelled unverified
+    // (the price is cleared so it can't be ranked) or dropped — the caller
+    // decides which. Extraction above is unchanged and provenance-agnostic;
+    // the caller tags the source it read from.
+
+    /** Where a row's price came from. Only [FULL_PAGE] prices may be ranked. */
+    enum class PriceSource { FULL_PAGE, SEARCH_SNIPPET }
+
+    /**
+     * A row with its price provenance. When [priceVerified] is false the row's
+     * [Row.price] has been cleared (so it cannot be quoted or ranked) and [note]
+     * carries the unverified snippet price text, if any.
+     */
+    data class Provenanced(val row: Row, val priceVerified: Boolean, val note: String = "")
+
+    /**
+     * Tag rows with their price provenance. For [PriceSource.FULL_PAGE] the price
+     * is verified and kept. For [PriceSource.SEARCH_SNIPPET] the price is never
+     * trusted: with [dropUnverified] the row is omitted entirely, otherwise it is
+     * kept with the price cleared and a label noting the snippet-only price.
+     */
+    fun withProvenance(
+        rows: List<Row>, source: PriceSource, dropUnverified: Boolean = false,
+    ): List<Provenanced> {
+        if (source == PriceSource.FULL_PAGE) {
+            return rows.map { Provenanced(it, priceVerified = true) }
+        }
+        val out = ArrayList<Provenanced>()
+        for (r in rows) {
+            if (dropUnverified) continue
+            val raw = r.price?.text.orEmpty()
+            val note = "unverified: snippet-only price" +
+                (if (raw.isNotEmpty()) " ($raw)" else "") +
+                " — requires full page read (rendered + OCR + DOM)"
+            out += Provenanced(r.copy(price = null), priceVerified = false, note)
+        }
+        return out
+    }
+
+    /** The rows whose price may be quoted and ranked: verified, with a price. */
+    fun rankable(provenanced: List<Provenanced>): List<Row> =
+        provenanced.filter { it.priceVerified && it.row.price != null }.map { it.row }
 }
