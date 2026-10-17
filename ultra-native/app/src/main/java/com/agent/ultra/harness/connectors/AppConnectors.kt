@@ -23,6 +23,27 @@ object AppConnectors {
         ConnectorRegistry(grants).also { r -> g.forEach(r::register); registry = r; google = g; vault = v }
     }
 
+    /** The account recipient grants are keyed to: the one signed-in Google account. */
+    const val ACCOUNT = "me"
+
+    private const val PREFS = "connector_grants"
+    private const val K_RECIPIENTS = "gmail_recipients"
+
+    /** Addresses the owner lets Jarvis email without asking each time (durable recipient grants). */
+    fun trustedRecipients(ctx: Context): List<String> =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(K_RECIPIENTS, "").orEmpty()
+            .lines().map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+
+    /** Sets the list: grants for new addresses, revokes for removed ones. Purchases never get grants. */
+    suspend fun setTrustedRecipients(ctx: Context, addresses: List<String>) {
+        val grants = com.agent.ultra.harness.ApprovalGrants(com.agent.ultra.data.UltraDatabase.get(ctx.applicationContext).grants())
+        val old = trustedRecipients(ctx).toSet()
+        val new = addresses.map { it.trim().lowercase() }.filter { '@' in it }.toSet()
+        (old - new).forEach { grants.revokeRecipient("gmail", ACCOUNT, it) }
+        (new - old).forEach { grants.grantRecipient("gmail", ACCOUNT, it) }
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(K_RECIPIENTS, new.sorted().joinToString("\n")).apply()
+    }
+
     fun google(ctx: Context): List<GoogleConnector> { registry(ctx); return google }
     fun vault(ctx: Context): CredentialVault { registry(ctx); return vault!! }
 

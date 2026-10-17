@@ -6,6 +6,7 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -81,5 +82,22 @@ fun ConnectorsSettings(context: Context) {
     }
     line?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+    }
+    var trusted by remember { mutableStateOf(AppConnectors.trustedRecipients(context).joinToString("\n")) }
+    var trustedSaved by remember { mutableStateOf<String?>(null) }
+    androidx.compose.material3.OutlinedTextField(
+        value = trusted, onValueChange = { trusted = it; trustedSaved = null },
+        label = { Text("Email these without asking each time (one address per line)") },
+        modifier = androidx.compose.ui.Modifier.fillMaxWidth(), minLines = 2,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(onClick = {
+            scope.launch {
+                AppConnectors.setTrustedRecipients(context, trusted.lines())
+                trusted = AppConnectors.trustedRecipients(context).joinToString("\n")
+                trustedSaved = "Saved. Every other address — and anything that costs money — still asks."
+            }
+        }) { Text("Save") }
+        trustedSaved?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) }
     }
 }

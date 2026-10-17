@@ -1023,12 +1023,13 @@ class Tools(
                 com.agent.ultra.harness.connectors.AppConnectors.vault(context),
                 com.agent.ultra.harness.connectors.AppConnectors.google(context))
         }
-        var r = reg.call(id, op, args)
+        // account "me": the one signed-in account, so the owner's recipient grants (Settings) apply.
+        var r = reg.call(id, op, args, account = com.agent.ultra.harness.connectors.AppConnectors.ACCOUNT)
         if (r is com.agent.ultra.harness.connectors.CallResult.NeedsApproval) {
             val ok = ActionGate.approve("connector", "$id.$op", id, "approval",
                 title = "Allow Jarvis: $id — $op?", body = r.action.take(600))
             if (!ok) return "Not done: the owner didn't approve.\n${r.action}"
-            r = reg.call(id, op, args, approval = reg.approve(r.key))
+            r = reg.call(id, op, args, approval = reg.approve(r.key), account = com.agent.ultra.harness.connectors.AppConnectors.ACCOUNT)
         }
         return when (r) {
             is com.agent.ultra.harness.connectors.CallResult.Ok -> r.text
