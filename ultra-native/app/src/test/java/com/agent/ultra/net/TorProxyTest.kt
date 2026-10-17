@@ -55,11 +55,13 @@ class TorProxyTest {
     }
 
     @Test fun availableOnlyWhileSomethingListens() {
-        val s = FakeSocks("x")
-        val port = s.port
-        assertTrue(TorProxy(port = port).isAvailable())
-        s.close()
-        assertFalse(TorProxy(port = port).isAvailable())
+        FakeSocks("x").use { s -> assertTrue(TorProxy(port = s.port).isAvailable()) }
+        // Nothing listening: a port held by a bound, non-listening socket. A port freed by close()
+        // could be taken by another test's server before the check (CI run 39011170097).
+        Socket().use { held ->
+            held.bind(java.net.InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
+            assertFalse(TorProxy(port = held.localPort).isAvailable())
+        }
     }
 
     @Test fun downProxyGivesNullNotAClearnetFetch() = runBlocking {
