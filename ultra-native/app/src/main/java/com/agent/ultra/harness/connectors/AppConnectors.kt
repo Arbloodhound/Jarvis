@@ -20,7 +20,9 @@ object AppConnectors {
         val g = listOf(GmailConnector(v, transport, oauth), GoogleCalendarConnector(v, transport, oauth),
             GoogleDriveConnector(v, transport, oauth), GoogleDocsConnector(v, transport, oauth))
         val grants = ApprovalGrantsCheck(com.agent.ultra.harness.ApprovalGrants(com.agent.ultra.data.UltraDatabase.get(app).grants()))
-        ConnectorRegistry(grants).also { r -> g.forEach(r::register); registry = r; google = g; vault = v }
+        ConnectorRegistry(grants).also { r ->
+            g.forEach(r::register); r.register(SpotifyConnector(v, transport)); registry = r; google = g; vault = v
+        }
     }
 
     /** The account recipient grants are keyed to: the one signed-in Google account. */

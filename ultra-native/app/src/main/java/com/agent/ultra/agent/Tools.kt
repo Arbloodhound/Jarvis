@@ -1018,6 +1018,7 @@ class Tools(
         val op = params.optString("op")
         if (id.isBlank() || op.isBlank() || op == "list") return "Connectors:\n" + reg.directory()
         val args = params.optJSONObject("args")?.let { o -> o.keys().asSequence().associateWith { o.optString(it) } } ?: emptyMap()
+        if (id == com.agent.ultra.harness.connectors.SpotifyConnector.ID) com.agent.ultra.harness.connectors.SpotifyAuth.refresh(context)
         if (id in com.agent.ultra.harness.connectors.GoogleAccess.CONNECTORS) {
             com.agent.ultra.harness.connectors.GoogleAccess.refresh(context,
                 com.agent.ultra.harness.connectors.AppConnectors.vault(context),

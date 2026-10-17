@@ -83,6 +83,28 @@ fun ConnectorsSettings(context: Context) {
     line?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
     }
+    // Spotify: the owner's own Spotify app (developer.spotify.com) client ID; redirect URI to register there:
+    // com.agent.ultra://spotify-callback. PKCE, so no secret.
+    var spotifyId by remember { mutableStateOf(com.agent.ultra.harness.connectors.SpotifyAuth.clientId(context)) }
+    var spotifyLine by remember { mutableStateOf<String?>(null) }
+    val spotifyOn = remember(spotifyLine) { AppConnectors.vault(context).handleFor("spotify") != null }
+    androidx.compose.material3.OutlinedTextField(
+        value = spotifyId, onValueChange = { spotifyId = it.trim() },
+        label = { Text("Spotify client ID (redirect: com.agent.ultra://spotify-callback)") },
+        modifier = androidx.compose.ui.Modifier.fillMaxWidth(), singleLine = true,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(enabled = spotifyId.isNotBlank(), onClick = {
+            com.agent.ultra.harness.connectors.SpotifyAuth.setClientId(context, spotifyId)
+            spotifyLine = if (com.agent.ultra.harness.connectors.SpotifyAuth.start(context)) "Finish signing in in the browser." else "Set the client ID first."
+        }) { Text(if (spotifyOn) "Reconnect Spotify" else "Connect Spotify") }
+        if (spotifyOn) OutlinedButton(onClick = {
+            com.agent.ultra.harness.connectors.SpotifyAuth.disconnect(context)
+            spotifyLine = "Spotify disconnected."
+        }) { Text("Disconnect") }
+    }
+    spotifyLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) }
+
     var trusted by remember { mutableStateOf(AppConnectors.trustedRecipients(context).joinToString("\n")) }
     var trustedSaved by remember { mutableStateOf<String?>(null) }
     androidx.compose.material3.OutlinedTextField(
