@@ -49,7 +49,9 @@ class MainActivity : ComponentActivity() {
                         onOpenMemory = { screen = "memory" },
                         onOpenGuide = { guideFrom = "chat"; screen = "guide" },
                         onOpenInsights = { screen = "insights" },
+                        onOpenForYou = { screen = "foryou" },
                     )
+                    "foryou" -> com.agent.ultra.ui.ForYouScreen(onBack = { screen = "chat" })
                     "insights" -> com.agent.ultra.ui.InsightsScreen(onBack = { screen = "chat" })
                     "guide" -> com.agent.ultra.ui.GuideScreen(onBack = { screen = guideFrom })
                     "notes" -> com.agent.ultra.ui.NotesScreen(onBack = { screen = "chat" }, onAsk = { screen = "chat" })
