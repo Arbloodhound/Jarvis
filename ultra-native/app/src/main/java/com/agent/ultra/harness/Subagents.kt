@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -76,6 +77,9 @@ class SubagentOrchestrator(
             } catch (e: Exception) {
                 Result.failure(e)
             }
+            // Interrupted or closed while the runner was finishing (it can return normally after the
+            // cancel, e.g. awaiting something already done): that run hands nothing off.
+            if (!isActive) return@launch
             // The status changes only after the handoff is delivered: a child listed as DONE or
             // FAILED has always handed its result to the parent already.
             out.onSuccess { r ->
