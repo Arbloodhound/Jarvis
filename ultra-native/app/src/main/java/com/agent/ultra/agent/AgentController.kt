@@ -117,6 +117,12 @@ class AgentController(private val context: Context) {
      * app is settling after a transition (proven on device: root=null bursts
      * after Chrome launched) — retry with backoff before reporting empty.
      */
+    /** The id of the last screen read (harness ScreenGuard snapshot), or null. */
+    fun screenSnapshotId(): String? = service?.screenSnapshotId
+
+    /** Null when an action read from snapshot [id] may run; else why not (window or app changed). */
+    fun snapshotStale(id: String?): String? = if (id == null) null else service?.preflightSnapshot(id)
+
     suspend fun screenFlat(): String = withContext(Dispatchers.IO) {
         val svc = serviceOrWait() ?: return@withContext "[]"
         var result = svc.getScreenContentFlat() ?: "[]"

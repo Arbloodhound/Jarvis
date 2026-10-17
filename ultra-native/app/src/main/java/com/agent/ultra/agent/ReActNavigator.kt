@@ -423,6 +423,15 @@ ACTION:"""
                 ?.let { n -> labelled.firstOrNull { it.second == n }?.first }
             android.util.Log.i("UltraNav", "step $iter action: $action" +
                 (if (tappedWords != null) "  = \"$tappedWords\"" else "") + (if (byLabel != null) "  <- $said" else ""))
+            // Bound to the screen it was chosen from (Muse's ScreenGuard, OpenClaw's snapshot preflight):
+            // a window or app change since that read means the choice may no longer mean the same thing.
+            val stale = controller.snapshotStale(lastSnapshotId)
+            if (stale != null) {
+                android.util.Log.i("UltraNav", "step $iter action: $action — NOT DONE, $stale; reading the screen again")
+                history += "step $iter: the screen changed before $said could run, so it was read again. Choose from the new screen."
+                observation = observe()
+                continue
+            }
             val acted = ScreenSettle.mark()
             val ok = executeAction(action, observation)
             ScreenSettle.await(acted, maxMs = 900)
@@ -634,6 +643,9 @@ ACTION:"""
      * into a confident tap on the wrong thing.
      */
     private var lastFlat: String = ""
+
+    /** The ScreenGuard snapshot the last observe() read; actions chosen from it are bound to it. */
+    private var lastSnapshotId: String? = null
     /** From the last observe(): words -> node index, and the indexes shown because they had no words. */
     private var labelled: List<Pair<String, Int>> = emptyList()
     private var listedIndexes: Set<Int> = emptySet()
@@ -983,6 +995,7 @@ ACTION:"""
     private suspend fun observe(): String {
         val flat = controller.screenFlat()
         lastFlat = flat
+        lastSnapshotId = controller.screenSnapshotId()
         // Every screen the navigator reads goes past the flow tracker. This is
         // the path the taint gate could not see: react_navigate returns a short
         // summary, so nothing the navigator READ ever reached the episode, and
@@ -1290,9 +1303,11 @@ ACTION:"""
         val script = RoutePlayer.script(call, values)
         if (script.actions.isEmpty()) return null
         var done = 0
+        var carried: String? = null
         for ((n, said) in script.actions.withIndex()) {
             stopReason?.let { return Played(false, done, "route stopped: $it") }
-            val before = observe()
+            // The previous step's after-read is this step's before-read: no second tree walk.
+            val before = carried ?: observe()
             val textBefore = screenText(lastFlat)
             val isTap = said.startsWith("tap(") || said.startsWith("long_press(")
             // type(#2,"…") is "the second text box on this screen": an index means nothing on
@@ -1313,10 +1328,15 @@ ACTION:"""
                 }
                 (if (said.startsWith("long_press")) "long_press" else "tap") + "($idx)"
             }
+            controller.snapshotStale(lastSnapshotId)?.let { why ->
+                android.util.Log.i("UltraNav", "ROUTE step ${n + 1}/${script.actions.size}: $said — NOT DONE, $why; the model takes over")
+                return Played(false, done, "A route that has passed a check was followed for $done step(s); the screen changed before $said could run. Carry on from here.")
+            }
             val acted = ScreenSettle.mark()
             val ok = executeAction(action, before)
             ScreenSettle.await(acted, maxMs = 900)
             val after = observe()
+            carried = after
             val changed = after != before || screenText(lastFlat) != textBefore
             val refusal = lastRefusal
             lastRefusal = null
