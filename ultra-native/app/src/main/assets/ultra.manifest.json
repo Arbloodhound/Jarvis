@@ -125,6 +125,10 @@
       ]
     },
     {
+      "name": "tor_connect",
+      "effects": ["mutate"]
+    },
+    {
       "name": "shop_checkout_prep",
       "effects": [
         "mutate"

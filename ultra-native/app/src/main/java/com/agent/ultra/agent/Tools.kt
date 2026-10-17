@@ -292,6 +292,13 @@ class Tools(
                     else webBrowse(task)
                 }
                 "shop_checkout_prep" -> checkoutPrep(params)
+                // Starts Tor (Orbot) for the onion route; never turns onion research on.
+                "tor_connect" -> when {
+                    NetPolicy.offlineOnly(context) -> "Offline-only mode is on, so Tor stays off. Nothing was started."
+                    !com.agent.ultra.ui.UltraPrefs.onionResearch(context) ->
+                        "Onion research via Tor is off in Settings, so Tor stays off — the owner can turn it on there. Nothing was started."
+                    else -> com.agent.ultra.net.TorConnect.describe(com.agent.ultra.net.TorConnect.connect(context, openOrbot = true))
+                }
 
                 // ── Device control ───────────────────────────────────
                 "flashlight_toggle" -> {

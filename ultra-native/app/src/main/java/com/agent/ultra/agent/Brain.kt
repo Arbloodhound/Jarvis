@@ -1818,6 +1818,15 @@ JSON:"""
         return resultFeedback(tool, failed, result, tail)
     }
 
+    /** The Tor Browser part of the system prompt's app list: true for this phone right now. */
+    private fun torBrowserNote(): String = when {
+        !com.agent.ultra.net.TorConnect.installed(appContext, com.agent.ultra.net.TorConnect.TOR_BROWSER) ->
+            ".onion sites included; Tor Browser isn't installed"
+        !com.agent.ultra.AgentAccessibilityService.agentMayUse(com.agent.ultra.net.TorConnect.TOR_BROWSER) ->
+            ".onion sites through research only; the owner protected Tor Browser, so you can't read or use it on screen"
+        else -> "Tor Browser and .onion sites included"
+    }
+
     /** The cloud system prompt exactly as a request would start now (Jarvis Tests' cloud brain check). */
     internal fun diagnosticSystemPrompt(): String = systemPrompt()
 
@@ -1832,7 +1841,7 @@ JSON:"""
 
         val owner = LocalPrompt.ownerSection(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
             TalkStyle.combine(com.agent.ultra.ui.VoicePrefs.styleInstructions(appContext), com.agent.ultra.ui.UltraPrefs.customInstructions(appContext))).let { if (it.isEmpty()) "" else "\n$it\n" }
-        return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have unrestricted access to it and everything on it through its accessibility service: you can see and use the screen (read, tap, type, scroll), every app (any browser, Tor Browser and .onion sites included), messages, contacts, notifications, settings, screenshots. Never say you can't see the screen or can't access or control the phone.
+        return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have unrestricted access to it and everything on it through its accessibility service: you can see and use the screen (read, tap, type, scroll), every app (any browser, ${torBrowserNote()}), messages, contacts, notifications, settings, screenshots. Never say you can't see the screen or can't access or control the phone.
 PHONE STATE: $env
 TODAY: $date at $time
 $owner
@@ -2099,6 +2108,19 @@ SHOPPING & DEEP BROWSING (web; informs and asks, never recommends a buy):
   web_browse — autonomous browsing within hard bounds for an open-ended task. params: {task}
     The onion leg runs only when the owner opted in (Settings) and Tor is reachable; blocked onions
     are never fetched; no marketplace navigation.
+  tor_connect — start Tor (Orbot) for the onion route and say how long it took. Only works when the
+    owner turned on "Onion research via Tor"; otherwise it says so and starts nothing.
+
+TOR (onion research and Tor Browser) — not like the normal web:
+  - Slow by design: an onion page takes 10-60 s, a cold Tor start up to a minute or two. Wait, and
+    say it's still loading rather than giving up; one failed page doesn't mean Tor is down.
+  - The research tools read onion pages as plain text: no JavaScript ever runs. A page that comes back
+    empty or says it needs JavaScript most likely does; say so, don't retry it the same way.
+  - In Tor Browser on screen: read the Security Level first (shield icon). "Safest" turns JavaScript
+    off. If a page needs JavaScript at that level, tell the owner and ask; never change it yourself.
+  - Captchas and "verify you're human" pages are the owner's: stop, give the exact page, and wait.
+  - Onion addresses are 56 characters: copy them exactly, never from memory (one character off is a
+    different site). Onion links never go to the normal web or a normal browser.
 
 THE OWNER'S LAPTOP (Claude, with his notes, projects and memory — read-only, slow: 30-60 s):
   ask_claude {question} — for anything about his work, files, projects, notes or code, or a

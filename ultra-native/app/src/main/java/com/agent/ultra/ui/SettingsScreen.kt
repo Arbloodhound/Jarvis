@@ -207,6 +207,35 @@ fun SettingsScreen(
                 }
                 Switch(checked = onion, onCheckedChange = { on -> onion = on; UltraPrefs.setOnionResearch(context, on) })
             }
+            // Manual Tor start (Orbot). The owner's own tap, so it works with onion research off too;
+            // the tor_connect tool only works with it on.
+            run {
+                val scope = rememberCoroutineScope()
+                var torLine by remember { mutableStateOf<String?>(null) }
+                var torBusy by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) {
+                    torLine = when {
+                        !com.agent.ultra.net.TorConnect.installed(context) -> "Orbot isn't installed."
+                        com.agent.ultra.net.TorConnect.connected() -> "Tor is connected."
+                        else -> "Tor isn't running."
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(enabled = !torBusy, onClick = {
+                        torBusy = true
+                        torLine = "Connecting to Tor… (up to a minute)"
+                        scope.launch {
+                            val o = com.agent.ultra.net.TorConnect.connect(context, openOrbot = true)
+                            torLine = com.agent.ultra.net.TorConnect.describe(o)
+                            torBusy = false
+                        }
+                    }) { Text("Connect to Tor") }
+                    torLine?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    }
+                }
+            }
             if (onion) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
