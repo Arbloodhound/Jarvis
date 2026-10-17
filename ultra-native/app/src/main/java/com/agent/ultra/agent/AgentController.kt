@@ -381,7 +381,8 @@ class AgentController(private val context: Context) {
         cursor.use {
             while (it.moveToNext() && out.size < limit) {
                 val addr = it.getString(0) ?: "unknown"
-                val body = (it.getString(1) ?: "").take(160)
+                // Scrub codes before the cut, so a code split by the 160-char limit cannot slip past.
+                val body = com.agent.ultra.harness.OtpScrubber.scrub(it.getString(1) ?: "").take(160)
                 out += "From $addr: $body"
             }
         }
