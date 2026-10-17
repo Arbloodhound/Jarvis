@@ -170,16 +170,21 @@ class TranscriptCueWorker(private val ctx: Context, private val mem: AmbientMemo
         val wordCount = if (j.words.isNotEmpty()) j.words.size else j.plain.split(Regex("\\s+")).count { it.isNotBlank() }
         val wps = CueTags.wordsPerSecond(wordCount, speechMs)
         val level = CueAudio.speechLevelDb(db, gate)?.toDouble()
+        // Experimental prosody (Settings): pitch against this speaker's own usual. Needs the audio,
+        // which is kept only while speaker tags are on.
+        val hz = if (com.agent.ultra.ui.UltraPrefs.prosody(ctx)) pcm?.let { CueAudio.pitchHz(it, span)?.toDouble() } else null
         val lead = ArrayList<String>()
         j.gapBeforeMs?.let { lead += CueTags.pause(it) }
         val v = voice
         if (v != null) {
             wps?.let { CueTags.rate(v.rate, it) }?.let { lead += it }
             level?.let { CueTags.loudness(v.loud, it) }?.let { lead += it }
+            hz?.let { CueTags.pitch(v.pitch, it) }?.let { lead += it }
             val (c, n) = if (!fresh && emb != null && VoiceMatch.shouldUpdate(v, sim)) VoiceMatch.update(v.centroid, v.n, emb)
                 else v.centroid to v.n
             mem.updateVoice(v, c, n, now,
-                wps?.let { v.rate.add(it) } ?: v.rate, level?.let { v.loud.add(it) } ?: v.loud)
+                wps?.let { v.rate.add(it) } ?: v.rate, level?.let { v.loud.add(it) } ?: v.loud,
+                hz?.let { v.pitch.add(it) } ?: v.pitch)
         }
 
         val body = CueTags.body(j.plain, j.words, pauses, overlapAt, lead)

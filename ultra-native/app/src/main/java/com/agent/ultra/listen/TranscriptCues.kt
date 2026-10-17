@@ -30,6 +30,44 @@ object CueAudio {
         }
     }
 
+    /**
+     * Median voice pitch (Hz) over the speech in [span] of [pcm] (16 kHz), or null when fewer than
+     * [MIN_VOICED] frames are clearly voiced. Per 40 ms frame (20 ms hop): normalised autocorrelation
+     * over 75-400 Hz lags; a frame counts only if its peak is at least [VOICED]. A measurement, not a
+     * reading of mood: it is only ever compared with the same speaker's own usual pitch.
+     */
+    fun pitchHz(pcm: ShortArray, span: Span, rate: Int = AmbientConfig.SAMPLE_RATE): Float? {
+        val win = rate / 25; val hop = rate / 50
+        val minLag = rate / 400; val maxLag = rate / 75
+        val from = (span.startMs * rate / 1000).toInt().coerceIn(0, pcm.size)
+        val to = (span.endMs * rate / 1000).toInt().coerceIn(from, pcm.size)
+        val found = ArrayList<Float>()
+        var s = from
+        while (s + win + maxLag <= to) {
+            var energy = 0.0
+            for (i in s until s + win) energy += pcm[i].toDouble() * pcm[i]
+            if (energy / win > 1e4) {   // skip near-silent frames (RMS below ~100 of 32768)
+                var bestLag = -1; var best = 0.0
+                for (lag in minLag..maxLag) {
+                    var num = 0.0; var e2 = 0.0
+                    for (i in s until s + win) { num += pcm[i].toDouble() * pcm[i + lag]; e2 += pcm[i + lag].toDouble() * pcm[i + lag] }
+                    val r = num / kotlin.math.sqrt(energy * e2 + 1e-9)
+                    if (r > best) { best = r; bestLag = lag }
+                }
+                if (best >= VOICED && bestLag > 0) found += rate.toFloat() / bestLag
+            }
+            s += hop
+        }
+        if (found.size < MIN_VOICED) return null
+        found.sort()
+        return found[found.size / 2]
+    }
+
+    /** Autocorrelation peak a frame needs to count as voiced. */
+    const val VOICED = 0.6
+    /** Voiced frames needed before a pitch is reported (~0.2 s of voice). */
+    const val MIN_VOICED = 10
+
     /** The loudness a frame must pass to count as speech, given the room's noise floor. */
     fun gateDb(floorDb: Float): Float =
         max(floorDb + AmbientConfig.GATE_ABOVE_FLOOR_DB, AmbientConfig.GATE_ABS_MIN_DB)
@@ -164,6 +202,8 @@ object CueTags {
     const val SLOW = "[slow]"
     const val LOUDER = "[louder]"
     const val QUIETER = "[quieter]"
+    const val HIGHER = "[higher]"
+    const val LOWER = "[lower]"
 
     /** A baseline needs this many lines before a line is called fast/slow/louder/quieter. */
     const val MIN_BASELINE = 8
@@ -220,6 +260,17 @@ object CueTags {
         return when {
             levelDb > b.mean + margin -> LOUDER
             levelDb < b.mean - margin -> QUIETER
+            else -> null
+        }
+    }
+
+    /** "[higher]" / "[lower]" for [hz] against the speaker's own usual pitch [b] (Hz), or null. */
+    fun pitch(b: Baseline, hz: Double): String? {
+        if (b.n < MIN_BASELINE || b.mean <= 0) return null
+        val margin = max(1.5 * b.sd, 0.12 * b.mean)   // ~2 semitones at least
+        return when {
+            hz > b.mean + margin -> HIGHER
+            hz < b.mean - margin -> LOWER
             else -> null
         }
     }

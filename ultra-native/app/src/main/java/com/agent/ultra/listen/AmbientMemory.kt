@@ -12,7 +12,7 @@ import android.database.sqlite.SQLiteOpenHelper
  * as a tool; a capacity trigger so it can never grow without bound.
  */
 class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db") :
-    SQLiteOpenHelper(ctx.applicationContext, name, null, 3) {
+    SQLiteOpenHelper(ctx.applicationContext, name, null, 4) {
 
     override fun onConfigure(db: SQLiteDatabase) { db.enableWriteAheadLogging() }
 
@@ -29,6 +29,8 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
     override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {
         if (o < 2) createVectors(db)
         if (o < 3) createCues(db)
+        // v4: a voice's usual pitch (createCues makes it for anything older than v3).
+        if (o == 3) db.execSQL("ALTER TABLE voices ADD COLUMN pitch TEXT")
     }
 
     /**
@@ -43,7 +45,7 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
             "voice INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL)")
         db.execSQL("CREATE TABLE IF NOT EXISTS voices(id INTEGER PRIMARY KEY AUTOINCREMENT, num INTEGER NOT NULL, " +
             "name TEXT, owner INTEGER NOT NULL DEFAULT 0, centroid BLOB NOT NULL, n INTEGER NOT NULL, " +
-            "last_seen INTEGER NOT NULL, rate TEXT, loud TEXT)")
+            "last_seen INTEGER NOT NULL, rate TEXT, loud TEXT, pitch TEXT)")
     }
 
     /** v2: one sentence vector per heard row (same rowid), filled by [MemoryIndexer].
@@ -75,12 +77,13 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
     fun voices(): List<Voice> {
         val out = ArrayList<Voice>()
         readableDatabase.rawQuery(
-            "SELECT id,num,name,owner,centroid,n,last_seen,rate,loud FROM voices ORDER BY owner DESC, last_seen DESC", null
+            "SELECT id,num,name,owner,centroid,n,last_seen,rate,loud,pitch FROM voices ORDER BY owner DESC, last_seen DESC", null
         ).use { c ->
             while (c.moveToNext()) out += Voice(
                 id = c.getLong(0), num = c.getInt(1), name = c.getString(2), owner = c.getInt(3) != 0,
                 centroid = floats(c.getBlob(4)), n = c.getInt(5), lastSeen = c.getLong(6),
                 rate = Baseline.decode(c.getString(7)), loud = Baseline.decode(c.getString(8)),
+                pitch = Baseline.decode(c.getString(9)),
             )
         }
         return out
@@ -116,10 +119,11 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
      * never touched here (the owner may be renaming it in Settings at the same moment). Applied
      * only if the row is still as read ([Voice.n], [Voice.lastSeen]): an enrolment, merge or
      * delete in between wins, and this line's update is dropped. Returns whether it applied. */
-    fun updateVoice(was: Voice, centroid: FloatArray, n: Int, lastSeen: Long, rate: Baseline, loud: Baseline): Boolean =
+    fun updateVoice(was: Voice, centroid: FloatArray, n: Int, lastSeen: Long, rate: Baseline, loud: Baseline,
+                    pitch: Baseline = was.pitch): Boolean =
         writableDatabase.update("voices", ContentValues().apply {
             put("centroid", bytes(centroid)); put("n", n); put("last_seen", lastSeen)
-            put("rate", rate.encode()); put("loud", loud.encode())
+            put("rate", rate.encode()); put("loud", loud.encode()); put("pitch", pitch.encode())
         }, "id=? AND n=? AND last_seen=?", arrayOf(was.id.toString(), was.n.toString(), was.lastSeen.toString())) > 0
 
     /**

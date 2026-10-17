@@ -72,6 +72,17 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OFFLINE_ONLY, on).apply()
     }
 
+    private const val K_PROSODY = "prosody_experimental"
+
+    /** Experimental prosody: pitch measured per heard line and tagged [higher]/[lower] against the
+     * speaker's own usual (only with speaker tags on). Measurements, never verdicts. Off by default. */
+    fun prosody(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_PROSODY, false)
+
+    fun setProsody(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_PROSODY, on).apply()
+    }
+
     private const val K_NOTIF_FILTER = "notif_filter"
     private const val K_QUIET_START = "notif_quiet_start"
     private const val K_QUIET_END = "notif_quiet_end"

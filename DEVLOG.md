@@ -3,6 +3,19 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-17 (session 01UX5qeo) — the rest of the list
+- Navigator: actions bound to the screen they were read from (ScreenGuard snapshot preflight, the OpenClaw
+  pattern; a window/app change since the read → read again, never act on the stale choice); route steps reuse
+  the previous read (one tree walk per step instead of two).
+- For you feed grounded in live web research (WebResearchRun, clearnet), sources cited per item.
+- Spotify connector (PKCE, owner's client ID, no secret; reads at once, playback changes ask first).
+- Prosody (experimental, Settings → Who's speaking → Pitch, off by default): per-line pitch (autocorrelation
+  F0 on 16 kHz audio) tagged [higher]/[lower] against the speaker's own usual; AmbientMemory v4 adds voices.pitch.
+  Pauses / pace / loudness / overlap / turn gaps already existed (TranscriptCues).
+- Not built: cloud stand-in diagnostic and Tor checks in button 6 (both stopped by the safety filter earlier);
+  Plaid/Stripe (secret keys / a server can't live on the phone); the training dataset (stopped by the safety filter).
+- 1606 JVM tests, 0 failures. RUNTIME-UNPROVEN.
+
 ## 2026-10-17 (session 01UX5qeo) — "build it all": wiring what was built, and the OpenClaw lessons
 Owner: "Fuck the testing, just get straight to building all this." No phone testing; JVM suite before every push.
 - Cloud brain: native tool calling (provider "tools"; a native call comes back as the text-protocol JSON so the loop
