@@ -72,12 +72,17 @@ object ForYou {
         val ai = client(ctx) ?: return unavailable(ctx) ?: "Not available."
         val f = feed(ctx)
         val made = f.generate(System.currentTimeMillis()) { prompt, recent ->
+            // Grounded: the same web research web_search uses (clearnet only here), read first, so the
+            // feed is today's pages with their sources, not the model's memory.
+            val sources = try { WebResearchRun.run(prompt) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
             val reply = ai.complete(listOf(
                 OpenAiClient.ChatMessage("system", "You write a short personal feed. Reply with ONLY a JSON array of up to 5 " +
-                    "objects {\"title\",\"body\",\"category\"}; body at most 3 sentences; category one word. Only what you " +
-                    "actually know; no invented news, dates or numbers — say \"(from model knowledge)\" when it isn't current."),
-                OpenAiClient.ChatMessage("user", "The owner's feed prompt: $prompt\nDon't repeat these titles: ${recent.take(30).joinToString(" | ")}"),
-            ), 900, 0.6).getOrNull().orEmpty()
+                    "objects {\"title\",\"body\",\"category\"}; body at most 3 sentences ending with (source: <domain>); " +
+                    "category one word. Use ONLY the web results given; never invent news, dates or numbers. " +
+                    "No web results → at most 2 items from what you know, each ending with (from model knowledge)."),
+                OpenAiClient.ChatMessage("user", "The owner's feed prompt: $prompt\nDon't repeat these titles: ${recent.take(30).joinToString(" | ")}" +
+                    "\n\nWeb results:\n" + (sources?.take(6000) ?: "(none — the search found nothing)")),
+            ), 900, 0.4).getOrNull().orEmpty()
             val arr = jsonArray(reply) ?: JSONArray()
             (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.mapNotNull { o ->
                 val t = o.optString("title").trim()
