@@ -3,6 +3,25 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-17 (session 01UX5qeo) — "build it all": wiring what was built, and the OpenClaw lessons
+Owner: "Fuck the testing, just get straight to building all this." No phone testing; JVM suite before every push.
+- Cloud brain: native tool calling (provider "tools"; a native call comes back as the text-protocol JSON so the loop
+  is unchanged; a provider that rejects tools falls back to text for the session). ACCESS NOW line: the prompt names
+  what's switched off (a11y, notification access, SMS, contacts) instead of claiming full access. global_action offered.
+- Screen reads (getScreenContentFlat) on a worker thread, not the main thread (OpenClaw pattern).
+- Chat: streamed pieces batched (40 ms); the model's Markdown drawn (ChatMarkdown).
+- Wired Muse's modules: Forget (tool "forget": plan on the confirm card, delete only after the tap); notification
+  filter (Settings, off by default, Muse's 22-7 / 5 per min); Google connectors (Settings → CONNECTORS, Google's
+  Android authorization API — custom-scheme redirects are retired — tool "connector", registry approval on the
+  confirm card); recipient grants (Settings list); artifacts + trash (tools "artifact", "trash"; owner empties trash);
+  helper agents (tool "delegate": up to 4 parallel research children, verified handoffs); For you (✨ screen: Feed to
+  the owner's prompt, Ideas from notes, Proactivity notifications on the scheduler — auto off by default).
+- Fixed: SubagentOrchestrator handed off a run interrupted while finishing (CI race, run 39018923728).
+- NOT wired (deliberately): MemoryClaims/ClaimVerifier/LlmNliHead write path and SkillStore duplicate the existing
+  memory and Recipes; BanditArmState has no feedback surface beyond Ideas; Spotify/Plaid/Stripe need owner accounts.
+- 1600 JVM tests, 0 failures. Everything RUNTIME-UNPROVEN. Google connectors need an Android OAuth client
+  (package com.agent.ultra + the signing key's SHA-1) in the owner's Google Cloud project.
+
 ## 2026-10-17 (session 01UX5qeo) — in-app Tor, Tor Browser VPN check, Tor do/don'ts, two speed fixes
 Owner: "build and push it all". Subsystems: D/net (Tor), A (prompts), D (navigator waits), A (run start).
 - In-app Tor: Guardian Project tor-android 0.4.9.5 (BSD-3, Orbot's Tor library; arm64 libtor 16 KB-aligned;
