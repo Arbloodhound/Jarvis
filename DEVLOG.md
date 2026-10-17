@@ -3,6 +3,14 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-17 (session 01UX5qeo) — handoff update; Muse's decisions locked
+- Owner: "I WANT EVERY DECISION THAT MUSE MADE TO STAY AS IT WAS." Recorded as MUSE_HANDOFF.md §0: everything in
+  HANDOFF_V5_MISSING.md and Muse's six harness base files is locked; conflicts go to the owner, no session decides.
+- Listed (not changed) where shipped code goes beyond Muse: on-device path also code-scrubbed; notifications.log
+  scrubbed; raw taps with no node refused; project email (§6 gmail vs later memory note). Owner to decide.
+- v3.0.41-test published (Release APK run 38999016649, muse/v5-delta-port @ 79a438b). Not tested on the phone.
+- No code changed this session entry.
+
 ## 2026-10-17 (session 01BUKaYm) — harness guards wired into device paths (branch v5-guards)
 Subsystems: D (device control), E (security), F (notification log). Scope: wiring only, no refactors.
 - ScreenGuard.requireScreenBound: AgentAccessibilityService.performTap(x,y) now resolves the deepest live node under the
