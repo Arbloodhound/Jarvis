@@ -46,7 +46,9 @@ object ActionGate {
      * Ask the operator. Returns false if they decline or never answer —
      * an unanswered prompt must never become an approval.
      */
-    suspend fun approve(action: String, label: String, app: String, reason: String): Boolean {
+    suspend fun approve(action: String, label: String, app: String, reason: String,
+                        /** The card's own wording, when it isn't a button press (e.g. "forget"). */
+                        title: String? = null, body: String? = null): Boolean {
         val d = CompletableDeferred<Boolean>()
         waiter = d
         onUi { pending = Pending(action, label, app, reason) }
@@ -61,8 +63,8 @@ object ActionGate {
         val svc = com.agent.ultra.AgentAccessibilityService.getInstance()
         val drawn = try {
             svc?.showGateOverlay(
-                "Jarvis is about to press \u201C$label\u201D",
-                "in $app. This commits something (matched \u201C$reason\u201D). Nothing happens unless you say so.",
+                title ?: "Jarvis is about to press \u201C$label\u201D",
+                body ?: "in $app. This commits something (matched \u201C$reason\u201D). Nothing happens unless you say so.",
                 { resolve(true) }, { resolve(false) },
             ) ?: false
         } catch (e: Exception) { false }

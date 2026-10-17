@@ -940,6 +940,34 @@ fun SettingsScreen(
                 UltraPrefs.setCaptureNotifications(context, it)
             })
         }
+        if (capture) run {
+            var filterOn by remember { mutableStateOf(UltraPrefs.notificationFilter(context)) }
+            val (qs, qe) = remember { UltraPrefs.quietHours(context) }
+            var start by remember { mutableStateOf(qs.toString()) }
+            var end by remember { mutableStateOf(qe.toString()) }
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Notification filter", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Off by default. When on, the log skips notifications during quiet hours and " +
+                            "more than 5 a minute from one app. Scam warnings still fire.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = filterOn, onCheckedChange = { filterOn = it; UltraPrefs.setNotificationFilter(context, it) })
+            }
+            if (filterOn) Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                fun save() {
+                    val a = start.toIntOrNull(); val b = end.toIntOrNull()
+                    if (a != null && b != null) UltraPrefs.setQuietHours(context, a, b)
+                }
+                OutlinedTextField(value = start, onValueChange = { start = it.filter(Char::isDigit).take(2); save() },
+                    label = { Text("Quiet from (hour)") }, modifier = Modifier.weight(1f), singleLine = true)
+                OutlinedTextField(value = end, onValueChange = { end = it.filter(Char::isDigit).take(2); save() },
+                    label = { Text("until (hour)") }, modifier = Modifier.weight(1f), singleLine = true)
+            }
+        }
         OutlinedButton(onClick = {
             scope.launch {
                 withContext(kotlinx.coroutines.Dispatchers.IO) {

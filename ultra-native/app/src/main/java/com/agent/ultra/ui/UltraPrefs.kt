@@ -72,6 +72,30 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OFFLINE_ONLY, on).apply()
     }
 
+    private const val K_NOTIF_FILTER = "notif_filter"
+    private const val K_QUIET_START = "notif_quiet_start"
+    private const val K_QUIET_END = "notif_quiet_end"
+
+    /** Notification filter (harness NotificationForwardingPolicy, Muse/OpenClaw): quiet hours and a
+     * per-app burst limit in front of what Jarvis keeps of notifications. Off by default. The scam
+     * shield and code copying still see every notification. */
+    fun notificationFilter(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_NOTIF_FILTER, false)
+
+    fun setNotificationFilter(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_NOTIF_FILTER, on).apply()
+    }
+
+    /** Quiet hours (local time, 0-23); Muse's defaults 22 → 7. */
+    fun quietHours(context: Context): Pair<Int, Int> = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).let {
+        it.getInt(K_QUIET_START, 22) to it.getInt(K_QUIET_END, 7)
+    }
+
+    fun setQuietHours(context: Context, start: Int, end: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(K_QUIET_START, start.coerceIn(0, 23)).putInt(K_QUIET_END, end.coerceIn(0, 23)).apply()
+    }
+
     private const val K_ONION = "onion_research"
 
     /** Onion research via Tor: .onion links in research are read through Orbot's SOCKS proxy

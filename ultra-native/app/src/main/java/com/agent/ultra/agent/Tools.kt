@@ -294,6 +294,7 @@ class Tools(
                     else webBrowse(task)
                 }
                 "shop_checkout_prep" -> checkoutPrep(params)
+                "forget" -> forget(params.optString("subject"))
                 // Starts Tor (Orbot) for the onion route; never turns onion research on.
                 "tor_connect" -> when {
                     NetPolicy.offlineOnly(context) -> "Offline-only mode is on, so Tor stays off. Nothing was started."
@@ -977,6 +978,29 @@ class Tools(
             append("Completing it is your own action, and any pay/checkout tap asks you first. ")
             append(com.agent.ultra.research.ShoppingCheckout.DIRECTION_QUESTION)
         }
+    }
+
+    /**
+     * "Forget X" (harness Forget, HANDOFF_V5 §3): plan every copy, show the plan on the owner's
+     * confirm card, delete only after their tap, then search again and report. The card's yes is
+     * the only thing that mints the confirmation; the model can't.
+     */
+    private suspend fun forget(subject: String): String {
+        if (subject.isBlank()) return "Error: forget needs a 'subject'"
+        val notes = com.agent.ultra.listen.MemoryNotes.get(context)
+        val f = com.agent.ultra.harness.Forget(listOf(
+            com.agent.ultra.harness.ClaimsForgetSource(com.agent.ultra.data.UltraDatabase.get(context).claimForget()),
+            com.agent.ultra.harness.NotesForgetSource(
+                { q -> withContext(Dispatchers.IO) { notes.list(null, q, 200).map { it.id to it.text } } },
+                { id -> withContext(Dispatchers.IO) { notes.delete(id) } }),
+        ))
+        val plan = f.plan(subject)
+        if (plan.items.isEmpty()) return plan.summary()
+        val ok = ActionGate.approve("forget", subject, "Jarvis", "forget",
+            title = "Forget \u201C${subject.take(60)}\u201D? (${plan.items.size} item${if (plan.items.size == 1) "" else "s"})",
+            body = plan.summary().take(600))
+        if (!ok) return "Nothing was forgotten: the owner didn't confirm.\n" + plan.summary()
+        return f.execute(f.userConfirmed(plan.id)).summary()
     }
 
     companion object {

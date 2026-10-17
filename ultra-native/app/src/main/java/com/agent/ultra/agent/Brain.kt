@@ -2199,6 +2199,11 @@ RECIPES (the user's saved routines — replay a whole sequence by name):
   recipe_save — save the PREVIOUS successful run under a name. params: {name}
   recipe_list — list saved routines
   recipe_delete — delete one. params: {name}
+
+FORGET (privacy):
+  forget {subject} — "forget X": finds every copy in memory and notes, shows the owner the plan
+    on a confirm card, deletes only after they tap yes, then searches again and reports what's
+    gone. Overheard ambient text is a separate store it doesn't search — say so.
 """
     }
 }
