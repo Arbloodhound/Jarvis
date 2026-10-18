@@ -1386,6 +1386,31 @@ private fun PermissionPanel(context: android.content.Context) {
         }
     }
 
+    // With the screen off Android's battery saver can stop the listening service. Exempting the app
+    // keeps "Hey Jarvis" working in a pocket (owner, 2026-10-18: "do things with the screen off").
+    run {
+        val pm = context.getSystemService(android.os.PowerManager::class.java)
+        val exempt = remember(tick) { pm?.isIgnoringBatteryOptimizations(context.packageName) == true }
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Keep working with the screen off", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (exempt) "Allowed. Android won't put Jarvis to sleep with the screen off."
+                    else "Not allowed. Android may stop listening once the screen is off.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+            if (!exempt) TextButton(onClick = {
+                try {
+                    context.startActivity(android.content.Intent(
+                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        android.net.Uri.parse("package:" + context.packageName)))
+                } catch (_: Exception) {}
+            }) { Text("Allow") } else Text("✓", color = MaterialTheme.colorScheme.primary)
+        }
+    }
+
     if (missing.size > 1) {
         Spacer(Modifier.height(4.dp))
         TextButton(onClick = {

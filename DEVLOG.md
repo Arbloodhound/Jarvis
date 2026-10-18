@@ -4692,3 +4692,12 @@ Owner-only: turn off Offline-only and use mobile data or sign in to the Shaw Wi-
 - JVM: 1623 tests, 0 failures. All on-device behaviour is RUNTIME-UNPROVEN.
 
 - Local brain by default: offline-only defaults ON under a new pref key (offline_only_v2), so every install, the owner's included, starts on the on-device model once. Choosing a cloud model in the picker still switches.
+
+## 2026-10-18 — Screen-off use (owner: "do things while the screen is off")
+
+Already true (unchanged): ambient listening is a microphone foreground service with a partial wake lock, so "Hey Jarvis" is heard with the screen off. A LOCKED phone runs only harmless requests (LockedPolicy: flashlight, volume, music, alarms, time, general questions, adding a note); everything private needs an unlock, by design.
+Added:
+- `AgentController.wakeScreenIfUnlocked()`: when the phone is asleep but NOT locked, light the screen (45 s) before launching an app, opening a URL or starting react_navigate. A locked phone stays dark: Android lets no app unlock it.
+- REQUEST_IGNORE_BATTERY_OPTIMIZATIONS plus a Settings row "Keep working with the screen off", so battery saver doesn't stop listening.
+JVM: 1623 tests, 0 failures. Runtime-unproven. Background activity launches with the screen off may still be blocked by Android 17 on some paths.
+Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private tools.

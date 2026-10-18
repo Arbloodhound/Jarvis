@@ -229,6 +229,7 @@ class Tools(
                     else "Error: could not open $url"
                 }
                 "react_navigate" -> {
+                    controller.wakeScreenIfUnlocked()   // asleep but unlocked: light it for the task
                     // Already judged this request wrong; do not go round again.
                     navigator?.stoppedOnDisagreement?.let { return it }
 

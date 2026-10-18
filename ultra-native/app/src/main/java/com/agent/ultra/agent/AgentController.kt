@@ -222,6 +222,23 @@ class AgentController(private val context: Context) {
 
     // ── Apps ────────────────────────────────────────────────────────────
 
+    /** Light the screen for a task that has to drive an app, when the phone is asleep but NOT locked
+     *  (inside the lock-after-sleep grace). A locked phone stays dark: Android lets no app unlock it,
+     *  and nobody else's hands should be driving it. Held 45 s, then released. Returns whether it woke. */
+    @Suppress("DEPRECATION")
+    fun wakeScreenIfUnlocked(): Boolean = try {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (pm.isInteractive || km.isKeyguardLocked) false else {
+            pm.newWakeLock(
+                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "ultra:screenTask",
+            ).acquire(45_000L)
+            android.util.Log.i("UltraNav", "screen woken for an app task")
+            true
+        }
+    } catch (_: Exception) { false }
+
     fun launchApp(packageName: String): Boolean {
         // Launching goes through an Intent, not the accessibility service, so
         // the app policy has to be asked here too. Otherwise "only apps I
@@ -232,6 +249,7 @@ class AgentController(private val context: Context) {
         }
         val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        wakeScreenIfUnlocked()
         context.startActivity(intent)
         return true
     }
@@ -255,6 +273,7 @@ class AgentController(private val context: Context) {
 
     fun openUrl(url: String): Boolean = try {
         val u = if (url.startsWith("http")) url else "https://$url"
+        wakeScreenIfUnlocked()
         context.startActivity(
             Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
