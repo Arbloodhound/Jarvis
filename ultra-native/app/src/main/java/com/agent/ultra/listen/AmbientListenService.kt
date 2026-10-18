@@ -466,7 +466,7 @@ class AmbientListenService : Service() {
         if (com.agent.ultra.local.LocalModelEngine.librarian(applicationContext).busy.value) Librarian.yieldNow()
         val (threads, cpus) = AmbientThrottle.placement(
             plan, com.agent.ultra.local.LocalModelEngine.shared(applicationContext).busy.value,
-            level == com.agent.ultra.agent.ThermalPolicy.Level.NORMAL, llmCpus, whisperCpus)
+            level == com.agent.ultra.agent.ThermalPolicy.Level.NORMAL, llmCpus, whisperCpus, command = windowOpen)
         switchAsrIfWanted()
         val t0 = System.currentTimeMillis()
         val r = WhisperNative.transcribe(

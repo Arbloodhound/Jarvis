@@ -65,6 +65,16 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
     p.suppress_blank   = true;
     p.temperature      = 0.0f;
     p.language         = "en";
+    // Encoder sized to the clip instead of whisper's fixed 30 s window: a 1-2 s command took
+    // ~6-7 s on the fast cores and 28-103 s on the slow ones (Pixel 2026-10-17), nearly all of
+    // it encoding 30 s of padding. 50 encoder frames per second of audio (320 samples), plus
+    // 2.5 s of margin, never under 512 (~10 s): very short contexts make whisper less reliable.
+    {
+        int ctx = (int)(pcm.size() / 320) + 128;
+        if (ctx < 512) ctx = 512;
+        ctx = (ctx + 63) / 64 * 64;
+        if (ctx < 1500) p.audio_ctx = ctx;
+    }
     p.initial_prompt   = prompt;              // wake-name spelling (ambient: + fillers, see WhisperNative)
     if (!c->vadPath.empty()) {
         p.vad            = true;

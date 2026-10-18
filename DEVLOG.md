@@ -4646,3 +4646,21 @@ Owner asked for a full calling tool. Dialing already existed (`call_phone`, 50df
 - JVM: 1620 tests, 0 failures (ToolWiringTest parity holds).
 Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN. Needs one real ringing call on the Pixel after re-granting Phone in Settings.
 Not done: talking to the caller as an AI voice. Android doesn't let a normal app inject audio into a cellular call. That needs a cloud telephony number (e.g. Twilio), which is a separate decision.
+
+## 2026-10-18 — Voice latency fixes from the owner's 2026-10-17 22:40-22:50 DIAG capture
+
+What the logs showed (app 3.0.56):
+- The cloud brain is not in use. OFFLINE-ONLY is on, and the live check failed: the Wi-Fi's captive portal (wifisignon.shaw.ca) intercepts HTTPS. Every answer came from the on-device model.
+- Whisper small.en took about 6-7 s for any short clip on the fast cores, and 28-103 s on the little A520s while an answer was running. 40 utterances were dropped as "backlog full".
+- The first answer after loading Qwen3-4B Thinking got its tier's whole 512-token think budget because the speed was still unknown. At 3.2 tok/s that is 200 s of silence.
+- TTS works: every SPEAK has a SPEAK DONE and there are no errors. But Piper made a 169-char first sentence in one piece before anything was heard. The battery was at 1%.
+
+Fixes:
+- `ultra_whisper.cpp`: `audio_ctx` sized to the clip (50 frames/s + 128, min 512, else the full 1500). The encoder no longer pays for 30 s of padding.
+- `AmbientThrottle.placement(command=)`: speech inside a wake window always gets the fast cores.
+- `WaitBudget`: unknown speed assumes 3 tok/s (`UNKNOWN_TOK_PER_SEC`), capped at the tier budget.
+- `LocalVoice.chunks(firstMax=)` / `Speaker`: the first spoken piece is at most 80 chars.
+
+JVM: 1622 tests, 0 failures. The native change is compiled only in CI.
+Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN. Needs a new DIAG capture. Expected: `whisper ... ms=` well under audioMs on the fast cores.
+Owner-only: turn off Offline-only and use mobile data or sign in to the Shaw Wi-Fi portal. That is what gets near-instant answers from the cloud.

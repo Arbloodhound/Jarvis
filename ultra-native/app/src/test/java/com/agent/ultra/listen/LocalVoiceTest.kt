@@ -90,4 +90,14 @@ class TarExtractTest {
     }
     @Test fun symlinkIsRefused() = assertTrue(refused(archive { link("voice/s", TarConstants.LF_SYMLINK, "/data/data") }))
     @Test fun hardlinkIsRefused() = assertTrue(refused(archive { link("voice/h", TarConstants.LF_LINK, "voice/tokens.txt") }))
+
+    @Test fun longFirstSentenceIsCutShorterAndNothingIsLost() {
+        val first = "This is a long opening sentence, which goes on for quite a while before it finally ends here."
+        val text = "$first Second one."
+        val parts = LocalVoice.chunks(text, firstMax = 40)
+        assertTrue(parts.first().length <= 40)
+        assertEquals(text.split(Regex("\\s+")), parts.joinToString(" ").split(Regex("\\s+")))
+        assertEquals("Second one.", parts.last())
+        assertEquals(LocalVoice.chunks("Short. Two."), LocalVoice.chunks("Short. Two.", firstMax = 40))
+    }
 }

@@ -255,10 +255,19 @@ object LocalVoice {
      * spaces, then anywhere), so the first piece is synthesised and playing while the rest are
      * still being made. No piece is blank. Pure, JVM-tested.
      */
-    fun chunks(text: String, max: Int = 200): List<String> {
+    fun chunks(text: String, max: Int = 200, firstMax: Int = max): List<String> {
         val out = mutableListOf<String>()
         val limit = max.coerceAtLeast(1)
         for (sentence in text.split(Regex("(?<=[.!?;:…])\\s+"))) split(sentence.trim(), limit, out)
+        // A long first sentence is cut shorter: nothing is heard until the first piece is made.
+        val first = out.firstOrNull() ?: return out
+        if (firstMax in 1 until first.length) {
+            val head = mutableListOf<String>()
+            split(first, firstMax, head)
+            out.removeAt(0)
+            out.add(0, head.first())
+            if (head.size > 1) out.add(1, head.drop(1).joinToString(" "))
+        }
         return out
     }
 

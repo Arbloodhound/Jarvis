@@ -43,9 +43,14 @@ object AmbientThrottle {
      * ([whisperCpus], the two A520s on the Tensor G5) with the [plan]'s threads, so it never
      * slows an answer. On the old build the Pixel logged "backlog full: dropped" while listening
      * only ran on the little cores (2026-10-06 19:38). No LLM cores known = unchanged.
+     *
+     * [command]: speech inside a wake window ("Hey Jarvis, …") always takes the fast cores. On the
+     * little ones a 1-3 s command took 28-103 s to transcribe while an answer was running
+     * (Pixel 2026-10-17 22:42-22:47); the running answer loses a few seconds instead.
      */
-    fun placement(plan: Decision, brainBusy: Boolean, cool: Boolean, llmCpus: IntArray, whisperCpus: IntArray): Pair<Int, IntArray> =
-        if (!brainBusy && cool && llmCpus.isNotEmpty())
+    fun placement(plan: Decision, brainBusy: Boolean, cool: Boolean, llmCpus: IntArray, whisperCpus: IntArray,
+                  command: Boolean = false): Pair<Int, IntArray> =
+        if (llmCpus.isNotEmpty() && (command || (!brainBusy && cool)))
             minOf(IDLE_FAST_THREADS, llmCpus.size) to llmCpus
         else plan.threads to whisperCpus
 }
