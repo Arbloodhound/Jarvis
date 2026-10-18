@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
                         onOpenGuide = { guideFrom = "chat"; screen = "guide" },
                         onOpenInsights = { screen = "insights" },
                         onOpenForYou = { screen = "foryou" },
+                        onModelChanged = { configVersion++ },
                     )
                     "foryou" -> com.agent.ultra.ui.ForYouScreen(onBack = { screen = "chat" })
                     "insights" -> com.agent.ultra.ui.InsightsScreen(onBack = { screen = "chat" })

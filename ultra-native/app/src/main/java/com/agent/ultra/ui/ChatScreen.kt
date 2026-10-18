@@ -52,6 +52,7 @@ fun ChatScreen(
     onOpenGuide: () -> Unit = {},
     onOpenInsights: () -> Unit = {},
     onOpenForYou: () -> Unit = {},
+    onModelChanged: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -295,17 +296,24 @@ fun ChatScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            var showModelPicker by remember { mutableStateOf(false) }
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.clickable { showModelPicker = true },
             ) {
                 Text(
-                    brain.modelLabel,
+                    "${brain.modelLabel} ▾",
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     maxLines = 1,
                 )
             }
+            if (showModelPicker) ModelPicker(
+                localEngine = localEngine,
+                onChanged = onModelChanged,
+                onDismiss = { showModelPicker = false },
+            )
             TextButton(enabled = !thinking, onClick = {
                 torchOn = !torchOn
                 val cmd = if (torchOn) "turn on the flashlight" else "turn off the flashlight"
