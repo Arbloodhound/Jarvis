@@ -4625,3 +4625,13 @@ byte-identical to the build; the app launches, no crash in the crash buffer.
 - ChatScreen: chip is clickable and opens the picker; new onModelChanged param wired from MainActivity (configVersion++).
 - PROCEED_GUIDE.md at repo root: install APK, fix the Claude key (401), use the picker, grant permissions, run the DIAG capture, owner account items, and full Obtainium setup for the private repo (fine-grained PAT, include-prereleases, jarvis-release.apk filter).
 - Full suite green. Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN until a tap on the phone.
+
+## 2026-10-18 — Phone calls (call_phone tool)
+- New `call_phone` tool so the agent can place a real call. Mirrors the proven `sms_send` path end to end, no new mechanism:
+  - AgentController.placeCall(number): Intent.ACTION_CALL on `tel:` + NEW_TASK; returns Boolean like sendSms. CALL_PHONE was already in AndroidManifest.
+  - Tools.kt dispatch "call_phone" (Communication section): needs `to` (falls back to `number`); contacts-first for a name. Added to DESTRUCTIVE and PERSONAL_TOOLS.
+  - Gate manifest (assets/ultra.manifest.json): call_phone = {effects:[egress], requires:[recipient_traceable(to), spoof_check]}. Same contracts as sms_send minus the message rule. ToolWiringTest proves dispatch⇄manifest parity.
+  - Brain: catalog line under COMMUNICATION ("DIALS IMMEDIATELY") + describeAction confirm-line ("Call X").
+  - Settings: new "Phone" capability to grant CALL_PHONE from the app. CloudBrainReport NEEDS map ("Phone call"→call_phone). Experience comms family includes call_phone.
+- Safety: call_phone is EGRESS (risk 40+), above AUTO_APPROVE_THRESHOLD (15). recipient_traceable is a CONFIRMABLE rule, so "call mom" (number resolved via contacts_read, not literally in the request) surfaces an "About to: Call mom" confirmation card instead of firing silently; a number the user actually spoke can auto-approve. Same gate behaviour as sms_send.
+- Full suite green (ToolWiringTest + CloudBrainReportTest verified). Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN — needs one call on the phone (grant Phone permission, say "call <contact>", confirm the card, hear it dial).
