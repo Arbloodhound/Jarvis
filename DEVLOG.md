@@ -4584,3 +4584,15 @@ byte-identical to the build; the app launches, no crash in the crash buffer.
 - ChatScreen.kt mic: live words now fill the box as you talk (onPartial, preserving any text typed before the mic via preVoice; restored on error). The mic button is now 🎙 → "■ stop"; tapping while listening calls finish() (stop now, use what was said) instead of discarding.
 - Scope: neutral UX only. Owner confirmed not to build the onion/crypto/stand-in/classifier-evasion items; those are not being worked on.
 - Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN (own-Whisper path has no partials; only the platform recognizer streams live words) — needs a phone check.
+
+## 2026-10-18 — Memory: wired the verified claim store + Muse bank categories
+- Finding: MemoryClaims.writeVerified (two-lens ClaimVerifier + LlmNliHead NLI gate, supersede, decay, embeddings) had NO producer and NO reader — the whole Muse-grade claim memory was built but dormant; live memory was the flat ambient-notes path only.
+- Producer: the librarian now promotes durable new notes to verified claims. LibrarianRun.file() returns the newly-inserted durable drafts (Filed.promoted); LibrarianRun.run() takes a suspend `promote` sink (default no-op) and calls it per promoted draft, cancellation-safe, failures logged (never breaks note filing). Librarian.passes() builds the sink once: MemoryClaims(db.claims()) + LlmNliHead(LocalModelEngine.librarian) + SentenceEmbedder.shared + db.embeddings(), and calls writeVerified(text, kind, speaker=who, emb, modelName=MiniLM). Only the main pass promotes (not reread).
+- Mapper: listen/ClaimKind.kt (pure, tested) — FACT→"fact", PERSON→"world"; PLAN/TODO/OBSERVATION/SUMMARY not promoted. file() stays pure; the side-effecting write lives in the suspend layer.
+- Reader: UltraApplication.wireMemory registers a second recall source "memory" over MemoryClaims.searchScored (active() only, so a superseded claim never surfaces beside its replacement), on the same scoring scale as notes/heard.
+- Categories: MemoryClaimScoring.KINDS extended with Muse's four — experience, opinion, reflection, world (kept alongside fact/preference/…). Available to the claim system now; the librarian currently emits fact/world (the note kinds it has); experience/opinion/reflection are available for chat-driven/future producers.
+- No DB migration (ClaimEntity + MemoryEmbeddingEntity + BanditArmEntity already registered in UltraDatabase).
+- Tests: listen/ClaimKindTest (mapping + the four categories present). Full suite green.
+- Not a parallel path: one producer (librarian), one reader (recall); notes = raw dated log, claims = verified durable layer on top.
+- Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN — NLI label quality on-device and end-to-end supersede unproven until a phone check (speak a fact then a contradicting correction; ask recall).
+- Deliberately not touched: the dormant BanditArmState ranking (next), KV-cache prefix reuse (next batch), cloud onion/crypto/stand-in/evasion (owner-excluded).

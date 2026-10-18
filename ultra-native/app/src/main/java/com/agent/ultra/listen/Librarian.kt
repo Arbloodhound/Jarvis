@@ -110,6 +110,8 @@ object LibrarianRun {
         patterns: Boolean = true,
         readings: Boolean = true,
         minAgeMs: Long = MIN_AGE_MS,
+        /** Promote a newly-filed durable note to a verified claim (default: no-op). */
+        promote: suspend (NoteDraft) -> Unit = {},
     ): Result {
         val fetched = source.unprocessed(MAX_ROWS + 1)   // one extra: is there more after this batch?
         val rows = fetched.take(MAX_ROWS)
@@ -186,17 +188,25 @@ object LibrarianRun {
             }
             observations += drafts.count { it.obs != null }
             withReading += drafts.count { it.obs?.reading != null }
-            val (a, m) = file(drafts, chunk, store, zone, now())
-            added += a; merged += m
+            val filed = file(drafts, chunk, store, zone, now())
+            added += filed.added; merged += filed.merged
+            for (d in filed.promoted) {
+                currentCoroutineContext().ensureActive()
+                try { promote(d) } catch (e: CancellationException) { throw e } catch (e: Exception) { log("promote failed: ${e.message}") }
+            }
             source.markProcessed(last, lastTs); done++
         }
         val more = stop == Stop.CAP || (stop == Stop.DONE && fetched.size > MAX_ROWS && ready.size == rows.size)
         return Result(done, added, merged, rejected, skipped, stop, more, observations, withReading)
     }
 
-    /** Files [drafts] from [chunk]: new notes inserted, duplicates merged. Returns (added, merged). */
-    fun file(drafts: List<NoteDraft>, chunk: List<HeardLine>, store: NoteStore, zone: ZoneId, now: Long): Pair<Int, Int> {
+    /** What [file] did: counts, plus the newly-inserted drafts that should promote to claims. */
+    data class Filed(val added: Int, val merged: Int, val promoted: List<NoteDraft>)
+
+    /** Files [drafts] from [chunk]: new notes inserted, duplicates merged. */
+    fun file(drafts: List<NoteDraft>, chunk: List<HeardLine>, store: NoteStore, zone: ZoneId, now: Long): Filed {
         var added = 0; var merged = 0
+        val promoted = ArrayList<NoteDraft>()
         val ids = chunk.map { it.id }
         for (d in drafts) {
             if (d.obs != null) {
@@ -227,9 +237,9 @@ object LibrarianRun {
             )
             val dup = NoteMerge.findDuplicate(fresh, store.candidates(d.kind, d.text, CANDIDATES))
             if (dup != null) { store.update(NoteMerge.merge(dup, fresh, now)); merged++ }
-            else { store.insert(fresh); added++ }
+            else { store.insert(fresh); added++; if (ClaimKind.promotes(d.kind)) promoted += d }
         }
-        return added to merged
+        return Filed(added, merged, promoted)
     }
 }
 
@@ -420,8 +430,25 @@ object Librarian {
         LibrarianPrompt.ownerName = com.agent.ultra.ui.UltraPrefs.ownerName(ctx)
         val log: (String) -> Unit = { android.util.Log.w(TAG, it) }
         val start = System.currentTimeMillis()
+        // Promote durable new notes (facts, people) to verified claims — the two-lens verifier + NLI
+        // gate runs inside writeVerified, so a contradiction supersedes instead of piling up. Built
+        // once per pass; a failure here never breaks note filing (the caller catches it).
+        val db = com.agent.ultra.data.UltraDatabase.get(ctx)
+        val claims = com.agent.ultra.harness.MemoryClaims(db.claims())
+        val embDao = db.embeddings()
+        val embedder = SentenceEmbedder.shared(ctx)
+        val nli = com.agent.ultra.harness.LlmNliHead(com.agent.ultra.local.LocalModelEngine.librarian(ctx))
+        val promote: suspend (NoteDraft) -> Unit = promote@{ d ->
+            val kind = ClaimKind.of(d.kind) ?: return@promote
+            val emb = embedder?.let { runCatching { it.embed(d.text) }.getOrNull() } ?: FloatArray(0)
+            claims.writeVerified(
+                text = d.text, kind = kind, speaker = d.who ?: "Me", sourceMessage = d.text,
+                nli = nli, embeddings = embDao, embedding = emb, modelName = SentenceEmbedder.MODEL,
+                quote = d.text,
+            )
+        }
         val main = LibrarianRun.run(source, store, m, zone, now = System::currentTimeMillis, keepGoing = keepGoing,
-            failures = failures, log = log, patterns = patterns, readings = readings, minAgeMs = minAgeMs)
+            failures = failures, log = log, patterns = patterns, readings = readings, minAgeMs = minAgeMs, promote = promote)
         val links = if (keepGoing()) LibrarianLinks.run(store, m, zone, since = start, now = System::currentTimeMillis,
             keepGoing = keepGoing, log = log) else LibrarianLinks.Result(0, 0, 0)
         val reread = if (!main.more && main.chunks == 0 && keepGoing()) {

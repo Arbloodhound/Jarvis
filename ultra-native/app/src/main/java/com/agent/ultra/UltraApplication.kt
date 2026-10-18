@@ -44,6 +44,13 @@ class UltraApplication : Application() {
             com.agent.ultra.listen.MemoryRecall.textSource("notes") { q, n ->
                 com.agent.ultra.listen.MemoryNotes.get(ctx).search(q, n).map { it.ts to it.text }
             }
+        // Verified durable memory (the claim store: facts/people promoted through the verify + NLI
+        // gate). active() only, so a superseded claim never resurfaces next to its replacement.
+        com.agent.ultra.listen.MemoryRecall.extraSources +=
+            com.agent.ultra.listen.MemoryRecall.textSource("memory") { q, n ->
+                com.agent.ultra.harness.MemoryClaims(com.agent.ultra.data.UltraDatabase.get(ctx).claims())
+                    .searchScored(q).take(n).map { (c, _) -> c.reinforcedAt to c.text }
+            }
         com.agent.ultra.agent.MemoryBrief.provider = { q, now ->
             val r = com.agent.ultra.listen.MemoryRecall
             r.brief(r.relevant(ctx, q, now)).substringAfter('\n', "").ifBlank { null }

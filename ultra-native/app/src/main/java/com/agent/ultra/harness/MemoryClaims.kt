@@ -77,8 +77,11 @@ object MemoryClaimScoring {
     const val TEXT_WEIGHT = 0.7
     const val PRIOR_WEIGHT = 0.3
 
+    // The last four are Muse's memory-bank categories (experience / opinion / reflection / world),
+    // folded onto the existing kind dimension so claims reuse all the verify/decay/recall machinery.
     val KINDS = setOf("preference", "fact", "finding", "request",
-        "completion", "correction", "observation")
+        "completion", "correction", "observation",
+        "experience", "opinion", "reflection", "world")
 
     /** 1.0 for evergreen or fresh; halves every HALF_LIFE_DAYS. */
     fun temporalFactor(c: ClaimEntity, nowMs: Long = System.currentTimeMillis()): Double {
