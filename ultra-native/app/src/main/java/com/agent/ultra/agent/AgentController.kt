@@ -378,6 +378,17 @@ class AgentController(private val context: Context) {
         true
     } catch (_: Exception) { false }
 
+    /** Place a real phone call to [number]. ACTION_CALL dials immediately (needs the CALL_PHONE
+     *  runtime permission — a SecurityException if it is off). NEW_TASK: started from a non-activity
+     *  context. The gate confirms the call and checks the number is traceable before this runs. */
+    fun placeCall(number: String): Boolean = try {
+        val intent = android.content.Intent(
+            android.content.Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(number)))
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+        true
+    } catch (_: Exception) { false }
+
     fun readSms(limit: Int): String = try {
         val cursor = context.contentResolver.query(
             Uri.parse("content://sms/inbox"),

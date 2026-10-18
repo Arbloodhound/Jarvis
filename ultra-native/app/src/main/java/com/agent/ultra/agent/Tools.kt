@@ -360,6 +360,17 @@ class Tools(
                 }
                 "sms_read" -> controller.readSms(params.optInt("limit", 10))
                 "contacts_read" -> controller.readContacts(params.optString("name"))
+                "call_phone" -> {
+                    val number = params.optString("to").ifBlank { params.optString("number") }.trim()
+                    when {
+                        number.isBlank() ->
+                            "Error: call_phone needs a 'to' phone number — ask the user or use contacts_read first"
+                        controller.placeCall(number) -> "Calling $number"
+                        // Most likely the Phone permission is off; otherwise the number is unusable.
+                        else -> "Error: call failed — the Phone (CALL_PHONE) permission may be off " +
+                            "(the user grants it in Settings), or '$number' is not a dialable number"
+                    }
+                }
 
                 // ── Location / clipboard / media / alarms / notes ────
                 "device_location" -> controller.lastKnownLocation()
@@ -1136,10 +1147,10 @@ class Tools(
 
     companion object {
         /** Tools that mutate the outside world — confirmation gate targets. */
-        val DESTRUCTIVE = setOf("sms_send", "file_delete")
+        val DESTRUCTIVE = setOf("sms_send", "file_delete", "call_phone")
 
         /** Reach personal data directly, bypassing the app-access list. */
-        val PERSONAL_TOOLS = setOf("sms_send", "sms_read", "contacts_read", "device_location")
+        val PERSONAL_TOOLS = setOf("sms_send", "sms_read", "contacts_read", "device_location", "call_phone")
 
         /** Perception budgets. Characters, not node counts — a node count
          * punishes a page for having short labels. */

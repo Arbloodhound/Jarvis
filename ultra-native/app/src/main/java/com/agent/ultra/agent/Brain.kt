@@ -1809,6 +1809,7 @@ JSON:"""
 
     private fun describeAction(tool: String, params: JSONObject): String = when (tool) {
         "sms_send" -> "Send a text to ${params.optString("to").ifBlank { "unknown" }}: \"${params.optString("message")}\""
+        "call_phone" -> "Call ${params.optString("to").ifBlank { params.optString("number").ifBlank { "a number" } }}"
         "file_delete" -> "Delete file: ${params.optString("filename").ifBlank { params.optString("path") }}"
         "shop_checkout_prep" -> "Prepare (not place) an order: ${params.optString("title").ifBlank { "an item" }}" +
             params.optString("seller").let { if (it.isBlank()) "" else " from $it" }
@@ -2187,6 +2188,7 @@ SETTINGS (opens the page directly — far more reliable than tapping through Set
 
 COMMUNICATION:
   sms_send — send SMS. params: {to: a PHONE NUMBER, message}. Given a name ("text mom"), call contacts_read first.
+  call_phone — place a phone call. params: {to: a PHONE NUMBER}. Given a name ("call mom"), call contacts_read first. This DIALS IMMEDIATELY.
   sms_read — read inbox. params: {limit?}
   contacts_read — search contacts. params: {name?}
 

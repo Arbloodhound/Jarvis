@@ -1307,6 +1307,8 @@ private val CAPABILITIES = listOf(
         listOf(android.Manifest.permission.CAMERA)),
     Capability("Texts", "Reading and sending SMS.",
         listOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.SEND_SMS)),
+    Capability("Phone", "Placing a call when you ask it to.",
+        listOf(android.Manifest.permission.CALL_PHONE)),
     Capability("Contacts", "Looking someone up by name.",
         listOf(android.Manifest.permission.READ_CONTACTS)),
     Capability("Calendar", "Reading and adding events.",

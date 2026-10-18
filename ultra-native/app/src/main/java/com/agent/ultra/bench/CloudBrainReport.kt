@@ -57,6 +57,7 @@ object CloudBrainReport {
         "Notification access" to listOf("notification_read"),
         "SMS read" to listOf("sms_read"),
         "SMS send" to listOf("sms_send"),
+        "Phone call" to listOf("call_phone"),
         "Contacts" to listOf("contacts_read"),
         "Location" to listOf("device_location"),
     )

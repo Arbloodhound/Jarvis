@@ -270,6 +270,21 @@
       ]
     },
     {
+      "name": "call_phone",
+      "effects": [
+        "egress"
+      ],
+      "requires": [
+        {
+          "kind": "recipient_traceable",
+          "arg": "to"
+        },
+        {
+          "kind": "spoof_check"
+        }
+      ]
+    },
+    {
       "name": "sms_read",
       "effects": [
         "read"

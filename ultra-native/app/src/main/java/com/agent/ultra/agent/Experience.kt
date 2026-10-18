@@ -70,7 +70,7 @@ object Experience {
     private val FAMILIES = listOf(
         setOf("app_launch", "react_navigate", "open_url"),
         setOf("read_text_on_screen", "read_screen_deep", "describe_screen", "screen_ocr", "look_at_screen", "screenshot"),
-        setOf("sms_send", "contacts_read"),
+        setOf("sms_send", "call_phone", "contacts_read"),
         // Ways to get information off the web: a plain search, a shopping run, an autonomous browse.
         setOf("web_search", "shop_search", "web_browse"),
     )
