@@ -4701,3 +4701,5 @@ Added:
 - REQUEST_IGNORE_BATTERY_OPTIMIZATIONS plus a Settings row "Keep working with the screen off", so battery saver doesn't stop listening.
 JVM: 1623 tests, 0 failures. Runtime-unproven. Background activity launches with the screen off may still be blocked by Android 17 on some paths.
 Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private tools.
+
+- Default thinker restored to the abliterated Qwen3-4B Thinking (owner, 2026-10-18: "hit the abliterated back as the default"). The LFM default was reverted; the two LFM2.5 models stay as opt-in picker entries (stock, refusals on). Local-first (offline-only default on) stays.

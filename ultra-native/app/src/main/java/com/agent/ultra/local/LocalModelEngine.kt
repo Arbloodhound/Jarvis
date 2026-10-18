@@ -1095,7 +1095,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 "Reasoning model small enough to stay fully in memory with room to spare, on the phone CPU's fast path. Strong maths/reasoning for its size and good at tool calls.",
             ),
             ModelChoice(
-                "Qwen3-4B Thinking 2507 ABLITERATED (Q4_K_M) — strongest reasoning",
+                "Qwen3-4B Thinking 2507 ABLITERATED (Q4_K_M) — default",
                 "https://huggingface.co/mradermacher/Huihui-Qwen3-4B-Thinking-2507-abliterated-GGUF/resolve/main/Huihui-Qwen3-4B-Thinking-2507-abliterated.Q4_K_M.gguf",
                 "qwen3-4b-thinking-2507-abliterated-q4km.gguf", 2382,
                 "The same 4B with refusals removed (Q4_K_M, also on the fast path, speed boost included). The default since 2026-10-07 (owner's choice).",
@@ -1222,7 +1222,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             // architectures are in the pinned llama.cpp (8345f33). Not thinking models: they answer
             // without a hidden trace. Speed and tool-call quality on the Pixel are unmeasured.
             ModelChoice(
-                "LFM2.5 2.6B (Q4_0) — default, fast, answers without thinking",
+                "LFM2.5 2.6B (Q4_0) — fast, answers without thinking (refusals on)",
                 "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q4_0.gguf",
                 "lfm25-2.6b-q4_0.gguf", 1520,
                 "Liquid AI's on-device model: a hybrid design built to run fast on phone CPUs. No hidden thinking, so the reply starts almost at once.",
@@ -1351,12 +1351,6 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
          *  selectable, and kept by an install that already has it on disk ([defaultFor]). */
         val BIG_DEFAULT = PRESETS.first { it.fileName == "qwen3-8b-q4ks.gguf" }
 
-        /** The thinker's default since 2026-10-18 (owner: "if these models are just better, use them
-         *  as a default"): LFM2.5 2.6B. No hidden thinking, so the reply starts at once; the 4B
-         *  Thinking spent up to 200 s silent on the Pixel (2026-10-17 log). Speed and tool-call
-         *  quality on the phone are unmeasured. */
-        val LFM_DEFAULT = PRESETS.first { it.fileName == "lfm25-2.6b-q4_0.gguf" }
-
         /** The librarian's model until the user chooses one: Qwen3 1.7B Q4_0. */
         val LIBRARIAN_DEFAULT = PRESETS.first { it.fileName == "qwen3-1.7b-q4_0.gguf" }
 
@@ -1383,9 +1377,9 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
          */
         fun defaultFor(totalRamBytes: Long, downloaded: Set<String> = emptySet()): ModelChoice {
             // Not the MoE any more: on the 16 GB Pixel it can't stay in memory (see PRESETS).
-            val byRam = if (totalRamBytes > 0 && fitFor(LFM_DEFAULT, totalRamBytes) != Fit.TOO_BIG) LFM_DEFAULT else DEFAULT
+            val byRam = if (totalRamBytes > 0 && fitFor(FAST_DEFAULT, totalRamBytes) != Fit.TOO_BIG) FAST_DEFAULT else DEFAULT
             if (byRam.fileName in downloaded) return byRam
-            val earlier = listOf(FAST_DEFAULT, STOCK_4B, BIG_DEFAULT, DEFAULT).filter {
+            val earlier = listOf(STOCK_4B, BIG_DEFAULT, DEFAULT).filter {
                 it == DEFAULT || (totalRamBytes > 0 && fitFor(it, totalRamBytes) != Fit.TOO_BIG)
             }
             return earlier.firstOrNull { it.fileName in downloaded } ?: byRam
@@ -1395,8 +1389,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
          *  Pure, JVM-tested (DefaultModelTest). */
         fun fasterThinkerHint(currentFileName: String): String? = when (currentFileName) {
             BIG_DEFAULT.fileName -> "4B-Thinking is faster and scores higher on reasoning benchmarks."
-            STOCK_4B.fileName, FAST_DEFAULT.fileName ->
-                "The default is now LFM2.5 2.6B: no hidden thinking, so replies start at once. Pick it to switch."
+            STOCK_4B.fileName -> "The default is now the abliterated 4B (same model, refusals removed): pick it below to switch."
             else -> null
         }
     }

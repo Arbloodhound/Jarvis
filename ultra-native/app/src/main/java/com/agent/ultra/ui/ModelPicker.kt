@@ -46,7 +46,7 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
     val currentLocal = remember { localEngine.modelFileName }
     // The recommended on-device brain, offered even before it is downloaded.
     val recommended = remember {
-        LocalModelEngine.LFM_DEFAULT.takeIf { it.fileName !in downloaded && localEngine.role == LocalModelEngine.Role.THINKER }
+        LocalModelEngine.FAST_DEFAULT.takeIf { it.fileName !in downloaded && localEngine.role == LocalModelEngine.Role.THINKER }
     }
     val cloudIds = remember {
         (listOf("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5") + cfg.model)
