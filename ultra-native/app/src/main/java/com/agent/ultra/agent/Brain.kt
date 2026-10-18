@@ -139,6 +139,8 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         }
     }
 
+    private val THOUGHT_MAX_CHARS = 16_000
+
     /**
      * The live preview of the hidden thinking for a typed request: the "Thinking…" line under the
      * chat shows its latest words (owner: "a preview of what it's thinking when I text it").
@@ -150,13 +152,15 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         var last = 0L
         return { piece ->
             sb.append(piece)
-            if (sb.length > 600) sb.delete(0, sb.length - 300)
+            // The whole trace (owner, 2026-10-18: "all its thoughts, like DeepSeek"), up to a cap
+            // that keeps a runaway trace from growing the status without bound.
+            if (sb.length > THOUGHT_MAX_CHARS) sb.delete(0, sb.length - THOUGHT_MAX_CHARS)
             val now = System.currentTimeMillis()
             val cur = current()
             if (cur == null || now - last < 300) null else {
                 last = now
-                // A longer tail than the one-line view needs, so the chat can expand the reasoning.
-                val tail = sb.toString().replace(Regex("\\s+"), " ").trim().takeLast(300)
+                // Everything so far: the chat shows the last lines collapsed and all of it expanded.
+                val tail = sb.toString().replace(Regex("[ \\t]+"), " ").trim()
                 ChatStore.setStatus(ChatStatus.Phase.THINKING, "💭 …$tail").also { ChatStore.clearStatus(cur) }
             }
         }
@@ -220,7 +224,10 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
 
     /** What the model chip shows: the cloud model, or the on-device one. */
     // Was hard-coded to "Gemma 3 1B" whatever model was selected (seen on the Pixel with the MoE in use).
-    val modelLabel: String get() = client?.modelName ?: "${local.modelLabel.substringBefore(" — ")} (on-device)"
+    // The cloud name only while the cloud is actually used: with Offline-only on, the chip showed
+    // "claude-opus-5-5" though every answer came from the phone (owner, 2026-10-18).
+    val modelLabel: String get() = client?.takeIf { NetPolicy.cloudAllowed(NetPolicy.offlineOnly(appContext), true) }?.modelName
+        ?: "${local.modelLabel.substringBefore(" — ")} (on-device)"
 
     /** Non-null while a confirmable policy-gate block waits on the operator.
      * The chat UI renders a confirm/cancel card from this. */

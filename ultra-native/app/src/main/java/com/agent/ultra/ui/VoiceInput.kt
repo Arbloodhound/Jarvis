@@ -26,7 +26,7 @@ class VoiceInput(
     private val onResult: (String) -> Unit,
 ) {
     private var recognizer: SpeechRecognizer? = null
-    private val own by lazy { com.agent.ultra.listen.LocalSpeech(context, onState, onError, onResult) }
+    private val own by lazy { com.agent.ultra.listen.LocalSpeech(context, onState, onError, onPartial, onResult) }
 
     fun start(): Boolean {
         // Jarvis's own whisper when the user prefers it (default: no Google), or when the phone has
@@ -100,7 +100,7 @@ class VoiceInput(
      * its final onResults (unlike [stop], which throws the utterance away). The mic's "stop" button.
      */
     fun finish() {
-        own.stop()
+        own.finish()
         try { recognizer?.stopListening() } catch (_: Exception) {}
     }
 

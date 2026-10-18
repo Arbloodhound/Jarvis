@@ -11,19 +11,20 @@ class DefaultModelTest {
     private val fast = "qwen3-4b-thinking-2507-abliterated-q4km.gguf"
     private val stock = "qwen3-4b-thinking-2507-q4_0.gguf"
     private val gemma = "gemma3-1b-q4km.gguf"
+    private val lfm = "lfm25-2.6b-q4_0.gguf"
 
     // Range of totalMem a "16 GB" phone actually reports (same as ModelFitTest).
     @Test fun sixteenGbGetsFast4bThinking() =
         listOf(15_000_000_000L, 16_000_000_000L, 17_179_869_184L).forEach {
-            assertEquals(fast, LocalModelEngine.defaultFor(it).fileName)
+            assertEquals(lfm, LocalModelEngine.defaultFor(it).fileName)
         }
 
     /** The owner's Pixel 10 Pro XL: 15,081 MiB total. */
     @Test fun pixel10ProXlGetsFast4bThinking() =
-        assertEquals(fast, LocalModelEngine.defaultFor(15_081L * 1_048_576).fileName)
+        assertEquals(lfm, LocalModelEngine.defaultFor(15_081L * 1_048_576).fileName)
 
-    @Test fun twelveGbGetsFast4b() = assertEquals(fast, LocalModelEngine.defaultFor(12_000_000_000L).fileName)
-    @Test fun eightGbGetsFast4b() = assertEquals(fast, LocalModelEngine.defaultFor(8_000_000_000L).fileName)
+    @Test fun twelveGbGetsFast4b() = assertEquals(lfm, LocalModelEngine.defaultFor(12_000_000_000L).fileName)
+    @Test fun eightGbGetsFast4b() = assertEquals(lfm, LocalModelEngine.defaultFor(8_000_000_000L).fileName)
     @Test fun fourGbGetsGemma() = assertEquals(gemma, LocalModelEngine.defaultFor(4_000_000_000L).fileName)
 
     @Test fun unknownRamGetsGemma() {
@@ -59,16 +60,20 @@ class DefaultModelTest {
 
     /** The 8B is TOO_BIG on 8 GB: a stray file there doesn't become the default. */
     @Test fun eightGbIgnoresBigOnDisk() =
-        assertEquals(fast, LocalModelEngine.defaultFor(8_000_000_000L, setOf(big)).fileName)
+        assertEquals(lfm, LocalModelEngine.defaultFor(8_000_000_000L, setOf(big)).fileName)
 
     @Test fun sixteenGbWithOtherFilesOnDiskGetsFast() =
-        assertEquals(fast, LocalModelEngine.defaultFor(16_000_000_000L, setOf("qwen25-7b-q4km.gguf")).fileName)
+        assertEquals(lfm, LocalModelEngine.defaultFor(16_000_000_000L, setOf("qwen25-7b-q4km.gguf")).fileName)
 
     @Test fun twelveGbWithOnlyGemmaOnDiskStaysOnGemma() =
         assertEquals(gemma, LocalModelEngine.defaultFor(12_000_000_000L, setOf(gemma)).fileName)
 
     @Test fun twelveGbWithFastOnDiskGetsFast() =
         assertEquals(fast, LocalModelEngine.defaultFor(12_000_000_000L, setOf(gemma, fast)).fileName)
+
+    /** Once the LFM default is on disk it wins over a downloaded 4B. */
+    @Test fun lfmOnDiskWinsOverThe4b() =
+        assertEquals(lfm, LocalModelEngine.defaultFor(16_000_000_000L, setOf(fast, lfm)).fileName)
 
     @Test fun defaultIsNeverDesktopOnly() =
         listOf(0L, 4_000_000_000L, 16_000_000_000L, 64_000_000_000L).forEach {
@@ -77,7 +82,8 @@ class DefaultModelTest {
 
     @Test fun hintOnlyForThe8b() {
         assertNotNull(LocalModelEngine.fasterThinkerHint(big))
-        assertNull(LocalModelEngine.fasterThinkerHint(fast))
+        assertNotNull(LocalModelEngine.fasterThinkerHint(fast))   // points at the LFM default
+        assertNull(LocalModelEngine.fasterThinkerHint(lfm))
         assertNull(LocalModelEngine.fasterThinkerHint(gemma))
         assertNull(LocalModelEngine.fasterThinkerHint("custom.gguf"))
     }
@@ -88,7 +94,7 @@ class DefaultModelTest {
     @Test fun aDownloadedStock4bIsKeptUntilTheAbliteratedOneIsThere() {
         assertEquals(stock, LocalModelEngine.defaultFor(16_000_000_000L, setOf(stock)).fileName)
         assertEquals(fast, LocalModelEngine.defaultFor(16_000_000_000L, setOf(stock, fast)).fileName)
-        assertEquals("The default is now the abliterated 4B (same model, refusals removed): pick it below to switch.",
+        assertEquals("The default is now LFM2.5 2.6B: no hidden thinking, so replies start at once. Pick it to switch.",
             LocalModelEngine.fasterThinkerHint(stock))
     }
 }

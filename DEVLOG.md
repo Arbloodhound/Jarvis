@@ -4676,3 +4676,17 @@ Owner-only: turn off Offline-only and use mobile data or sign in to the Shaw Wi-
   - MiniCPM-V 4.7 1B and LFM2.5-VL: need newer mtmd support or a different projector path than VisionModel's Qwen2.5-VL.
   - Speech: whisper base.en is already the automatic fallback when small is too slow. A different ASR engine (e.g. sherpa-onnx streaming) is a real integration.
 - Release from 9e8ed4d (voice latency fixes) built green.
+
+## 2026-10-18 — Owner asks: local-first picker, LFM default, mic text, full thinking
+
+- Model chip: shows the cloud model only while the cloud is actually allowed. With Offline-only on, it said "claude-opus-5-5" even though answers came from the phone.
+- Model picker: ON-DEVICE is listed first and CLOUD second. The default LFM2.5 2.6B is offered even before it is downloaded; tapping it selects it and starts the download.
+- Default thinker: `LFM_DEFAULT` = LFM2.5 2.6B Q4_0, at the owner's request ("if these are better, use them as default"). Installs whose saved choice is the 4B keep it, and the picker hint points to LFM. If LFM isn't on disk, a downloaded 4B is still used. Whether LFM is better on the Pixel is unmeasured.
+- Mic with Jarvis's own speech recognition (the default):
+  - "■ stop" used to cancel the job and throw the recording away, so nothing reached the chat. `LocalSpeech.finish()` now transcribes what was heard.
+  - Live words: the recording so far is re-read every 1.5 s, last 15 s at most. "🎙 …" shows as soon as the mic opens.
+  - A command segment is now capped at 12 s, down from 28 s. A noisy floor no longer keeps it open.
+  - The 30 s listen cap now transcribes the audio instead of returning nothing.
+- Thinking: the full trace, up to 16k chars, is kept live. Collapsed shows the latest words; expanded shows every line, with no 12-line cap.
+  - Still not done: the thoughts disappear when the answer arrives. Keeping them under the answer, DeepSeek-style, needs a ChatMessage/Room field.
+- JVM: 1623 tests, 0 failures. All on-device behaviour is RUNTIME-UNPROVEN.

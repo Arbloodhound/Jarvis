@@ -415,11 +415,13 @@ fun ChatScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            // Collapsed: the latest words. Expanded: the whole trace, every line
+                            // (owner, 2026-10-18: "all its thoughts, like DeepSeek").
                             Text(
-                                text = preview,
+                                text = if (expanded) preview else "…" + preview.takeLast(160).replace('\n', ' '),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                maxLines = if (expanded) 12 else 2,
+                                maxLines = if (expanded) Int.MAX_VALUE else 2,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             )
                         }
@@ -591,6 +593,10 @@ fun ChatScreen(
                         listening = false
                         input = preVoice   // put back whatever was typed before the mic
                         android.widget.Toast.makeText(context, "Voice: $msg", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    onState = { st ->
+                        // Something shows the moment the mic is on, before any words are read.
+                        if (st == "listening") input = listOf(preVoice, "🎙 …").filter { it.isNotBlank() }.joinToString(" ")
                     },
                     onPartial = { words ->
                         // Live words appear in the box while you're still talking (like Claude / Gemini).

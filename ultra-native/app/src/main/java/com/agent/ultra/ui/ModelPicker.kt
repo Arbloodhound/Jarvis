@@ -44,6 +44,10 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
     val downloaded = remember { localEngine.downloadedFileNames() }
     val localModels = remember { LocalModelEngine.PRESETS.filter { it.fileName in downloaded } }
     val currentLocal = remember { localEngine.modelFileName }
+    // The recommended on-device brain, offered even before it is downloaded.
+    val recommended = remember {
+        LocalModelEngine.LFM_DEFAULT.takeIf { it.fileName !in downloaded && localEngine.role == LocalModelEngine.Role.THINKER }
+    }
     val cloudIds = remember {
         (listOf("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5") + cfg.model)
             .filter { it.isNotBlank() }.distinct()
@@ -56,6 +60,23 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
         title = { Text("Choose the brain") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("ON-DEVICE", style = MaterialTheme.typography.labelSmall, color = faint)
+                run {
+                    (localModels + listOfNotNull(recommended)).forEach { m ->
+                        Row(selected = offline && currentLocal == m.fileName, label = "${m.label} (on-device)" +
+                            if (m.fileName in downloaded) "" else " — tap to download (${m.approxMb} MB)") {
+                            scope.launch {
+                                localEngine.selectModel(m)
+                                if (m.fileName !in downloaded) com.agent.ultra.local.Downloads.downloadAllMissing(context)
+                                UltraPrefs.setOfflineOnly(context, true)
+                                offline = true
+                                onChanged()
+                                onDismiss()
+                            }
+                        }
+                    }
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 Text("CLOUD", style = MaterialTheme.typography.labelSmall, color = faint)
                 if (!cfg.isUsable) {
                     Text("No API key yet — add one in Settings → AI PROVIDER.",
@@ -73,24 +94,6 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
                 Text("Base URL + key (e.g. Gemini) live in Settings → AI PROVIDER.",
                     style = MaterialTheme.typography.bodySmall, color = faint,
                     modifier = Modifier.padding(top = 4.dp))
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Text("ON-DEVICE", style = MaterialTheme.typography.labelSmall, color = faint)
-                if (localModels.isEmpty()) {
-                    Text("None downloaded — get one in Settings → DOWNLOADS.",
-                        style = MaterialTheme.typography.bodySmall, color = faint)
-                } else {
-                    localModels.forEach { m ->
-                        Row(selected = offline && currentLocal == m.fileName, label = "${m.label} (on-device)") {
-                            scope.launch {
-                                localEngine.selectModel(m)
-                                UltraPrefs.setOfflineOnly(context, true)
-                                offline = true
-                                onChanged()
-                                onDismiss()
-                            }
-                        }
-                    }
-                }
             }
         },
     )
