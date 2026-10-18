@@ -546,31 +546,47 @@ fun ChatScreen(
                 modifier = Modifier.weight(1f),
                 maxLines = 4,
             )
-            // Voice input — on-device speech recognition fills the box
+            // Voice input — on-device speech recognition fills the box, live as you talk
             var listening by remember { mutableStateOf(false) }
+            // What was in the box before the mic started, so live words don't eat typed text.
+            var preVoice by remember { mutableStateOf("") }
             val speechHelper = remember {
                 VoiceInput(
                     context,
                     onError = { msg ->
                         listening = false
+                        input = preVoice   // put back whatever was typed before the mic
                         android.widget.Toast.makeText(context, "Voice: $msg", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    onPartial = { words ->
+                        // Live words appear in the box while you're still talking (like Claude / Gemini).
+                        input = listOf(preVoice, words).filter { it.isNotBlank() }.joinToString(" ")
                     },
                 ) { spoken ->
                     listening = false
                     // Speaking is asking: what was said runs at once, like Send (owner, 2026-10-07: it only
                     // filled the box, so a spoken request did nothing until Send was pressed), and is
                     // answered out loud. Said mid-run, it stops or changes that run (sendNow).
-                    val text = (input + " " + spoken).trim()
-                    if (text.isNotEmpty()) { input = ""; sendNow(text, spoken = true) }
+                    val text = listOf(preVoice, spoken).filter { it.isNotBlank() }.joinToString(" ").trim()
+                    if (text.isNotEmpty()) { input = ""; preVoice = ""; sendNow(text, spoken = true) }
                 }
             }
             DisposableEffect(speechHelper) { onDispose { speechHelper.stop() } }
             val askMic = androidx.activity.compose.rememberLauncherForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-            ) { granted -> if (granted) listening = speechHelper.start() }
+            ) { granted -> if (granted) { preVoice = input; listening = speechHelper.start() } }
+            val startMic = {
+                // Jarvis stops talking when you go to speak (the mic must not hear it), and a run
+                // still answering stays quiet; what you say can then stop or change it.
+                com.agent.ultra.agent.Brain.hushAll()
+                SpeechQueue.stopAll()
+                preVoice = input
+                listening = speechHelper.start()
+            }
             TextButton(onClick = {
                 if (listening) {
-                    speechHelper.stop()
+                    // Stop recording now and use what was heard (not throw it away).
+                    speechHelper.finish()
                     listening = false
                 } else if (androidx.core.content.ContextCompat.checkSelfPermission(
                         context, android.Manifest.permission.RECORD_AUDIO
@@ -578,14 +594,10 @@ fun ChatScreen(
                 ) {
                     askMic.launch(android.Manifest.permission.RECORD_AUDIO)
                 } else {
-                    // Jarvis stops talking when you go to speak (the mic must not hear it), and a run
-                    // still answering stays quiet; what you say can then stop or change it.
-                    com.agent.ultra.agent.Brain.hushAll()
-                    SpeechQueue.stopAll()
-                    listening = speechHelper.start()
+                    startMic()
                 }
             }) {
-                Text(if (listening) "🎙…" else "🎙")
+                Text(if (listening) "■ stop" else "🎙")
             }
             // While anything runs (thinking, answering, driving another app): stop it and any
             // speech. Generation stops at the next token; any open confirmation is denied.

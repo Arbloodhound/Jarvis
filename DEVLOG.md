@@ -4577,3 +4577,10 @@ byte-identical to the build; the app launches, no crash in the crash buffer.
 - MainActivity: wrapped the `when(screen)` in a Box; FAB aligned bottom-end. No manifest/permission/xml changes (FileProvider authority + cache-path already declared).
 - This captures the REAL app running — it's how we'll root-cause the late speech and Tor-not-connecting instead of guessing. Honesty status: SOURCE-FIXED BUT RUNTIME-UNPROVEN until a phone capture.
 - Next: rework the cloud stand-in (button 7) to execute tools for REAL through the one guarded runLoop (diagnosticMute flag), per owner "make it all actually run" — not dry-run.
+
+## 2026-10-18 — Mic / speech-to-text: live words + a real stop
+- Owner: the hold-to-talk mic doesn't show words as you speak, sometimes misses audio, and has no stop-recording control; wants it like Claude/Gemini.
+- VoiceInput.kt: platform recognizer had EXTRA_PARTIAL_RESULTS=false and an empty onPartialResults, so no live transcript. Now partials are on and forwarded via a new onPartial callback. Added finish() = recognizer.stopListening() (keeps the recognizer alive so it emits the final result) — distinct from stop(), which discards.
+- ChatScreen.kt mic: live words now fill the box as you talk (onPartial, preserving any text typed before the mic via preVoice; restored on error). The mic button is now 🎙 → "■ stop"; tapping while listening calls finish() (stop now, use what was said) instead of discarding.
+- Scope: neutral UX only. Owner confirmed not to build the onion/crypto/stand-in/classifier-evasion items; those are not being worked on.
+- Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN (own-Whisper path has no partials; only the platform recognizer streams live words) — needs a phone check.

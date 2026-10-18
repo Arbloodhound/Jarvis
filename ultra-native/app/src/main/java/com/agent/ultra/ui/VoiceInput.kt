@@ -21,6 +21,8 @@ class VoiceInput(
     private val preferOffline: Boolean = true,
     private val onState: ((String) -> Unit)? = null,
     private val onError: ((String) -> Unit)? = null,
+    /** Live words as they're recognized, before the final result (platform recognizer only). */
+    private val onPartial: ((String) -> Unit)? = null,
     private val onResult: (String) -> Unit,
 ) {
     private var recognizer: SpeechRecognizer? = null
@@ -66,12 +68,17 @@ class VoiceInput(
                 override fun onEndOfSpeech() { onState?.invoke("thinking") }
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onPartialResults(partialResults: Bundle?) {
+                    // Live words while the user is still talking.
+                    val best = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()?.trim().orEmpty()
+                    if (best.isNotEmpty()) onPartial?.invoke(best)
+                }
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             if (preferOffline) intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             sr.startListening(intent)
@@ -86,6 +93,15 @@ class VoiceInput(
     fun stop() {
         own.stop()
         stopInternal()
+    }
+
+    /**
+     * Stop recording now and use what was heard: the platform recognizer keeps processing and fires
+     * its final onResults (unlike [stop], which throws the utterance away). The mic's "stop" button.
+     */
+    fun finish() {
+        own.stop()
+        try { recognizer?.stopListening() } catch (_: Exception) {}
     }
 
     private fun releaseIf(sr: SpeechRecognizer) {
