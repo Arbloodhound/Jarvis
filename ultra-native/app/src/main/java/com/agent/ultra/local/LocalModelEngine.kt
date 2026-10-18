@@ -1217,6 +1217,22 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 "gemma4-e2b-q4km.gguf", 3302,
                 "Google's latest small model. Better reasoning than Gemma 3 at similar speed. Needs 6GB+ RAM.",
             ),
+            // Liquid AI LFM2.5 (2026-10-18, owner: "something faster"). Files and sizes from the Hub
+            // listing (LiquidAI/*-GGUF): 1,593,894,912 B and 4,844,678,368 B. The lfm2 / lfm2moe
+            // architectures are in the pinned llama.cpp (8345f33). Not thinking models: they answer
+            // without a hidden trace. Speed and tool-call quality on the Pixel are unmeasured.
+            ModelChoice(
+                "LFM2.5 2.6B (Q4_0) — fast, answers without thinking",
+                "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q4_0.gguf",
+                "lfm25-2.6b-q4_0.gguf", 1520,
+                "Liquid AI's on-device model: a hybrid design built to run fast on phone CPUs. No hidden thinking, so the reply starts almost at once.",
+            ),
+            ModelChoice(
+                "LFM2.5 8B-A1B MoE (Q4_0) — fast and bigger",
+                "https://huggingface.co/LiquidAI/LFM2.5-8B-A1B-GGUF/resolve/main/LFM2.5-8B-A1B-Q4_0.gguf",
+                "lfm25-8b-a1b-q4_0.gguf", 4620,
+                "8B of knowledge, but only about 1B works per word, so it runs near 1B-model speed. Needs 8GB+ RAM.",
+            ),
             ModelChoice(
                 "Qwen2.5 7B (Q4_K_M)",
                 "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",

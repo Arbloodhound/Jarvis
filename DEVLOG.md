@@ -4664,3 +4664,15 @@ Fixes:
 JVM: 1622 tests, 0 failures. The native change is compiled only in CI.
 Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN. Needs a new DIAG capture. Expected: `whisper ... ms=` well under audioMs on the fast cores.
 Owner-only: turn off Offline-only and use mobile data or sign in to the Shaw Wi-Fi portal. That is what gets near-instant answers from the cloud.
+
+## 2026-10-18 — New model options (owner: "plug and play something faster")
+
+- Added two brain models to the model picker. They are opt-in and the default is unchanged:
+  - LFM2.5 2.6B Q4_0, 1.5 GB
+  - LFM2.5 8B-A1B MoE Q4_0, 4.6 GB, about 1B active per token
+  Both are non-thinking, so there is no silent trace. The lfm2/lfm2moe archs are confirmed present in llama.cpp 8345f33. URLs and sizes were checked on the Hub. Speed, tool calls and KV reuse on these hybrid models are RUNTIME-UNPROVEN. Prompt reuse falls back to a cache clear if seq_rm refuses.
+- Checked and NOT done, because none is plug-and-play:
+  - EmbeddingGemma 2 (google/embeddinggemma-2, 2026-10-06): needs the Gemma SentencePiece tokenizer, not our WordPiece. It is 768-d against our 384-d store, so memory would need re-indexing.
+  - MiniCPM-V 4.7 1B and LFM2.5-VL: need newer mtmd support or a different projector path than VisionModel's Qwen2.5-VL.
+  - Speech: whisper base.en is already the automatic fallback when small is too slow. A different ASR engine (e.g. sherpa-onnx streaming) is a real integration.
+- Release from 9e8ed4d (voice latency fixes) built green.
