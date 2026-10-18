@@ -4635,3 +4635,14 @@ byte-identical to the build; the app launches, no crash in the crash buffer.
   - Settings: new "Phone" capability to grant CALL_PHONE from the app. CloudBrainReport NEEDS map ("Phone call"→call_phone). Experience comms family includes call_phone.
 - Safety: call_phone is EGRESS (risk 40+), above AUTO_APPROVE_THRESHOLD (15). recipient_traceable is a CONFIRMABLE rule, so "call mom" (number resolved via contacts_read, not literally in the request) surfaces an "About to: Call mom" confirmation card instead of firing silently; a number the user actually spoke can auto-approve. Same gate behaviour as sms_send.
 - Full suite green (ToolWiringTest + CloudBrainReportTest verified). Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN — needs one call on the phone (grant Phone permission, say "call <contact>", confirm the card, hear it dial).
+
+## 2026-10-18 — Call control: answer, hang up, speakerphone
+
+Owner asked for a full calling tool. Dialing already existed (`call_phone`, 50dfa7e). Added the rest, same wiring as `flashlight_toggle`:
+- `call_answer` (TelecomManager.acceptRingingCall), `call_end` (TelecomManager.endCall: hangs up or declines), `call_speaker {on}` (AudioManager communication device on Android 12+).
+- `ANSWER_PHONE_CALLS` in AndroidManifest; Settings → "Phone" capability now grants it along with CALL_PHONE.
+- Gate manifest: all three are `mutate` (nothing leaves the phone), so they need no confirm card.
+- Catalog lines under COMMUNICATION. Cloud brain only. They are not in the offline LocalToolCall subset.
+- JVM: 1620 tests, 0 failures (ToolWiringTest parity holds).
+Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN. Needs one real ringing call on the Pixel after re-granting Phone in Settings.
+Not done: talking to the caller as an AI voice. Android doesn't let a normal app inject audio into a cellular call. That needs a cloud telephony number (e.g. Twilio), which is a separate decision.

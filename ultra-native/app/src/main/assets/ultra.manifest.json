@@ -270,6 +270,24 @@
       ]
     },
     {
+      "name": "call_answer",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "call_end",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "call_speaker",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
       "name": "call_phone",
       "effects": [
         "egress"

@@ -389,6 +389,31 @@ class AgentController(private val context: Context) {
         true
     } catch (_: Exception) { false }
 
+    /** Pick up the call that is ringing. Needs ANSWER_PHONE_CALLS; false when nothing rings or it is off. */
+    fun answerCall(): Boolean = try {
+        val tm = context.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !tm.isInCall) false
+        else { @Suppress("DEPRECATION") tm.acceptRingingCall(); true }
+    } catch (_: Exception) { false }
+
+    /** Hang up the call in progress, or decline the ringing one. Needs ANSWER_PHONE_CALLS (Android 9+). */
+    fun endCall(): Boolean = try {
+        val tm = context.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) false
+        else @Suppress("DEPRECATION") tm.endCall()
+    } catch (_: Exception) { false }
+
+    /** Speakerphone on or off for the call in progress. No permission needed. */
+    fun setSpeakerphone(on: Boolean): Boolean = try {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (on) am.availableCommunicationDevices
+                .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                ?.let { am.setCommunicationDevice(it) } ?: false
+            else { am.clearCommunicationDevice(); true }
+        } else { @Suppress("DEPRECATION") run { am.isSpeakerphoneOn = on }; true }
+    } catch (_: Exception) { false }
+
     fun readSms(limit: Int): String = try {
         val cursor = context.contentResolver.query(
             Uri.parse("content://sms/inbox"),

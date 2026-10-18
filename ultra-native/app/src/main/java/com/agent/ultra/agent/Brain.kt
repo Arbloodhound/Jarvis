@@ -2189,6 +2189,9 @@ SETTINGS (opens the page directly — far more reliable than tapping through Set
 COMMUNICATION:
   sms_send — send SMS. params: {to: a PHONE NUMBER, message}. Given a name ("text mom"), call contacts_read first.
   call_phone — place a phone call. params: {to: a PHONE NUMBER}. Given a name ("call mom"), call contacts_read first. This DIALS IMMEDIATELY.
+  call_answer — pick up the call that is ringing. params: {}
+  call_end — hang up the current call, or decline a ringing one. params: {}
+  call_speaker — speakerphone on/off during a call. params: {on: true|false}
   sms_read — read inbox. params: {limit?}
   contacts_read — search contacts. params: {name?}
 

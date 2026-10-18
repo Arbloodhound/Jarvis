@@ -372,6 +372,19 @@ class Tools(
                     }
                 }
 
+                "call_answer" ->
+                    if (controller.answerCall()) "Answered the call"
+                    else "Error: no call is ringing, or the Phone permission (answer calls) is off"
+                "call_end" ->
+                    if (controller.endCall()) "Call ended"
+                    else "Error: no call to end, or the Phone permission (answer calls) is off"
+                "call_speaker" -> {
+                    val on = ToolArgs.bool(params, "on")
+                    if (on == null) "Error: call_speaker needs \"on\": true or false"
+                    else if (controller.setSpeakerphone(on)) "Speakerphone ${if (on) "on" else "off"}"
+                    else "Error: could not switch the speakerphone"
+                }
+
                 // ── Location / clipboard / media / alarms / notes ────
                 "device_location" -> controller.lastKnownLocation()
                 "clipboard_write" -> {
