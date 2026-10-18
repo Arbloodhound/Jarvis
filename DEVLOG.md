@@ -4596,3 +4596,10 @@ byte-identical to the build; the app launches, no crash in the crash buffer.
 - Not a parallel path: one producer (librarian), one reader (recall); notes = raw dated log, claims = verified durable layer on top.
 - Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN — NLI label quality on-device and end-to-end supersede unproven until a phone check (speak a fact then a contradicting correction; ask recall).
 - Deliberately not touched: the dormant BanditArmState ranking (next), KV-cache prefix reuse (next batch), cloud onion/crypto/stand-in/evasion (owner-excluded).
+
+## 2026-10-18 — Batch A: bandit ranking wired into For-You ideas
+- The dormant BanditArmState (UCB arms) now drives idea ranking and learns from the owner. Arm = (policy "ideas", domain = idea's primary topic, lane = feasibility band) via new pure harness/IdeaArm.kt.
+- ForYou.rankedIdeas() blends each idea's own score with its arm's learned fast mean (weight 0.5); ForYou.onIdeaActed/Dismissed/Shown call BanditFeedback (reward / penalize / decision). Ideas.kt and BanditArmState.kt unchanged (BanditFeedback was built to need no edits there).
+- ForYouScreen: loads the blended list in a LaunchedEffect(tick) and records a decision per shown idea; "Doing it" rewards, "Not now" penalizes. Cards reorder as the owner engages.
+- No DB migration (bandit_arm_state already registered). Tests: harness/IdeaArmTest (domain/lane + rank-by-fast-mean). Full suite green.
+- Proactivity engagement reward (notification taps) needs tap-tracking — not wired; ideas have the full reward loop. Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN.

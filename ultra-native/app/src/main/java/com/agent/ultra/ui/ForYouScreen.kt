@@ -16,6 +16,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -88,15 +89,22 @@ fun ForYouScreen(onBack: () -> Unit) {
         Text("IDEAS (from your notes)", style = MaterialTheme.typography.titleSmall)
         Text(com.agent.ultra.harness.Ideas.RANK_RULE, style = MaterialTheme.typography.bodySmall, color = faint)
         OutlinedButton(enabled = !busy, onClick = { run { ForYou.generateIdeas(context) } }) { Text("Find ideas") }
-        ideas.ranked().forEach { i ->
+        // Bandit-ranked: ideas on topics the owner acts on rise; dismissed ones fall. Shown = a
+        // decision point for each surfaced idea's arm.
+        var ideaList by remember { mutableStateOf<List<com.agent.ultra.harness.Ideas.Idea>>(emptyList()) }
+        LaunchedEffect(tick) {
+            ideaList = ForYou.rankedIdeas(context)
+            ideaList.forEach { ForYou.onIdeaShown(context, it) }
+        }
+        ideaList.forEach { i ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
                     Text(i.title, style = MaterialTheme.typography.titleSmall)
                     Text(i.why, style = MaterialTheme.typography.bodyMedium)
                     Text("From ${i.sources.joinToString()}", style = MaterialTheme.typography.labelSmall, color = faint)
                     Row {
-                        TextButton(onClick = { ideas.act(i.id); tick++ }) { Text("Doing it") }
-                        TextButton(onClick = { ideas.dismiss(i.id, "not now"); tick++ }) { Text("Not now") }
+                        TextButton(onClick = { ideas.act(i.id); scope.launch { ForYou.onIdeaActed(context, i) }; tick++ }) { Text("Doing it") }
+                        TextButton(onClick = { ideas.dismiss(i.id, "not now"); scope.launch { ForYou.onIdeaDismissed(context, i) }; tick++ }) { Text("Not now") }
                     }
                 }
             }

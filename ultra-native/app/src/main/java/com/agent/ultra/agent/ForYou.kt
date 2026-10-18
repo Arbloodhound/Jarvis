@@ -23,6 +23,40 @@ object ForYou {
     fun feed(ctx: Context) = Feed(File(ctx.filesDir, "harness/feed.json"))
     fun ideas(ctx: Context) = Ideas(File(ctx.filesDir, "harness/ideas.json"))
 
+    // --- Bandit ranking: ideas learn from what the owner acts on vs dismisses (no fine-tuning). ---
+    private fun bandit(ctx: Context) =
+        com.agent.ultra.harness.BanditArmState(com.agent.ultra.data.UltraDatabase.get(ctx).banditArms())
+
+    /** How much the learned arm signal (fast mean, [-1,1]) nudges an idea's own [Ideas.Idea.score]. */
+    private const val BANDIT_WEIGHT = 0.5
+
+    /**
+     * Open ideas, best first, with each idea's own rank nudged by its bandit arm's learned reward —
+     * so topics the owner keeps acting on rise and ones they keep dismissing fall. Falls back to the
+     * plain rank when nothing has been learned yet.
+     */
+    suspend fun rankedIdeas(ctx: Context, limit: Int = 10): List<Ideas.Idea> =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val open = ideas(ctx).ranked(limit * 2)
+            if (open.isEmpty()) return@withContext open
+            val st = bandit(ctx)
+            open.map { i ->
+                val arm = st.get(com.agent.ultra.harness.BanditFeedback.POLICY_IDEAS,
+                    com.agent.ultra.harness.IdeaArm.domain(i.title), com.agent.ultra.harness.IdeaArm.lane(i.feasibility))
+                val learned = arm?.let { com.agent.ultra.harness.BanditScoring.fastMean(it) } ?: 0.0
+                i to (i.score + BANDIT_WEIGHT * learned)
+            }.sortedByDescending { it.second }.take(limit).map { it.first }
+        }
+
+    suspend fun onIdeaActed(ctx: Context, i: Ideas.Idea) = com.agent.ultra.harness.BanditFeedback.onIdeaActed(
+        bandit(ctx), com.agent.ultra.harness.IdeaArm.domain(i.title), com.agent.ultra.harness.IdeaArm.lane(i.feasibility))
+
+    suspend fun onIdeaDismissed(ctx: Context, i: Ideas.Idea) = com.agent.ultra.harness.BanditFeedback.onIdeaDismissed(
+        bandit(ctx), com.agent.ultra.harness.IdeaArm.domain(i.title), com.agent.ultra.harness.IdeaArm.lane(i.feasibility))
+
+    suspend fun onIdeaShown(ctx: Context, i: Ideas.Idea) = com.agent.ultra.harness.BanditFeedback.onIdeaShown(
+        bandit(ctx), com.agent.ultra.harness.IdeaArm.domain(i.title), com.agent.ultra.harness.IdeaArm.lane(i.feasibility))
+
     private const val PREFS = "for_you"
     private const val K_AUTO = "auto"
     private const val CHANNEL = "for_you"
