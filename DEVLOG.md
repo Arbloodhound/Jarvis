@@ -4603,3 +4603,8 @@ byte-identical to the build; the app launches, no crash in the crash buffer.
 - ForYouScreen: loads the blended list in a LaunchedEffect(tick) and records a decision per shown idea; "Doing it" rewards, "Not now" penalizes. Cards reorder as the owner engages.
 - No DB migration (bandit_arm_state already registered). Tests: harness/IdeaArmTest (domain/lane + rank-by-fast-mean). Full suite green.
 - Proactivity engagement reward (notification taps) needs tap-tracking — not wired; ideas have the full reward loop. Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
+## 2026-10-18 — Batch B: expandable thinking line
+- The chat already showed a live reasoning preview in the "Thinking…" status (Brain.thoughtPreview → status.detail). Now it's expandable like Claude/Gemini: ChatScreen renders a THINKING status as a tappable two-line preview (▸/▾) that expands to up to 12 lines; thoughtPreview keeps a 300-char rolling tail (was 110) so there's more to expand into. Non-thinking statuses unchanged.
+- Speech on first sentence: the on-device path already speaks as written (SpeechChunker, speakAsWritten default on). The cloud runLoop multiplexes tool-call turns and the final answer through one stream, so speaking mid-stream there would risk reading tool JSON aloud — deliberately NOT changed; cloud answers still speak once settled. Noted as a follow-up needing a safe "is this the final answer" signal.
+- UI-only + one-line Brain change. Full suite green. Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN (visual, needs a glance on the phone).

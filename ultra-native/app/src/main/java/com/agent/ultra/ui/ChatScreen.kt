@@ -391,12 +391,38 @@ fun ChatScreen(
             }
             status?.let { s ->
                 item(key = "status") {
-                    Text(
-                        text = ChatStatus.label(s.phase, statusNow - s.sinceMs, s.detail),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
-                    )
+                    val preview = if (s.phase == ChatStatus.Phase.THINKING)
+                        s.detail.removePrefix("💭").trim().trimStart('…', ' ') else ""
+                    if (preview.isNotBlank()) {
+                        // Expandable thinking line (like Claude / Gemini): one-line preview, tap for more.
+                        var expanded by remember { mutableStateOf(false) }
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { expanded = !expanded }
+                                .padding(horizontal = 14.dp, vertical = 2.dp),
+                        ) {
+                            Text(
+                                text = ChatStatus.label(s.phase, statusNow - s.sinceMs) + (if (expanded) "  ▾" else "  ▸"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = preview,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                maxLines = if (expanded) 12 else 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = ChatStatus.label(s.phase, statusNow - s.sinceMs, s.detail),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+                        )
+                    }
                 }
             }
         }

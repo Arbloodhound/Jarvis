@@ -155,7 +155,8 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             val cur = current()
             if (cur == null || now - last < 300) null else {
                 last = now
-                val tail = sb.toString().replace(Regex("\\s+"), " ").trim().takeLast(110)
+                // A longer tail than the one-line view needs, so the chat can expand the reasoning.
+                val tail = sb.toString().replace(Regex("\\s+"), " ").trim().takeLast(300)
                 ChatStore.setStatus(ChatStatus.Phase.THINKING, "💭 …$tail").also { ChatStore.clearStatus(cur) }
             }
         }
