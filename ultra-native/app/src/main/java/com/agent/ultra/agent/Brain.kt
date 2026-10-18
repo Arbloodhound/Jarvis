@@ -1279,11 +1279,12 @@ JSON:"""
                     GateAuditLog.recordRoute(GateAuditLog.ROUTE_CLOUD_FALLBACK_LOCAL, "cloud_failed")
                     // Only before anything ran: a run that already acted is not restarted on-device.
                     val navTask = if (turn == 0 && startTurn == 0) offlineNavTask(userInput) else null
+                    val why = cloudFailure(it)
                     if (navTask != null) {
-                        emit("(cloud unreachable — working on-device)")
+                        emit("(cloud $why — working on-device)")
                         runOfflineNav(userInput, navTask)
                     } else {
-                        emit("(cloud unreachable — answering on-device)")
+                        emit("(cloud $why — answering on-device)")
                         emitLocal(userInput)
                     }
                 } else {
@@ -1900,6 +1901,17 @@ RULES:
     }
 
     companion object {
+        /** Why the cloud call failed, in the fallback note: a rejected key is not a network outage. */
+        fun cloudFailure(e: Throwable): String {
+            val m = e.message.orEmpty()
+            return when {
+                Regex("""\bHTTP 40[13]\b""").containsMatchIn(m) -> "key rejected (check Settings → AI PROVIDER)"
+                Regex("""\bHTTP 429\b""").containsMatchIn(m) -> "rate-limited"
+                Regex("""\bHTTP 5\d\d\b""").containsMatchIn(m) -> "provider error"
+                else -> "unreachable"
+            }
+        }
+
         /** The last request sent to the cloud model, as (role, text): Jarvis Tests' cloud brain check
          *  shows it. In memory only, this process. */
         @Volatile internal var lastCloudRequest: List<Pair<String, String>> = emptyList()
