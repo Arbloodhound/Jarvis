@@ -4690,3 +4690,5 @@ Owner-only: turn off Offline-only and use mobile data or sign in to the Shaw Wi-
 - Thinking: the full trace, up to 16k chars, is kept live. Collapsed shows the latest words; expanded shows every line, with no 12-line cap.
   - Still not done: the thoughts disappear when the answer arrives. Keeping them under the answer, DeepSeek-style, needs a ChatMessage/Room field.
 - JVM: 1623 tests, 0 failures. All on-device behaviour is RUNTIME-UNPROVEN.
+
+- Local brain by default: offline-only defaults ON under a new pref key (offline_only_v2), so every install, the owner's included, starts on the on-device model once. Choosing a cloud model in the picker still switches.

@@ -61,12 +61,13 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OWN_VOICE, on).apply()
     }
 
-    private const val K_OFFLINE_ONLY = "offline_only"
+    private const val K_OFFLINE_ONLY = "offline_only_v2"   // new key: every install starts on the on-device brain once
 
-    /** Offline only: no cloud brain, no web search (model downloads still work). Off by default.
-     * Read through agent.NetPolicy. */
+    /** Offline only: no cloud brain, no web search (model downloads still work). On by default
+     * (owner, 2026-10-18: the on-device model is the default brain); the chat's model picker
+     * switches to a cloud model when chosen. Read through agent.NetPolicy. */
     fun offlineOnly(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_OFFLINE_ONLY, false)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_OFFLINE_ONLY, true)
 
     fun setOfflineOnly(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OFFLINE_ONLY, on).apply()

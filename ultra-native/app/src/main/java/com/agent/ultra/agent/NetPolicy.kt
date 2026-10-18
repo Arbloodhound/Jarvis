@@ -21,6 +21,6 @@ object NetPolicy {
     /** Pure, JVM-tested. Web search may run only with offline-only off. */
     fun webAllowed(offlineOnly: Boolean): Boolean = !offlineOnly
 
-    /** The owner's setting (UltraPrefs "offline_only", off by default). */
+    /** The owner's setting (UltraPrefs, on by default). */
     fun offlineOnly(ctx: Context): Boolean = com.agent.ultra.ui.UltraPrefs.offlineOnly(ctx)
 }
