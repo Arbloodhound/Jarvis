@@ -95,7 +95,7 @@ class LocalToolCallTest {
 
     @Test fun toolsOutsideTheOfferedSetAreNotRun() {
         assertEquals(LocalToolCall.Parsed.Unparsed,
-            LocalToolCall.extract("{\"tool\":\"sms_send\",\"params\":{\"to\":\"555\",\"message\":\"hi\"}}"))
+            LocalToolCall.extract("{\"tool\":\"react_navigate\",\"params\":{\"goal\":\"hi\"}}"))
         assertEquals(LocalToolCall.Parsed.Unparsed,
             LocalToolCall.extract("{\"tool\":\"react_navigate\",\"params\":{\"goal\":\"x\"}}"))
     }
@@ -115,11 +115,24 @@ class LocalToolCallTest {
         assertEquals(LocalToolCall.Parsed.Unparsed,
             LocalToolCall.extract("This isn't wifi_toggle or anything else; no tool applies."))
         assertEquals(LocalToolCall.Parsed.Unparsed,
-            LocalToolCall.extract("{\"tool\":\"sms_send\",\"params\":{\"message\":\"use note_create\"}}"))
+            LocalToolCall.extract("{\"tool\":\"react_navigate\",\"params\":{\"message\":\"use note_create\"}}"))
     }
 
     @Test fun visibleTextDropsTraceAndMarkers() {
         assertEquals("flashlight_toggle", LocalToolCall.visibleText("hm</think>\n flashlight_toggle <|im_end|>"))
         assertEquals("ok", LocalToolCall.visibleText("ok<think>trailing trace"))
+    }
+}
+
+class LocalToolCallCallsTest {
+    @org.junit.Test fun callsAndTextsAreOffered() {
+        for (t in listOf("call_phone", "call_answer", "call_end", "call_speaker", "sms_send"))
+            org.junit.Assert.assertTrue(t, t in LocalToolCall.TOOLS)
+        val c = LocalToolCall.extract("{\"tool\":\"call_phone\",\"params\":{\"to\":\"mom\"}}")
+        org.junit.Assert.assertTrue(c is LocalToolCall.Parsed.Call && c.tool == "call_phone")
+    }
+    @org.junit.Test fun callRequestsRouteToTheToolLoop() {
+        for (r in listOf("call mom", "hang up", "put it on speaker", "text Sam I am running late", "answer the call"))
+            org.junit.Assert.assertTrue(r, Brain.isSimpleLocalIntent(r))
     }
 }

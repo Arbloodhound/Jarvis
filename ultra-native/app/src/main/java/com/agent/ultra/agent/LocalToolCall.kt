@@ -30,6 +30,9 @@ object LocalToolCall {
         "media_play", "media_next", "settings_open", "device_location",
         // Everything on the phone (owner, 2026-10-07: "unrestricted access to the phone and everything on it").
         "sms_read", "contacts_read", "system_info",
+        // Calls and texts (owner, 2026-10-19: the local model needs the cloud model's tools). "call mom"
+        // gives a name: Brain resolves it from the contacts and the gate still asks before it dials.
+        "call_phone", "call_answer", "call_end", "call_speaker", "sms_send",
     )
 
     /** What the model says when the message is not a command for one of [TOOLS]. */
@@ -91,6 +94,11 @@ device_location {}
 sms_read {"limit":5}   (read my texts / messages)
 contacts_read {"name":"..."}   (a contact's number or details)
 system_info {}   (storage, Wi-Fi, Bluetooth, battery, phone details)
+call_phone {"to":"name or number"}   (place a call; a name is looked up in contacts)
+call_answer {}   (pick up the ringing call)
+call_end {}   (hang up, or decline the ringing call)
+call_speaker {"on":true|false}   (speakerphone during a call)
+sms_send {"to":"name or number","message":"..."}   (send a text)
 """.trim()
 
     /** After the tool list: the way out and the worked examples. */
@@ -114,6 +122,11 @@ lock the phone -> {"tool":"global_action","params":{"action":"lock_screen"}}
 read my last texts -> {"tool":"sms_read","params":{"limit":5}}
 what's Sam's number -> {"tool":"contacts_read","params":{"name":"Sam"}}
 how much storage do I have -> {"tool":"system_info","params":{}}
+call mom -> {"tool":"call_phone","params":{"to":"mom"}}
+answer the call -> {"tool":"call_answer","params":{}}
+hang up -> {"tool":"call_end","params":{}}
+put it on speaker -> {"tool":"call_speaker","params":{"on":true}}
+text Sam I am running late -> {"tool":"sms_send","params":{"to":"Sam","message":"I am running late"}}
 set a timer for 5 minutes -> {"tool":"none","params":{}}
 """.trim()
 

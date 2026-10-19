@@ -254,6 +254,8 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         /** When the pause began ([android.os.SystemClock.elapsedRealtime]): a card left too long
          *  is not acted on ([pauseExpired]), like the on-screen tap gate's 120 s. */
         internal val createdAtMs: Long = android.os.SystemClock.elapsedRealtime(),
+        /** Raised by an on-device call: confirming runs the tool and answers; no cloud loop to resume. */
+        internal val local: Boolean = false,
     )
 
     /** The operator's decision on a paused action. */
@@ -269,6 +271,19 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             GateAuditLog.record(appContext, p.tool, GateAuditLog.Outcome.BLOCKED, "confirm_expired", p.episode.observations)
             android.util.Log.i("UltraGate", "EXPIRED pause ${p.tool}: confirmed too late")
             answer("Cancelled: ${p.description} (it waited over ${PAUSE_TIMEOUT_MS / 60_000} minutes — ask again)")
+            return@withLock
+        }
+        if (p.local) {
+            p.targets.forEach { p.episode.confirm(it) }
+            p.episode.observeOperatorConfirmation(p.tool)
+            GateAuditLog.record(appContext, p.tool, GateAuditLog.Outcome.OVERRIDDEN, null, p.episode.observations)
+            android.util.Log.i("UltraGate", "CONFIRMED (local) ${p.tool} targets=${p.targets}")
+            val res = tools.execute(p.tool, p.params)
+            p.episode.observeSecrets(res)
+            p.episode.observeTool(p.tool, res.take(80))
+            val bad = res.startsWith("Error:") || res.startsWith("Could not")
+            answer((if (bad) "Tried on-device: $res" else "$res (on-device)"))
+            recordMemory(p.userInput, listOf(Triple(p.tool, p.params, !bad)), !bad)
             return@withLock
         }
         // The cloud brain was removed while the action waited (its key cleared in Settings: this
@@ -1219,7 +1234,37 @@ JSON:"""
         call: Pair<String, JSONObject>,
     ) {
         GateAuditLog.recordRoute(GateAuditLog.ROUTE_LOCAL_TOOL, "call")
+        // "call mom" / "text Sam ...": the model gives a name; the number comes from the contacts.
+        if (call.first == "call_phone" || call.first == "sms_send") {
+            val to = call.second.optString("to").ifBlank { call.second.optString("number") }.trim()
+            if (to.isBlank()) { answer("Who should I ${if (call.first == "call_phone") "call" else "text"}?"); return }
+            if (to.count { it.isDigit() } < 5) {
+                val hits = controller.readContacts(to).lines().mapNotNull { l ->
+                    l.split(" — ").takeIf { it.size == 2 }?.let { it[0] to it[1].trim() }
+                }
+                when {
+                    hits.isEmpty() -> { answer("I couldn't find a number for \"$to\" in your contacts."); return }
+                    hits.size > 1 -> {
+                        answer("Which one: " + hits.joinToString(", ") { "${it.first} (${it.second})" } + "? Say the full name or the number.")
+                        return
+                    }
+                }
+                call.second.put("to", hits.single().second)
+            }
+        }
         val verdict = gate.enforceCall(episode, call.first, call.second)
+        if (!verdict.allowed && verdict.confirmable && (call.first == "call_phone" || call.first == "sms_send")) {
+            GateAuditLog.record(appContext, call.first, GateAuditLog.Outcome.BLOCKED, verdict.rule, episode.observations, verdict.riskScore)
+            val targets = verdict.violations.mapNotNull { v ->
+                v.arg?.let { a -> call.second.optString(a).takeIf { it.isNotBlank() } }
+            }.distinct()
+            val desc = describeAction(call.first, call.second)
+            pendingConfirm = PendingConfirm(
+                desc, targets, call.first, call.second, "", mutableListOf(), 0, episode, userInput, local = true,
+            )
+            answer("Waiting for your OK: $desc. Confirm or cancel.")
+            return
+        }
         if (!verdict.allowed) {
             GateAuditLog.record(appContext, call.first, GateAuditLog.Outcome.BLOCKED, verdict.rule, episode.observations, verdict.riskScore)
             android.util.Log.i("UltraGate", "LOCAL BLOCK ${call.first}: ${verdict.violations.firstOrNull()?.hint}")
@@ -2080,7 +2125,8 @@ RULES:
                     "airplane|alarm|battery|clipboard|note this|open|launch|" +
                     "screenshot|screen ?shot|home screen|go home|go back|recent apps|notifications?|quick settings|" +
                     "lock (?:the |my )?(?:phone|screen)|on (?:my|the) screen|music|song|track|pause|play|skip|" +
-                    "settings|where am i|my location|texts?|sms|messages?|contacts?|number|storage|phone info)\\b"
+                    "settings|where am i|my location|texts?|sms|messages?|contacts?|number|storage|phone info|" +
+                    "call|dial|hang up|hangup|end the call|decline|answer (?:the |this |that )?(?:call|phone|it)|speaker(?:phone)?)\\b"
             ).containsMatchIn(u)
         }
 

@@ -4716,3 +4716,8 @@ Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private t
 - Why "go on Google and search X" did nothing: OfflineNav.task did not match "go on ..." and GrapheneOS has no "Google" app, so findPackage failed. Fixed: WEB_SEARCH pattern -> appHint "browser"; AgentController.findPackage maps browser/google/chrome/web to the default browser (defaultBrowserPackage).
 - My ScreenAsk guard was placed BEFORE the on-device navigator and would have blocked it; moved to AFTER offlineNavTask, and its text now says it could not tell which app to drive.
 - Still true: LocalToolCall has 22 tools; call_phone/sms_send etc. are cloud-only. Local navigator needs a thinking model (local.isThinkingModel) and an installed named app; it is slow on-device. JVM 1625 tests, 0 failures. Runtime-unproven.
+
+## 2026-10-19 — Local model: calls and texts
+- LocalToolCall.TOOLS += call_phone, call_answer, call_end, call_speaker, sms_send (prompt lines, examples, routing keywords in Brain.isSimpleLocalIntent).
+- runLocalCall: a name ("call mom", "text Sam ...") is resolved from the contacts; none -> says so; several -> asks which. The gate still decides: a confirmable block raises the same Confirm/Cancel card (PendingConfirm.local = true; resolvePending runs the tool directly, no cloud loop).
+- Not yet on-device: describe_screen/read_screen_deep/screen_ocr/look_at_screen, open_url/web_search/web_browse/device_info/trash, recipe_*, watch_me*, forget/ambient_recall/shop_*/tor_connect, delegate/connector/artifact/ask_claude. The 1B (non-thinking) prompt in runLocalLoop is unchanged (thinking-model path only). JVM 1627 tests, 0 failures. Runtime-unproven.
