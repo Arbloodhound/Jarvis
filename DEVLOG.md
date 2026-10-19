@@ -4766,3 +4766,10 @@ Owner: "branch the existing work to a new project, a Jarvis client on the comput
 - Fixed 20 findings, incl. CRITICAL git core.fsmonitor RCE via allowlisted `git status`, prefix allowlist (git diff --output / --no-index, du --files0-from), symlink and case bypasses of sensitive paths, URL userinfo host spoof, subdomain trust, IPv4-mapped IPv6 SSRF + DNS rebinding (pinned lookup), short/encoded leaks (password-like tokens, trifecta rule), planted memory/clipboard after web reads, secrets reaching Claude after a brain switch, PowerShell injection (CLI on Windows), fast-path misroutes, local tool-call merging, cut-off tool calls running, unbounded history, lost confirm cards, corrupt config/memory blocking startup, stuck busy state.
 - Config: `allowCommands` replaced by `extraAllowedCommands` (exact text); old key ignored.
 - 31 tests pass (was 19); Linux native self-test passes. CI runs Windows/macOS.
+
+## 2026-10-19 — Desktop: model compat, vision, screen control, CI fix (handoff point)
+- Piece 1 (DONE 88353dd): model picker (/models) + semantic memory via any /embeddings model (EmbeddingGemma-2 etc.), word-overlap fallback, embedder local-only + offline-blocked. Plus 2nd adversarial review round: 6 more gate fixes (critical dead newline check, WHATWG host parsing, memory output=private, encoded-secret/leak detection via egressVariants, more sensitive files, glob block).
+- Piece 2 (DONE bba81e6): vision (look_at_screen/look_at_image via local VLM or cloud) + experimental screen control (control_screen, off by default, alwaysConfirm per action). Screen control RUNTIME-UNPROVEN.
+- CI fix (ce82b1b): isSensitivePath compares realpath form too (macOS /var vs /private/var symlink); /proc test Linux-only. 40 tests pass.
+- Pieces 3 (Chromebook/Crostini) and 4 (full feature+competitive review) NOT STARTED. Full handoff in desktop/HANDOFF_DESKTOP.md.
+- Excluded per scope: dark-web/Tor/onion monitoring + dark-web classifier + auto-action pipeline.
