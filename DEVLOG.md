@@ -3,6 +3,21 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-19 — the five items: setup checklist, draft margin, chain resume, thinking kept, 20 real tasks
+Owner: "Do all five items." Subsystems: G (setup UI), B/local (draft), A (chains, routing), F (tests/diagnostics).
+- Setup checklist banner at the top of the chat (SetupChecklist.kt, SetupStepsTest).
+- DraftModel FREE_AFTER_BYTES 3 GB -> 2 GB: the owner's log showed roomMB=3659, so the draft never loaded. Speed boost
+  stays OFF by default (unchanged).
+- Chain resume: PendingConfirm carries chainDone/chainStep; confirming a local card runs continueLocalChain.
+- Thinking kept with the answer: ChatStore.thoughts (session only, not in Room), ChatStatus.thoughtOf, "Thought ▸" row.
+- RealTasksTest: 20 everyday requests, 20/20 on the right path. It found two bugs, both fixed: "make a note: …" went to
+  chat (isSimpleLocalIntent only knew "note this"), and "open settings and turn on dark mode" was taken by the tool
+  loop and stopped after opening Settings (OfflineNav.opensAppFirst now sends these to the screen driver first).
+- Owner docs: DIAGNOSTICS_AND_FIXES.md (fixes, known bugs, the DIAG steps needed for the speed fix);
+  ultra-native/tools/REAL_TASKS.md (phone checklist for the pass rate).
+- 1636 JVM tests, 0 failures. Routing PROVEN by JVM tests. Everything on the phone is SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+  Speed is blocked on a fresh DIAG capture from the newest build.
+
 ## 2026-10-17 (session 01UX5qeo) — the rest of the list
 - Navigator: actions bound to the screen they were read from (ScreenGuard snapshot preflight, the OpenClaw
   pattern; a window/app change since the read → read again, never act on the stale choice); route steps reuse

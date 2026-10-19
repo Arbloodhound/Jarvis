@@ -573,6 +573,9 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             // ("search my notes for the wifi password" must not toggle wifi).
             if (noteFromMemory != null && local.isThinkingModel) { emitLocal(userInput, noteFromMemory, noteMode = true); return }
             if (spokenFocus != null && local.isThinkingModel) { emitLocal(userInput, spokenFocus); return }
+            // "open settings and turn on dark mode": a screen job that opens an installed app goes to the
+            // screen driver first. The tool loop would open Settings and stop (no tool turns on dark mode).
+            if (OfflineNav.opensAppFirst(IntentRouter.requestPart(userInput))) offlineNavTask(userInput)?.let { runOfflineNav(userInput, it); return }
             if (LocalToolCall.offlineRoute(userInput, canDecline = toolEngine.isThinkingModel, chains = toolEngine.isThinkingModel) &&
                 runLocalLoop(IntentRouter.requestPart(userInput))) return
             // A job of several steps on screens ("open settings and turn on dark mode"): the
@@ -2215,7 +2218,7 @@ RULES:
             }
             return Regex(
                 "\\b(flashlight|torch|wi-?fi|bluetooth|do not disturb|dnd|volume|brightness|" +
-                    "airplane|alarm|battery|clipboard|note this|open|launch|" +
+                    "airplane|alarm|battery|clipboard|note this|(?:make|take|write|add|save|create) (?:a |me a )?note|open|launch|" +
                     "screenshot|screen ?shot|home screen|go home|go back|recent apps|notifications?|quick settings|" +
                     "lock (?:the |my )?(?:phone|screen)|on (?:my|the) screen|music|song|track|pause|play|skip|" +
                     "settings|where am i|my location|texts?|sms|messages?|contacts?|number|storage|phone info|" +
