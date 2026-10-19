@@ -54,7 +54,18 @@ const SECRET_PATTERNS: Array<[string, RegExp]> = [
   ["google_api_key", /\bAIza[0-9A-Za-z_-]{35}\b/g],
   ["jwt", /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g],
   ["private_key", /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g],
+  ["stripe_key", /\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}\b/g],
+  ["gitlab_token", /\bglpat-[A-Za-z0-9_-]{20,}\b/g],
+  ["npm_token", /\bnpm_[A-Za-z0-9]{36}\b/g],
+  ["huggingface_token", /\bhf_[A-Za-z0-9]{30,}\b/g],
+  ["twilio_key", /\bSK[0-9a-f]{32}\b/g],
 ];
+
+/**
+ * `password = hunter2x`, `"api_key": "…"`, `AWS_SECRET_ACCESS_KEY=…`: the value
+ * after a secret-sounding name. Only the value is the secret, not the name.
+ */
+const ASSIGNED = /\b[\w.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|auth)[\w.-]*["']?\s*[:=]\s*["']?([^\s"',;]{8,200})/gi;
 
 export interface FoundSecret {
   kind: string;
@@ -68,6 +79,12 @@ export function findSecrets(text: string): FoundSecret[] {
     for (const m of text.matchAll(rx)) {
       if (!seen.has(m[0])) { seen.add(m[0]); out.push({ kind, value: m[0] }); }
     }
+  }
+  for (const m of text.matchAll(ASSIGNED)) {
+    const v = m[1]!;
+    // Skip placeholders and references, which are not secrets: ${VAR}, <your-key>, process.env.X.
+    if (/^(\$\{|<|process\.env|os\.environ|null|none|true|false|undefined|x{6,}|\*+)/i.test(v)) continue;
+    if (!seen.has(v)) { seen.add(v); out.push({ kind: "assigned_secret", value: v }); }
   }
   const code = extractVerificationCode(text);
   if (code) out.push({ kind: "verification_code", value: code });

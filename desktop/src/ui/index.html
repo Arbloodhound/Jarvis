@@ -24,6 +24,7 @@
   header h1 { font-size: 16px; margin: 0; letter-spacing: .02em; }
   .status { color: var(--muted); font-size: 13px; }
   .spacer { flex: 1; }
+  button.plain { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; }
   .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   .seg button { border: 0; background: transparent; color: var(--text); padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
   .seg button.on { background: var(--accent); color: var(--accent-text); }
@@ -67,6 +68,7 @@
     <button id="b-cloud" type="button">Cloud</button>
   </div>
   <label class="switch"><input type="checkbox" id="offline"> Offline only</label>
+  <button id="new" type="button" class="plain" title="Start a new conversation (what Jarvis remembers about you stays)">New chat</button>
   <span class="spacer"></span>
   <span class="status" id="status">Connecting…</span>
 </header>
@@ -143,6 +145,7 @@
         break;
       }
       case "confirm": {
+        if (document.getElementById(`card-${e.cardId}`)) break; // re-sent after a reconnect
         const r = ensureRun(e.runId); r.textNode = null;
         const c = r.body.appendChild(el("div", "confirm"));
         c.id = `card-${e.cardId}`;
@@ -166,6 +169,7 @@
       }
       case "warning": ensureRun(e.runId).body.appendChild(el("div", "warn", e.text)); break;
       case "error": (e.runId ? ensureRun(e.runId).body : log).appendChild(el("div", "err", e.message)); break;
+      case "reset": log.replaceChildren(el("p", "empty", "New conversation. Ask me to do something on this computer.")); log.firstChild.id = "empty"; run = null; break;
       case "done": if (e.stopped) ensureRun(e.runId).body.appendChild(el("div", "meta", "Stopped.")); run = null; break;
     }
   }
@@ -187,7 +191,9 @@
     ws.send(JSON.stringify({ type: "send", text }));
     input.value = ""; input.style.height = "";
   };
-  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("form").requestSubmit(); } });
+  // Enter sends; while Jarvis is working it does nothing (only the Stop button stops).
+  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); if (!state.busy) $("form").requestSubmit(); } });
+  $("new").onclick = () => ws?.send(JSON.stringify({ type: "reset" }));
   input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 200) + "px"; });
   $("b-local").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "local" }));
   $("b-cloud").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "cloud" }));

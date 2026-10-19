@@ -1,8 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { DEFAULT_ALLOW_COMMANDS } from "./gate/gate.js";
 
 /**
  * Everything Jarvis keeps lives in one folder (default ~/.jarvis, or
@@ -30,7 +29,11 @@ export interface Config {
   };
   port: number;
   writableRoots: string[];
-  allowCommands: string[];
+  /**
+   * Extra commands that run without a confirm card, matched as exact text.
+   * The built-in read-only list (ls, pwd, df, du…) is in gate.ts and can't be widened here.
+   */
+  extraAllowedCommands: string[];
   maxTurns: number;
 }
 
@@ -43,6 +46,9 @@ export interface Paths {
   transcript: string;
   workspace: string;
 }
+
+/** Problems found while loading files, shown to the owner once the app is up. */
+export const startupWarnings: string[] = [];
 
 export function paths(home = process.env.JARVIS_HOME || path.join(homedir(), ".jarvis")): Paths {
   return {
@@ -64,7 +70,7 @@ export function defaults(p: Paths): Config {
     local: { baseUrl: "http://127.0.0.1:11434/v1", model: "qwen3:8b" },
     port: 7337,
     writableRoots: [p.workspace],
-    allowCommands: DEFAULT_ALLOW_COMMANDS,
+    extraAllowedCommands: [],
     maxTurns: 16,
   };
 }
@@ -77,7 +83,19 @@ export function loadConfig(p: Paths = paths()): Config {
     writeFileSync(p.config, JSON.stringify(base, null, 2) + "\n", { mode: 0o600 });
     return base;
   }
-  const raw = JSON.parse(readFileSync(p.config, "utf8")) as Partial<Config>;
+  let raw: Partial<Config> & { allowCommands?: unknown };
+  try {
+    raw = JSON.parse(readFileSync(p.config, "utf8")) as Partial<Config>;
+  } catch (err) {
+    // A broken file must not stop Jarvis from starting: keep it for the owner, start from defaults.
+    const aside = `${p.config}.broken-${Date.now()}`;
+    renameSync(p.config, aside);
+    startupWarnings.push(`config.json could not be read (${err instanceof Error ? err.message : String(err)}). It was moved to ${aside} and the defaults are in use.`);
+    writeFileSync(p.config, JSON.stringify(base, null, 2) + "\n", { mode: 0o600 });
+    return base;
+  }
+  // Older configs carried a prefix allowlist ("git status" …) that let flags through; it is ignored now.
+  delete raw.allowCommands;
   return {
     ...base,
     ...raw,

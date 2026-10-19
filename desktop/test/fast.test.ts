@@ -23,3 +23,12 @@ test("think tags are split across chunk borders", () => {
   assert.equal(thought, "plan it");
   assert.equal(said, "Hello there");
 });
+
+test("fast commands don't guess at files, compounds or reminders", () => {
+  for (const t of ["open notes.txt", "open report.pdf", "open terminal and run ls", "remember to call mom tomorrow", "start a new document"]) {
+    assert.equal(fastCommand(t), null, t);
+  }
+  const r = fastCommand("remember that my sister is Ana and she lives in Lyon");
+  assert.ok(r && r.kind === "tool");
+  assert.deepEqual([r.tool, r.args], ["remember", { fact: "my sister is Ana and she lives in Lyon" }]);
+});

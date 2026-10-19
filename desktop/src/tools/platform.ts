@@ -43,6 +43,19 @@ export function run(cmd: string, args: string[], input?: string, timeoutMs = 150
   });
 }
 
+/**
+ * PowerShell joins -Command arguments into one script, so text passed that way
+ * can run as code. Values go in as single-quoted literals ('' escapes a quote)
+ * inside a script sent with -EncodedCommand, which PowerShell never re-parses.
+ */
+export function psQuote(s: string): string {
+  return `'${s.replace(/['\u2018\u2019\u201A\u201B]/g, "''")}'`;
+}
+
+function powershell(script: string, timeoutMs?: number): Promise<string> {
+  return run("powershell", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], undefined, timeoutMs);
+}
+
 /** Start a program and leave it running (a browser, an app). */
 function launch(cmd: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -96,8 +109,8 @@ export async function notify(title: string, message: string): Promise<void> {
     return;
   }
   if (OS === "win32") {
-    const ps = "param($t,$m) Add-Type -AssemblyName System.Windows.Forms; $n=New-Object System.Windows.Forms.NotifyIcon; $n.Icon=[System.Drawing.SystemIcons]::Information; $n.Visible=$true; $n.ShowBalloonTip(5000,$t,$m,'Info'); Start-Sleep 6; $n.Dispose()";
-    await run("powershell", ["-NoProfile", "-Command", `& {${ps}}`, title, message], undefined, 20000);
+    const ps = `Add-Type -AssemblyName System.Windows.Forms; $n=New-Object System.Windows.Forms.NotifyIcon; $n.Icon=[System.Drawing.SystemIcons]::Information; $n.Visible=$true; $n.ShowBalloonTip(5000,${psQuote(title)},${psQuote(message)},'Info'); Start-Sleep 6; $n.Dispose()`;
+    await powershell(ps, 20000);
     return;
   }
   await run("notify-send", [title, message]);
@@ -107,8 +120,8 @@ export async function screenshot(file: string): Promise<void> {
   if (native) { await writeFile(file, await native.screenshot()); return; }
   if (OS === "darwin") { await run("screencapture", ["-x", file]); return; }
   if (OS === "win32") {
-    const ps = "param($f) Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=[System.Windows.Forms.SystemInformation]::VirtualScreen; $bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height; $g=[System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Left,$b.Top,0,0,$bmp.Size); $bmp.Save($f)";
-    await run("powershell", ["-NoProfile", "-Command", `& {${ps}}`, file], undefined, 20000);
+    const ps = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=[System.Windows.Forms.SystemInformation]::VirtualScreen; $bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height; $g=[System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Left,$b.Top,0,0,$bmp.Size); $bmp.Save(${psQuote(file)})`;
+    await powershell(ps, 20000);
     return;
   }
   const tries: Array<[string, string[]]> = [["grim", [file]], ["gnome-screenshot", ["-f", file]], ["scrot", [file]], ["import", ["-window", "root", file]]];

@@ -1,7 +1,9 @@
 import { exec } from "node:child_process";
-import { lookup } from "node:dns/promises";
+import { lookup as dnsLookup, type LookupOptions } from "node:dns";
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { isIP } from "node:net";
+import http from "node:http";
+import https from "node:https";
+import { BlockList, isIP, type LookupFunction } from "node:net";
 import { arch, cpus, freemem, homedir, hostname, platform, release, totalmem, uptime } from "node:os";
 import path from "node:path";
 import { z } from "zod";
@@ -153,7 +155,7 @@ const runCommandTool = tool({
     cwd: z.string().optional(),
     timeout_sec: z.number().int().min(1).max(600).optional(),
   }),
-  policy: { effects: ["exec"], egressArgs: ["command"] },
+  policy: { effects: ["exec"], egressArgs: ["command"], pathArgs: ["cwd"] },
   async run({ command, cwd, timeout_sec = 60 }, ctx) {
     const dir = cwd ? resolvePath(cwd, ctx.cwd) : ctx.cwd;
     return new Promise((resolve) => {
@@ -170,24 +172,49 @@ const runCommandTool = tool({
 
 // ---------- web ----------
 
-function privateAddress(ip: string): boolean {
-  if (isIP(ip) === 4) {
-    const [a, b] = ip.split(".").map(Number) as [number, number];
-    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
-  }
-  const l = ip.toLowerCase();
-  return l === "::1" || l === "::" || l.startsWith("fc") || l.startsWith("fd") || l.startsWith("fe80") || l.startsWith("::ffff:127.") || l.startsWith("::ffff:10.") || l.startsWith("::ffff:192.168.");
+/** Addresses web tools may never reach: this computer, the local network, and special ranges. */
+const BLOCKED = new BlockList();
+for (const [net, bits] of [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
+  ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 4], ["240.0.0.0", 4],
+] as const) BLOCKED.addSubnet(net, bits, "ipv4");
+for (const [net, bits] of [
+  ["::", 128], ["::1", 128], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8], ["64:ff9b::", 96], ["2002::", 16],
+] as const) BLOCKED.addSubnet(net, bits, "ipv6");
+
+/** IPv4-mapped IPv6 forms (::ffff:7f00:1) are checked as the IPv4 address they carry. */
+export function privateAddress(ip: string): boolean {
+  const fam = isIP(ip);
+  if (!fam) return true;
+  return BLOCKED.check(ip, fam === 6 ? "ipv6" : "ipv4");
 }
 
-/** Web tools may not reach this computer or the local network: that is where the gateway and other private services live. */
-export async function assertPublicUrl(raw: string): Promise<URL> {
+const NO_LOCAL = "Web tools do not reach this computer or the local network.";
+
+/** Checks that need no DNS: scheme, local names, literal addresses. */
+export function assertPublicUrl(raw: string): URL {
   const u = new URL(raw);
   if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("Only http and https links.");
   const host = u.hostname.replace(/^\[|\]$/g, "");
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) throw new Error("Web tools do not reach this computer or the local network.");
-  const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
-  if (addrs.some((a) => privateAddress(a.address))) throw new Error("Web tools do not reach this computer or the local network.");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) throw new Error(NO_LOCAL);
+  if (isIP(host) && privateAddress(host)) throw new Error(NO_LOCAL);
   return u;
+}
+
+/**
+ * DNS lookup used for the connection itself, so the address that is checked is
+ * the address that is used. A name that resolves to a public address for the
+ * check and a private one for the fetch (DNS rebinding) can't slip between them.
+ */
+function publicOnlyLookup(hostname: string, options: LookupOptions, cb: (...a: unknown[]) => void): void {
+  dnsLookup(hostname, { all: true }, (err, addrs) => {
+    if (err) return cb(err);
+    if (!addrs.length || addrs.some((a) => privateAddress(a.address))) {
+      return cb(Object.assign(new Error(NO_LOCAL), { code: "EBLOCKED" }));
+    }
+    if (options.all) cb(null, addrs);
+    else cb(null, addrs[0]!.address, addrs[0]!.family);
+  });
 }
 
 export function htmlToText(html: string): string {
@@ -203,17 +230,52 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
-async function safeFetch(raw: string, signal: AbortSignal): Promise<Response> {
+interface Fetched { status: number; type: string; body: string; url: string }
+
+const MAX_BODY = 3 * 1024 * 1024;
+
+function getOnce(u: URL, signal: AbortSignal): Promise<Fetched & { location?: string }> {
+  return new Promise((resolve, reject) => {
+    const mod = u.protocol === "https:" ? https : http;
+    const req = mod.request(u, {
+      method: "GET",
+      lookup: publicOnlyLookup as unknown as LookupFunction,
+      signal: AbortSignal.any([signal, AbortSignal.timeout(20000)]),
+      headers: {
+        "user-agent": "Mozilla/5.0 (Jarvis desktop agent)",
+        accept: "text/html,application/json,text/plain;q=0.9,*/*;q=0.5",
+        "accept-encoding": "identity",
+      },
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on("data", (c: Buffer) => {
+        size += c.length;
+        if (size <= MAX_BODY) chunks.push(c);
+        else res.destroy();
+      });
+      const done = () => resolve({
+        status: res.statusCode ?? 0,
+        type: String(res.headers["content-type"] ?? ""),
+        body: Buffer.concat(chunks).toString("utf8"),
+        url: u.toString(),
+        location: typeof res.headers.location === "string" ? res.headers.location : undefined,
+      });
+      res.on("end", done);
+      res.on("close", done);
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+export async function safeFetch(raw: string, signal: AbortSignal): Promise<Fetched> {
   let url = raw;
   for (let hop = 0; hop < 5; hop++) {
-    await assertPublicUrl(url);
-    const res = await fetch(url, {
-      redirect: "manual",
-      signal: AbortSignal.any([signal, AbortSignal.timeout(20000)]),
-      headers: { "user-agent": "Mozilla/5.0 (Jarvis desktop agent)", accept: "text/html,application/json,text/plain;q=0.9,*/*;q=0.5" },
-    });
-    const loc = res.headers.get("location");
-    if (res.status >= 300 && res.status < 400 && loc) { url = new URL(loc, url).toString(); continue; }
+    const u = assertPublicUrl(url);
+    const res = await getOnce(u, signal);
+    if (res.status >= 300 && res.status < 400 && res.location) { url = new URL(res.location, url).toString(); continue; }
     return res;
   }
   throw new Error("Too many redirects.");
@@ -229,23 +291,25 @@ const webFetchTool = tool({
   parallelSafe: true,
   async run({ url }, ctx) {
     const res = await safeFetch(url, ctx.signal);
-    const type = res.headers.get("content-type") ?? "";
-    const body = await res.text();
-    const text = type.includes("html") ? htmlToText(body) : body;
+    const text = res.type.includes("html") ? htmlToText(res.body) : res.body;
     return `${res.status} ${url}\n${text.length > MAX_FETCH ? text.slice(0, MAX_FETCH) + "\n[… cut]" : text}`;
   },
 });
 
 export function parseDuckDuckGo(html: string): Array<{ title: string; url: string; snippet: string }> {
   const out: Array<{ title: string; url: string; snippet: string }> = [];
-  const rx = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:class="result__snippet"[^>]*>([\s\S]*?)<\/a>)?/g;
-  for (const m of html.matchAll(rx)) {
-    let href = m[1]!.replace(/&amp;/g, "&");
+  // One block per result; title and snippet are found inside each block separately.
+  for (const block of html.split(/<div[^>]+class="[^"]*\bresult\b[^"]*"/).slice(1)) {
+    const a = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/.exec(block)
+      ?? /<a[^>]*href="([^"]+)"[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/.exec(block);
+    if (!a) continue;
+    let href = a[1]!.replace(/&amp;/g, "&");
     const ud = /[?&]uddg=([^&]+)/.exec(href);
     if (ud) href = decodeURIComponent(ud[1]!);
     if (href.startsWith("//")) href = `https:${href}`;
     if (/duckduckgo\.com\/y\.js/.test(href)) continue; // ads
-    out.push({ title: htmlToText(m[2]!), url: href, snippet: htmlToText(m[3] ?? "") });
+    const sn = /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div|td)>/.exec(block);
+    out.push({ title: htmlToText(a[2]!), url: href, snippet: htmlToText(sn?.[1] ?? "") });
     if (out.length >= 8) break;
   }
   return out;
@@ -261,7 +325,7 @@ const webSearchTool = tool({
   parallelSafe: true,
   async run({ query }, ctx) {
     const res = await safeFetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, ctx.signal);
-    const results = parseDuckDuckGo(await res.text());
+    const results = parseDuckDuckGo(res.body);
     if (!results.length) return `No results for "${query}". Do not make any up.`;
     return results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n");
   },
@@ -287,7 +351,11 @@ const openAppTool = tool({
   schema: z.object({ name: z.string().min(1).max(80) }),
   policy: { effects: ["mutate"], targetArgs: ["name"] },
   async run({ name }) {
-    await os.openApp(name);
+    try {
+      await os.openApp(name);
+    } catch {
+      throw new Error(`I couldn't find an app called "${name}" on this computer.`);
+    }
     return `Started ${name}.`;
   },
 });
@@ -308,7 +376,7 @@ const clipboardWriteTool = tool({
   name: "clipboard_write",
   description: "Put text on the clipboard.",
   schema: z.object({ text: z.string() }),
-  policy: { effects: ["mutate"] },
+  policy: { effects: ["mutate"], lastsBeyondRequest: true },
   async run({ text }) {
     await os.clipboardWrite(text);
     return `Copied ${text.length} characters.`;
@@ -365,7 +433,7 @@ const rememberTool = tool({
   name: "remember",
   description: "Save a short fact about the owner or their world for later (one fact per call).",
   schema: z.object({ fact: z.string().min(2).max(500) }),
-  policy: { effects: ["mutate"] },
+  policy: { effects: ["mutate"], lastsBeyondRequest: true },
   async run({ fact }, ctx) {
     const f = ctx.memory.remember(fact);
     return `Remembered (${f.id}): ${f.text}`;

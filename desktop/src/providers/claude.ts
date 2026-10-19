@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { redactSecrets } from "../gate/secrets.js";
 import type { Provider, ToolCall, Turn, TurnRequest, TurnResult } from "./types.js";
 
 /**
@@ -101,7 +102,8 @@ export function toMessages(turns: Turn[]): Anthropic.Beta.BetaMessageParam[] {
         content: t.results.map((r) => ({
           type: "tool_result" as const,
           tool_use_id: r.id,
-          content: r.content,
+          // Results the local brain saw unredacted are masked here, whichever brain produced them.
+          content: redactSecrets(r.content).text,
           is_error: r.isError,
         })),
       });

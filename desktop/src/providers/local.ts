@@ -49,6 +49,8 @@ export class LocalProvider implements Provider {
     let text = "";
     let finish = "";
     const calls = new Map<number, { id: string; name: string; args: string }>();
+    const idSlot = new Map<string, number>();
+    let lastSlot = 0;
     const think = new ThinkSplitter(req.onText, req.onThinking);
     for await (const data of sseData(res.body)) {
       if (data === "[DONE]") break;
@@ -61,18 +63,26 @@ export class LocalProvider implements Provider {
       if (d.reasoning) req.onThinking(d.reasoning);
       if (d.content) text += think.push(d.content);
       for (const tc of d.tool_calls ?? []) {
-        const i = tc.index ?? 0;
-        const cur = calls.get(i) ?? { id: tc.id ?? `call_${i}`, name: "", args: "" };
+        // Servers differ: most send an index, some only an id, some neither (one whole call per entry).
+        let slot: number;
+        if (typeof tc.index === "number") slot = tc.index;
+        else if (tc.id && idSlot.has(tc.id)) slot = idSlot.get(tc.id)!;
+        else if (!tc.id && !tc.function?.name && calls.size) slot = lastSlot;
+        else slot = 1000 + calls.size;
+        if (tc.id) idSlot.set(tc.id, slot);
+        lastSlot = slot;
+        const cur = calls.get(slot) ?? { id: tc.id ?? `call_${calls.size}`, name: "", args: "" };
         if (tc.id) cur.id = tc.id;
-        if (tc.function?.name) cur.name += tc.function.name;
+        // The name arrives once; a server that repeats it in every fragment must not double it.
+        if (tc.function?.name && !cur.name.endsWith(tc.function.name)) cur.name += tc.function.name;
         if (tc.function?.arguments) cur.args += tc.function.arguments;
-        calls.set(i, cur);
+        calls.set(slot, cur);
       }
       if (choice.finish_reason) finish = choice.finish_reason;
     }
     text += think.flush();
 
-    const toolCalls: ToolCall[] = [...calls.values()].map((c, i) => {
+    const toolCalls: ToolCall[] = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, c], i) => {
       let input: Record<string, unknown> = {};
       try { input = c.args ? (JSON.parse(c.args) as Record<string, unknown>) : {}; } catch { input = { __invalid_json: c.args }; }
       return { id: c.id || `call_${i}`, name: c.name, input };

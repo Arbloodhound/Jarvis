@@ -51,6 +51,9 @@ export interface RunHooks {
 }
 
 const SUMMARY = 400;
+const DECLINED = "The owner declined this.";
+/** About 150k tokens of conversation, well inside every current model's window. */
+const HISTORY_BUDGET = 600_000;
 
 export class Agent {
   readonly turns: Turn[] = [];
@@ -71,10 +74,11 @@ export class Agent {
     const runId = randomUUID().slice(0, 8);
     const ac = new AbortController();
     this.running = ac;
-    const provider = this.deps.provider();
-    const ep = new Episode(request);
-    hooks.emit({ type: "run_start", runId, brain: provider.label });
     try {
+      const provider = this.deps.provider();
+      const ep = new Episode(request);
+      hooks.emit({ type: "run_start", runId, brain: provider.label });
+      this.trim();
       const fast = fastCommand(request);
       if (fast) return await this.runFast(runId, fast, ep, hooks, ac.signal, request);
       return await this.runModel(runId, request, provider, ep, hooks, ac.signal);
@@ -89,6 +93,26 @@ export class Agent {
     } finally {
       this.settle();
       this.running = null;
+    }
+  }
+
+  /** Forget the conversation (memory facts stay). */
+  reset(): void {
+    if (this.running) throw new Error("Stop the current request first.");
+    this.turns.length = 0;
+  }
+
+  /**
+   * Keep the conversation under a size budget by dropping the oldest whole
+   * exchanges (a request and everything that answered it), so a long session
+   * never overflows the model's context and every tool call keeps its result.
+   */
+  private trim(budgetChars = HISTORY_BUDGET): void {
+    const size = () => this.turns.reduce((n, t) => n + JSON.stringify(t).length, 0);
+    while (size() > budgetChars) {
+      const next = this.turns.findIndex((t, i) => i > 0 && t.role === "user");
+      if (next <= 0) { this.turns.length = 0; return; }
+      this.turns.splice(0, next);
     }
   }
 
@@ -115,7 +139,10 @@ export class Agent {
     } else {
       const call: ToolCall = { id: `fast_${runId}`, name: fast.tool, input: fast.args };
       const [res] = await this.execute(runId, [call], ep, hooks, signal, false);
-      text = res!.isError ? res!.content : fast.say ? fast.say(res!.content) : res!.content;
+      if (signal.aborted) throw new Error("stopped");
+      text = !res!.isError ? (fast.say ? fast.say(res!.content) : res!.content)
+        : res!.content.startsWith(DECLINED) ? "Okay, I didn't do it."
+        : res!.content;
     }
     this.turns.push({ role: "user", text: request }, { role: "assistant", text, toolCalls: [], brain: "fast" });
     hooks.emit({ type: "text", runId, delta: text });
@@ -155,9 +182,15 @@ export class Agent {
         break;
       }
       if (!res.toolCalls.length) break;
+      if (res.stop === "max_tokens") {
+        // A tool call cut off mid-way may still parse (a half-written file); never run it.
+        this.turns.push({ role: "tool", results: res.toolCalls.map((c) => ({ id: c.id, name: c.name, content: "Not run: the request was cut off by the length limit. Do it in smaller steps.", isError: true })) });
+        continue;
+      }
 
       const results = await this.execute(runId, res.toolCalls, ep, hooks, signal, cloud);
       this.turns.push({ role: "tool", results });
+      if (signal.aborted) throw new Error("stopped");
       if (turn === this.deps.maxTurns - 1) {
         hooks.emit({ type: "warning", runId, text: `Stopped after ${this.deps.maxTurns} steps without a final answer.` });
       }
@@ -193,7 +226,10 @@ export class Agent {
 
     // Inputs stream eagerly from the cloud brain, so they are validated here before anything runs.
     const parsed = t.schema.safeParse(call.input);
-    if (!parsed.success) return fail(`Invalid input for ${t.name}: ${parsed.error.message}`);
+    if (!parsed.success) {
+      const why = parsed.error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ");
+      return fail(`Invalid input for ${t.name} (${why}).`);
+    }
     const args = parsed.data as Record<string, unknown>;
 
     const verdict = this.deps.gate.check(ep, t.name, t.policy, args);
@@ -209,8 +245,9 @@ export class Agent {
         new Promise<boolean>((resolve) => signal.addEventListener("abort", () => resolve(false), { once: true })),
       ]);
       hooks.emit({ type: "confirm_resolved", runId, cardId, allowed });
+      if (signal.aborted) return fail("Stopped by the owner.");
       this.deps.audit.write({ runId, tool: t.name, args: redactArgs(args), gate: "confirm", rule: verdict.confirm.rule, allowed });
-      if (!allowed) return fail("The owner declined this. Do not retry it another way.");
+      if (!allowed) return fail(`${DECLINED} Do not retry it another way.`);
       ep.confirm(t.name, args);
     }
 

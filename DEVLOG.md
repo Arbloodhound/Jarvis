@@ -4760,3 +4760,9 @@ Owner: "branch the existing work to a new project, a Jarvis client on the comput
 - PROVEN here (Linux, Xvfb): app and the packaged AppImage pass the self-test (window connects, clipboard round-trip, 1280x800 capture, notification, tray, hotkey). AppImage + .deb build.
 - PROVEN in CI (run 39335363833, head 88b9a58): self-test passed on win32 (screenshot 1024x768, notification shown), darwin (all checks, capture 1024x768) and linux; installers built and uploaded as artifacts jarvis-Windows / jarvis-macOS / jarvis-Linux.
 - Still unproven: daily use on the owner's own computer; macOS Screen Recording permission prompt on a real Mac; unsigned-installer warnings are expected (no certificates).
+
+## 2026-10-19 — Pre-release review of Jarvis Desktop (owner: review before merge/release)
+- 4 Haiku agents (security review, correctness review, OSS comparison, OpenClaw/agent-security research); every finding verified against the code. Full list and comparison in desktop/REVIEW.md.
+- Fixed 20 findings, incl. CRITICAL git core.fsmonitor RCE via allowlisted `git status`, prefix allowlist (git diff --output / --no-index, du --files0-from), symlink and case bypasses of sensitive paths, URL userinfo host spoof, subdomain trust, IPv4-mapped IPv6 SSRF + DNS rebinding (pinned lookup), short/encoded leaks (password-like tokens, trifecta rule), planted memory/clipboard after web reads, secrets reaching Claude after a brain switch, PowerShell injection (CLI on Windows), fast-path misroutes, local tool-call merging, cut-off tool calls running, unbounded history, lost confirm cards, corrupt config/memory blocking startup, stuck busy state.
+- Config: `allowCommands` replaced by `extraAllowedCommands` (exact text); old key ignored.
+- 31 tests pass (was 19); Linux native self-test passes. CI runs Windows/macOS.

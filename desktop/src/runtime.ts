@@ -22,7 +22,7 @@ export class Runtime {
     this.agent = new Agent({
       provider: () => this.provider(),
       tools: () => toolsFor(this.cfg.offlineOnly),
-      gate: new Gate({ writableRoots: cfg.writableRoots, allowCommands: cfg.allowCommands }, cwd),
+      gate: new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd),
       memory: this.memory,
       audit: new AuditLog(p.audit),
       home: p.home,

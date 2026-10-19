@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { startupWarnings } from "./config.js";
 
 /**
  * What Jarvis remembers about its owner: short facts in a JSON file, searched
@@ -31,7 +32,16 @@ export class Memory {
   private store: Store;
 
   constructor(private readonly file: string | null) {
-    this.store = file && existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Store) : { facts: [], trash: [] };
+    this.store = { facts: [], trash: [] };
+    if (!file || !existsSync(file)) return;
+    try {
+      const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<Store>;
+      this.store = { facts: Array.isArray(raw.facts) ? raw.facts : [], trash: Array.isArray(raw.trash) ? raw.trash : [] };
+    } catch (err) {
+      const aside = `${file}.broken-${Date.now()}`;
+      renameSync(file, aside);
+      startupWarnings.push(`memory.json could not be read (${err instanceof Error ? err.message : String(err)}). It was moved to ${aside}; memory starts empty.`);
+    }
   }
 
   remember(text: string): Fact {
@@ -67,6 +77,8 @@ export class Memory {
     const ids = new Set(hits.map((f) => f.id));
     this.store.facts = this.store.facts.filter((f) => !ids.has(f.id));
     this.store.trash.push(...hits);
+    // The trash keeps the last 500 forgotten facts; older ones are gone for good.
+    if (this.store.trash.length > 500) this.store.trash = this.store.trash.slice(-500);
     this.save();
     return hits;
   }

@@ -104,7 +104,11 @@ export function normHost(raw: string): string | null {
   let s = raw.toLowerCase().trim().replace(/[.,)!?;:]+$/, "");
   const i = s.indexOf("://");
   if (i >= 0) s = s.slice(i + 3);
-  s = s.split("/")[0]!.split("?")[0]!.split("#")[0]!.split(":")[0]!;
+  s = s.split("/")[0]!.split("?")[0]!.split("#")[0]!;
+  // "amazon.com:x@evil.example" is evil.example: everything before the last @ is a user name.
+  const at = s.lastIndexOf("@");
+  if (at >= 0) s = s.slice(at + 1);
+  s = s.startsWith("[") ? s.slice(0, s.indexOf("]") + 1) : s.split(":")[0]!;
   if (s.startsWith("www.")) s = s.slice(4);
   return s.includes(".") && s.length >= 4 ? s : null;
 }

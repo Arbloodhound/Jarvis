@@ -9,7 +9,7 @@ It follows OpenClaw's design (a local gateway that clients connect to) and adds 
 | Area | Tools |
 |---|---|
 | Files | read, list, find, write (writes go to its own workspace unless you approve a card) |
-| Computer | run commands (you confirm each one, except `ls`, `git status` and a few other read-only ones), open apps, open links, clipboard, notifications, screenshots, system info |
+| Computer | run commands (you confirm each one, except a few read-only ones like `ls`, `pwd` and `df`), open apps, open links, clipboard, notifications, screenshots, system info |
 | Web | search (DuckDuckGo), read pages |
 | Memory | remember, recall, forget (forgotten facts go to a trash first) |
 

@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { AgentEvent } from "./agent/loop.js";
+import { startupWarnings } from "./config.js";
 import type { Runtime } from "./runtime.js";
 
 /**
@@ -21,6 +22,9 @@ import type { Runtime } from "./runtime.js";
  *   other sites from driving it).
  */
 
+/** An unanswered card is declined after 10 minutes, so a forgotten card can't hold Jarvis forever. */
+const CARD_TIMEOUT_MS = 10 * 60 * 1000;
+
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "ui");
 
 type ClientMsg =
@@ -28,7 +32,8 @@ type ClientMsg =
   | { type: "confirm"; cardId: string; allow: boolean }
   | { type: "stop" }
   | { type: "settings"; brain?: "local" | "cloud"; offlineOnly?: boolean }
-  | { type: "state" };
+  | { type: "state" }
+  | { type: "reset" };
 
 function sameToken(a: string, b: string): boolean {
   const x = Buffer.from(a);
@@ -82,7 +87,15 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
   const clients = new Set<WebSocket>();
-  const pending = new Map<string, (allow: boolean) => void>();
+  /** Open confirm cards: re-sent to a page that reconnects, declined after CARD_TIMEOUT_MS. */
+  const pending = new Map<string, { resolve: (allow: boolean) => void; card: Record<string, unknown>; timer: NodeJS.Timeout }>();
+  const settleCard = (id: string, allow: boolean) => {
+    const p = pending.get(id);
+    if (!p) return;
+    pending.delete(id);
+    clearTimeout(p.timer);
+    p.resolve(allow);
+  };
 
   const broadcast = (msg: { type: string } & Record<string, unknown>) => {
     opts.onEvent?.(msg);
@@ -105,6 +118,8 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
   wss.on("connection", (ws: WebSocket) => {
     clients.add(ws);
     ws.send(JSON.stringify({ type: "state", ...rt.state() }));
+    for (const w of startupWarnings) ws.send(JSON.stringify({ type: "error", runId: "", message: w }));
+    for (const p of pending.values()) ws.send(JSON.stringify(p.card));
     ws.on("close", () => clients.delete(ws));
     ws.on("message", (raw) => {
       let msg: ClientMsg;
@@ -115,22 +130,26 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
         void rt.agent.run(msg.text.trim(), {
           emit: (e: AgentEvent) => broadcast(e as AgentEvent & Record<string, unknown>),
           confirm: (card) => new Promise<boolean>((resolve) => {
-            pending.set(card.cardId, resolve);
+            const timer = setTimeout(() => settleCard(card.cardId, false), CARD_TIMEOUT_MS);
+            pending.set(card.cardId, { resolve, card: card as typeof card & Record<string, unknown>, timer });
             broadcast(card as typeof card & Record<string, unknown>);
           }),
         }).finally(() => {
           // A stopped run can leave a card nobody answered; close it as declined.
-          for (const [id, resolve] of pending) { resolve(false); pending.delete(id); }
+          for (const id of [...pending.keys()]) settleCard(id, false);
           broadcast({ type: "state", ...rt.state() });
         });
       } else if (msg.type === "confirm" && typeof msg.cardId === "string") {
-        const resolve = pending.get(msg.cardId);
-        if (resolve) { pending.delete(msg.cardId); resolve(msg.allow === true); }
+        settleCard(msg.cardId, msg.allow === true);
       } else if (msg.type === "stop") {
         rt.agent.stop();
       } else if (msg.type === "settings") {
         rt.update(msg);
         broadcast({ type: "state", ...rt.state() });
+      } else if (msg.type === "reset") {
+        if (rt.agent.busy) { ws.send(JSON.stringify({ type: "error", runId: "", message: "Stop the current request first." })); return; }
+        rt.agent.reset();
+        broadcast({ type: "reset" });
       } else if (msg.type === "state") {
         ws.send(JSON.stringify({ type: "state", ...rt.state() }));
       }
