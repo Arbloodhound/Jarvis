@@ -21,6 +21,10 @@ object NetPolicy {
     /** Pure, JVM-tested. Web search may run only with offline-only off. */
     fun webAllowed(offlineOnly: Boolean): Boolean = !offlineOnly
 
-    /** The owner's setting (UltraPrefs, on by default). */
+    /** The cloud brain answers: chosen in the model picker (default: on-device) and offline-only off. */
+    fun cloudBrainOn(ctx: Context): Boolean =
+        com.agent.ultra.ui.UltraPrefs.cloudBrain(ctx) && !offlineOnly(ctx)
+
+    /** The owner's setting (UltraPrefs, off by default). */
     fun offlineOnly(ctx: Context): Boolean = com.agent.ultra.ui.UltraPrefs.offlineOnly(ctx)
 }

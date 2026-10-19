@@ -4703,3 +4703,9 @@ JVM: 1623 tests, 0 failures. Runtime-unproven. Background activity launches with
 Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private tools.
 
 - Default thinker restored to the abliterated Qwen3-4B Thinking (owner, 2026-10-18: "hit the abliterated back as the default"). The LFM default was reverted; the two LFM2.5 models stay as opt-in picker entries (stock, refusals on). Local-first (offline-only default on) stays.
+
+## 2026-10-19 — Toggles, local brain, grounding
+- Offline-only is a pure privacy switch again: original pref key, default OFF, and only Settings changes it. The model picker no longer flips it (that, plus my earlier offline_only_v2 key, made toggles look like they reset).
+- New separate pref cloud_brain (default false = on-device). Cloud answers only when the picker chose a cloud model AND offline-only is off (NetPolicy.cloudBrainOn).
+- Grounding: when the web search ran and found nothing, the local prompt now says so and forbids invented sellers/prices/links and invented screen actions. Pixel 2026-10-18 showed fabricated results after results=0.
+- Not touched: any other toggle that may reset; no evidence found. JVM 1622 tests, 0 failures. Runtime-unproven.

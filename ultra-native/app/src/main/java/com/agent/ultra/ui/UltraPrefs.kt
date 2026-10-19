@@ -61,13 +61,23 @@ object UltraPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OWN_VOICE, on).apply()
     }
 
-    private const val K_OFFLINE_ONLY = "offline_only_v2"   // new key: every install starts on the on-device brain once
+    private const val K_OFFLINE_ONLY = "offline_only"
+    private const val K_CLOUD_BRAIN = "cloud_brain"
 
-    /** Offline only: no cloud brain, no web search (model downloads still work). On by default
-     * (owner, 2026-10-18: the on-device model is the default brain); the chat's model picker
-     * switches to a cloud model when chosen. Read through agent.NetPolicy. */
+    /** Offline only: no cloud brain, no web search (model downloads still work). Off by default,
+     * and only the Settings switch changes it (the model picker used to flip it, which looked like
+     * a toggle resetting itself: owner, 2026-10-19). Read through agent.NetPolicy. */
     fun offlineOnly(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_OFFLINE_ONLY, true)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_OFFLINE_ONLY, false)
+
+    /** Which brain answers: the on-device model (default) or the cloud model chosen in the chat's
+     * model picker. Separate from [offlineOnly], which is a privacy switch on top of it. */
+    fun cloudBrain(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_CLOUD_BRAIN, false)
+
+    fun setCloudBrain(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_CLOUD_BRAIN, on).apply()
+    }
 
     fun setOfflineOnly(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OFFLINE_ONLY, on).apply()

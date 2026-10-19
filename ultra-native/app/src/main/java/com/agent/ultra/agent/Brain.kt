@@ -226,7 +226,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     // Was hard-coded to "Gemma 3 1B" whatever model was selected (seen on the Pixel with the MoE in use).
     // The cloud name only while the cloud is actually used: with Offline-only on, the chip showed
     // "claude-opus-5-5" though every answer came from the phone (owner, 2026-10-18).
-    val modelLabel: String get() = client?.takeIf { NetPolicy.cloudAllowed(NetPolicy.offlineOnly(appContext), true) }?.modelName
+    val modelLabel: String get() = client?.takeIf { NetPolicy.cloudBrainOn(appContext) }?.modelName
         ?: "${local.modelLabel.substringBefore(" — ")} (on-device)"
 
     /** Non-null while a confirmable policy-gate block waits on the operator.
@@ -278,7 +278,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             return@withLock
         }
         // Offline-only switched on while the action waited: the cloud run is not resumed.
-        if (!NetPolicy.cloudAllowed(NetPolicy.offlineOnly(appContext), true)) {
+        if (!NetPolicy.cloudBrainOn(appContext)) {
             answer("Cancelled: ${p.description} (offline-only mode is on, so the cloud brain can't carry on)")
             return@withLock
         }
@@ -508,7 +508,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
 
         // Offline only (Settings): the cloud brain is not used even when one is configured.
         val offlineOnly = NetPolicy.offlineOnly(appContext)
-        val ai = client?.takeIf { NetPolicy.cloudAllowed(offlineOnly, true) }
+        val ai = client?.takeIf { NetPolicy.cloudBrainOn(appContext) }
         if (ai == null) {
             // Offline/unconfigured path: the on-device model is the brain.
             if (!loadLocalShown()) {
@@ -691,7 +691,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         var failures = 0
         for ((i, step) in steps.withIndex()) {
             // react_navigate is driven by the cloud model (ReActNavigator): not with offline only on.
-            if (step.tool == "react_navigate" && client != null && !NetPolicy.cloudAllowed(NetPolicy.offlineOnly(appContext), true)) {
+            if (step.tool == "react_navigate" && client != null && !NetPolicy.cloudBrainOn(appContext)) {
                 lines += "${i + 1}. ${step.tool} — skipped (it needs the cloud brain; offline-only mode is on)"
                 failures++
                 continue
@@ -989,6 +989,12 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 }
                 if (webQuery != null) GateAuditLog.recordRoute(GateAuditLog.ROUTE_WEB, if (web != null) "found" else "empty")
                 android.util.Log.d("UltraRoute", "web query=${webQuery?.take(60)} found=${web != null}")
+                // The search ran and found nothing: tell the model, or it writes the results itself
+                // (Pixel 2026-10-18: invented sellers, prices and links, and "typing in Google" it never did).
+                val userForPrompt = if (webQuery != null && web == null)
+                    userInput + "\n\n[The web search found nothing. Say that plainly. Do not invent sellers, " +
+                        "prices, links or search results, and do not describe any action on the screen you did not take.]"
+                else userInput
                 // System block from the fixed-order fragments (persona, profile, tools, history):
                 // byte-identical to LocalPrompt.offlineSystem, tracked for KV prefix reuse.
                 val envelope = LocalEnvelope.answer(com.agent.ultra.ui.UltraPrefs.ownerName(appContext),
@@ -996,7 +1002,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                     history, historyChars)
                 trackPromptEnvelope(envelope)
                 val system = LocalEnvelope.systemText(envelope.fragments, "\n")
-                val prompt = LocalPrompt.build(system, history, userInput, historyChars,
+                val prompt = LocalPrompt.build(system, history, userForPrompt, historyChars,
                     memory = listOfNotNull(memory, web).joinToString("\n\n").ifBlank { null },
                     now = LocalPrompt.nowLine(),
                     memoryCap = if (web != null) WebNeed.RESEARCH_CHARS else if (focus != null) MemoryFocus.MAX_CHARS else MemoryBrief.MAX_CHARS,

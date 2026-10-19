@@ -39,7 +39,7 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val cfg = remember { ProviderConfig.load(context) }
-    var offline by remember { mutableStateOf(UltraPrefs.offlineOnly(context)) }
+    var cloud by remember { mutableStateOf(UltraPrefs.cloudBrain(context)) }
     var cloudModel by remember { mutableStateOf(cfg.model) }
     val downloaded = remember { localEngine.downloadedFileNames() }
     val localModels = remember { LocalModelEngine.PRESETS.filter { it.fileName in downloaded } }
@@ -63,13 +63,13 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
                 Text("ON-DEVICE", style = MaterialTheme.typography.labelSmall, color = faint)
                 run {
                     (localModels + listOfNotNull(recommended)).forEach { m ->
-                        Row(selected = offline && currentLocal == m.fileName, label = "${m.label} (on-device)" +
+                        Row(selected = !cloud && currentLocal == m.fileName, label = "${m.label} (on-device)" +
                             if (m.fileName in downloaded) "" else " — tap to download (${m.approxMb} MB)") {
                             scope.launch {
                                 localEngine.selectModel(m)
                                 if (m.fileName !in downloaded) com.agent.ultra.local.Downloads.downloadAllMissing(context)
-                                UltraPrefs.setOfflineOnly(context, true)
-                                offline = true
+                                UltraPrefs.setCloudBrain(context, false)
+                                cloud = false
                                 onChanged()
                                 onDismiss()
                             }
@@ -83,10 +83,10 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
                         style = MaterialTheme.typography.bodySmall, color = faint)
                 } else {
                     cloudIds.forEach { id ->
-                        Row(selected = !offline && cloudModel == id, label = "Cloud · $id") {
+                        Row(selected = cloud && cloudModel == id, label = "Cloud · $id") {
                             ProviderConfig.save(context, cfg.copy(model = id))
-                            UltraPrefs.setOfflineOnly(context, false)
-                            offline = false; cloudModel = id
+                            UltraPrefs.setCloudBrain(context, true)
+                            cloud = true; cloudModel = id
                             onChanged()
                         }
                     }
