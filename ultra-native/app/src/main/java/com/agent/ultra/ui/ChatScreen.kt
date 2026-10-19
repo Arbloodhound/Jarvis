@@ -283,6 +283,8 @@ fun ChatScreen(
                 Text("⚙", style = MaterialTheme.typography.titleLarge)
             }
         }
+        // Unfinished setup: one line, opening the checklist (gone once every required step is done).
+        SetupChecklistBanner(context)
 
         // Model chip + quick actions (drive through the agent's own local-first
         // router — these exercise the same path as typed commands)
