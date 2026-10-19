@@ -33,6 +33,8 @@ object LocalToolCall {
         // Calls and texts (owner, 2026-10-19: the local model needs the cloud model's tools). "call mom"
         // gives a name: Brain resolves it from the contacts and the gate still asks before it dials.
         "call_phone", "call_answer", "call_end", "call_speaker", "sms_send",
+        // Reading the screen as a picture, and the rest of the phone's details.
+        "screen_ocr", "look_at_screen", "describe_screen", "read_screen_deep", "device_info",
     )
 
     /** What the model says when the message is not a command for one of [TOOLS]. */
@@ -99,6 +101,11 @@ call_answer {}   (pick up the ringing call)
 call_end {}   (hang up, or decline the ringing call)
 call_speaker {"on":true|false}   (speakerphone during a call)
 sms_send {"to":"name or number","message":"..."}   (send a text)
+screen_ocr {}   (read the words in a picture of the screen: games, maps, images)
+look_at_screen {"question":"..."}   (the vision model describes the screen or answers a question about it; slow)
+describe_screen {}   (a description of what is on the screen)
+read_screen_deep {}   (scroll the page and read all of it)
+device_info {}   (model, Android version, hardware)
 """.trim()
 
     /** After the tool list: the way out and the worked examples. */
@@ -127,6 +134,10 @@ answer the call -> {"tool":"call_answer","params":{}}
 hang up -> {"tool":"call_end","params":{}}
 put it on speaker -> {"tool":"call_speaker","params":{"on":true}}
 text Sam I am running late -> {"tool":"sms_send","params":{"to":"Sam","message":"I am running late"}}
+read the words in the picture of my screen -> {"tool":"screen_ocr","params":{}}
+what does my screen look like -> {"tool":"look_at_screen","params":{"question":""}}
+read this whole page -> {"tool":"read_screen_deep","params":{}}
+what phone is this -> {"tool":"device_info","params":{}}
 set a timer for 5 minutes -> {"tool":"none","params":{}}
 """.trim()
 

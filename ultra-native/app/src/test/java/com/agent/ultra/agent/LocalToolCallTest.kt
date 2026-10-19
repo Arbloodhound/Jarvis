@@ -132,7 +132,8 @@ class LocalToolCallCallsTest {
         org.junit.Assert.assertTrue(c is LocalToolCall.Parsed.Call && c.tool == "call_phone")
     }
     @org.junit.Test fun callRequestsRouteToTheToolLoop() {
-        for (r in listOf("call mom", "hang up", "put it on speaker", "text Sam I am running late", "answer the call"))
+        for (r in listOf("call mom", "hang up", "put it on speaker", "text Sam I am running late", "answer the call",
+            "look at my screen", "describe my screen", "read this whole page", "what phone is this"))
             org.junit.Assert.assertTrue(r, Brain.isSimpleLocalIntent(r))
     }
 }

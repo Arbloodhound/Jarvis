@@ -2126,7 +2126,8 @@ RULES:
                     "screenshot|screen ?shot|home screen|go home|go back|recent apps|notifications?|quick settings|" +
                     "lock (?:the |my )?(?:phone|screen)|on (?:my|the) screen|music|song|track|pause|play|skip|" +
                     "settings|where am i|my location|texts?|sms|messages?|contacts?|number|storage|phone info|" +
-                    "call|dial|hang up|hangup|end the call|decline|answer (?:the |this |that )?(?:call|phone|it)|speaker(?:phone)?)\\b"
+                    "call|dial|hang up|hangup|end the call|decline|answer (?:the |this |that )?(?:call|phone|it)|speaker(?:phone)?|" +
+                    "ocr|look at (?:my |the )?screen|describe (?:my |the )?screen|read (?:this|the) (?:whole )?page|what phone)\\b"
             ).containsMatchIn(u)
         }
 
