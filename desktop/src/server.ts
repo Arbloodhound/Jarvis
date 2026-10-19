@@ -31,7 +31,9 @@ type ClientMsg =
   | { type: "send"; text: string }
   | { type: "confirm"; cardId: string; allow: boolean }
   | { type: "stop" }
-  | { type: "settings"; brain?: "local" | "cloud"; offlineOnly?: boolean }
+  | { type: "settings"; brain?: "local" | "cloud"; offlineOnly?: boolean; embeddings?: boolean }
+  | { type: "set_model"; which: "local" | "cloud"; model: string }
+  | { type: "list_models" }
   | { type: "state" }
   | { type: "reset" };
 
@@ -146,6 +148,14 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
       } else if (msg.type === "settings") {
         rt.update(msg);
         broadcast({ type: "state", ...rt.state() });
+      } else if (msg.type === "set_model" && (msg.which === "local" || msg.which === "cloud") && typeof msg.model === "string") {
+        rt.setModel(msg.which, msg.model);
+        broadcast({ type: "state", ...rt.state() });
+      } else if (msg.type === "list_models") {
+        rt.listModels().then(
+          (models) => ws.send(JSON.stringify({ type: "models", models })),
+          (err) => ws.send(JSON.stringify({ type: "models", models: [], error: err instanceof Error ? err.message : String(err) })),
+        );
       } else if (msg.type === "reset") {
         if (rt.agent.busy) { ws.send(JSON.stringify({ type: "error", runId: "", message: "Stop the current request first." })); return; }
         rt.agent.reset();

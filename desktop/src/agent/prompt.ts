@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import type { Embedder } from "../embeddings.js";
 import type { Memory } from "../memory.js";
 
 /**
@@ -40,9 +41,9 @@ export function systemPrompt(home: string, os: string): string {
   ].join("\n").trim();
 }
 
-/** Per-request context for the top of the user turn. */
-export function requestContext(request: string, memory: Memory, now: Date = new Date()): string {
-  const facts = memory.recall(request, 6);
+/** Per-request context for the top of the user turn. Uses semantic recall when an embedder is set. */
+export async function requestContext(request: string, memory: Memory, embedder: Embedder | null, now: Date = new Date()): Promise<string> {
+  const facts = await memory.search(request, embedder, 6);
   const lines = [`Now: ${now.toString()}`];
   if (facts.length) lines.push("Things you remember that may matter:", ...facts.map((f) => `- ${f.text}`));
   return `<context>\n${lines.join("\n")}\n</context>\n\n${request}`;

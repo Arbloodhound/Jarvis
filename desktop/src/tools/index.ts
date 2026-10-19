@@ -9,6 +9,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { ToolPolicy } from "../gate/gate.js";
 import { resolvePath } from "../gate/gate.js";
+import type { Embedder } from "../embeddings.js";
 import type { Memory } from "../memory.js";
 import * as os from "./platform.js";
 
@@ -23,6 +24,7 @@ export interface ToolContext {
   cwd: string;
   workspace: string;
   memory: Memory;
+  embedder: Embedder | null;
   signal: AbortSignal;
 }
 
@@ -447,7 +449,7 @@ const recallTool = tool({
   policy: { effects: ["read"] },
   parallelSafe: true,
   async run({ query }, ctx) {
-    const hits = ctx.memory.recall(query);
+    const hits = await ctx.memory.search(query, ctx.embedder);
     return hits.length ? hits.map((f) => `(${f.id}) ${f.text}`).join("\n") : "Nothing remembered about that.";
   },
 });

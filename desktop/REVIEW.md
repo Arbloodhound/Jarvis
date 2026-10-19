@@ -50,3 +50,18 @@ Not changed: the gateway (loopback, token, Host and Origin checks), the chat pag
 **Worth copying next:** OpenClaw's "Allow always" bound to the exact command and folder; Claude Code's OS-level command sandbox; Goose's optional second-model reviewer (but failing closed); stripping hidden Unicode before checks (Block's red team); Jan's bundled llama.cpp; AnythingLLM's scheduled tasks.
 
 Research sources are in the session log. Incident counts from secondary sources were not independently verified.
+
+## Second pass: adversarial re-test after the fixes (same day)
+
+A fresh agent attacked the patched gate. It found one critical regression I had introduced and more, all now fixed with tests:
+
+| Severity | Problem | Fix |
+|---|---|---|
+| Critical | My newline check in the command allowlist was dead (the string was whitespace-normalized before the check), so `ls\nsh evil.sh` ran with no card. | Control characters are rejected on the raw command before normalizing. |
+| High | A backslash in a URL (`https://evil.example\@github.com`) was read as github.com by the gate but as evil.example by a browser. | Hosts are parsed with the WHATWG URL parser (same as Node/browsers); user names and backslashes can't spoof. |
+| High | `forget`/`remember` output wasn't treated as private, so a forgotten fact could be exfiltrated. | Any tool result not from the web counts as private. |
+| High | A secret or private text **base64/percent/hex-encoded** into a URL query slipped past the raw-string checks, even to an owner-named host. | Egress arguments are decoded (percent, base64, base64url, hex) and every decoded form is checked for secrets and private text. |
+| Medium | More credential files readable with no card (`/proc/self/environ`, rclone, doctl, GitHub CLI, Firefox logins, Jarvis's own data). | Added to the sensitive list. |
+| Low | `ls /root/.s[s]h` glob dodged the path check. | `[` `]` `*` `?` rejected in path arguments. |
+
+Held on re-test: SSRF in every address form (IPv4-mapped IPv6, decimal/octal/short IPv4, DNS rebinding via pinned lookup), workspace confinement through symlinks, sensitive-path reads, raw-secret egress, the trifecta rule, and lasting-effect cards.

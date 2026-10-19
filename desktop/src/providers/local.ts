@@ -19,6 +19,14 @@ export class LocalProvider implements Provider {
     return `Local (${this.model})`;
   }
 
+  /** The model ids this server has, from the OpenAI-compatible /models endpoint. */
+  static async listModels(baseUrl: string, signal?: AbortSignal): Promise<string[]> {
+    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/models`, { signal });
+    if (!res.ok) throw new Error(`Model server answered ${res.status}`);
+    const body = (await res.json()) as { data?: Array<{ id?: string }> };
+    return (body.data ?? []).map((m) => m.id).filter((id): id is string => typeof id === "string").sort();
+  }
+
   async turn(req: TurnRequest): Promise<TurnResult> {
     let res: Response;
     try {

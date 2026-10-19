@@ -94,7 +94,9 @@ const SENSITIVE = [
   "AppData/Local/Google/Chrome", "AppData/Local/Microsoft/Edge", "AppData/Local/BraveSoftware",
   "AppData/Roaming/Mozilla", "AppData/Roaming/Microsoft/Credentials", "AppData/Local/Microsoft/Credentials",
   "AppData/Roaming/Microsoft/Protect", "AppData/Roaming/Code/User/globalStorage",
-  ".jarvis/token", ".jarvis/config.json",
+  ".jarvis/token", ".jarvis/config.json", ".jarvis/memory.json", ".jarvis/transcript.jsonl", ".jarvis/audit.jsonl",
+  ".config/rclone", ".config/doctl", ".config/gh/hosts.yml", ".config/fly", ".config/heroku",
+  ".var/app/org.mozilla.firefox", ".thunderbird", ".config/Slack", ".config/discord",
 ];
 
 const SHELL_META = /[;&|`$<>(){}\\\n*?'"!#]/;
@@ -196,7 +198,9 @@ export function isSensitivePath(abs: string, extra: string[] = []): boolean {
     const norm = slash(p);
     return listed.some((full) => norm === full || norm.startsWith(`${full}/`)) ||
       /(^|\/)\.env(\.[\w-]+)?$/.test(norm) || /(^|\/)id_(rsa|ed25519|ecdsa|dsa)(\.pub)?$/.test(norm) ||
-      /\.(pem|key|p12|pfx|kdbx)$/.test(norm);
+      /\.(pem|key|p12|pfx|kdbx)$/.test(norm) ||
+      /^\/proc\/(self|\d+)\/(environ|cmdline|maps|mem)$/.test(norm) ||
+      /(^|\/)(logins\.json|key[34]\.db|cookies\.sqlite|rclone\.conf)$/.test(norm);
   });
 }
 
@@ -222,8 +226,11 @@ const BUILTIN: Record<string, { flags?: RegExp; args?: "paths" | "names" }> = {
 const VERSION = /^(node|npm|python3?|pip3?|git|java|go|rustc|cargo|deno|bun) (--version|-v|-V|version)$/;
 
 export function commandAllowed(command: string, extra: string[], safePath: (p: string) => boolean = () => true): boolean {
-  const c = command.trim().replace(/\s+/g, " ");
-  if (!c || c.includes("\n")) return false;
+  // Control characters (newline, CR, tab, NUL, …) would let a second command hide behind an
+  // allowlisted one; check the raw string, before any whitespace is folded away.
+  if (/[\u0000-\u0008\u000a-\u001f]/.test(command)) return false;
+  const c = command.trim().replace(/ +/g, " ");
+  if (!c) return false;
   if (extra.includes(c)) return true;
   if (SHELL_META.test(c)) return false;
   if (VERSION.test(c)) return true;
@@ -234,7 +241,7 @@ export function commandAllowed(command: string, extra: string[], safePath: (p: s
     if (t.startsWith("-")) {
       if (!rule.flags?.test(t)) return false;
     } else if (rule.args === "paths") {
-      if (/^~[^/\\]/.test(t) || !safePath(t)) return false;
+      if (/[[\]*?]/.test(t) || /^~[^/\\]/.test(t) || !safePath(t)) return false;
     } else if (rule.args === "names") {
       if (!/^[\w.+-]+$/.test(t)) return false;
     } else {
@@ -266,7 +273,8 @@ export class Episode {
     for (const s of findSecrets(result)) this.secrets.add(s.value);
     if (fromOutside) {
       this.outsideTexts.push(result);
-    } else if (effects.includes("read") || effects.includes("exec")) {
+    } else {
+      // Anything not from outside is private: a file, the shell, the clipboard, a remembered fact.
       this.privateTexts.push(result);
       for (const w of result.split(/[\s"'`,;()<>[\]{}]+/)) {
         if (this.privateTokens.size >= 20000) break;
@@ -326,6 +334,37 @@ function key(tool: string, args: Record<string, unknown>): string {
   return `${tool}:${JSON.stringify(args, Object.keys(args).sort())}`;
 }
 
+/**
+ * The value as sent, plus the plain text hidden inside common encodings
+ * (percent, base64, base64url, hex). An exfiltration that base64s a key into a
+ * URL query is caught because one variant is the decoded key.
+ */
+export function egressVariants(value: string): string[] {
+  const out = new Set<string>([value]);
+  const seeds = [value];
+  try {
+    const d = decodeURIComponent(value.replace(/\+/g, " "));
+    if (d !== value) { out.add(d); seeds.push(d); }
+  } catch { /* bad % escape */ }
+  for (const seed of seeds) {
+    // base64 / base64url runs (padding '=' is left to the decoder, not part of the run)
+    for (const run of seed.match(/[A-Za-z0-9+/_-]{16,}/g) ?? []) {
+      try {
+        const d = Buffer.from(run.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+        if (d.length >= 6 && /^[\x09\x0a\x0d\x20-\x7e]+$/.test(d)) out.add(d);
+      } catch { /* not base64 */ }
+    }
+    for (const run of seed.match(/[0-9a-fA-F]{16,}/g) ?? []) {
+      if (run.length % 2) continue;
+      try {
+        const d = Buffer.from(run, "hex").toString("utf8");
+        if (d.length >= 6 && /^[\x09\x0a\x0d\x20-\x7e]+$/.test(d)) out.add(d);
+      } catch { /* not hex */ }
+    }
+  }
+  return [...out];
+}
+
 export class Gate {
   constructor(private readonly cfg: GateConfig, private readonly cwd: string = process.cwd()) {}
 
@@ -340,9 +379,9 @@ export class Gate {
     // 1. Secrets never leave, whatever the owner says on a card.
     if (policy.effects.includes("egress") || policy.effects.includes("exec")) {
       for (const k of outArgs) {
-        const v = str(k);
+        const variants = egressVariants(str(k));
         for (const s of ep.secrets) {
-          if (s.length >= 4 && v.includes(s)) {
+          if (s.length >= 4 && variants.some((x) => x.includes(s))) {
             return { allowed: false, blocked: { rule: "secret_egress", reason: `"${k}" carries a secret seen this run (key or one-time code); it never leaves this computer.` } };
           }
         }
@@ -400,8 +439,10 @@ export class Gate {
     if (policy.effects.includes("egress")) {
       // 6. Private text leaving in an egress argument.
       for (const k of outArgs) {
-        const leak = ep.leakedPrivate(str(k));
-        if (leak) return ask("private_data_egress", `"${k}" contains text read from this computer ("${leak}").`);
+        for (const variant of egressVariants(str(k))) {
+          const leak = ep.leakedPrivate(variant);
+          if (leak) return ask("private_data_egress", `"${k}" contains text read from this computer ("${leak}").`);
+        }
       }
       // 7. The lethal trifecta: private text + outside text + something leaving that the owner didn't type.
       if (ep.hasPrivate() && ep.hasOutside()) {

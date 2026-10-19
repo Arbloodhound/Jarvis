@@ -100,17 +100,26 @@ const COMMON_TLDS = new Set([
   "cc", "icu", "vip", "buzz", "cfd", "sbs", "cyou", "support", "help", "services", "delivery",
 ]);
 
+/**
+ * The real host a URL points at, exactly as a browser or Node would connect:
+ * the WHATWG URL parser, which strips user names ("a@evil"), treats backslashes
+ * as slashes in http(s), and lowercases and punycodes the host. A bare host like
+ * "amazon.com/x" is parsed by prepending http://. Returns null for non-hosts.
+ */
 export function normHost(raw: string): string | null {
-  let s = raw.toLowerCase().trim().replace(/[.,)!?;:]+$/, "");
-  const i = s.indexOf("://");
-  if (i >= 0) s = s.slice(i + 3);
-  s = s.split("/")[0]!.split("?")[0]!.split("#")[0]!;
-  // "amazon.com:x@evil.example" is evil.example: everything before the last @ is a user name.
-  const at = s.lastIndexOf("@");
-  if (at >= 0) s = s.slice(at + 1);
-  s = s.startsWith("[") ? s.slice(0, s.indexOf("]") + 1) : s.split(":")[0]!;
-  if (s.startsWith("www.")) s = s.slice(4);
-  return s.includes(".") && s.length >= 4 ? s : null;
+  const t = raw.trim().replace(/[.,)!?;:]+$/, "");
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(t);
+  try {
+    const u = new URL(hasScheme ? t : `http://${t}`);
+    if (hasScheme && u.protocol !== "http:" && u.protocol !== "https:") return null;
+    let h = u.hostname.toLowerCase();
+    if (h.startsWith("www.")) h = h.slice(4);
+    // A bracketed IPv6 host keeps its brackets for matching; a name must have a dot.
+    if (h.startsWith("[")) return h;
+    return h.includes(".") && h.length >= 4 ? h : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Digits only, at least 7; North American numbers compared on their last 10 digits. */

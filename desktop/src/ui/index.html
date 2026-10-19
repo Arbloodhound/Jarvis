@@ -25,6 +25,16 @@
   .status { color: var(--muted); font-size: 13px; }
   .spacer { flex: 1; }
   button.plain { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; }
+  button.chip { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .picker { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .picker.open { display: flex; }
+  .picker .box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: min(460px, 92vw); max-height: 70vh; overflow: auto; padding: 14px; }
+  .picker h3 { margin: 0 0 8px; font-size: 15px; }
+  .picker .row { padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .picker .row:hover { background: var(--card); }
+  .picker .row.on { background: var(--user); }
+  .picker input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; margin-bottom: 8px; }
+  .picker .muted { color: var(--muted); font-size: 13px; margin: 6px 2px; }
   .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   .seg button { border: 0; background: transparent; color: var(--text); padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
   .seg button.on { background: var(--accent); color: var(--accent-text); }
@@ -67,7 +77,9 @@
     <button id="b-local" type="button">On this computer</button>
     <button id="b-cloud" type="button">Cloud</button>
   </div>
+  <button id="model" type="button" class="chip" title="Choose the model for the current brain">model…</button>
   <label class="switch"><input type="checkbox" id="offline"> Offline only</label>
+  <label class="switch"><input type="checkbox" id="embed"> Semantic memory</label>
   <button id="new" type="button" class="plain" title="Start a new conversation (what Jarvis remembers about you stays)">New chat</button>
   <span class="spacer"></span>
   <span class="status" id="status">Connecting…</span>
@@ -79,6 +91,12 @@
     <button id="send" type="submit">Send</button>
   </form>
 </footer>
+<div class="picker" id="picker"><div class="box">
+  <h3 id="picker-title">Choose a model</h3>
+  <input id="picker-input" placeholder="type a model name, or pick one below" autocomplete="off">
+  <div class="muted" id="picker-note"></div>
+  <div id="picker-list"></div>
+</div></div>
 <script>
 (() => {
   let token = "";
@@ -101,7 +119,10 @@
     $("b-local").classList.toggle("on", state.brain !== "cloud");
     $("b-cloud").classList.toggle("on", state.brain === "cloud");
     $("offline").checked = !!state.offlineOnly;
-    status.textContent = `${state.answering || ""}${state.busy ? " · working" : ""}`;
+    $("embed").checked = !!state.embeddings;
+    const model = state.brain === "cloud" ? state.cloudModel : state.localModel;
+    $("model").textContent = model || "model…";
+    status.textContent = `${state.answering || ""}${state.embeddings && state.embedderId ? " · memory: " + state.embedderId : ""}${state.busy ? " · working" : ""}`;
     sendBtn.textContent = state.busy ? "Stop" : "Send";
     sendBtn.classList.toggle("stop", !!state.busy);
   }
@@ -127,6 +148,7 @@
   function onEvent(e) {
     switch (e.type) {
       case "state": state = e; showState(); break;
+      case "models": showModels(e.models || [], e.error); break;
       case "user": add(el("div", "msg user", e.text)); scroll(); break;
       case "run_start": { const r = ensureRun(e.runId); r.meta.textContent = e.brain; state.busy = true; showState(); break; }
       case "thinking": { const r = ensureRun(e.runId); r.think.hidden = false; r.thinkBox.textContent += e.delta; break; }
@@ -195,6 +217,34 @@
   input.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); if (!state.busy) $("form").requestSubmit(); } });
   $("new").onclick = () => ws?.send(JSON.stringify({ type: "reset" }));
   input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 200) + "px"; });
+  const picker = $("picker"), pInput = $("picker-input"), pList = $("picker-list"), pNote = $("picker-note");
+  function openPicker() {
+    const which = state.brain === "cloud" ? "cloud" : "local";
+    $("picker-title").textContent = which === "cloud" ? "Cloud model (Claude)" : "Local model";
+    pInput.value = state.brain === "cloud" ? (state.cloudModel || "") : (state.localModel || "");
+    pList.replaceChildren();
+    pNote.textContent = which === "local" ? "Loading models from your server…" : "Type the model id, e.g. claude-opus-5-5.";
+    picker.classList.add("open"); pInput.focus(); pInput.select();
+    if (which === "local") ws?.send(JSON.stringify({ type: "list_models" }));
+  }
+  function showModels(models, error) {
+    if (!picker.classList.contains("open")) return;
+    pNote.textContent = error ? `Couldn't list models (${error}). Type the id by hand.` : models.length ? "" : "No models reported; type the id by hand.";
+    pList.replaceChildren(...models.map((m) => {
+      const r = el("div", "row" + (m === pInput.value ? " on" : ""), m);
+      r.onclick = () => chooseModel(m);
+      return r;
+    }));
+  }
+  function chooseModel(model) {
+    const which = state.brain === "cloud" ? "cloud" : "local";
+    if (model && model.trim()) ws?.send(JSON.stringify({ type: "set_model", which, model: model.trim() }));
+    picker.classList.remove("open");
+  }
+  $("model").onclick = openPicker;
+  picker.onclick = (ev) => { if (ev.target === picker) picker.classList.remove("open"); };
+  pInput.addEventListener("keydown", (ev) => { if (ev.key === "Enter") chooseModel(pInput.value); if (ev.key === "Escape") picker.classList.remove("open"); });
+  $("embed").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", embeddings: ev.target.checked }));
   $("b-local").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "local" }));
   $("b-cloud").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "cloud" }));
   $("offline").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", offlineOnly: ev.target.checked }));

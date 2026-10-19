@@ -1,20 +1,29 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { startupWarnings } from "./config.js";
+import { dot, type Embedder } from "./embeddings.js";
 
 /**
- * What Jarvis remembers about its owner: short facts in a JSON file, searched
- * by word overlap. Forgotten facts go to a trash list first, as on the phone,
- * so "forget" can be undone until the trash is emptied.
+ * What Jarvis remembers about its owner: short facts in a JSON file. Forgotten
+ * facts go to a trash list first, as on the phone, so "forget" can be undone
+ * until the trash is emptied.
  *
- * Deliberately simple: no embeddings yet. Recall quality is word overlap and
- * nothing more; that is stated, not hidden.
+ * Recall is word-overlap by default. When an embedding model is configured, a
+ * fact's vector is stored beside it (`vec`, tagged with the embedder `emb` that
+ * produced it) and recall ranks by meaning instead. The two never mix: a vector
+ * made by a different model is ignored, and when no vector is available for the
+ * query the search falls back to word overlap. So turning embeddings on or off,
+ * or switching models, degrades gracefully and never loses a fact.
  */
 
 export interface Fact {
   id: string;
   text: string;
   at: string;
+  /** Unit vector, present only once embedded. */
+  vec?: number[];
+  /** The embedder id that produced `vec`; a mismatch means re-embed. */
+  emb?: string;
 }
 
 interface Store {
@@ -48,12 +57,13 @@ export class Memory {
     const t = text.trim();
     const same = this.store.facts.find((f) => f.text.toLowerCase() === t.toLowerCase());
     if (same) return same;
-    const f = { id: randomUUID().slice(0, 8), text: t, at: new Date().toISOString() };
+    const f: Fact = { id: randomUUID().slice(0, 8), text: t, at: new Date().toISOString() };
     this.store.facts.push(f);
     this.save();
     return f;
   }
 
+  /** Word-overlap recall. Always available, no server needed. */
   recall(query: string, limit = 8): Fact[] {
     const q = new Set(words(query));
     if (q.size === 0) return this.store.facts.slice(-limit).reverse();
@@ -65,7 +75,43 @@ export class Memory {
       .map((x) => x.f);
   }
 
-  /** Move matching facts to the trash. Returns what moved. */
+  /**
+   * Semantic recall when an embedder is given and the facts are embedded with
+   * it; otherwise word overlap. Best-effort: if the embedding server is down,
+   * it falls back rather than failing the request.
+   */
+  async search(query: string, embedder: Embedder | null, limit = 8): Promise<Fact[]> {
+    if (!embedder || this.store.facts.length === 0) return this.recall(query, limit);
+    try {
+      await this.ensureEmbedded(embedder);
+      const usable = this.store.facts.filter((f) => f.vec && f.emb === embedder.id);
+      if (usable.length === 0) return this.recall(query, limit);
+      const qv = await embedder.embedOne(query);
+      return usable
+        .map((f) => ({ f, score: dot(qv, f.vec!) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map((x) => x.f);
+    } catch {
+      return this.recall(query, limit);
+    }
+  }
+
+  /** Embed any facts that aren't embedded with this embedder yet (batched). */
+  async ensureEmbedded(embedder: Embedder, signal?: AbortSignal): Promise<number> {
+    const todo = this.store.facts.filter((f) => f.emb !== embedder.id || !f.vec);
+    if (todo.length === 0) return 0;
+    let done = 0;
+    for (let i = 0; i < todo.length; i += 32) {
+      const batch = todo.slice(i, i + 32);
+      const vecs = await embedder.embed(batch.map((f) => f.text), signal);
+      batch.forEach((f, j) => { f.vec = vecs[j]; f.emb = embedder.id; });
+      done += batch.length;
+    }
+    this.save();
+    return done;
+  }
+
   forget(query: string): Fact[] {
     const byId = this.store.facts.filter((f) => f.id === query.trim());
     const hits = byId.length ? byId : this.recall(query, 50).filter((f) => {
@@ -76,7 +122,7 @@ export class Memory {
     if (!hits.length) return [];
     const ids = new Set(hits.map((f) => f.id));
     this.store.facts = this.store.facts.filter((f) => !ids.has(f.id));
-    this.store.trash.push(...hits);
+    this.store.trash.push(...hits.map((f) => ({ ...f, vec: undefined })));
     // The trash keeps the last 500 forgotten facts; older ones are gone for good.
     if (this.store.trash.length > 500) this.store.trash = this.store.trash.slice(-500);
     this.save();

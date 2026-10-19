@@ -27,6 +27,15 @@ export interface Config {
     baseUrl: string;
     model: string;
   };
+  embeddings: {
+    /** On = semantic memory. Off = word-overlap recall (no server needed). */
+    enabled: boolean;
+    /** Embedding server; empty means "use the local brain's baseUrl". */
+    baseUrl: string;
+    model: string;
+    /** Keep this many dimensions (Matryoshka truncation); 0 = the model's full size. */
+    dims: number;
+  };
   port: number;
   writableRoots: string[];
   /**
@@ -68,6 +77,7 @@ export function defaults(p: Paths): Config {
     offlineOnly: false,
     cloud: { model: "claude-opus-5-5", effort: "medium", apiKey: "" },
     local: { baseUrl: "http://127.0.0.1:11434/v1", model: "qwen3:8b" },
+    embeddings: { enabled: false, baseUrl: "", model: "embeddinggemma-2", dims: 256 },
     port: 7337,
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
@@ -101,6 +111,7 @@ export function loadConfig(p: Paths = paths()): Config {
     ...raw,
     cloud: { ...base.cloud, ...(raw.cloud ?? {}) },
     local: { ...base.local, ...(raw.local ?? {}) },
+    embeddings: { ...base.embeddings, ...(raw.embeddings ?? {}) },
   };
 }
 
