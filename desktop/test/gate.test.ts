@@ -188,3 +188,20 @@ test("more credential files need a card", () => {
     assert.equal(gate.check(ep, "read_file", READ, { path: p2 }).confirm?.rule, "sensitive_path", p2);
   }
 });
+
+test("screen control always needs a card, even a click with no traceable arg", () => {
+  const CTL: ToolPolicy = { effects: ["mutate"], alwaysConfirm: true };
+  const ep = new Episode("click the save button");
+  assert.equal(gate.check(ep, "control_screen", CTL, { action: "click", x: 100, y: 200 }).confirm?.rule, "always_confirm");
+  assert.equal(gate.check(ep, "control_screen", CTL, { action: "type", text: "hello" }).confirm?.rule, "always_confirm");
+  const args = { action: "click", x: 100, y: 200 };
+  ep.confirm("control_screen", args);
+  assert.equal(gate.check(ep, "control_screen", CTL, args).allowed, true);
+});
+
+test("control_screen is absent unless turned on", async () => {
+  const { toolsFor } = await import("../src/tools/index.ts");
+  assert.equal(toolsFor({ offlineOnly: false, screenControl: false }).some((t) => t.name === "control_screen"), false);
+  assert.equal(toolsFor({ offlineOnly: false, screenControl: true }).some((t) => t.name === "control_screen"), true);
+  assert.equal(toolsFor({ offlineOnly: true, screenControl: true }).some((t) => t.name === "web_fetch"), false);
+});

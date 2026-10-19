@@ -80,6 +80,7 @@
   <button id="model" type="button" class="chip" title="Choose the model for the current brain">model…</button>
   <label class="switch"><input type="checkbox" id="offline"> Offline only</label>
   <label class="switch"><input type="checkbox" id="embed"> Semantic memory</label>
+  <label class="switch" title="Experimental: let Jarvis type and click. Every action still asks you."><input type="checkbox" id="screenctl"> Screen control</label>
   <button id="new" type="button" class="plain" title="Start a new conversation (what Jarvis remembers about you stays)">New chat</button>
   <span class="spacer"></span>
   <span class="status" id="status">Connecting…</span>
@@ -120,6 +121,7 @@
     $("b-cloud").classList.toggle("on", state.brain === "cloud");
     $("offline").checked = !!state.offlineOnly;
     $("embed").checked = !!state.embeddings;
+    $("screenctl").checked = !!state.screenControl;
     const model = state.brain === "cloud" ? state.cloudModel : state.localModel;
     $("model").textContent = model || "model…";
     status.textContent = `${state.answering || ""}${state.embeddings && state.embedderId ? " · memory: " + state.embedderId : ""}${state.busy ? " · working" : ""}`;
@@ -245,6 +247,7 @@
   picker.onclick = (ev) => { if (ev.target === picker) picker.classList.remove("open"); };
   pInput.addEventListener("keydown", (ev) => { if (ev.key === "Enter") chooseModel(pInput.value); if (ev.key === "Escape") picker.classList.remove("open"); });
   $("embed").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", embeddings: ev.target.checked }));
+  $("screenctl").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", screenControl: ev.target.checked }));
   $("b-local").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "local" }));
   $("b-cloud").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "cloud" }));
   $("offline").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", offlineOnly: ev.target.checked }));

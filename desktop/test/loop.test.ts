@@ -19,6 +19,7 @@ function agent(provider: Provider, maxTurns = 4): Agent {
   return new Agent({
     provider: () => provider,
     embedder: () => null,
+    vision: () => null,
     tools: () => ALL_TOOLS,
     gate: new Gate({ writableRoots: [home], extraAllowedCommands: [] }, home),
     memory: new Memory(null),

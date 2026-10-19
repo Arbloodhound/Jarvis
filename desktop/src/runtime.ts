@@ -3,6 +3,7 @@ import { type Config, type Paths, saveConfig } from "./config.js";
 import { AuditLog } from "./gate/audit.js";
 import { Gate } from "./gate/gate.js";
 import { Embedder } from "./embeddings.js";
+import { Vision } from "./vision.js";
 import { Memory } from "./memory.js";
 import { ClaudeProvider } from "./providers/claude.js";
 import { LocalProvider } from "./providers/local.js";
@@ -23,7 +24,8 @@ export class Runtime {
     this.agent = new Agent({
       provider: () => this.provider(),
       embedder: () => this.embedder(),
-      tools: () => toolsFor(this.cfg.offlineOnly),
+      vision: () => this.vision(),
+      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled }),
       gate: new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd),
       memory: this.memory,
       audit: new AuditLog(p.audit),
@@ -56,6 +58,24 @@ export class Runtime {
     return new Embedder({ enabled: true, baseUrl, model: e.model, dims: e.dims });
   }
 
+  /**
+   * The vision backend: a configured local VLM if one is set, otherwise the
+   * cloud brain when it's on. null when offline-only with no local VLM.
+   */
+  vision(): Vision | null {
+    const v = this.cfg.vision;
+    const localUrl = v.baseUrl || this.cfg.local.baseUrl;
+    // Prefer a dedicated local VLM so it works offline and on the local brain.
+    if (v.model && (this.cfg.offlineOnly || this.cfg.brain === "local" || !this.cfg.cloud.apiKey)) {
+      return new Vision({ kind: "local", baseUrl: localUrl, model: v.model });
+    }
+    if (this.cloudOn) {
+      return new Vision({ kind: "cloud", baseUrl: "", model: this.cfg.cloud.model, apiKey: this.cfg.cloud.apiKey || undefined });
+    }
+    if (v.model) return new Vision({ kind: "local", baseUrl: localUrl, model: v.model });
+    return null;
+  }
+
   /** The model ids a server has, for the picker. Defaults to the local brain's server. */
   async listModels(baseUrl?: string): Promise<string[]> {
     return LocalProvider.listModels(baseUrl || this.cfg.local.baseUrl);
@@ -69,10 +89,11 @@ export class Runtime {
     saveConfig(this.cfg, this.p);
   }
 
-  update(change: { brain?: Config["brain"]; offlineOnly?: boolean; embeddings?: boolean }): void {
+  update(change: { brain?: Config["brain"]; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean }): void {
     if (change.brain === "cloud" || change.brain === "local") this.cfg.brain = change.brain;
     if (typeof change.offlineOnly === "boolean") this.cfg.offlineOnly = change.offlineOnly;
     if (typeof change.embeddings === "boolean") this.cfg.embeddings.enabled = change.embeddings;
+    if (typeof change.screenControl === "boolean") this.cfg.screenControl.enabled = change.screenControl;
     saveConfig(this.cfg, this.p);
   }
 
@@ -86,6 +107,8 @@ export class Runtime {
       localModel: this.cfg.local.model,
       embeddings: this.cfg.embeddings.enabled,
       embedderId: this.embedder()?.id ?? null,
+      vision: this.vision()?.label ?? null,
+      screenControl: this.cfg.screenControl.enabled,
     };
   }
 }

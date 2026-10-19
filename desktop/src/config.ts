@@ -36,6 +36,13 @@ export interface Config {
     /** Keep this many dimensions (Matryoshka truncation); 0 = the model's full size. */
     dims: number;
   };
+  vision: {
+    /** Local vision model id (OpenAI-compatible server). The cloud brain reads images on its own. */
+    baseUrl: string;
+    model: string;
+  };
+  /** Synthetic keyboard/mouse. Off by default; experimental; every action still needs a card. */
+  screenControl: { enabled: boolean };
   port: number;
   writableRoots: string[];
   /**
@@ -78,6 +85,8 @@ export function defaults(p: Paths): Config {
     cloud: { model: "claude-opus-5-5", effort: "medium", apiKey: "" },
     local: { baseUrl: "http://127.0.0.1:11434/v1", model: "qwen3:8b" },
     embeddings: { enabled: false, baseUrl: "", model: "embeddinggemma-2", dims: 256 },
+    vision: { baseUrl: "", model: "qwen3-vl" },
+    screenControl: { enabled: false },
     port: 7337,
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
@@ -112,6 +121,8 @@ export function loadConfig(p: Paths = paths()): Config {
     cloud: { ...base.cloud, ...(raw.cloud ?? {}) },
     local: { ...base.local, ...(raw.local ?? {}) },
     embeddings: { ...base.embeddings, ...(raw.embeddings ?? {}) },
+    vision: { ...base.vision, ...(raw.vision ?? {}) },
+    screenControl: { ...base.screenControl, ...(raw.screenControl ?? {}) },
   };
 }
 

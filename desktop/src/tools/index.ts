@@ -11,6 +11,7 @@ import type { ToolPolicy } from "../gate/gate.js";
 import { resolvePath } from "../gate/gate.js";
 import type { Embedder } from "../embeddings.js";
 import type { Memory } from "../memory.js";
+import type { Vision } from "../vision.js";
 import * as os from "./platform.js";
 
 /**
@@ -25,6 +26,7 @@ export interface ToolContext {
   workspace: string;
   memory: Memory;
   embedder: Embedder | null;
+  vision: Vision | null;
   signal: AbortSignal;
 }
 
@@ -409,6 +411,65 @@ const screenshotTool = tool({
   },
 });
 
+const seeScreenTool = tool({
+  name: "look_at_screen",
+  description: "Take a screenshot and have a vision model describe it or answer a question about what's on screen.",
+  schema: z.object({ question: z.string().max(500).optional() }),
+  policy: { effects: ["read"] },
+  network: false,
+  async run({ question }, ctx) {
+    if (!ctx.vision) throw new Error("No vision model is set up. Set a local vision model in config (vision.model), or switch to the cloud brain.");
+    const png = await os.screenshotBuffer();
+    return ctx.vision.describe([{ data: png.toString("base64"), mediaType: "image/png" }], question || "Describe what is on the screen.", ctx.signal);
+  },
+});
+
+const seeImageTool = tool({
+  name: "look_at_image",
+  description: "Have a vision model describe an image file (png/jpeg) or answer a question about it.",
+  schema: z.object({ path: z.string(), question: z.string().max(500).optional() }),
+  policy: { effects: ["read"], pathArgs: ["path"] },
+  async run({ path: p, question }, ctx) {
+    if (!ctx.vision) throw new Error("No vision model is set up. Set a local vision model in config (vision.model), or switch to the cloud brain.");
+    const abs = resolvePath(p, ctx.cwd);
+    const buf = await readFile(abs);
+    if (buf.length > 12 * 1024 * 1024) throw new Error("That image is too large (over 12 MB).");
+    const mediaType = /\.jpe?g$/i.test(abs) ? "image/jpeg" as const : "image/png" as const;
+    return ctx.vision.describe([{ data: buf.toString("base64"), mediaType }], question || "Describe this image.", ctx.signal);
+  },
+});
+
+const controlScreenTool = tool({
+  name: "control_screen",
+  description:
+    "Type text, press a key combo, or click at a point on the screen. Experimental; off unless the owner turned it on. Every action asks the owner first. Use look_at_screen to see before acting.",
+  schema: z.object({
+    action: z.enum(["type", "key", "click"]),
+    text: z.string().max(2000).optional().describe("for type"),
+    keys: z.string().max(40).optional().describe("for key, e.g. ctrl+c, Return, Tab"),
+    x: z.number().int().min(0).max(20000).optional(),
+    y: z.number().int().min(0).max(20000).optional(),
+    button: z.enum(["left", "right", "middle"]).optional(),
+  }),
+  // Experimental and far-reaching: a confirm card for every single action.
+  policy: { effects: ["mutate"], alwaysConfirm: true },
+  async run({ action, text, keys, x, y, button }) {
+    if (action === "type") {
+      if (!text) throw new Error("Nothing to type.");
+      await os.screenType(text);
+      return `Typed ${text.length} characters.`;
+    }
+    if (action === "key") {
+      if (!keys) throw new Error("No key combo given.");
+      await os.screenKey(keys);
+      return `Pressed ${keys}.`;
+    }
+    if (x === undefined || y === undefined) throw new Error("Click needs x and y.");
+    await os.screenClick(x, y, button ?? "left");
+    return `Clicked at ${x}, ${y}.`;
+  },
+});
+
 const systemInfoTool = tool({
   name: "system_info",
   description: "This computer's OS, CPU, memory, uptime and home folder.",
@@ -468,10 +529,14 @@ const forgetTool = tool({
 export const ALL_TOOLS: Tool[] = [
   readFileTool, listDirTool, findFilesTool, writeFileTool, runCommandTool,
   webSearchTool, webFetchTool, openUrlTool, openAppTool,
-  clipboardReadTool, clipboardWriteTool, notifyTool, screenshotTool, systemInfoTool,
+  clipboardReadTool, clipboardWriteTool, notifyTool, screenshotTool, seeScreenTool, seeImageTool, controlScreenTool, systemInfoTool,
   rememberTool, recallTool, forgetTool,
 ];
 
-export function toolsFor(offlineOnly: boolean): Tool[] {
-  return ALL_TOOLS.filter((t) => !(offlineOnly && t.network));
+export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean }): Tool[] {
+  return ALL_TOOLS.filter((t) => {
+    if (opts.offlineOnly && t.network) return false;
+    if (t.name === "control_screen" && !opts.screenControl) return false;
+    return true;
+  });
 }

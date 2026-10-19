@@ -166,6 +166,8 @@ function refreshTray(): void {
     { label: "On this computer", type: "radio", checked: s.brain === "local", click: () => set({ brain: "local" }) },
     { label: "Cloud", type: "radio", checked: s.brain === "cloud", click: () => set({ brain: "cloud" }) },
     { label: "Offline only", type: "checkbox", checked: s.offlineOnly, click: (i) => set({ offlineOnly: i.checked }) },
+    { label: "Semantic memory", type: "checkbox", checked: s.embeddings, click: (i) => set({ embeddings: i.checked }) },
+    { label: "Screen control (experimental)", type: "checkbox", checked: s.screenControl, click: (i) => set({ screenControl: i.checked }) },
     { type: "separator" },
     {
       label: "Start at login",

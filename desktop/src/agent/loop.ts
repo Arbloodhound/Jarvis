@@ -6,6 +6,7 @@ import { redactSecrets } from "../gate/secrets.js";
 import type { Memory } from "../memory.js";
 import type { Provider, ToolCall, ToolResult, Turn } from "../providers/types.js";
 import type { Embedder } from "../embeddings.js";
+import type { Vision } from "../vision.js";
 import { jsonSchema, type Tool, type ToolContext } from "../tools/index.js";
 import { fastCommand } from "./fast.js";
 import { requestContext, systemPrompt } from "./prompt.js";
@@ -36,6 +37,7 @@ export type AgentEvent =
 export interface AgentDeps {
   provider: () => Provider;
   embedder: () => Embedder | null;
+  vision: () => Vision | null;
   tools: () => Tool[];
   gate: Gate;
   memory: Memory;
@@ -256,7 +258,7 @@ export class Agent {
       ep.confirm(t.name, args);
     }
 
-    const ctx: ToolContext = { cwd: this.deps.cwd, workspace: this.deps.workspace, memory: this.deps.memory, embedder: this.deps.embedder(), signal };
+    const ctx: ToolContext = { cwd: this.deps.cwd, workspace: this.deps.workspace, memory: this.deps.memory, embedder: this.deps.embedder(), vision: this.deps.vision(), signal };
     try {
       const out = await t.run(args, ctx);
       const scam = ep.observe(t.name, t.policy.effects, out, !!t.outside);

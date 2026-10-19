@@ -50,6 +50,8 @@ export interface ToolPolicy {
    * unless the owner's own words say what to store.
    */
   lastsBeyondRequest?: boolean;
+  /** Always show a confirm card (an experimental or far-reaching action, e.g. screen control). */
+  alwaysConfirm?: boolean;
 }
 
 export type Rule =
@@ -61,6 +63,7 @@ export type Rule =
   | "after_untrusted"
   | "scam_followup"
   | "command"
+  | "always_confirm"
   | "secret_egress";
 
 export interface Verdict {
@@ -397,6 +400,9 @@ export class Gate {
       const hit = [...targetsIn(str(k))].find((t) => ep.scamTargets.has(t));
       if (hit) return ask("scam_followup", `${hit.replace(":", " ")} came from something that looks like a scam (${ep.scamReasons.join("; ")}).`);
     }
+
+    // 2b. Experimental / far-reaching actions always ask.
+    if (policy.alwaysConfirm) return ask("always_confirm", `${tool}: this needs your OK every time.`);
 
     // 3. Paths: sensitive places need the owner even to read; writes stay in the workspace.
     for (const k of policy.pathArgs ?? []) {
