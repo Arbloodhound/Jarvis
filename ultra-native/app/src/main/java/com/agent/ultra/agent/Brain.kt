@@ -1125,7 +1125,9 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         if (toolEngine.isThinkingModel) {
             val call = thinkingToolCall(userInput, recalled) ?: return false
             var last = call
-            var result = runLocalCall(userInput, episode, call)
+            val compose = com.agent.ultra.ui.UltraPrefs.mainReply(appContext)
+            val collected = mutableListOf<String>()
+            var result = runLocalCall(userInput, episode, call, speak = !compose, collect = collected)
             // "call mom and then text Sam": more than one job -> next tool, up to MAX_CHAIN. A confirm card
             // (result == null) ends the chain: it waits for the person, and the rest is asked again.
             if (result != null && LocalToolCall.compound(userInput)) {
@@ -1139,10 +1141,11 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                     ) ?: break
                     if (next.first == last.first && next.second.toString() == last.second.toString()) break
                     last = next
-                    result = runLocalCall(userInput, episode, next)
+                    result = runLocalCall(userInput, episode, next, speak = !compose, collect = collected)
                     step++
                 }
             }
+            if (compose && collected.isNotEmpty()) composeReply(userInput, collected)
             return true
         }
         // Few-shot examples — 1B models map intents reliably with them, not
@@ -1265,10 +1268,25 @@ JSON:"""
 
     /** Gate, run, verify and record one on-device tool call. The same policy gate as the
      * cloud loop; a call it refuses (confirmable or not) is not run. */
+    /** The main model says what the tools did (Settings → Main model writes the reply). Falls back to the raw results. */
+    private suspend fun composeReply(userInput: String, results: List<String>) {
+        val raw = try {
+            local.generate(
+                LocalToolCall.replyPrompt(userInput, results), maxTokens = 220,
+                thinkBudget = ThinkBudget(0, startsInThink = true),
+            ).getOrNull()
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+        val text = raw?.let { LocalToolCall.visibleText(it) }.orEmpty()
+        answer(if (text.isNotBlank()) text else results.joinToString("\n") { "$it (on-device)" })
+    }
+
     private suspend fun runLocalCall(
         userInput: String,
         episode: Gate.Episode,
         call: Pair<String, JSONObject>,
+        /** False: the result is not said here; the caller composes the reply ([collect] gets it). */
+        speak: Boolean = true,
+        collect: MutableList<String>? = null,
     ): String? {
         GateAuditLog.recordRoute(GateAuditLog.ROUTE_LOCAL_TOOL, "call")
         // "call mom" / "text Sam ...": the model gives a name; the number comes from the contacts.
@@ -1317,7 +1335,8 @@ JSON:"""
         episode.observeTool(call.first, result.take(80))
         val verification = verifyAction(call.first, call.second, result) ?: ""
         val failed = result.startsWith("Error:")
-        answer((if (failed) "Tried on-device: $result" else "$result (on-device)") + verification)
+        collect?.add("${call.first}: $result")
+        if (speak) answer((if (failed) "Tried on-device: $result" else "$result (on-device)") + verification)
         android.util.Log.i("UltraBrain", "RUN COMPLETE (local, tool=${call.first}, ok=${!failed})")
         // On-device runs feed task memory and the recipe buffer too —
         // otherwise "save that as X" after a local command has nothing

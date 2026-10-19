@@ -47,6 +47,16 @@ object LocalToolCall {
         Regex("\\b(and then|then|after that|afterwards|and also|, and| and )\\b", RegexOption.IGNORE_CASE)
             .containsMatchIn(IntentRouter.requestPart(request))
 
+    /** The prompt for the main model's final reply, from what the tools returned. Pure, JVM-tested. */
+    fun replyPrompt(request: String, results: List<String>): String {
+        val system = "You are Jarvis, a calm, concise assistant on the user's phone. Tools just ran for the user's " +
+            "request. Say what happened in one or two short, plain sentences, using only the results below. " +
+            "Do not invent anything. If a result says Error, say it did not work and why."
+        val user = "Request: ${IntentRouter.requestPart(request)}\nResults:\n" +
+            results.mapIndexed { i, r -> "${i + 1}. ${r.take(400)}" }.joinToString("\n")
+        return LocalPrompt.build(system, emptyList(), user)
+    }
+
     /** At most this many tool calls for one request. */
     const val MAX_CHAIN = 4
 

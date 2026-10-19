@@ -157,3 +157,10 @@ class LocalToolCallChainTest {
         org.junit.Assert.assertFalse(LocalToolCall.compound("call mom"))
     }
 }
+
+class LocalToolCallReplyTest {
+    @org.junit.Test fun replyPromptCarriesRequestAndResults() {
+        val p = LocalToolCall.replyPrompt("call mom", listOf("call_phone: Calling 5551234", "device_info: Pixel"))
+        org.junit.Assert.assertTrue("call mom" in p && "Calling 5551234" in p && "Do not invent anything" in p)
+    }
+}

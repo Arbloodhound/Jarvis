@@ -81,6 +81,15 @@ object UltraPrefs {
     fun actionModel(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("action_model", true)
 
+    /** After on-device tools run, the MAIN model writes the final reply from their results (one more
+     *  model run, so slower). Off by default: results are then shown as the tools returned them. */
+    fun mainReply(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("main_reply", false)
+
+    fun setMainReply(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("main_reply", on).apply()
+    }
+
     fun setActionModel(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("action_model", on).apply()
     }

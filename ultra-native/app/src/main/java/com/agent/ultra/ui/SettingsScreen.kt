@@ -191,6 +191,25 @@ fun SettingsScreen(
         }
 
         run {
+            var mainReply by remember { mutableStateOf(UltraPrefs.mainReply(context)) }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Main model writes the reply", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "After on-device tools run, the main model says what happened in plain words. " +
+                            "Slower: one more model run. Off: you see the tool's own result.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = mainReply, onCheckedChange = { on ->
+                    mainReply = on
+                    UltraPrefs.setMainReply(context, on)
+                })
+            }
+        }
+
+        run {
             var actionModel by remember { mutableStateOf(UltraPrefs.actionModel(context)) }
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
