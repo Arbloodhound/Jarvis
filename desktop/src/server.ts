@@ -36,9 +36,26 @@ function sameToken(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-export function startServer(rt: Runtime, token: string, port: number, host = "127.0.0.1"): Promise<Server> {
-  const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
-  const allowedOrigins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
+export interface ServerOptions {
+  /** Every event the gateway broadcasts, for the desktop app (tray, notifications). */
+  onEvent?: (e: { type: string } & Record<string, unknown>) => void;
+  /** When the port is taken, take any free one instead of failing. */
+  fallbackPort?: boolean;
+}
+
+export interface Gateway {
+  server: Server;
+  port: number;
+  url: string;
+  /** Tell every client the settings or busy state changed (e.g. from the tray menu). */
+  pushState: () => void;
+}
+
+export async function startServer(rt: Runtime, token: string, port: number, opts: ServerOptions = {}): Promise<Gateway> {
+  const host = "127.0.0.1";
+  // Filled in once the real port is known (it may be a fallback).
+  const allowedHosts = new Set<string>();
+  const allowedOrigins = new Set<string>();
   const hostOk = (req: IncomingMessage) => allowedHosts.has(req.headers.host ?? "");
 
   const server = createServer((req, res) => {
@@ -67,7 +84,8 @@ export function startServer(rt: Runtime, token: string, port: number, host = "12
   const clients = new Set<WebSocket>();
   const pending = new Map<string, (allow: boolean) => void>();
 
-  const broadcast = (msg: unknown) => {
+  const broadcast = (msg: { type: string } & Record<string, unknown>) => {
+    opts.onEvent?.(msg);
     const data = JSON.stringify(msg);
     for (const c of clients) if (c.readyState === c.OPEN) c.send(data);
   };
@@ -95,10 +113,10 @@ export function startServer(rt: Runtime, token: string, port: number, host = "12
         if (rt.agent.busy) { ws.send(JSON.stringify({ type: "error", runId: "", message: "Still working on the last request. Stop it first." })); return; }
         broadcast({ type: "user", text: msg.text });
         void rt.agent.run(msg.text.trim(), {
-          emit: (e: AgentEvent) => broadcast(e),
+          emit: (e: AgentEvent) => broadcast(e as AgentEvent & Record<string, unknown>),
           confirm: (card) => new Promise<boolean>((resolve) => {
             pending.set(card.cardId, resolve);
-            broadcast(card);
+            broadcast(card as typeof card & Record<string, unknown>);
           }),
         }).finally(() => {
           // A stopped run can leave a card nobody answered; close it as declined.
@@ -119,8 +137,29 @@ export function startServer(rt: Runtime, token: string, port: number, host = "12
     });
   });
 
-  return new Promise((resolve, reject) => {
+  const listen = (p: number) => new Promise<number>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, host, () => resolve(server));
+    server.listen(p, host, () => {
+      server.off("error", reject);
+      const a = server.address();
+      resolve(typeof a === "object" && a ? a.port : p);
+    });
   });
+  let actual: number;
+  try {
+    actual = await listen(port);
+  } catch (err) {
+    if (!opts.fallbackPort || (err as NodeJS.ErrnoException).code !== "EADDRINUSE") throw err;
+    actual = await listen(0);
+  }
+  for (const h of [`127.0.0.1:${actual}`, `localhost:${actual}`]) {
+    allowedHosts.add(h);
+    allowedOrigins.add(`http://${h}`);
+  }
+  return {
+    server,
+    port: actual,
+    url: `http://127.0.0.1:${actual}/#token=${token}`,
+    pushState: () => broadcast({ type: "state", ...rt.state() }),
+  };
 }

@@ -16,6 +16,9 @@
     "ask": "tsx src/cli.ts ask",
     "build": "tsc -p tsconfig.json && node scripts/copy-ui.mjs",
     "start": "node dist/cli.js serve",
+    "app": "npm run build && electron .",
+    "app:self-test": "npm run build && electron . --self-test",
+    "dist": "npm run build && electron-builder --publish never",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts"
   },
@@ -27,7 +30,72 @@
   "devDependencies": {
     "@types/node": "^22.20.5",
     "@types/ws": "^8.18.2",
+    "electron": "44.5.1",
+    "electron-builder": "26.16.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "main": "dist/app/main.js",
+  "productName": "Jarvis",
+  "author": "Arbloodhound",
+  "homepage": "https://github.com/Arbloodhound/Jarvis",
+  "build": {
+    "appId": "com.arbloodhound.jarvis",
+    "productName": "Jarvis",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/**/*.map",
+      "assets/**/*",
+      "package.json"
+    ],
+    "artifactName": "Jarvis-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "NSScreenCaptureUsageDescription": "Jarvis takes screenshots when you ask it to."
+      }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "maintainer": "Arbloodhound"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Arbloodhound",
+      "repo": "Jarvis",
+      "releaseType": "draft"
+    }
   }
 }

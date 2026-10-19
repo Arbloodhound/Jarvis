@@ -4752,3 +4752,10 @@ Owner: "branch the existing work to a new project, a Jarvis client on the comput
 - 19 tests pass (gate, detectors, fast commands, full gateway run against a fake model server). UI driven in headless Chromium.
 - RUNTIME-UNPROVEN on a real desktop: app launching, clipboard, notifications, screenshots per OS; real Ollama tool-calling quality; live Claude calls (no key here; request shape checked against a mock); DuckDuckGo parser against the live page.
 - Next: phone as thin client of this gateway; voice; routines; screen understanding; embeddings.
+
+## 2026-10-19 — Jarvis Desktop is a native app (owner: "must work natively on the computer")
+- Electron 44.5.1 app (`src/app/main.ts`) runs the same agent + gateway in-process: own window, tray menu (brain, offline only, stop, start at login, quit), global hotkey Ctrl/Cmd+Shift+J, close to tray, single instance, port fallback if 7337 is taken. Confirm cards bring the window forward + notify.
+- Native OS integration through Electron (`useNative`): clipboard, notifications, screen capture (desktopCapturer), default browser. CLI keeps the command-line fallbacks.
+- Installers via electron-builder: Windows NSIS .exe, macOS .dmg (arm64 + x64), Linux AppImage + .deb. CI matrix (ubuntu/windows/macos): typecheck, tests, native `--self-test`, installer build, artifacts; `desktop-v*` tag drafts a release.
+- PROVEN here (Linux, Xvfb): app and the packaged AppImage pass the self-test (window connects, clipboard round-trip, 1280x800 capture, notification, tray, hotkey). AppImage + .deb build.
+- UNPROVEN until CI/owner runs it: Windows and macOS self-test and installers; macOS Screen Recording permission flow; unsigned-installer warnings are expected (no certificates).

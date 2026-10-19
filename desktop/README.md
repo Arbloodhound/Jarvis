@@ -1,6 +1,6 @@
 # Jarvis Desktop
 
-Jarvis on your computer. This branches off the Android app (`muse/v5-delta-port`). It keeps the same idea and the same safety rules, rebuilt for a desktop or laptop. It runs as a small program on your machine, and you chat with it in your browser.
+Jarvis on your computer. This branches off the Android app (`muse/v5-delta-port`). It keeps the same idea and the same safety rules, rebuilt for a desktop or laptop. It is a **native desktop app** for Windows, macOS and Linux, with its own window, a tray icon, and a hotkey that brings it up from anywhere.
 
 It follows OpenClaw's design (a local gateway that clients connect to) and adds the safety layer the phone app already had.
 
@@ -35,28 +35,47 @@ It follows OpenClaw's design (a local gateway that clients connect to) and adds 
 
 What OpenClaw has that this does **not** have yet: chat-app channels (WhatsApp, Telegram, Slack…), a plugin and skills ecosystem, voice, scheduled jobs, phone clients, browser automation, and years of real-world use.
 
-## Run it
+## Install
+
+Download the installer for your computer from the PR's CI run (artifacts `jarvis-Windows`, `jarvis-macOS`, `jarvis-Linux`). Once a `desktop-v*` tag is pushed, the installers are also attached to a draft GitHub release.
+
+| Computer | File | Note |
+|---|---|---|
+| Windows | `Jarvis-…-win-x64.exe` | Not code-signed yet: SmartScreen shows "unknown publisher"; choose **More info → Run anyway**. |
+| Mac | `Jarvis-…-mac-arm64.dmg` (Apple silicon) or `…-x64.dmg` (Intel) | Not notarized yet: the first time, right-click the app → **Open**. For screenshots, allow Jarvis under System Settings → Privacy & Security → Screen Recording. |
+| Linux | `Jarvis-…-x86_64.AppImage` or `…-amd64.deb` | AppImage: `chmod +x` and run. |
+
+## Using it
+
+- **Ctrl+Shift+J** (Cmd+Shift+J on a Mac) shows or hides Jarvis from anywhere.
+- Closing the window keeps Jarvis running in the **tray** (menu bar on a Mac). The tray menu has: Show, Stop, the brain choice, Offline only, Start at login (Windows and Mac), Open Jarvis folder, and Quit.
+- When Jarvis needs your OK and its window is hidden, it comes to the front and posts a notification.
+- Clipboard, notifications, screenshots and opening links use the operating system directly through the app. The command-line version falls back to system tools.
+
+**Local brain:** install Ollama, then run `ollama pull qwen3:8b`. To use another model, set `local.model` in `~/.jarvis/config.json`.
+
+**Cloud brain:** set `ANTHROPIC_API_KEY` (or `cloud.apiKey` in the config), then pick **Cloud** in the header or the tray menu.
+
+## From source
 
 You need Node.js 22 or newer.
 
 ```bash
 cd desktop
 npm install
-npm run build
-node dist/cli.js serve        # prints a link with your access token; open it
+npm run app          # build and open the desktop app
+npm run dist         # build an installer for this computer into release/
+npm run app:self-test  # start the app, check the native pieces, quit
 ```
 
-Other ways to use it:
+Without the app window, the same agent runs as a terminal program or a local web page:
 
 ```bash
 node dist/cli.js chat                       # talk in the terminal
 node dist/cli.js ask "what's in ~/Downloads?"
+node dist/cli.js serve                      # chat page in your browser
 node dist/cli.js where                      # where config, memory and logs live
 ```
-
-**Local brain:** install Ollama, then run `ollama pull qwen3:8b`. To use another model, set `local.model` in `~/.jarvis/config.json`.
-
-**Cloud brain:** set `ANTHROPIC_API_KEY` (or `cloud.apiKey` in the config), then pick **Cloud** in the page header.
 
 ## Your files
 
@@ -73,9 +92,12 @@ Everything lives in `~/.jarvis` (or wherever `JARVIS_HOME` points):
 
 ## Status
 
-- **Proven by tests:** the gate rules, the scam and secret detectors, fast commands, and one full run through the real gateway, agent loop, gate and local-model client against a fake model server. That run covers a confirm card, parallel reads, a declined command and an honest final answer. There are 19 tests and all pass. The chat page was also driven in headless Chromium at desktop and phone widths.
+- **Proven by tests:** the gate rules, the scam and secret detectors, fast commands, and one full run through the real gateway, agent loop, gate and local-model client against a fake model server. That run covers a confirm card, parallel reads, a declined command and an honest final answer. There are 19 tests and all pass.
+- **Proven on Linux (virtual display):** the desktop app and the packaged AppImage both start, the window connects, and the OS clipboard, screen capture, notification, tray and global hotkey all work (`--self-test`). The AppImage and .deb installers build.
+- **Set up, not yet run:** the same self-test and installer builds on Windows and macOS. CI runs them on every push to this PR.
 - **Checked, not run live:** the Claude client's request shape, against a mock server. No API key was available.
-- **Not yet tried on a real machine:** opening apps, the clipboard, notifications and screenshots on macOS, Windows and Linux desktops. Also untested: how well a real Ollama model calls tools, and whether the DuckDuckGo results parser still matches the live page.
+- **Not yet tried:** using the app day to day on a real desktop; opening apps by name on each OS; how well a real Ollama model calls tools; whether the DuckDuckGo results parser still matches the live page.
+- **Not done:** code signing (Windows) and notarization (macOS), which need paid certificates; auto-update; Start at login on Linux.
 
 ## Next
 

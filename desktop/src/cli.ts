@@ -66,8 +66,8 @@ async function main(): Promise<void> {
 
   if (cmd === "serve") {
     const token = accessToken(p);
-    await startServer(rt, token, cfg.port);
-    console.log(`Jarvis is listening on this computer only.\n\n  Open: http://127.0.0.1:${cfg.port}/#token=${token}\n\n  Brain: ${rt.provider().label}${cfg.offlineOnly ? " (offline only)" : ""}\n  Files: ${p.home}`);
+    const gw = await startServer(rt, token, cfg.port);
+    console.log(`Jarvis is listening on this computer only.\n\n  Open: ${gw.url}\n\n  Brain: ${rt.provider().label}${cfg.offlineOnly ? " (offline only)" : ""}\n  Files: ${p.home}`);
     return;
   }
 

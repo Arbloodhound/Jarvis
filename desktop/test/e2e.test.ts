@@ -18,7 +18,7 @@ import { startServer } from "../src/server.ts";
 const home = mkdtempSync(path.join(tmpdir(), "jarvis-e2e-"));
 const p = paths(home);
 const TOKEN = "test-token-123";
-let gw: Server;
+let gw: Server | undefined;
 let model: Server;
 let port = 0;
 const seenRequests: Array<{ messages: Array<{ role: string; content?: string }>; tools?: unknown[] }> = [];
@@ -68,7 +68,7 @@ before(async () => {
   const cfg = loadConfig(p);
   cfg.local.baseUrl = `http://127.0.0.1:${mport}/v1`;
   cfg.port = port;
-  gw = await startServer(new Runtime(cfg, p, home), TOKEN, port);
+  gw = (await startServer(new Runtime(cfg, p, home), TOKEN, port)).server;
 });
 
 after(() => {

@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { writeFile } from "node:fs/promises";
 import { platform } from "node:os";
 
 /**
@@ -8,6 +9,27 @@ import { platform } from "node:os";
  */
 
 export const OS = platform();
+
+/**
+ * When Jarvis runs as the desktop app, Electron supplies these natively
+ * (clipboard, notifications, screen capture, the default browser) and the
+ * command-line fallbacks below are not used. `jarvis serve` and the CLI keep
+ * the fallbacks.
+ */
+export interface Native {
+  openUrl(url: string): Promise<void>;
+  clipboardRead(): Promise<string>;
+  clipboardWrite(text: string): Promise<void>;
+  notify(title: string, message: string): Promise<void>;
+  /** PNG bytes of the whole screen. */
+  screenshot(): Promise<Buffer>;
+}
+
+let native: Native | null = null;
+
+export function useNative(impl: Native | null): void {
+  native = impl;
+}
 
 export function run(cmd: string, args: string[], input?: string, timeoutMs = 15000): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -32,6 +54,7 @@ function launch(cmd: string, args: string[]): Promise<void> {
 
 export async function openUrl(url: string): Promise<void> {
   if (!/^https?:\/\//i.test(url)) throw new Error("Only http and https links are opened.");
+  if (native) return native.openUrl(url);
   if (OS === "darwin") return launch("open", [url]);
   // rundll32 opens a URL without going through cmd.exe's parser.
   if (OS === "win32") return launch("rundll32", ["url.dll,FileProtocolHandler", url]);
@@ -52,18 +75,21 @@ export async function openApp(name: string): Promise<void> {
 }
 
 export async function clipboardRead(): Promise<string> {
+  if (native) return native.clipboardRead();
   if (OS === "darwin") return run("pbpaste", []);
   if (OS === "win32") return run("powershell", ["-NoProfile", "-Command", "Get-Clipboard -Raw"]);
   try { return await run("wl-paste", ["--no-newline"]); } catch { return run("xclip", ["-selection", "clipboard", "-o"]); }
 }
 
 export async function clipboardWrite(text: string): Promise<void> {
+  if (native) return native.clipboardWrite(text);
   if (OS === "darwin") { await run("pbcopy", [], text); return; }
   if (OS === "win32") { await run("powershell", ["-NoProfile", "-Command", "$input | Set-Clipboard"], text); return; }
   try { await run("wl-copy", [], text); } catch { await run("xclip", ["-selection", "clipboard"], text); }
 }
 
 export async function notify(title: string, message: string): Promise<void> {
+  if (native) return native.notify(title, message);
   if (OS === "darwin") {
     // Pass the strings as AppleScript arguments, never spliced into the script.
     await run("osascript", ["-e", "on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv)\nend run", title, message]);
@@ -78,6 +104,7 @@ export async function notify(title: string, message: string): Promise<void> {
 }
 
 export async function screenshot(file: string): Promise<void> {
+  if (native) { await writeFile(file, await native.screenshot()); return; }
   if (OS === "darwin") { await run("screencapture", ["-x", file]); return; }
   if (OS === "win32") {
     const ps = "param($f) Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=[System.Windows.Forms.SystemInformation]::VirtualScreen; $bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height; $g=[System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Left,$b.Top,0,0,$bmp.Size); $bmp.Save($f)";

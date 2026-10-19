@@ -13,10 +13,11 @@ Do not build drug sourcing or "find me X to buy" tooling for controlled or illic
 - `src/gate/`: `gate.ts` (provenance rules), `scam.ts` (port of ScamSignals.kt), `secrets.ts` (keys, one-time codes), `audit.ts`.
 - `src/tools/index.ts`: the tools. Each one declares its effects and which args are targets, paths or egress.
 - `src/providers/`: `claude.ts` (official SDK, streaming) and `local.ts` (OpenAI-compatible local servers).
+- `src/app/main.ts`: the native desktop app (Electron main process): window, tray, global hotkey, single instance, native clipboard / notifications / screen capture / browser via `useNative`, and `--self-test`.
 - `src/server.ts`: the gateway (127.0.0.1, token, Host/Origin checks). `src/ui/index.html`: the chat page.
 
 ## Adding a tool
 Declare `policy.effects` truthfully. List every arg that names where an effect lands (`targetArgs`), every local path (`pathArgs`) and every arg whose text leaves the computer (`egressArgs`). Set `outside: true` when the result comes from the web and `network: true` when the tool needs the network. Add a gate test for any new rule.
 
 ## Checks
-`npm run typecheck && npm test`. Run `npm run build` to produce `dist/`.
+`npm run typecheck && npm test`. Run `npm run build` to produce `dist/`. `npm run app:self-test` (Linux: under `xvfb-run -a`, add `--no-sandbox` as root) proves the native app. `npm run dist` builds an installer for the current OS. Pin new dependencies to versions at least two weeks old.
