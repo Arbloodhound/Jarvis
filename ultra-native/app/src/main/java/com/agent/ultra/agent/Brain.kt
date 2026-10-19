@@ -564,7 +564,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             // ("search my notes for the wifi password" must not toggle wifi).
             if (noteFromMemory != null && local.isThinkingModel) { emitLocal(userInput, noteFromMemory, noteMode = true); return }
             if (spokenFocus != null && local.isThinkingModel) { emitLocal(userInput, spokenFocus); return }
-            if (LocalToolCall.offlineRoute(userInput, canDecline = toolEngine.isThinkingModel) &&
+            if (LocalToolCall.offlineRoute(userInput, canDecline = toolEngine.isThinkingModel, chains = toolEngine.isThinkingModel) &&
                 runLocalLoop(IntentRouter.requestPart(userInput))) return
             // A job of several steps on screens ("open settings and turn on dark mode"): the
             // on-device model drives the app itself, through the cloud navigator's action path.
@@ -1124,7 +1124,25 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         }
         if (toolEngine.isThinkingModel) {
             val call = thinkingToolCall(userInput, recalled) ?: return false
-            runLocalCall(userInput, episode, call)
+            var last = call
+            var result = runLocalCall(userInput, episode, call)
+            // "call mom and then text Sam": more than one job -> next tool, up to MAX_CHAIN. A confirm card
+            // (result == null) ends the chain: it waits for the person, and the rest is asked again.
+            if (result != null && LocalToolCall.compound(userInput)) {
+                val done = StringBuilder()
+                var step = 1
+                while (step < LocalToolCall.MAX_CHAIN && result != null && !stopRequested) {
+                    done.append("\n$step. ${last.first} ${last.second} -> ${result.take(200)}")
+                    val next = thinkingToolCall(
+                        userInput + "\n[Already done:$done\nIf the whole request is finished reply " +
+                            "{\"tool\":\"none\",\"params\":{}}. Otherwise reply with only the NEXT tool.]", null,
+                    ) ?: break
+                    if (next.first == last.first && next.second.toString() == last.second.toString()) break
+                    last = next
+                    result = runLocalCall(userInput, episode, next)
+                    step++
+                }
+            }
             return true
         }
         // Few-shot examples — 1B models map intents reliably with them, not
@@ -1251,21 +1269,21 @@ JSON:"""
         userInput: String,
         episode: Gate.Episode,
         call: Pair<String, JSONObject>,
-    ) {
+    ): String? {
         GateAuditLog.recordRoute(GateAuditLog.ROUTE_LOCAL_TOOL, "call")
         // "call mom" / "text Sam ...": the model gives a name; the number comes from the contacts.
         if (call.first == "call_phone" || call.first == "sms_send") {
             val to = call.second.optString("to").ifBlank { call.second.optString("number") }.trim()
-            if (to.isBlank()) { answer("Who should I ${if (call.first == "call_phone") "call" else "text"}?"); return }
+            if (to.isBlank()) { answer("Who should I ${if (call.first == "call_phone") "call" else "text"}?"); return null }
             if (to.count { it.isDigit() } < 5) {
                 val hits = controller.readContacts(to).lines().mapNotNull { l ->
                     l.split(" — ").takeIf { it.size == 2 }?.let { it[0] to it[1].trim() }
                 }
                 when {
-                    hits.isEmpty() -> { answer("I couldn't find a number for \"$to\" in your contacts."); return }
+                    hits.isEmpty() -> { answer("I couldn't find a number for \"$to\" in your contacts."); return null }
                     hits.size > 1 -> {
                         answer("Which one: " + hits.joinToString(", ") { "${it.first} (${it.second})" } + "? Say the full name or the number.")
-                        return
+                        return null
                     }
                 }
                 call.second.put("to", hits.single().second)
@@ -1282,13 +1300,13 @@ JSON:"""
                 desc, targets, call.first, call.second, "", mutableListOf(), 0, episode, userInput, local = true,
             )
             answer("Waiting for your OK: $desc. Confirm or cancel.")
-            return
+            return null
         }
         if (!verdict.allowed) {
             GateAuditLog.record(appContext, call.first, GateAuditLog.Outcome.BLOCKED, verdict.rule, episode.observations, verdict.riskScore)
             android.util.Log.i("UltraGate", "LOCAL BLOCK ${call.first}: ${verdict.violations.firstOrNull()?.hint}")
             answer("Blocked by policy gate: ${verdict.violations.firstOrNull()?.hint}")
-            return
+            return null
         }
         val localOutcome = if (verdict.autoApproved) GateAuditLog.Outcome.AUTO_APPROVED else GateAuditLog.Outcome.ALLOWED
         if (verdict.autoApproved) android.util.Log.i("UltraGate", "LOCAL AUTO-APPROVE ${call.first} (risk=${verdict.riskScore?.total})")
@@ -1305,6 +1323,7 @@ JSON:"""
         // otherwise "save that as X" after a local command has nothing
         // to save.
         recordMemory(userInput, listOf(Triple(call.first, call.second, !failed)), !failed)
+        return if (failed) null else result
     }
 
     private suspend fun runLoop(
@@ -2132,13 +2151,20 @@ RULES:
          * tool subset route on-device. Anything else goes cloud. No "timer" or
          * "start": the local catalog has no timer tool, and the 1B model mapped
          * them onto whatever it had and reported that done. */
-        internal fun isSimpleLocalIntent(input: String): Boolean {
+        internal fun isSimpleLocalIntent(input: String, allowChains: Boolean = false): Boolean {
             val u = input.lowercase()
             // Compounds and URL-like targets exceed the 1B model's measured
-            // competence (suite t03/t05/t08): those go cloud.
+            // competence (suite t03/t05/t08): those go cloud. The action model (a thinking model) takes
+            // them: [allowChains], with the web, memory and routine words too.
+            if (allowChains) {
+                if (Regex("\\b(search (?:the )?(?:web|internet|online)|search for|look up|google|browse|trash|recycle bin|" +
+                        "forget|recipe|routine|watch me|stop watching|what did (?:i|we|they) say|https?|www)\\b|" +
+                        "[a-z0-9-]+\\.(?:com|org|net|io|edu|gov)\\b").containsMatchIn(u)) return true
+            } else {
             if (Regex("\\b(and then|then|after that| and )\\b").containsMatchIn(u)) return false
             if (Regex("[a-z0-9-]+\\.(com|org|net|io|edu|gov)\\b").containsMatchIn(u)) return false
             if (u.contains("http")) return false
+            }
             return Regex(
                 "\\b(flashlight|torch|wi-?fi|bluetooth|do not disturb|dnd|volume|brightness|" +
                     "airplane|alarm|battery|clipboard|note this|open|launch|" +

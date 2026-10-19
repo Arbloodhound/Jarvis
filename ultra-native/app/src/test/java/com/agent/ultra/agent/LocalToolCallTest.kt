@@ -137,3 +137,23 @@ class LocalToolCallCallsTest {
             org.junit.Assert.assertTrue(r, Brain.isSimpleLocalIntent(r))
     }
 }
+
+class LocalToolCallChainTest {
+    @org.junit.Test fun webMemoryAndRoutineToolsAreOffered() {
+        for (t in listOf("open_url", "web_search", "web_browse", "ambient_recall", "trash", "forget",
+            "recipe_run", "recipe_save", "recipe_list", "recipe_delete", "watch_me", "stop_watching", "cancel_watching"))
+            org.junit.Assert.assertTrue(t, t in LocalToolCall.TOOLS)
+        for (t in listOf("shop_search", "shop_checkout_prep", "tor_connect", "ask_claude", "delegate", "connector", "artifact"))
+            org.junit.Assert.assertFalse(t, t in LocalToolCall.TOOLS)
+    }
+    @org.junit.Test fun chainsAndLinksRouteOnlyWhenAllowed() {
+        val r = "call mom and then text Sam hi"
+        org.junit.Assert.assertFalse(Brain.isSimpleLocalIntent(r))
+        org.junit.Assert.assertTrue(Brain.isSimpleLocalIntent(r, allowChains = true))
+        org.junit.Assert.assertFalse(Brain.isSimpleLocalIntent("open example.com"))
+        org.junit.Assert.assertTrue(Brain.isSimpleLocalIntent("open example.com", allowChains = true))
+        org.junit.Assert.assertTrue(Brain.isSimpleLocalIntent("search the web for ferry times", allowChains = true))
+        org.junit.Assert.assertTrue(LocalToolCall.compound(r))
+        org.junit.Assert.assertFalse(LocalToolCall.compound("call mom"))
+    }
+}

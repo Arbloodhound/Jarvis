@@ -4728,3 +4728,10 @@ Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private t
 - RAM: the 3.5 GB free seen in logs is what is left AFTER the 4B loads; the 1.7B (~1 GB) fits. UNPROVEN on the phone: speed, whether the 1.7B picks tools as reliably as the 4B, and load time when it was unloaded (idle).
 - bench/CloudStandIn.kt mentions an "action model" in comments (diagnostic only; the excluded cloud stand-in material): not touched.
 - JVM 1627 tests, 0 failures.
+
+## 2026-10-19 — Local tool chains, links, web, memory, routines
+- Chains: Brain.runLocalLoop (thinking/action-model path) now continues after the first tool when the request is compound (LocalToolCall.compound), up to LocalToolCall.MAX_CHAIN=4, feeding each result back ("Already done: ..."). A confirm card (call/text) or a failure ends the chain; the rest must be asked again. runLocalCall now returns the result text (null = did not run).
+- Routing: with a thinking tool engine, isSimpleLocalIntent(allowChains=true) no longer rejects compounds or links, and routes web/memory/routine words (search the web, look up, google, browse, http/www/.com, trash, forget, recipe/routine, watch me, "what did we say").
+- Tools on-device: open_url, web_search, web_browse, ambient_recall, trash, forget, recipe_run/save/list/delete, watch_me, stop_watching, cancel_watching. The model calls web_search itself; Offline-only still blocks it inside Tools.
+- Deliberately NOT on-device: shop_search, shop_checkout_prep, tor_connect (shopping and onion reach; product scope is inform + confirm, no sourcing), ask_claude/delegate/connector/artifact (cloud by nature).
+- Not built: the main model composing the final reply from tool results (adds a slow extra run); results are shown as the tool returned them. JVM 1629 tests, 0 failures. Runtime-unproven.

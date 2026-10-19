@@ -35,7 +35,20 @@ object LocalToolCall {
         "call_phone", "call_answer", "call_end", "call_speaker", "sms_send",
         // Reading the screen as a picture, and the rest of the phone's details.
         "screen_ocr", "look_at_screen", "describe_screen", "read_screen_deep", "device_info",
+        // The web, memory, saved routines and learn-by-watching (owner, 2026-10-19). Not here on purpose:
+        // shop_*, tor_connect (shopping and onion reach), ask_claude / delegate / connector / artifact (cloud by nature).
+        "open_url", "web_search", "web_browse", "ambient_recall", "trash", "forget",
+        "recipe_run", "recipe_save", "recipe_list", "recipe_delete", "watch_me", "stop_watching", "cancel_watching",
     )
+
+    /** A request with more than one job ("call mom and then text Sam"): the on-device loop goes on to a
+     *  next tool after the first. Simple requests stop after one call (no extra model run). */
+    fun compound(request: String): Boolean =
+        Regex("\\b(and then|then|after that|afterwards|and also|, and| and )\\b", RegexOption.IGNORE_CASE)
+            .containsMatchIn(IntentRouter.requestPart(request))
+
+    /** At most this many tool calls for one request. */
+    const val MAX_CHAIN = 4
 
     /** What the model says when the message is not a command for one of [TOOLS]. */
     const val NONE = "none"
@@ -53,9 +66,9 @@ object LocalToolCall {
      * positively calls a DEVICE command. Routing is on the command alone when ambient context
      * wraps it.
      */
-    fun offlineRoute(input: String, canDecline: Boolean): Boolean {
+    fun offlineRoute(input: String, canDecline: Boolean, chains: Boolean = false): Boolean {
         val request = IntentRouter.requestPart(input)
-        if (!Brain.isSimpleLocalIntent(request)) return false
+        if (!Brain.isSimpleLocalIntent(request, chains)) return false
         val tier = IntentRouter.route(request).tier
         return if (canDecline) tier != IntentRouter.Tier.DEEP else tier == IntentRouter.Tier.DEVICE
     }
@@ -106,6 +119,19 @@ look_at_screen {"question":"..."}   (the vision model describes the screen or an
 describe_screen {}   (a description of what is on the screen)
 read_screen_deep {}   (scroll the page and read all of it)
 device_info {}   (model, Android version, hardware)
+open_url {"url":"https://..."}   (open a link in the browser)
+web_search {"query":"..."}   (search the internet; results come back as text)
+web_browse {"task":"..."}   (open-ended browsing for a task)
+ambient_recall {"query":"...","limit":5}   (search what the phone overheard earlier)
+trash {"action":"list|restore","id":"..."}   (the trash: list or restore)
+forget {"subject":"..."}   (forget something from memory; asks first)
+recipe_run {"name":"..."}   (run a saved routine)
+recipe_save {"name":"..."}   (save the previous successful run as a routine)
+recipe_list {}   (list saved routines)
+recipe_delete {"name":"..."}   (delete a saved routine)
+watch_me {}   (start watching me do something to learn it)
+stop_watching {"name":"..."}   (stop watching and save it under a name)
+cancel_watching {}   (stop watching and throw it away)
 """.trim()
 
     /** After the tool list: the way out and the worked examples. */
@@ -138,6 +164,15 @@ read the words in the picture of my screen -> {"tool":"screen_ocr","params":{}}
 what does my screen look like -> {"tool":"look_at_screen","params":{"question":""}}
 read this whole page -> {"tool":"read_screen_deep","params":{}}
 what phone is this -> {"tool":"device_info","params":{}}
+search the web for ferry times -> {"tool":"web_search","params":{"query":"ferry times"}}
+open example.com -> {"tool":"open_url","params":{"url":"https://example.com"}}
+what did we say about the trip -> {"tool":"ambient_recall","params":{"query":"trip","limit":5}}
+run my morning routine -> {"tool":"recipe_run","params":{"name":"morning"}}
+save that as morning -> {"tool":"recipe_save","params":{"name":"morning"}}
+what routines do I have -> {"tool":"recipe_list","params":{}}
+show my trash -> {"tool":"trash","params":{"action":"list"}}
+forget my old address -> {"tool":"forget","params":{"subject":"my old address"}}
+watch me do this -> {"tool":"watch_me","params":{}}
 set a timer for 5 minutes -> {"tool":"none","params":{}}
 """.trim()
 
