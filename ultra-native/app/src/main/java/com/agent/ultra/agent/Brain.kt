@@ -256,6 +256,9 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         internal val createdAtMs: Long = android.os.SystemClock.elapsedRealtime(),
         /** Raised by an on-device call: confirming runs the tool and answers; no cloud loop to resume. */
         internal val local: Boolean = false,
+        /** On-device chain paused at this card: what was already done, and this call's step number. */
+        internal val chainDone: String = "",
+        internal val chainStep: Int = 0,
     )
 
     /** The operator's decision on a paused action. */
@@ -284,6 +287,12 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             val bad = res.startsWith("Error:") || res.startsWith("Could not")
             answer((if (bad) "Tried on-device: $res" else "$res (on-device)"))
             recordMemory(p.userInput, listOf(Triple(p.tool, p.params, !bad)), !bad)
+            // "call mom and then text Sam": the chain paused at this card goes on now that it is confirmed.
+            if (!bad && p.chainStep > 0 && LocalToolCall.compound(p.userInput) && toolEngine.isThinkingModel) {
+                stopRequested = false
+                continueLocalChain(p.userInput, p.episode, p.tool to p.params, res, p.chainDone, p.chainStep,
+                    compose = false, collected = mutableListOf())
+            }
             return@withLock
         }
         // The cloud brain was removed while the action waited (its key cleared in Settings: this
@@ -1130,26 +1139,13 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         }
         if (toolEngine.isThinkingModel) {
             val call = thinkingToolCall(userInput, recalled) ?: return false
-            var last = call
             val compose = com.agent.ultra.ui.UltraPrefs.mainReply(appContext)
             val collected = mutableListOf<String>()
-            var result = runLocalCall(userInput, episode, call, speak = !compose, collect = collected)
+            val result = runLocalCall(userInput, episode, call, speak = !compose, collect = collected, chainStep = 1)
             // "call mom and then text Sam": more than one job -> next tool, up to MAX_CHAIN. A confirm card
-            // (result == null) ends the chain: it waits for the person, and the rest is asked again.
+            // (result == null) pauses the chain; confirming it carries on ([resolvePending]).
             if (result != null && LocalToolCall.compound(userInput)) {
-                val done = StringBuilder()
-                var step = 1
-                while (step < LocalToolCall.MAX_CHAIN && result != null && !stopRequested) {
-                    done.append("\n$step. ${last.first} ${last.second} -> ${result.take(200)}")
-                    val next = thinkingToolCall(
-                        userInput + "\n[Already done:$done\nIf the whole request is finished reply " +
-                            "{\"tool\":\"none\",\"params\":{}}. Otherwise reply with only the NEXT tool.]", null,
-                    ) ?: break
-                    if (next.first == last.first && next.second.toString() == last.second.toString()) break
-                    last = next
-                    result = runLocalCall(userInput, episode, next, speak = !compose, collect = collected)
-                    step++
-                }
+                continueLocalChain(userInput, episode, call, result, "", 1, compose, collected)
             }
             if (compose && collected.isNotEmpty()) composeReply(userInput, collected)
             return true
@@ -1272,8 +1268,29 @@ JSON:"""
         }
     }
 
-    /** Gate, run, verify and record one on-device tool call. The same policy gate as the
-     * cloud loop; a call it refuses (confirmable or not) is not run. */
+    /** The rest of an on-device chain after [first] (step [startStep]) returned [firstResult]. */
+    private suspend fun continueLocalChain(
+        userInput: String, episode: Gate.Episode, first: Pair<String, JSONObject>, firstResult: String,
+        startDone: String, startStep: Int, compose: Boolean, collected: MutableList<String>,
+    ) {
+        var last = first
+        var result: String? = firstResult
+        val done = StringBuilder(startDone)
+        var step = startStep
+        while (step < LocalToolCall.MAX_CHAIN && result != null && !stopRequested) {
+            done.append("\n$step. ${last.first} ${last.second} -> ${result.take(200)}")
+            val next = thinkingToolCall(
+                userInput + "\n[Already done:$done\nIf the whole request is finished reply " +
+                    "{\"tool\":\"none\",\"params\":{}}. Otherwise reply with only the NEXT tool.]", null,
+            ) ?: break
+            if (next.first == last.first && next.second.toString() == last.second.toString()) break
+            last = next
+            result = runLocalCall(userInput, episode, next, speak = !compose, collect = collected,
+                chainDone = done.toString(), chainStep = step + 1)
+            step++
+        }
+    }
+
     /** The main model says what the tools did (Settings → Main model writes the reply). Falls back to the raw results. */
     private suspend fun composeReply(userInput: String, results: List<String>) {
         val raw = try {
@@ -1286,6 +1303,8 @@ JSON:"""
         answer(if (text.isNotBlank()) text else results.joinToString("\n") { "$it (on-device)" })
     }
 
+    /** Gate, run, verify and record one on-device tool call. The same policy gate as the
+     * cloud loop; a call it refuses (confirmable or not) is not run. */
     private suspend fun runLocalCall(
         userInput: String,
         episode: Gate.Episode,
@@ -1293,6 +1312,9 @@ JSON:"""
         /** False: the result is not said here; the caller composes the reply ([collect] gets it). */
         speak: Boolean = true,
         collect: MutableList<String>? = null,
+        /** Part of an on-device chain: what was done before this call, and its step number (0 = not a chain). */
+        chainDone: String = "",
+        chainStep: Int = 0,
     ): String? {
         GateAuditLog.recordRoute(GateAuditLog.ROUTE_LOCAL_TOOL, "call")
         // "call mom" / "text Sam ...": the model gives a name; the number comes from the contacts.
@@ -1322,6 +1344,7 @@ JSON:"""
             val desc = describeAction(call.first, call.second)
             pendingConfirm = PendingConfirm(
                 desc, targets, call.first, call.second, "", mutableListOf(), 0, episode, userInput, local = true,
+                chainDone = chainDone, chainStep = chainStep,
             )
             answer("Waiting for your OK: $desc. Confirm or cancel.")
             return null
