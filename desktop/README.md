@@ -93,8 +93,8 @@ Everything lives in `~/.jarvis` (or wherever `JARVIS_HOME` points):
 ## Status
 
 - **Proven by tests:** the gate rules, the scam and secret detectors, fast commands, and one full run through the real gateway, agent loop, gate and local-model client against a fake model server. That run covers a confirm card, parallel reads, a declined command and an honest final answer. There are 19 tests and all pass.
-- **Proven on Linux (virtual display):** the desktop app and the packaged AppImage both start, the window connects, and the OS clipboard, screen capture, notification, tray and global hotkey all work (`--self-test`). The AppImage and .deb installers build.
-- **Set up, not yet run:** the same self-test and installer builds on Windows and macOS. CI runs them on every push to this PR.
+- **Proven on Windows, macOS and Linux (CI, run 39335363833):** the desktop app starts, its window connects, and the OS clipboard, screen capture, notification, tray and global hotkey all work (`--self-test`). The installers build: Windows `.exe`, macOS `.dmg` (Apple silicon and Intel), Linux AppImage and `.deb`. The packaged AppImage also passed the self-test here.
+- **Not proven:** the macOS Screen Recording permission prompt on a real Mac (the CI Mac allowed capture without it).
 - **Checked, not run live:** the Claude client's request shape, against a mock server. No API key was available.
 - **Not yet tried:** using the app day to day on a real desktop; opening apps by name on each OS; how well a real Ollama model calls tools; whether the DuckDuckGo results parser still matches the live page.
 - **Not done:** code signing (Windows) and notarization (macOS), which need paid certificates; auto-update; Start at login on Linux.

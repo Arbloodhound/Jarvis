@@ -4758,4 +4758,5 @@ Owner: "branch the existing work to a new project, a Jarvis client on the comput
 - Native OS integration through Electron (`useNative`): clipboard, notifications, screen capture (desktopCapturer), default browser. CLI keeps the command-line fallbacks.
 - Installers via electron-builder: Windows NSIS .exe, macOS .dmg (arm64 + x64), Linux AppImage + .deb. CI matrix (ubuntu/windows/macos): typecheck, tests, native `--self-test`, installer build, artifacts; `desktop-v*` tag drafts a release.
 - PROVEN here (Linux, Xvfb): app and the packaged AppImage pass the self-test (window connects, clipboard round-trip, 1280x800 capture, notification, tray, hotkey). AppImage + .deb build.
-- UNPROVEN until CI/owner runs it: Windows and macOS self-test and installers; macOS Screen Recording permission flow; unsigned-installer warnings are expected (no certificates).
+- PROVEN in CI (run 39335363833, head 88b9a58): self-test passed on win32 (screenshot 1024x768, notification shown), darwin (all checks, capture 1024x768) and linux; installers built and uploaded as artifacts jarvis-Windows / jarvis-macOS / jarvis-Linux.
+- Still unproven: daily use on the owner's own computer; macOS Screen Recording permission prompt on a real Mac; unsigned-installer warnings are expected (no certificates).
