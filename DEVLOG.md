@@ -4722,3 +4722,9 @@ Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private t
 - runLocalCall: a name ("call mom", "text Sam ...") is resolved from the contacts; none -> says so; several -> asks which. The gate still decides: a confirmable block raises the same Confirm/Cancel card (PendingConfirm.local = true; resolvePending runs the tool directly, no cloud loop).
 - Not yet on-device: describe_screen/read_screen_deep/screen_ocr/look_at_screen, open_url/web_search/web_browse/device_info/trash, recipe_*, watch_me*, forget/ambient_recall/shop_*/tor_connect, delegate/connector/artifact/ask_claude. The 1B (non-thinking) prompt in runLocalLoop is unchanged (thinking-model path only). JVM 1627 tests, 0 failures. Runtime-unproven.
 - Also on-device now: screen_ocr, look_at_screen, describe_screen, read_screen_deep, device_info (prompt lines, examples, routing). JVM 1627 tests, 0 failures.
+
+## 2026-10-19 — Action model
+- New setting (Settings, default ON): "Action model". Brain.toolEngine = the memory model (LocalModelEngine.librarian, Qwen3 1.7B) when it is downloaded and a thinking model, else the main model. It picks the tool call (thinkingToolCall, with fallback to the main model if it fails) and drives OfflineNavigator. The main model still thinks and answers. Gate, ScreenGuard, ActionGate, confirm cards, Stop unchanged.
+- RAM: the 3.5 GB free seen in logs is what is left AFTER the 4B loads; the 1.7B (~1 GB) fits. UNPROVEN on the phone: speed, whether the 1.7B picks tools as reliably as the 4B, and load time when it was unloaded (idle).
+- bench/CloudStandIn.kt mentions an "action model" in comments (diagnostic only; the excluded cloud stand-in material): not touched.
+- JVM 1627 tests, 0 failures.

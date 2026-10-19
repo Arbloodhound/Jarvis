@@ -191,6 +191,25 @@ fun SettingsScreen(
         }
 
         run {
+            var actionModel by remember { mutableStateOf(UltraPrefs.actionModel(context)) }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Action model", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "The small memory model picks tools and drives the screen, so actions are quicker. " +
+                            "The main model still thinks and answers. Off, or if the small model isn't downloaded: the main model does it all.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = actionModel, onCheckedChange = { on ->
+                    actionModel = on
+                    UltraPrefs.setActionModel(context, on)
+                })
+            }
+        }
+
+        run {
             var onion by remember { mutableStateOf(UltraPrefs.onionResearch(context)) }
             var deep by remember { mutableStateOf(UltraPrefs.deepResearch(context)) }
             var own by remember { mutableStateOf(UltraPrefs.onionKnownGood(context)) }

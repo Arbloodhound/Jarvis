@@ -564,7 +564,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             // ("search my notes for the wifi password" must not toggle wifi).
             if (noteFromMemory != null && local.isThinkingModel) { emitLocal(userInput, noteFromMemory, noteMode = true); return }
             if (spokenFocus != null && local.isThinkingModel) { emitLocal(userInput, spokenFocus); return }
-            if (LocalToolCall.offlineRoute(userInput, canDecline = local.isThinkingModel) &&
+            if (LocalToolCall.offlineRoute(userInput, canDecline = toolEngine.isThinkingModel) &&
                 runLocalLoop(IntentRouter.requestPart(userInput))) return
             // A job of several steps on screens ("open settings and turn on dark mode"): the
             // on-device model drives the app itself, through the cloud navigator's action path.
@@ -890,19 +890,32 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
     /** The on-device navigator, made on first use. It acts through the cloud navigator when there
      * is one (same gate, same screen memory), else through one with no cloud model. */
     private var offlineNavigator: OfflineNavigator? = null
+    private var offlineNavEngine: com.agent.ultra.local.LocalModelEngine? = null
 
-    private fun offlineNavigator(): OfflineNavigator = offlineNavigator ?: OfflineNavigator(
-        controller,
-        tools.navigator ?: ReActNavigator(controller, null).also {
-            it.screenMemory = com.agent.ultra.data.UltraDatabase.get(appContext).screenMemory()
-        },
-        local,
-    ).also { offlineNavigator = it }
+    /** The small model that picks tools and drives screens (Settings → Action model): the memory model
+     *  when it is downloaded and a thinking model, else the main one. */
+    private val toolEngine: com.agent.ultra.local.LocalModelEngine get() {
+        if (!com.agent.ultra.ui.UltraPrefs.actionModel(appContext)) return local
+        val lib = com.agent.ultra.local.LocalModelEngine.librarian(appContext)
+        return if (lib !== local && lib.modelFileSizeBytes > 0 && lib.isThinkingModel) lib else local
+    }
+
+    private fun offlineNavigator(): OfflineNavigator {
+        val engine = toolEngine
+        offlineNavigator?.let { if (offlineNavEngine === engine) return it }
+        return OfflineNavigator(
+            controller,
+            tools.navigator ?: ReActNavigator(controller, null).also {
+                it.screenMemory = com.agent.ultra.data.UltraDatabase.get(appContext).screenMemory()
+            },
+            engine,
+        ).also { offlineNavigator = it; offlineNavEngine = engine }
+    }
 
     /** A job of several steps on screens that the on-device thinker can drive ([OfflineNav.task]),
      * or null. The app it names must be installed: "in X" is otherwise only a guess. */
     private fun offlineNavTask(userInput: String): OfflineNav.Task? {
-        if (!local.isThinkingModel) return null
+        if (!toolEngine.isThinkingModel) return null
         val task = OfflineNav.task(IntentRouter.requestPart(userInput)) ?: return null
         if (task.appHint.isNotBlank() && controller.findPackage(task.appHint) == null) return null
         // "scroll down" typed into Ultra's own chat has no other app to act on: answer in text as before.
@@ -1109,7 +1122,7 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
         if (recalled != null) {
             android.util.Log.i("UltraBrain", "MEMORY HINT (local): $recalled")
         }
-        if (local.isThinkingModel) {
+        if (toolEngine.isThinkingModel) {
             val call = thinkingToolCall(userInput, recalled) ?: return false
             runLocalCall(userInput, episode, call)
             return true
@@ -1201,11 +1214,17 @@ JSON:"""
         if (!runSpoken) think.onThought = thoughtPreview { shown }?.let { p -> { t: String -> p(t)?.let { shown = it } } }
         val raw = try {
             thinkingNow(think, { shown = ChatStore.setStatus(ChatStatus.Phase.THINKING) }) { started ->
-                local.generate(
+                val engine = toolEngine
+                val first = engine.generate(
                     prompt, maxTokens = budget + reserve + 32,
                     thinkBudget = think,
                     onStart = started,
                 )
+                // The small action model could not run (no room, or it gave way): the main model does it.
+                if (first.isFailure && engine !== local) {
+                    android.util.Log.i("UltraBrain", "action model failed, using the main model: ${first.exceptionOrNull()?.message}")
+                    local.generate(prompt, maxTokens = budget + reserve + 32, thinkBudget = think, onStart = started)
+                } else first
             }.getOrElse { return null }
         } finally {
             shown?.let { ChatStore.clearStatus(it) }
