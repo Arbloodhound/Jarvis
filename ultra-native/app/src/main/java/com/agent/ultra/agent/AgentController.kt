@@ -261,7 +261,18 @@ class AgentController(private val context: Context) {
         val apps = pm.queryIntentActivities(intent, 0)
         // Ranking lives in AppMatch so it can be tested off the phone.
         return AppMatch.find(q, apps.map { AppMatch.App(it.loadLabel(pm).toString(), it.activityInfo.packageName) })
+            ?: if (q.trim() in BROWSER_NAMES) defaultBrowserPackage() else null
     }
+
+    /** What people call "the browser" when no app has that name (no Google app on GrapheneOS). */
+    private val BROWSER_NAMES = setOf("browser", "google", "chrome", "web", "the web", "internet", "the internet", "web browser")
+
+    /** The app that opens https links, or null. */
+    fun defaultBrowserPackage(): String? = try {
+        context.packageManager.resolveActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com")), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+        )?.activityInfo?.packageName?.takeIf { it != "android" }
+    } catch (_: Exception) { null }
 
     fun listLaunchableApps(): List<Pair<String, String>> {
         val pm = context.packageManager

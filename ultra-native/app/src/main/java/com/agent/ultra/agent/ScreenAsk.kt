@@ -15,6 +15,6 @@ object ScreenAsk {
     fun matches(request: String): Boolean = RE.containsMatchIn(IntentRouter.requestPart(request))
 
     const val NEEDS_CLOUD =
-        "I can't drive the screen with the on-device model. That needs the cloud model: tap the model " +
-            "chip at the top of the chat, pick a cloud model, and ask again. I did not touch the screen."
+        "I couldn't work out which app to drive on-device, so I did not touch the screen. Name the app " +
+            "(\"open Chrome and search ...\"), or pick a cloud model with the chip at the top of the chat."
 }

@@ -542,9 +542,6 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
                 )
                 return
             }
-            // Driving the screen is the cloud brain's job: say so instead of letting the on-device model
-            // narrate actions it never takes.
-            if (ScreenAsk.matches(userInput)) { answer(ScreenAsk.NEEDS_CLOUD); return }
             // Device commands try the on-device tool loop first, through the same policy gate as
             // the cloud path; a request it cannot map is answered in text as before. The loop sees
             // the command alone: overheard ambient text must not shape params or task memory.
@@ -557,6 +554,9 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
             // A job of several steps on screens ("open settings and turn on dark mode"): the
             // on-device model drives the app itself, through the cloud navigator's action path.
             offlineNavTask(userInput)?.let { runOfflineNav(userInput, it); return }
+            // A screen job the on-device navigator could not take: say so, instead of narrating
+            // actions that never happened.
+            if (ScreenAsk.matches(userInput)) { answer(ScreenAsk.NEEDS_CLOUD); return }
             emitLocal(userInput, menuFocus)
             return
         }

@@ -15,4 +15,10 @@ class ScreenAskTest {
         assertFalse(ScreenAsk.matches("turn on the flashlight"))
         assertFalse(ScreenAsk.matches("open Spotify"))
     }
+
+    @Test fun goOnGoogleAndSearchIsAnOnDeviceNavigatorTask() {
+        val t = OfflineNav.task("Use phone screen to search just go on Google and search weather today")
+        assertTrue(t != null && t.appHint == "browser")
+        assertTrue(OfflineNav.task("what is the weather") == null)
+    }
 }
