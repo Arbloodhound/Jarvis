@@ -35,6 +35,9 @@ object AmbientThrottle {
     /** Threads whisper gets on the LLM's cores while the brain is idle. */
     const val IDLE_FAST_THREADS = 4
 
+    /** Threads a wake-window command gets on the big cores while an answer is running. */
+    const val BUSY_COMMAND_THREADS = 2
+
     /**
      * Where whisper runs for one utterance: the threads and cores to pin it to. While the brain
      * is idle (neither model generating, loading or warming) and the phone is [cool] (thermal NORMAL), the LLM's big
@@ -44,13 +47,16 @@ object AmbientThrottle {
      * slows an answer. On the old build the Pixel logged "backlog full: dropped" while listening
      * only ran on the little cores (2026-10-06 19:38). No LLM cores known = unchanged.
      *
-     * [command]: speech inside a wake window ("Hey Jarvis, …") always takes the fast cores. On the
+     * [command]: speech inside a wake window ("Hey Jarvis, …") takes the fast cores. On the
      * little ones a 1-3 s command took 28-103 s to transcribe while an answer was running
-     * (Pixel 2026-10-17 22:42-22:47); the running answer loses a few seconds instead.
+     * (Pixel 2026-10-17 22:42-22:47). While an answer is running it gets only [BUSY_COMMAND_THREADS]
+     * of them, so the answer is slowed less (Pixel 2026-10-18: answers ran 1-3 tok/s with whisper on 4).
      */
     fun placement(plan: Decision, brainBusy: Boolean, cool: Boolean, llmCpus: IntArray, whisperCpus: IntArray,
                   command: Boolean = false): Pair<Int, IntArray> =
-        if (llmCpus.isNotEmpty() && (command || (!brainBusy && cool)))
+        if (llmCpus.isNotEmpty() && command && brainBusy)
+            minOf(BUSY_COMMAND_THREADS, llmCpus.size) to llmCpus
+        else if (llmCpus.isNotEmpty() && (command || (!brainBusy && cool)))
             minOf(IDLE_FAST_THREADS, llmCpus.size) to llmCpus
         else plan.threads to whisperCpus
 }

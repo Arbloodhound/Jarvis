@@ -4736,3 +4736,8 @@ Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private t
 - Deliberately NOT on-device: shop_search, shop_checkout_prep, tor_connect (shopping and onion reach; product scope is inform + confirm, no sourcing), ask_claude/delegate/connector/artifact (cloud by nature).
 - Not built: the main model composing the final reply from tool results (adds a slow extra run); results are shown as the tool returned them. JVM 1629 tests, 0 failures. Runtime-unproven.
 - Setting "Main model writes the reply" (default OFF): after on-device tools run, the main model (local) writes one or two plain sentences from the results (LocalToolCall.replyPrompt, Brain.composeReply); falls back to the raw results. One extra model run, so slower. JVM 1630 tests, 0 failures. Runtime-unproven.
+
+## 2026-10-19 — Fast voice
+- FastCommand (agent/FastCommand.kt): obvious one-shot commands (flashlight/wifi/bluetooth/DND on-off, volume N, battery, screenshot, home/back/recents/notifications/lock, pause/play/skip, hang up, answer, speaker on/off, where am I, call <name or number>) become a tool call with NO model run, hooked at the top of Brain.runLocalLoop; still through the gate and confirm cards; compounds, questions and anything unmatched go to the model.
+- AmbientThrottle.placement: a wake-window command while an answer is running now gets 2 threads (BUSY_COMMAND_THREADS) on the big cores, not 4, to slow the answer less. Needs a DIAG to prove. Voice stutter: pick a lighter Piper voice in the voice settings (no code change).
+- APP_OVERVIEW.md added (plain-language overview for the owner). JVM 1633 tests, 0 failures.

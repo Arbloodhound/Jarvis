@@ -1113,6 +1113,12 @@ class Brain(private val appContext: Context, private val local: com.agent.ultra.
      * Returns false when no tool call came out of it (the caller answers another way). */
     private suspend fun runLocalLoop(userInput: String): Boolean {
         val episode = Gate.Episode(userInput)
+        // An obvious one-shot command ("flashlight on", "call mom"): the tool call without a model run.
+        FastCommand.match(userInput)?.let { fast ->
+            android.util.Log.i("UltraBrain", "FAST COMMAND (no model): ${fast.first} ${fast.second}")
+            runLocalCall(userInput, episode, fast)
+            return true
+        }
         // What worked before, for the 1B model too. One line, and only when a
         // single tool is involved — this model follows a short concrete hint
         // and drowns in a long one.
