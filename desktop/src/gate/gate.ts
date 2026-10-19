@@ -196,7 +196,9 @@ const slash = (p: string) => p.split(path.sep).join("/").toLowerCase();
 /** Credentials and private browser data. Compared case-insensitively, before and after following symlinks. */
 export function isSensitivePath(abs: string, extra: string[] = []): boolean {
   const home = homedir();
-  const listed = [...SENSITIVE.map((s) => path.join(home, s)), ...extra].map(slash);
+  // Both the lexical and the symlink-resolved form of each protected path, so a
+  // link to it is caught too (on macOS /var and /private/var name the same file).
+  const listed = [...SENSITIVE.map((s) => path.join(home, s)), ...extra].flatMap((p) => [slash(p), slash(realish(p))]);
   return [abs, realish(abs)].some((p) => {
     const norm = slash(p);
     return listed.some((full) => norm === full || norm.startsWith(`${full}/`)) ||

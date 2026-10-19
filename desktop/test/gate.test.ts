@@ -184,7 +184,9 @@ test("memory tool output counts as private", () => {
 
 test("more credential files need a card", () => {
   const ep = new Episode("read files");
-  for (const p2 of ["/proc/self/environ", "~/.config/rclone/rclone.conf", "~/.config/gh/hosts.yml", "~/.jarvis/memory.json"]) {
+  const files = ["~/.config/rclone/rclone.conf", "~/.config/gh/hosts.yml", "~/.jarvis/memory.json"];
+  if (process.platform === "linux") files.push("/proc/self/environ"); // /proc is Linux-only
+  for (const p2 of files) {
     assert.equal(gate.check(ep, "read_file", READ, { path: p2 }).confirm?.rule, "sensitive_path", p2);
   }
 });
