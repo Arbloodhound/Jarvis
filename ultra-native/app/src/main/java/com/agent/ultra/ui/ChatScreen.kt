@@ -365,6 +365,20 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = if (msg.fromUser) Alignment.End else Alignment.Start,
                 ) {
+                    // The thinking that led to this answer stays with it (DeepSeek-style): tap to read it all.
+                    ChatStore.thoughts[msg.id]?.let { thought ->
+                        var open by remember(msg.id) { mutableStateOf(false) }
+                        Text(
+                            text = if (open) "Thought  ▾\n$thought" else "Thought  ▸  " + thought.takeLast(80).replace('\n', ' '),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                            maxLines = if (open) Int.MAX_VALUE else 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .clickable { open = !open }
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
                     // Tap: Copy / Edit / Branch under the bubble. Press and hold: select any part of it.
                     Surface(
                         color = if (msg.fromUser) MaterialTheme.colorScheme.primary

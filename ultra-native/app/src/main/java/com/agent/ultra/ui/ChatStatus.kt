@@ -20,6 +20,12 @@ object ChatStatus {
      * [detail] (e.g. "step 3/12") follows the phase text when non-blank. */
     class Status(val phase: Phase, val sinceMs: Long, val detail: String = "")
 
+    /** The thinking trace a status carries ("💭 …words"), or null for any other status. */
+    fun thoughtOf(s: Status): String? =
+        if (s.phase == Phase.THINKING && s.detail.startsWith("💭"))
+            s.detail.removePrefix("💭").trim().trimStart('…', ' ').ifBlank { null }
+        else null
+
     /** Elapsed seconds appear only once the wait is noticeable. */
     const val SHOW_SECONDS_AFTER_MS = 3_000L
 

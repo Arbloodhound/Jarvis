@@ -3,6 +3,7 @@ package com.agent.ultra.ui
 import android.content.Context
 import android.os.Looper
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import com.agent.ultra.data.ConversationEntity
 import com.agent.ultra.data.MessageEntity
@@ -62,7 +63,24 @@ object ChatStore {
 
     /** Start a status episode; returns it so the caller can clear exactly this one. */
     fun setStatus(phase: ChatStatus.Phase, detail: String = ""): ChatStatus.Status =
-        ChatStatus.Status(phase, System.currentTimeMillis(), detail).also { s -> onUi { status.value = s } }
+        ChatStatus.Status(phase, System.currentTimeMillis(), detail).also { s ->
+            ChatStatus.thoughtOf(s)?.let { lastThought = it }
+            onUi { status.value = s }
+        }
+
+    /**
+     * The model's thinking, kept with the answer it led to (DeepSeek-style: tap to read it all).
+     * Keyed by message id; this session only, not saved with the chat.
+     */
+    val thoughts = mutableStateMapOf<String, String>()
+    @Volatile private var lastThought = ""
+
+    /** The latest thinking goes with the next agent message; a new question starts fresh. */
+    private fun attachThought(msg: ChatMessage) {
+        val t = lastThought
+        lastThought = ""
+        if (!msg.fromUser && t.isNotBlank()) onUi { thoughts[msg.id] = t }
+    }
 
     /** Clear [s] if it is still the one showing (a newer episode is left alone). Any thread. */
     fun clearStatus(s: ChatStatus.Status) = onUi { if (status.value === s) status.value = null }
@@ -150,12 +168,14 @@ object ChatStore {
 
     /** Append to the visible conversation and persist. Title from first user message. */
     fun add(msg: ChatMessage) {
+        attachThought(msg)
         onUi { messages.add(msg) }
         persist(msg)
     }
 
     /** State-only append for streaming bubbles; call persist() with the final content. */
     fun addToState(msg: ChatMessage) {
+        attachThought(msg)
         onUi { messages.add(msg) }
     }
 
