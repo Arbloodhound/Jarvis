@@ -4741,3 +4741,14 @@ Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private t
 - FastCommand (agent/FastCommand.kt): obvious one-shot commands (flashlight/wifi/bluetooth/DND on-off, volume N, battery, screenshot, home/back/recents/notifications/lock, pause/play/skip, hang up, answer, speaker on/off, where am I, call <name or number>) become a tool call with NO model run, hooked at the top of Brain.runLocalLoop; still through the gate and confirm cards; compounds, questions and anything unmatched go to the model.
 - AmbientThrottle.placement: a wake-window command while an answer is running now gets 2 threads (BUSY_COMMAND_THREADS) on the big cores, not 4, to slow the answer less. Needs a DIAG to prove. Voice stutter: pick a lighter Piper voice in the voice settings (no code change).
 - APP_OVERVIEW.md added (plain-language overview for the owner). JVM 1633 tests, 0 failures.
+
+## 2026-10-19 — Jarvis Desktop (new project, `desktop/`)
+Owner: "branch the existing work to a new project, a Jarvis client on the computer, like OpenClaw but better."
+- New, separate project in `desktop/` (Node 22+, TypeScript). Shares ideas with the phone app, not code; `ultra-native/` untouched.
+- Local gateway on 127.0.0.1 (token + Host/Origin checks) serving a browser chat page; terminal `chat`/`ask` too.
+- Two brains: local (any OpenAI-compatible server, e.g. Ollama; default) and cloud (Claude via the official SDK, streaming, adaptive thinking, refusal fallback). Offline-only blocks cloud and web tools. Native tool calls on both, no text parsing.
+- Gate ported and extended for a computer: targets must trace to the owner's words, private file/shell text can't leave without a card, secrets/one-time codes never leave, scam follow-ups (ScamSignals port) need the owner, commands need a card except a read-only allowlist, writes stay in ~/.jarvis/workspace, sensitive paths (~/.ssh, browser profiles, .env) need a card. Web tools can't reach localhost/LAN.
+- Fast commands skip the model (open site/app, remember/recall/forget, screenshot, time).
+- 19 tests pass (gate, detectors, fast commands, full gateway run against a fake model server). UI driven in headless Chromium.
+- RUNTIME-UNPROVEN on a real desktop: app launching, clipboard, notifications, screenshots per OS; real Ollama tool-calling quality; live Claude calls (no key here; request shape checked against a mock); DuckDuckGo parser against the live page.
+- Next: phone as thin client of this gateway; voice; routines; screen understanding; embeddings.

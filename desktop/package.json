@@ -1,0 +1,33 @@
+{
+  "name": "jarvis-desktop",
+  "version": "0.1.0",
+  "description": "Jarvis on the computer: a local-first personal agent with a provenance gate, confirm cards and a local gateway.",
+  "type": "module",
+  "private": true,
+  "license": "SEE LICENSE IN ../LICENSE",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "jarvis": "dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts serve",
+    "ask": "tsx src/cli.ts ask",
+    "build": "tsc -p tsconfig.json && node scripts/copy-ui.mjs",
+    "start": "node dist/cli.js serve",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
