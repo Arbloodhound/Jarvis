@@ -26,10 +26,8 @@ import androidx.compose.ui.unit.dp
 fun PeopleSettings(context: Context) {
     var name by remember { mutableStateOf(UltraPrefs.ownerName(context)) }
     var saved by remember { mutableStateOf(UltraPrefs.ownerName(context)) }
-    Text(
+    JarvisHint(
         "Your name: Jarvis calls you by it, and notes say it instead of \"Me\".",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
         modifier = Modifier.padding(top = 8.dp),
     )
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -51,12 +49,10 @@ fun SystemPromptSettings(context: Context) {
     var text by remember { mutableStateOf(UltraPrefs.customInstructions(context)) }
     var saved by remember { mutableStateOf(UltraPrefs.customInstructions(context)) }
     var showBuiltIn by remember { mutableStateOf(false) }
-    Text(
+    JarvisHint(
         "Your instructions: how Jarvis should talk to you, things it should always know or do. Added to " +
             "both the on-device and the online brain. Example: \"Keep answers under three sentences. I work night " +
             "shifts. Call my wife Anna, not 'your partner'.\"",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
         modifier = Modifier.padding(top = 8.dp),
     )
     OutlinedTextField(
