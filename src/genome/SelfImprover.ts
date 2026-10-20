@@ -90,7 +90,7 @@ export class SelfImprover {
 
     const approved = await this.safetyGate.requestApproval(
       'self_modify',
-      `Ultra wants to modify its own genome with ${limited.length} mutations:\n\n${mutationSummary}`
+      `Jarvis wants to modify its own genome with ${limited.length} mutations:\n\n${mutationSummary}`
     );
 
     if (!approved) {
