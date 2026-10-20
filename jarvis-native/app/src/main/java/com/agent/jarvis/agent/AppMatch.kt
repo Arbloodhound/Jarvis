@@ -55,35 +55,52 @@ object AppMatch {
 
     private fun words(s: String) = s.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length > 1 && it !in FILLER }.toSet()
 
-    fun find(query: String, apps: List<App>): String? {
+    /** What people call "the browser" when no app has that name (no Google app on GrapheneOS). */
+    val BROWSER_NAMES = setOf("browser", "google", "chrome", "web", "the web", "internet", "the internet", "web browser")
+
+    /**
+     * Tor Browser is only ever opened by name. "go on google and search for pizza" sent "browser"
+     * through the label-contains rule to "Tor Browser" — the default browser (Vanadium) was only a
+     * fallback for when nothing matched — and the navigator then tapped Tor's Connect (phone DIAG,
+     * 2026-10-20). Tor is opt-in: a generic browser word means the default browser.
+     */
+    private const val TOR_BROWSER = "org.torproject.torbrowser"
+
+    /**
+     * [defaultBrowser] is the app that opens https links; a generic browser word ([BROWSER_NAMES])
+     * goes to it unless an app is called exactly that.
+     */
+    fun find(query: String, apps: List<App>, defaultBrowser: String? = null): String? {
         val q = query.trim().lowercase()
         if (q.isEmpty()) return null
         apps.firstOrNull { it.pkg.lowercase() == q }?.let { return it.pkg }
         apps.firstOrNull { it.label.lowercase() == q }?.let { return it.pkg }
-        apps.firstOrNull { it.label.lowercase().contains(q) }?.let { return it.pkg }
+        if (q in BROWSER_NAMES) defaultBrowser?.let { return it }
+        val pool = if (q in BROWSER_NAMES) apps.filter { it.pkg != TOR_BROWSER } else apps
+        pool.firstOrNull { it.label.lowercase().contains(q) }?.let { return it.pkg }
         val qw = words(q)
         if (qw.isEmpty()) return null
         // Every word said is in the label or package: "google maps" -> Maps
         // (com.google.android.apps.maps). Checked before the looser rule below, which on a real
         // phone sent "google maps" to the Google app, whose label is also inside the query
         // (learnrun pass B, 2026-09-19).
-        apps.firstOrNull { a -> (words(a.label) + words(a.pkg)).containsAll(qw) }?.let { return it.pkg }
+        pool.firstOrNull { a -> (words(a.label) + words(a.pkg)).containsAll(qw) }?.let { return it.pkg }
         // Two apps with one label: Simple Calendar Pro and Google Calendar are both "Calendar" on
         // the launcher, and only the package tells them apart — com.simplemobiletools.calendar.pro,
         // where "simple" is part of a longer word. Every word said must be in the label or INSIDE
         // the package name. Without this "Simple Calendar Pro" opened Google Calendar
         // (AndroidWorld SimpleCalendarAddOneEvent, 2026-09-20).
-        apps.filter { a -> qw.all { w -> w in words(a.label) || (w.length >= 3 && a.pkg.lowercase().contains(w)) } }
+        pool.filter { a -> qw.all { w -> w in words(a.label) || (w.length >= 3 && a.pkg.lowercase().contains(w)) } }
             .minByOrNull { it.pkg.length }?.let { return it.pkg }
         // The label is inside what was said; the label covering the most said words wins, then
         // the longest ("google play store" -> Play Store, not Google).
-        apps.filter { a -> words(a.label).let { lw -> lw.isNotEmpty() && qw.containsAll(lw) } }
+        pool.filter { a -> words(a.label).let { lw -> lw.isNotEmpty() && qw.containsAll(lw) } }
             .maxWithOrNull(compareBy<App>({ words(it.label).size }, { it.label.length }))?.let { return it.pkg }
         // Last: what the person is asking for rather than what it is called.
         for (w in qw) {
             val hint = FEATURE_HINTS[w] ?: continue
             if (hint == w) continue
-            find(hint, apps)?.let { return it }
+            find(hint, pool)?.let { return it }
         }
         return null
     }

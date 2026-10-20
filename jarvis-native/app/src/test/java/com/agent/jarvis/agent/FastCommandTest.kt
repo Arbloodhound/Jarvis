@@ -16,6 +16,11 @@ class FastCommandTest {
         assertEquals("global_action" to "{\"action\":\"home\"}", m("go home"))
         assertEquals("media_next" to "{}", m("skip this song"))
     }
+    @Test fun darkModeIsItsOwnCommand() {
+        assertEquals("dark_mode" to "{\"on\":true}", m("turn on dark mode"))
+        assertEquals("dark_mode" to "{\"on\":false}", m("switch off the dark theme"))
+        assertEquals("dark_mode" to "{\"on\":true}", m("night mode on"))
+    }
     @Test fun callCommands() {
         assertEquals("call_end" to "{}", m("hang up"))
         assertEquals("call_answer" to "{}", m("answer the call"))

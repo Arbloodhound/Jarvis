@@ -21,7 +21,7 @@ object LocalToolCall {
 
     /** The tools the on-device loop offers — the same subset as the 1B fast path. */
     val TOOLS = setOf(
-        "flashlight_toggle", "wifi_toggle", "bluetooth_toggle", "do_not_disturb",
+        "flashlight_toggle", "wifi_toggle", "bluetooth_toggle", "do_not_disturb", "dark_mode",
         "volume_set", "alarm_set", "note_create", "app_launch",
         "battery_status", "clipboard_read", "clipboard_write",
         // Full device control through the accessibility service (owner, 2026-10-07: "take a
@@ -62,8 +62,14 @@ object LocalToolCall {
 
     /** A chain's next call that only repeats the job just done: a second web lookup after a web lookup
      * (Pixel log 2026-10-19: "go on google for me and look up the time" ran web_search, then
-     * web_browse {"task":"search"}). The chain stops there. */
-    fun repeatsJob(prevTool: String, nextTool: String): Boolean = prevTool in WEB_LOOKUP && nextTool in WEB_LOOKUP
+     * web_browse {"task":"search"}). The chain stops there. Opening one place after another is the
+     * same kind of repeat: "open settings and turn on dark mode" opened Display, then Sound, then
+     * Sound (phone DIAG 2026-10-20) — a second settings_open or app_launch never finishes the job. */
+    fun repeatsJob(prevTool: String, nextTool: String): Boolean =
+        (prevTool in WEB_LOOKUP && nextTool in WEB_LOOKUP) || (prevTool == nextTool && prevTool in OPENERS)
+
+    /** Tools that only open a place; the work is done there, not by opening another. */
+    private val OPENERS = setOf("settings_open", "app_launch")
 
     /** At most this many tool calls for one request. */
     const val MAX_CHAIN = 4
@@ -109,6 +115,7 @@ flashlight_toggle {"on":true|false}
 wifi_toggle {"on":true|false}
 bluetooth_toggle {"on":true|false}
 do_not_disturb {"on":true|false}
+dark_mode {"on":true|false}
 volume_set {"percent":0-100}
 alarm_set {"hour":0-23,"minute":0-59,"label":"..."}
 note_create {"text":"..."}

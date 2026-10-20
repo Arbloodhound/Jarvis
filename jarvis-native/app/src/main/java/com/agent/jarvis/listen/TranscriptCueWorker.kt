@@ -69,9 +69,12 @@ class CueQueue(private val maxJobs: Int = MAX_JOBS, private val maxSamples: Long
     val audioSamples: Long @Synchronized get() = samples
 
     companion object {
-        const val MAX_JOBS = 24
-        /** 2 minutes of 16 kHz audio (~3.8 MB of shorts), as the transcription backlog. */
-        const val MAX_SAMPLES = 120L * AmbientConfig.SAMPLE_RATE
+        /** Raised from 24 lines / 2 minutes (phone DIAG 2026-10-20: "cue queue full" twice while
+         *  the brain answered, and those lines lost their voiceprint). A line without audio is a
+         *  few KB; 6 minutes of 16 kHz shorts is ~11.5 MB. */
+        const val MAX_JOBS = 64
+        /** 6 minutes of 16 kHz audio (~11.5 MB of shorts). */
+        const val MAX_SAMPLES = 360L * AmbientConfig.SAMPLE_RATE
     }
 }
 

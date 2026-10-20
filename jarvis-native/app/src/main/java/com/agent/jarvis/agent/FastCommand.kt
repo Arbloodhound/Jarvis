@@ -31,6 +31,8 @@ object FastCommand {
         r("^bluetooth (on|off)$") { call("bluetooth_toggle", "on" to onOff(it.groupValues[1])) },
         r("^(?:turn|switch) (on|off) (?:do not disturb|dnd)$") { call("do_not_disturb", "on" to onOff(it.groupValues[1])) },
         r("^(?:do not disturb|dnd) (on|off)$") { call("do_not_disturb", "on" to onOff(it.groupValues[1])) },
+        r("^(?:turn|switch) (on|off) (?:the )?(?:dark (?:mode|theme)|night mode)$") { call("dark_mode", "on" to onOff(it.groupValues[1])) },
+        r("^(?:dark (?:mode|theme)|night mode) (on|off)$") { call("dark_mode", "on" to onOff(it.groupValues[1])) },
         r("^(?:set )?(?:the )?(?:media )?volume (?:to )?(\\d{1,3}) ?(?:percent|%)?$") {
             call("volume_set", "percent" to it.groupValues[1].toInt().coerceIn(0, 100))
         },

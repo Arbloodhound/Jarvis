@@ -57,9 +57,9 @@ class CueQueueTest {
         assertEquals(800L, q.audioSamples)
     }
 
-    @Test fun defaultBudgetIsTwoMinutesOfAudio() {
-        assertEquals(24, CueQueue.MAX_JOBS)
-        assertEquals(120L * AmbientConfig.SAMPLE_RATE, CueQueue.MAX_SAMPLES)
+    @Test fun defaultBudgetIsSixMinutesOfAudio() {
+        assertEquals(64, CueQueue.MAX_JOBS)
+        assertEquals(360L * AmbientConfig.SAMPLE_RATE, CueQueue.MAX_SAMPLES)
     }
 
     @Test fun withoutAudioIsTheSameLine() {

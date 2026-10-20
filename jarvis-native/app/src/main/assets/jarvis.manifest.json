@@ -215,6 +215,12 @@
       ]
     },
     {
+      "name": "dark_mode",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
       "name": "flashlight_toggle",
       "effects": [
         "mutate"

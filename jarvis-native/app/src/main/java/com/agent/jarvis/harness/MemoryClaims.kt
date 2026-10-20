@@ -139,8 +139,8 @@ class MemoryClaims(private val dao: ClaimDao) {
      * claim is checked by lens (a) only. The verifier makes blocking NLI calls, so it runs on
      * Dispatchers.IO. A written claim also gets its embedding stored (when non-empty).
      *
-     * This is the single promotion entry point. No caller in the app writes claims yet
-     * (MemoryClaims.write has no call site outside harness/), so nothing is wired to it.
+     * This is the single promotion entry point: the Librarian promotes durable facts through it
+     * (listen/Librarian.kt); MemoryClaims.write has no other call site outside harness/.
      */
     suspend fun writeVerified(
         text: String, kind: String, speaker: String, sourceMessage: String,

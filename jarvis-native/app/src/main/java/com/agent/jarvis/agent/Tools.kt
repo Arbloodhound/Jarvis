@@ -85,7 +85,7 @@ class Tools(
         return try {
             when (tool) {
                 // ── Perception ───────────────────────────────────────
-                "read_text_on_screen" -> {
+                "read_text_on_screen" -> asideForRead {
                     val flat = controller.screenFlat()
                     when {
                         flat == PROTECTED -> PROTECTED_MSG
@@ -100,7 +100,7 @@ class Tools(
                     val maxScrolls = params.optInt("maxScrolls", 12).coerceIn(1, 30)
                     deepRead(maxScrolls)
                 }
-                "describe_screen" -> {
+                "describe_screen" -> asideForRead {
                     val flat = controller.screenFlat()
                     when {
                         flat == PROTECTED -> PROTECTED_MSG
@@ -109,14 +109,14 @@ class Tools(
                         else -> "Current app: ${controller.activePackage()}\n" + withPictureText(summarizeFlat(flat))
                     }
                 }
-                "screen_ocr" -> {
+                "screen_ocr" -> asideForRead {
                     if (controller.screenFlat() == PROTECTED) PROTECTED_MSG
                     else ScreenVision.unavailable()?.let { "Error: $it" }
                         ?: ScreenVision.readScreen(controller)?.ifBlank { "No text in the picture of the screen." }
                         ?: "Error: the screen could not be captured (a secure screen, or the accessibility service needs " +
                             "turning off and on again once to allow screenshots)."
                 }
-                "look_at_screen" -> {
+                "look_at_screen" -> asideForRead {
                     val q = params.optString("question")
                     when {
                         controller.screenFlat() == PROTECTED -> PROTECTED_MSG
@@ -332,6 +332,14 @@ class Tools(
                     if (on == null) "Error: do_not_disturb needs \"on\": true or false"
                     else if (controller.setDoNotDisturb(on)) "Do Not Disturb ${if (on) "on" else "off"}"
                     else "Error: DND toggle failed (needs notification policy access)"
+                }
+                "dark_mode" -> {
+                    val on = ToolArgs.bool(params, "on")
+                    if (on == null) "Error: dark_mode needs \"on\": true or false"
+                    else if (controller.setDarkMode(on)) "Dark theme ${if (on) "on" else "off"}"
+                    else if (controller.openSettings("dark_theme") || controller.openSettings("display"))
+                        "Error: couldn't switch the dark theme directly (Android doesn't allow apps to); opened the Dark theme settings for the user to tap"
+                    else "Error: couldn't switch the dark theme, and Settings could not be opened"
                 }
                 "volume_set" -> {
                     val pct = ToolArgs.int(params, "percent")?.coerceIn(0, 100)
@@ -790,6 +798,17 @@ class Tools(
         wikipedia(query)?.let { return@withContext it }
         scrapeDdg(query)
     }
+
+    /**
+     * A screen read asked while Jarvis's own chat is in front reads the app under it, then comes
+     * back to the chat (issue #17; [AgentController.stepAsideForRead]).
+     */
+    private suspend fun asideForRead(read: suspend () -> String): String =
+        when (val a = controller.stepAsideForRead()) {
+            is AgentController.Aside.Blocked -> "Error: nothing to read — ${a.why}"
+            AgentController.Aside.NotNeeded -> read()
+            AgentController.Aside.Stepped -> try { read() } finally { controller.stepBack() }
+        }
 
     /**
      * [url] opened in the browser on screen, under the takeover overlay, and its text read once the

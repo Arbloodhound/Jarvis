@@ -135,6 +135,52 @@ class AgentController(private val context: Context) {
         result
     }
 
+    /** What a screen read must do first when Jarvis's own chat may be in front. */
+    sealed class Aside {
+        /** Another app is in front: read it as it is. */
+        object NotNeeded : Aside()
+        /** The previous app was brought forward; call [stepBack] after the read. */
+        object Stepped : Aside()
+        /** Nothing but Jarvis to read; [why] says so in words the user can act on. */
+        data class Blocked(val why: String) : Aside()
+    }
+
+    /**
+     * Asked in Jarvis's chat, "what's on my screen" means the app under the chat — the read
+     * refuses Jarvis's own window (issue #17). Bring that app ([AgentAccessibilityService
+     * .getPreviousApp]) back to the front so it can be read. The home screen doesn't count:
+     * reading the launcher is not what was asked (phone DIAG 2026-10-20 read "Clear all").
+     */
+    suspend fun stepAsideForRead(): Aside {
+        if (activePackage() != context.packageName) return Aside.NotNeeded
+        val prev = service?.previousApp?.takeIf { it != homePackage() }
+            ?: return Aside.Blocked("only Jarvis's own chat is on screen, and no other app was open before it. " +
+                "Open the app you mean, then ask again — by voice or with the Jarvis tile — and I'll read it.")
+        if (!launchApp(prev)) return Aside.Blocked("only Jarvis's own chat is on screen, and the app before it " +
+            "($prev) could not be brought back. Open it, then ask again by voice or with the Jarvis tile.")
+        for (i in 0 until 15) {
+            kotlinx.coroutines.delay(200)
+            if (activePackage() == prev) break
+        }
+        return Aside.Stepped
+    }
+
+    /** Back to Jarvis's chat after [stepAsideForRead] stepped aside, so the answer is in view. */
+    fun stepBack() {
+        try {
+            context.packageManager.getLaunchIntentForPackage(context.packageName)
+                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                ?.let { context.startActivity(it) }
+        } catch (_: Exception) {}
+    }
+
+    /** The launcher's package, or null. */
+    private fun homePackage(): String? = try {
+        context.packageManager.resolveActivity(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY,
+        )?.activityInfo?.packageName
+    } catch (_: Exception) { null }
+
     /** Foreground app from live windows (falls back to the event tracker). */
     fun activePackage(): String = service?.getForegroundPackage() ?: service?.getActivePackage() ?: ""
 
@@ -260,12 +306,9 @@ class AgentController(private val context: Context) {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val apps = pm.queryIntentActivities(intent, 0)
         // Ranking lives in AppMatch so it can be tested off the phone.
-        return AppMatch.find(q, apps.map { AppMatch.App(it.loadLabel(pm).toString(), it.activityInfo.packageName) })
-            ?: if (q.trim() in BROWSER_NAMES) defaultBrowserPackage() else null
+        val browser = if (q.trim() in AppMatch.BROWSER_NAMES) defaultBrowserPackage() else null
+        return AppMatch.find(q, apps.map { AppMatch.App(it.loadLabel(pm).toString(), it.activityInfo.packageName) }, browser)
     }
-
-    /** What people call "the browser" when no app has that name (no Google app on GrapheneOS). */
-    private val BROWSER_NAMES = setOf("browser", "google", "chrome", "web", "the web", "internet", "the internet", "web browser")
 
     /** The app that opens https links, or null. */
     fun defaultBrowserPackage(): String? = try {
@@ -619,6 +662,33 @@ class AgentController(private val context: Context) {
         append(" | apps: ").append(listLaunchableApps().size)
     }
 
+    /** Dark theme on (true), off (false), or unknown (null), as the system reports it now. */
+    fun isDarkModeOn(): Boolean? = try {
+        when ((context.getSystemService(Context.UI_MODE_SERVICE) as android.app.UiModeManager).nightMode) {
+            android.app.UiModeManager.MODE_NIGHT_YES -> true
+            android.app.UiModeManager.MODE_NIGHT_NO -> false
+            else -> null
+        }
+    } catch (_: Exception) { null }
+
+    /**
+     * Dark theme on or off through the secure setting ui_night_mode (2 = on, 1 = off; the same
+     * WRITE_SECURE_SETTINGS grant as [setSecureSetting]'s other direct writes), then read back.
+     * Android lets no ordinary app call UiModeManager.setNightMode, and whether the system applies
+     * the written setting at once is not proven on every build — so this reports only what it
+     * reads back, never what it hoped. Asked "turn on dark mode", the on-device loop had no tool
+     * for it and opened Display, then Sound, then Sound (phone DIAG, 2026-10-20).
+     */
+    suspend fun setDarkMode(on: Boolean): Boolean {
+        if (isDarkModeOn() == on) return true
+        if (!setSecureSetting("ui_night_mode", if (on) "2" else "1")) return false
+        repeat(5) {
+            kotlinx.coroutines.delay(200)
+            if (isDarkModeOn() == on) return true
+        }
+        return false
+    }
+
     /**
      * The current state of the settings people ask about, read — never changed.
      *
@@ -657,6 +727,8 @@ class AgentController(private val context: Context) {
         "wifi" to Settings.ACTION_WIFI_SETTINGS,
         "bluetooth" to Settings.ACTION_BLUETOOTH_SETTINGS,
         "display" to Settings.ACTION_DISPLAY_SETTINGS,
+        // AOSP Settings' own Dark theme page (DarkThemeSettingsActivity); not a public constant.
+        "dark_theme" to "android.settings.DARK_THEME_SETTINGS",
         "sound" to Settings.ACTION_SOUND_SETTINGS,
         "storage" to Settings.ACTION_INTERNAL_STORAGE_SETTINGS,
         "about" to Settings.ACTION_DEVICE_INFO_SETTINGS,
