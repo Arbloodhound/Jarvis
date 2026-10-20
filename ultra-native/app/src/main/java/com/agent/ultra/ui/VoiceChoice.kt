@@ -17,7 +17,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -241,16 +240,10 @@ fun HowJarvisTalksSettings(context: Context) {
 @Composable
 private fun TalkSwitch(title: String, hint: String, initial: Boolean, onChange: (Boolean) -> Unit) {
     var on by remember { mutableStateOf(initial) }
-    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Hint(hint)
-        }
-        Switch(checked = on, onCheckedChange = { on = it; onChange(it) })
-    }
+    JarvisSwitchRow(title = title, detail = hint, checked = on, onCheckedChange = { on = it; onChange(it) })
 }
 
 @Composable
 private fun Hint(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+    JarvisHint(text)
 }
