@@ -7,10 +7,10 @@ actually did the thing, not just if Jarvis said it did. Pass rate = passes ÷ 20
 
 The app-side routing for all 20 is checked by `RealTasksTest` (20/20 on the right path when this
 sheet was written; that result was not re-verified in the 2026-10-19 audits, which were static,
-grep-level reading — and separately, two other Kotlin unit-test files, `HistoryPolicyTest.kt` and
-`MemoryBriefTest.kt`, are broken in the merged tree). This sheet covers what that test can't:
+grep-level reading; it was re-run 2026-10-20 after the merge and passes. `HistoryPolicyTest.kt` and
+`MemoryBriefTest.kt` also compile and pass under `testDebugUnitTest`). This sheet covers what that test can't:
 whether the model picks the right tool and the tool works on the phone. On-device behaviour
-itself was not re-verified in the 2026-10-19 audits, and CI has not yet compiled the merged tree.
+itself was not re-verified in the 2026-10-19 audits. The merged tree compiles (all 1644 JVM tests pass, 2026-10-20).
 
 | # | Say / type | Path | Pass when… | Pass? |
 |---|---|---|---|---|
