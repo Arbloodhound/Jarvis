@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #16181d; --muted: #667085; --line: #e3e6eb;
+    --accent: #2f6fed; --accent-text: #ffffff; --user: #e8effd; --warn-bg: #fff6e0; --warn: #8a5a00;
+    --ok: #157f3b; --bad: #b42318; --card: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1115; --panel: #171a20; --text: #e7e9ee; --muted: #8b93a3; --line: #2a2f38;
+      --accent: #5b8cff; --accent-text: #0b0d12; --user: #1d2a44; --warn-bg: #3a2e12; --warn: #f5c76a;
+      --ok: #4ec27a; --bad: #ff6b5f; --card: #1e222a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .02em; }
+  .status { color: var(--muted); font-size: 13px; }
+  .spacer { flex: 1; }
+  button.plain { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; }
+  button.chip { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text); cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .picker { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 10; }
+  .picker.open { display: flex; }
+  .picker .box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: min(460px, 92vw); max-height: 70vh; overflow: auto; padding: 14px; }
+  .picker h3 { margin: 0 0 8px; font-size: 15px; }
+  .picker .row { padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .picker .row:hover { background: var(--card); }
+  .picker .row.on { background: var(--user); }
+  .picker input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; margin-bottom: 8px; }
+  .picker .muted { color: var(--muted); font-size: 13px; margin: 6px 2px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+  .seg button.on { background: var(--accent); color: var(--accent-text); }
+  label.switch { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  main { flex: 1; overflow-y: auto; padding: 16px; }
+  .log { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+  .msg { padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; word-wrap: break-word; max-width: 100%; }
+  .user { background: var(--user); align-self: flex-end; max-width: 85%; }
+  .assistant { background: var(--panel); border: 1px solid var(--line); }
+  .meta { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  details.think { color: var(--muted); font-size: 13px; }
+  details.think summary { cursor: pointer; }
+  details.think div { white-space: pre-wrap; max-height: 240px; overflow: auto; }
+  .tool { background: var(--card); border-radius: 8px; padding: 6px 10px; font-size: 13px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .tool .res { color: var(--muted); white-space: pre-wrap; max-height: 120px; overflow: auto; }
+  .tool.ok .name::before { content: "✓ "; color: var(--ok); }
+  .tool.bad .name::before { content: "✗ "; color: var(--bad); }
+  .tool.run .name::before { content: "… "; color: var(--muted); }
+  .confirm { border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; background: var(--panel); }
+  .confirm .why { margin: 4px 0 8px; }
+  .confirm pre { margin: 0 0 8px; font-size: 12px; white-space: pre-wrap; word-break: break-all; color: var(--muted); max-height: 160px; overflow: auto; }
+  .confirm button { font: inherit; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; margin-right: 8px; }
+  .confirm button.allow { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .confirm.done { opacity: .6; border-color: var(--line); }
+  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+  .err { color: var(--bad); font-size: 14px; }
+  footer { border-top: 1px solid var(--line); background: var(--panel); padding: 10px 16px; }
+  form { max-width: 820px; margin: 0 auto; display: flex; gap: 8px; }
+  textarea { flex: 1; resize: none; min-height: 44px; max-height: 200px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+  form button { font: inherit; padding: 0 16px; border-radius: 10px; border: 0; background: var(--accent); color: var(--accent-text); cursor: pointer; }
+  form button.stop { background: var(--bad); color: #fff; }
+  .empty { color: var(--muted); text-align: center; margin-top: 18vh; }
+  @media (max-width: 560px) { header { gap: 8px; } .status { width: 100%; order: 9; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Jarvis</h1>
+  <div class="seg" role="group" aria-label="Brain">
+    <button id="b-local" type="button">On this computer</button>
+    <button id="b-cloud" type="button">Cloud</button>
+  </div>
+  <button id="model" type="button" class="chip" title="Choose the model for the current brain">model…</button>
+  <label class="switch"><input type="checkbox" id="offline"> Offline only</label>
+  <label class="switch"><input type="checkbox" id="embed"> Semantic memory</label>
+  <label class="switch" title="Experimental: let Jarvis type and click. Every action still asks you."><input type="checkbox" id="screenctl"> Screen control</label>
+  <button id="new" type="button" class="plain" title="Start a new conversation (what Jarvis remembers about you stays)">New chat</button>
+  <span class="spacer"></span>
+  <span class="status" id="status">Connecting…</span>
+</header>
+<main id="main"><div class="log" id="log"><p class="empty" id="empty">Ask me to do something on this computer.</p></div></main>
+<footer>
+  <form id="form">
+    <textarea id="input" rows="1" placeholder="e.g. what's taking space in my Downloads folder?" autofocus></textarea>
+    <button id="send" type="submit">Send</button>
+  </form>
+</footer>
+<div class="picker" id="picker"><div class="box">
+  <h3 id="picker-title">Choose a model</h3>
+  <input id="picker-input" placeholder="type a model name, or pick one below" autocomplete="off">
+  <div class="muted" id="picker-note"></div>
+  <div id="picker-list"></div>
+</div></div>
+<script>
+(() => {
+  let token = "";
+  const fromHash = new URLSearchParams(location.hash.slice(1)).get("token");
+  try {
+    if (fromHash) sessionStorage.setItem("jarvis-token", fromHash);
+    token = fromHash || sessionStorage.getItem("jarvis-token") || "";
+  } catch { token = fromHash || ""; }
+  if (fromHash) history.replaceState(null, "", location.pathname);
+
+  const $ = (id) => document.getElementById(id);
+  const log = $("log"), main = $("main"), input = $("input"), sendBtn = $("send"), status = $("status");
+  let ws, state = {}, run = null; // run: { el, text, think, thinkBox, tools: Map }
+
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const add = (node) => { $("empty")?.remove(); const stick = main.scrollTop + main.clientHeight >= main.scrollHeight - 40; log.appendChild(node); if (stick) main.scrollTop = main.scrollHeight; return node; };
+  const scroll = () => { main.scrollTop = main.scrollHeight; };
+
+  function showState() {
+    $("b-local").classList.toggle("on", state.brain !== "cloud");
+    $("b-cloud").classList.toggle("on", state.brain === "cloud");
+    $("offline").checked = !!state.offlineOnly;
+    $("embed").checked = !!state.embeddings;
+    $("screenctl").checked = !!state.screenControl;
+    const model = state.brain === "cloud" ? state.cloudModel : state.localModel;
+    $("model").textContent = model || "model…";
+    status.textContent = `${state.answering || ""}${state.embeddings && state.embedderId ? " · memory: " + state.embedderId : ""}${state.busy ? " · working" : ""}`;
+    sendBtn.textContent = state.busy ? "Stop" : "Send";
+    sendBtn.classList.toggle("stop", !!state.busy);
+  }
+
+  function ensureRun(runId) {
+    if (run && run.id === runId) return run;
+    const box = add(el("div", "msg assistant"));
+    const meta = box.appendChild(el("div", "meta"));
+    const think = box.appendChild(el("details", "think"));
+    think.hidden = true;
+    think.appendChild(el("summary", null, "Thinking"));
+    const thinkBox = think.appendChild(el("div"));
+    const body = box.appendChild(el("div"));
+    run = { id: runId, box, meta, think, thinkBox, body, textNode: null };
+    return run;
+  }
+
+  function appendText(r, delta) {
+    if (!r.textNode) { r.textNode = el("div"); r.body.appendChild(r.textNode); }
+    r.textNode.textContent += delta;
+  }
+
+  function onEvent(e) {
+    switch (e.type) {
+      case "state": state = e; showState(); break;
+      case "models": showModels(e.models || [], e.error); break;
+      case "user": add(el("div", "msg user", e.text)); scroll(); break;
+      case "run_start": { const r = ensureRun(e.runId); r.meta.textContent = e.brain; state.busy = true; showState(); break; }
+      case "thinking": { const r = ensureRun(e.runId); r.think.hidden = false; r.thinkBox.textContent += e.delta; break; }
+      case "text": appendText(ensureRun(e.runId), e.delta); break;
+      case "tool_start": {
+        const r = ensureRun(e.runId); r.textNode = null;
+        const t = r.body.appendChild(el("div", "tool run"));
+        t.id = `tool-${e.id}`;
+        t.appendChild(el("div", "name", `${e.name} ${JSON.stringify(e.args).slice(0, 200)}`));
+        break;
+      }
+      case "tool_end": {
+        const t = document.getElementById(`tool-${e.id}`); if (!t) break;
+        t.className = `tool ${e.ok ? "ok" : "bad"}`;
+        t.appendChild(el("div", "res", e.summary));
+        break;
+      }
+      case "confirm": {
+        if (document.getElementById(`card-${e.cardId}`)) break; // re-sent after a reconnect
+        const r = ensureRun(e.runId); r.textNode = null;
+        const c = r.body.appendChild(el("div", "confirm"));
+        c.id = `card-${e.cardId}`;
+        c.appendChild(el("strong", null, `Allow ${e.tool}?`));
+        c.appendChild(el("div", "why", e.reason));
+        c.appendChild(el("pre", null, JSON.stringify(e.args, null, 2)));
+        const yes = c.appendChild(el("button", "allow", "Allow once"));
+        const no = c.appendChild(el("button", null, "Decline"));
+        yes.type = no.type = "button";
+        yes.onclick = () => answer(e.cardId, true);
+        no.onclick = () => answer(e.cardId, false);
+        scroll();
+        break;
+      }
+      case "confirm_resolved": {
+        const c = document.getElementById(`card-${e.cardId}`); if (!c) break;
+        c.classList.add("done");
+        c.querySelectorAll("button").forEach((b) => b.remove());
+        c.appendChild(el("div", "meta", e.allowed ? "Allowed" : "Declined"));
+        break;
+      }
+      case "warning": ensureRun(e.runId).body.appendChild(el("div", "warn", e.text)); break;
+      case "error": (e.runId ? ensureRun(e.runId).body : log).appendChild(el("div", "err", e.message)); break;
+      case "reset": log.replaceChildren(el("p", "empty", "New conversation. Ask me to do something on this computer.")); log.firstChild.id = "empty"; run = null; break;
+      case "done": if (e.stopped) ensureRun(e.runId).body.appendChild(el("div", "meta", "Stopped.")); run = null; break;
+    }
+  }
+
+  function answer(cardId, allow) { ws?.send(JSON.stringify({ type: "confirm", cardId, allow })); }
+
+  function connect() {
+    if (!token) { status.textContent = "No token: open the link printed by `jarvis serve`."; return; }
+    ws = new WebSocket(`ws://${location.host}/ws?token=${encodeURIComponent(token)}`);
+    ws.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch {} };
+    ws.onclose = () => { status.textContent = "Disconnected. Retrying…"; setTimeout(connect, 2000); };
+  }
+
+  $("form").onsubmit = (ev) => {
+    ev.preventDefault();
+    if (state.busy) { ws?.send(JSON.stringify({ type: "stop" })); return; }
+    const text = input.value.trim();
+    if (!text || !ws || ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ type: "send", text }));
+    input.value = ""; input.style.height = "";
+  };
+  // Enter sends; while Jarvis is working it does nothing (only the Stop button stops).
+  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); if (!state.busy) $("form").requestSubmit(); } });
+  $("new").onclick = () => ws?.send(JSON.stringify({ type: "reset" }));
+  input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 200) + "px"; });
+  const picker = $("picker"), pInput = $("picker-input"), pList = $("picker-list"), pNote = $("picker-note");
+  function openPicker() {
+    const which = state.brain === "cloud" ? "cloud" : "local";
+    $("picker-title").textContent = which === "cloud" ? "Cloud model (Claude)" : "Local model";
+    pInput.value = state.brain === "cloud" ? (state.cloudModel || "") : (state.localModel || "");
+    pList.replaceChildren();
+    pNote.textContent = which === "local" ? "Loading models from your server…" : "Type the model id, e.g. claude-opus-5-5.";
+    picker.classList.add("open"); pInput.focus(); pInput.select();
+    if (which === "local") ws?.send(JSON.stringify({ type: "list_models" }));
+  }
+  function showModels(models, error) {
+    if (!picker.classList.contains("open")) return;
+    pNote.textContent = error ? `Couldn't list models (${error}). Type the id by hand.` : models.length ? "" : "No models reported; type the id by hand.";
+    pList.replaceChildren(...models.map((m) => {
+      const r = el("div", "row" + (m === pInput.value ? " on" : ""), m);
+      r.onclick = () => chooseModel(m);
+      return r;
+    }));
+  }
+  function chooseModel(model) {
+    const which = state.brain === "cloud" ? "cloud" : "local";
+    if (model && model.trim()) ws?.send(JSON.stringify({ type: "set_model", which, model: model.trim() }));
+    picker.classList.remove("open");
+  }
+  $("model").onclick = openPicker;
+  picker.onclick = (ev) => { if (ev.target === picker) picker.classList.remove("open"); };
+  pInput.addEventListener("keydown", (ev) => { if (ev.key === "Enter") chooseModel(pInput.value); if (ev.key === "Escape") picker.classList.remove("open"); });
+  $("embed").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", embeddings: ev.target.checked }));
+  $("screenctl").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", screenControl: ev.target.checked }));
+  $("b-local").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "local" }));
+  $("b-cloud").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "cloud" }));
+  $("offline").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", offlineOnly: ev.target.checked }));
+  connect();
+})();
+</script>
+</body>
+</html>

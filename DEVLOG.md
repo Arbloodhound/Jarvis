@@ -4797,3 +4797,41 @@ Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private t
 - FastCommand (agent/FastCommand.kt): obvious one-shot commands (flashlight/wifi/bluetooth/DND on-off, volume N, battery, screenshot, home/back/recents/notifications/lock, pause/play/skip, hang up, answer, speaker on/off, where am I, call <name or number>) become a tool call with NO model run, hooked at the top of Brain.runLocalLoop; still through the gate and confirm cards; compounds, questions and anything unmatched go to the model.
 - AmbientThrottle.placement: a wake-window command while an answer is running now gets 2 threads (BUSY_COMMAND_THREADS) on the big cores, not 4, to slow the answer less. Needs a DIAG to prove. Voice stutter: pick a lighter Piper voice in the voice settings (no code change).
 - APP_OVERVIEW.md added (plain-language overview for the owner). JVM 1633 tests, 0 failures.
+
+## 2026-10-19 — Jarvis Desktop (new project, `desktop/`)
+Owner: "branch the existing work to a new project, a Jarvis client on the computer, like OpenClaw but better."
+- New, separate project in `desktop/` (Node 22+, TypeScript). Shares ideas with the phone app, not code; `ultra-native/` untouched.
+- Local gateway on 127.0.0.1 (token + Host/Origin checks) serving a browser chat page; terminal `chat`/`ask` too.
+- Two brains: local (any OpenAI-compatible server, e.g. Ollama; default) and cloud (Claude via the official SDK, streaming, adaptive thinking, refusal fallback). Offline-only blocks cloud and web tools. Native tool calls on both, no text parsing.
+- Gate ported and extended for a computer: targets must trace to the owner's words, private file/shell text can't leave without a card, secrets/one-time codes never leave, scam follow-ups (ScamSignals port) need the owner, commands need a card except a read-only allowlist, writes stay in ~/.jarvis/workspace, sensitive paths (~/.ssh, browser profiles, .env) need a card. Web tools can't reach localhost/LAN.
+- Fast commands skip the model (open site/app, remember/recall/forget, screenshot, time).
+- 19 tests pass (gate, detectors, fast commands, full gateway run against a fake model server). UI driven in headless Chromium.
+- RUNTIME-UNPROVEN on a real desktop: app launching, clipboard, notifications, screenshots per OS; real Ollama tool-calling quality; live Claude calls (no key here; request shape checked against a mock); DuckDuckGo parser against the live page.
+- Next: phone as thin client of this gateway; voice; routines; screen understanding; embeddings.
+
+## 2026-10-19 — Jarvis Desktop is a native app (owner: "must work natively on the computer")
+- Electron 44.5.1 app (`src/app/main.ts`) runs the same agent + gateway in-process: own window, tray menu (brain, offline only, stop, start at login, quit), global hotkey Ctrl/Cmd+Shift+J, close to tray, single instance, port fallback if 7337 is taken. Confirm cards bring the window forward + notify.
+- Native OS integration through Electron (`useNative`): clipboard, notifications, screen capture (desktopCapturer), default browser. CLI keeps the command-line fallbacks.
+- Installers via electron-builder: Windows NSIS .exe, macOS .dmg (arm64 + x64), Linux AppImage + .deb. CI matrix (ubuntu/windows/macos): typecheck, tests, native `--self-test`, installer build, artifacts; `desktop-v*` tag drafts a release.
+- PROVEN here (Linux, Xvfb): app and the packaged AppImage pass the self-test (window connects, clipboard round-trip, 1280x800 capture, notification, tray, hotkey). AppImage + .deb build.
+- PROVEN in CI (run 39335363833, head 88b9a58): self-test passed on win32 (screenshot 1024x768, notification shown), darwin (all checks, capture 1024x768) and linux; installers built and uploaded as artifacts jarvis-Windows / jarvis-macOS / jarvis-Linux.
+- Still unproven: daily use on the owner's own computer; macOS Screen Recording permission prompt on a real Mac; unsigned-installer warnings are expected (no certificates).
+
+## 2026-10-19 — Pre-release review of Jarvis Desktop (owner: review before merge/release)
+- 4 Haiku agents (security review, correctness review, OSS comparison, OpenClaw/agent-security research); every finding verified against the code. Full list and comparison in desktop/REVIEW.md.
+- Fixed 20 findings, incl. CRITICAL git core.fsmonitor RCE via allowlisted `git status`, prefix allowlist (git diff --output / --no-index, du --files0-from), symlink and case bypasses of sensitive paths, URL userinfo host spoof, subdomain trust, IPv4-mapped IPv6 SSRF + DNS rebinding (pinned lookup), short/encoded leaks (password-like tokens, trifecta rule), planted memory/clipboard after web reads, secrets reaching Claude after a brain switch, PowerShell injection (CLI on Windows), fast-path misroutes, local tool-call merging, cut-off tool calls running, unbounded history, lost confirm cards, corrupt config/memory blocking startup, stuck busy state.
+- Config: `allowCommands` replaced by `extraAllowedCommands` (exact text); old key ignored.
+- 31 tests pass (was 19); Linux native self-test passes. CI runs Windows/macOS.
+
+## 2026-10-19 — Desktop: model compat, vision, screen control, CI fix (handoff point)
+- Piece 1 (DONE 88353dd): model picker (/models) + semantic memory via any /embeddings model (EmbeddingGemma-2 etc.), word-overlap fallback, embedder local-only + offline-blocked. Plus 2nd adversarial review round: 6 more gate fixes (critical dead newline check, WHATWG host parsing, memory output=private, encoded-secret/leak detection via egressVariants, more sensitive files, glob block).
+- Piece 2 (DONE bba81e6): vision (look_at_screen/look_at_image via local VLM or cloud) + experimental screen control (control_screen, off by default, alwaysConfirm per action). Screen control RUNTIME-UNPROVEN.
+- CI fix (ce82b1b): isSensitivePath compares realpath form too (macOS /var vs /private/var symlink); /proc test Linux-only. 40 tests pass.
+- Pieces 3 (Chromebook/Crostini) and 4 (full feature+competitive review) NOT STARTED. Full handoff in desktop/HANDOFF_DESKTOP.md.
+- Excluded per scope: dark-web/Tor/onion monitoring + dark-web classifier + auto-action pipeline.
+
+## 2026-10-20 — Desktop piece 3: Chromebook / Chrome OS (Crostini)
+- Tray is now optional: makeTray() wrapped in try/catch; when there's no system tray (Crostini has none), the window stays open and closing it quits instead of hiding to a missing tray. Logic extracted to src/app/behavior.ts (onWindowClose, isCrostini) and unit-tested without Electron.
+- Startup note when running in Crostini (screenshots capture only the container; tray/hotkey may be unavailable).
+- README: "Chromebook / Chrome OS" section — the serve+Chrome-browser path (best for low-RAM), the desktop-app path with its caveats, and brain guidance (cloud or small local model).
+- 42 tests pass; native self-test still passes.
