@@ -4,6 +4,7 @@ import { Writable } from "node:stream";
 import type { AgentEvent, RunHooks } from "./agent/loop.js";
 import { accessToken, loadConfig, paths, saveConfig, type Config, type Paths } from "./config.js";
 import { Runtime } from "./runtime.js";
+import { probeTorProxy } from "./tools/index.js";
 import { startServer } from "./server.js";
 
 /**
@@ -23,7 +24,10 @@ const HELP = `Jarvis desktop
 
 Brain: set "brain" in config.json to "local" (default; any OpenAI-compatible
 server such as Ollama) or "cloud" (Claude; needs ANTHROPIC_API_KEY or
-cloud.apiKey). "offlineOnly": true keeps everything on this computer.`;
+cloud.apiKey). "offlineOnly": true keeps everything on this computer.
+"tor": {"enabled": true} sends web search and fetch through a local Tor
+proxy (port 9050; 9150 for Tor Browser) — also a switch on the serve page —
+and is the only way .onion addresses open.`;
 
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
 const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
@@ -126,12 +130,17 @@ async function main(): Promise<void> {
   const p = paths();
   if (cmd === "where") {
     console.log(Object.entries(p).map(([k, v]) => `${k.padEnd(10)} ${v}`).join("\n"));
-    const keyState = loadConfig(p).cloud.apiKey
+    const cfgW = loadConfig(p);
+    const keyState = cfgW.cloud.apiKey
       ? "saved in config (jarvis set-key)"
       : process.env.ANTHROPIC_API_KEY
         ? "from ANTHROPIC_API_KEY — not saved (jarvis set-key saves it)"
         : "not set (jarvis set-key saves one)";
     console.log(`${"api key".padEnd(10)} ${keyState}`);
+    const torState = cfgW.tor.enabled
+      ? `on — proxy 127.0.0.1:${cfgW.tor.socksPort} ${(await probeTorProxy(cfgW.tor.socksPort)) ? "reachable" : "NOT reachable"}`
+      : "off";
+    console.log(`${"tor".padEnd(10)} ${torState}`);
     return;
   }
   if (cmd === "help" || cmd === "--help" || cmd === "-h") { console.log(HELP); return; }
