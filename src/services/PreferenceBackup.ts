@@ -117,7 +117,7 @@ export async function exportPreferences(): Promise<{ success: boolean; message: 
       if (canShare) {
         await Sharing.shareAsync(filePath, {
           mimeType: 'application/json',
-          dialogTitle: 'Save Agent Ultra Preferences Backup',
+          dialogTitle: 'Save Jarvis Preferences Backup',
         });
       }
     }
@@ -159,7 +159,7 @@ export async function importPreferences(): Promise<{ success: boolean; message: 
     }
 
     if (!rawData.version || !rawData.source || rawData.source !== EXPORT_SOURCE) {
-      return { success: false, message: 'Invalid backup file — not an Agent Ultra preferences backup.' };
+      return { success: false, message: 'Invalid backup file — not a Jarvis preferences backup.' };
     }
 
     const data = migrateBackup(rawData);
