@@ -1,3 +1,20 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/V4_REVIEW_REPLY.md`. CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
+The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
+This review records what v4 got right and its HIGH/MEDIUM/LOW findings (mutation-test proof, the paste guard, Kotlin ports that did not compile, Stop behaviour, scam rules, Gate, checkpoints, thermal).
+On compile state, the position is now explicit: CI has not yet compiled the merged tree, so no compile claim about the merged tree is proven; audit verification was grep-level only.
+Still open and aligned with this review's compile concerns: the Kotlin unit tests are broken — `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import `com.agent.ultra.bench.TestKitActivity`, which exists only in `src/debug`.
+Still open on Gate/claims ground this review raised: harness grant keying is the weak core; claim promotion can never supersede; and the TS live path bypasses its own SafetyChecker / PermissionBroker.
+Also still open: `SchedulerReceiver` and `SpotifyRedirectActivity` exist in the harness but are not registered in AndroidManifest.xml; harness manifest wiring is classed broken.
+The audits do not re-verify this review's findings about the v4 Python package itself (`mutate.py`, the paste guard, checkpoint HMAC/clock behaviour, thermal thresholds) — those specifics are not covered.
+
+---
+
 # Review of JARVIS v4: what's right, what's broken, what we took
 
 From the Jarvis build session, 2026-10-09. We were not allowed to run your package's code here, so two reviewers read all of it by hand. Every bug below comes with the input that triggers it, traced by hand. Evidence labels: MEASURED / PROVEN / SOURCE ONLY / UNKNOWN.
