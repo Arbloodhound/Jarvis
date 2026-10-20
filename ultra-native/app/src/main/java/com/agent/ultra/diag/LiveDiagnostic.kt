@@ -68,6 +68,7 @@ object LiveDiagnostic {
             val started = System.currentTimeMillis()
             val log = StringBuilder()
             var sinceMs = started
+            var lastRam = 0L
             try {
                 while (isActive && System.currentTimeMillis() - started < DURATION_SEC * 1000L) {
                     delay(POLL_MS)
@@ -76,7 +77,10 @@ object LiveDiagnostic {
                     drainLogcat(sinceMs).takeIf { it.isNotBlank() }?.let { log.append(it).append('\n') }
                     sinceMs = now
                     log.append(memorySnapshot(app, now)).append('\n')
+                    // Where the RAM goes, once a minute (owner, 2026-10-20).
+                    if (now - lastRam >= 60_000L) { lastRam = now; RamReport.snapshot(app).forEach { log.append(it).append('\n') } }
                 }
+                RamReport.snapshot(app).forEach { log.append(it).append('\n') }
                 // Catch the tail between the last poll and the stop.
                 drainLogcat(sinceMs).takeIf { it.isNotBlank() }?.let { log.append(it).append('\n') }
             } finally {

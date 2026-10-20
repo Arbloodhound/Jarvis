@@ -3,6 +3,17 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-20 — owner's answers: ambient "both", action model 4 cores, RAM count
+- Ambient (owner chose "both"): while the brain answers, background speech waits (AmbientBacklog.next): only wake-window
+  speech and short clips (<=1.5 s, a bare "stop") go at once during a run. Held clips are transcribed afterwards with
+  base.en beside small.en (second whisper handle, ~60 MB); commands keep small.en. Hold cap 15 s -> 120 s (unpinned 180 s);
+  backlog 8 items/2 min -> 32 items/5 min. Lost: a longer mid-run correction without "Hey Jarvis" no longer interrupts a run.
+- Action model: the librarian's pool is ACTION_THREADS=4 on the fastest LLM cores; tool calls and offline-nav steps pass
+  foreground=true and decode with 4 (background memory work keeps 2). Owner declined keeping it loaded (RAM).
+- RAM: DIAG now writes a RAM breakdown once a minute (diag/RamReport.kt): phone totals, swap, Jarvis resident split
+  (model files vs own memory, heap parts), "Android + other apps" as the rest, which models are loaded.
+- 1642 JVM tests, 0 failures. All SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
 ## 2026-10-20 — owner's v3.0.73 logs read
 - LIKELY: ambient whisper (small.en, cpus [0,1], 10–32 s per 1–4 s clip) running beside the LLM is the main slowdown:
   1.6 tok/s with it, 6.0 tok/s without (draft loaded, 61–88% accepted). Thermal WARM vs NORMAL confounds it. Owner decides

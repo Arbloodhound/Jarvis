@@ -1244,6 +1244,7 @@ JSON:"""
                 val first = engine.generate(
                     prompt, maxTokens = budget + reserve + 32,
                     thinkBudget = think,
+                    foreground = true,
                     onStart = started,
                 )
                 // The small action model could not run (no room, or it gave way): the main model does it.
