@@ -150,7 +150,7 @@ Respond with ONLY a JSON array of strings. No explanation. Example:
 
     const serviceEnabled = await AppController.isServiceEnabled().catch(() => false);
     if (!serviceEnabled) {
-      const msg = 'Accessibility service not enabled. Go to Settings > Accessibility > Agent Ultra and enable it.';
+      const msg = 'Accessibility service not enabled. Go to Settings > Accessibility > Jarvis and enable it.';
       return { success: false, steps, finalObservation: msg, goalAchieved: false, error: 'no_service' };
     }
 
