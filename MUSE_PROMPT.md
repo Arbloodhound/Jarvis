@@ -1,3 +1,16 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/MUSE_PROMPT.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree. The prompt text below is preserved verbatim as the historical record; the status section states what was actually built.
+
+## Status as of 2026-10-19
+
+The rebuild this prompt asked for exists. After the 2026-10-19 full-branch consolidation, all work is on `main` (tip `c8043e1c`); CI has not yet compiled the merged tree, and audit verification was grep-level, not compilation.
+
+- The harness package `com.agent.ultra.harness` inside `ultra-native` contains MemoryClaims, ApprovalGrants, Scheduler + SchedulerRuntime/SchedulerReceiver, SkillStore, NotificationForwardingPolicy, ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, the NLI head, bandit (ForYou), and `connectors/` (Gmail, Google Calendar/Docs/Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber).
+- The harness DB wiring that was the pass-2 audit's 1 critical is resolved in the merged tree: UltraDatabase is v9 with ClaimEntity/GrantEntity/MemoryEmbeddingEntity/BanditArmEntity, DAO accessors `claims()`/`claimForget()`/`grants()`/`embeddings()`/`banditArms()`, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+- Audits done: pass 2 — 119 defects (1 critical / 16 high / 41 medium / 61 low); supplement — 87 findings (0 critical / 12 high / 31 medium / 44 low). Post-merge: 0 known criticals.
+- Still open: 2 manifest registrations (`SchedulerReceiver`, `SpotifyRedirectActivity` not in `AndroidManifest.xml`), 2 broken unit tests (`HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import a debug-only class), TS `server/` orphaned, ~70 dead-code candidates, CI compile pending.
+
+---
+
 # Prompt to paste into your Muse
 
 Paste the block below into a new **side chat** in your Muse, so it doesn't clutter your main chat. It only asks for
