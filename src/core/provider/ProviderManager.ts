@@ -4,7 +4,7 @@ import { AppStorage } from '../../utils/AppStorage';
 import { SecureVault } from '../../security/SecureVault';
 import { probeProvider } from './ProviderProbe';
 import { normalizeProviderUrl } from './UrlNormalize';
-import { UltraDevLog } from '../../utils/UltraDevLog';
+import { JarvisDevLog } from '../../utils/JarvisDevLog';
 import type {
   ApiProvider,
   DiscoveredModel,
@@ -36,7 +36,7 @@ export class ProviderManager {
     if (this.initialized) return;
     await this.load();
     this.initialized = true;
-    UltraDevLog.push('SYSTEM', { event: 'provider_manager_init', count: this.providers.size });
+    JarvisDevLog.push('SYSTEM', { event: 'provider_manager_init', count: this.providers.size });
   }
 
   private async load(): Promise<void> {
@@ -64,7 +64,7 @@ export class ProviderManager {
         }
       }
     } catch (e: any) {
-      UltraDevLog.push('ERROR', { event: 'provider_manager_load_failed', error: e?.message });
+      JarvisDevLog.push('ERROR', { event: 'provider_manager_load_failed', error: e?.message });
     }
   }
 
@@ -137,7 +137,7 @@ export class ProviderManager {
     if (!provider) throw new Error(`Provider ${id} not found`);
     await this.vault.set(VK.providerPassword(id), password);
     await this.updateProvider(id, { passwordRef: VK.providerPassword(id) });
-    UltraDevLog.push('SYSTEM', { event: 'provider_password_updated', id });
+    JarvisDevLog.push('SYSTEM', { event: 'provider_password_updated', id });
   }
 
   async addProvider(input: {
@@ -177,7 +177,7 @@ export class ProviderManager {
     }
     this.providers.set(id, provider);
     await this.save();
-    UltraDevLog.push('SYSTEM', { event: 'provider_added', id, name: provider.name, baseUrl: provider.baseUrl, authMode: provider.authMode });
+    JarvisDevLog.push('SYSTEM', { event: 'provider_added', id, name: provider.name, baseUrl: provider.baseUrl, authMode: provider.authMode });
     return provider;
   }
 
@@ -192,7 +192,7 @@ export class ProviderManager {
     const updated: ApiProvider = { ...existing, ...updates, updatedAt: Date.now() };
     this.providers.set(id, updated);
     await this.save();
-    UltraDevLog.push('SYSTEM', { event: 'provider_updated', id });
+    JarvisDevLog.push('SYSTEM', { event: 'provider_updated', id });
   }
 
   async updateApiKey(id: string, apiKey: string): Promise<void> {
@@ -204,7 +204,7 @@ export class ProviderManager {
 
   async setActive(id: string, active: boolean): Promise<void> {
     await this.updateProvider(id, { isActive: active });
-    UltraDevLog.push('SYSTEM', { event: 'provider_toggle', id, active });
+    JarvisDevLog.push('SYSTEM', { event: 'provider_toggle', id, active });
   }
 
   async deleteProvider(id: string): Promise<void> {
@@ -216,7 +216,7 @@ export class ProviderManager {
     await AppStorage.remove(SK.providerProbe(id)).catch(() => {});
     await AppStorage.remove(SK.providerAccount(id)).catch(() => {});
     await this.save();
-    UltraDevLog.push('SYSTEM', { event: 'provider_deleted', id });
+    JarvisDevLog.push('SYSTEM', { event: 'provider_deleted', id });
   }
 
   async probe(id: string): Promise<{ status: ProviderStatus; modelsFound: number; error?: string; requiresStrongerScope?: boolean }> {
@@ -224,7 +224,7 @@ export class ProviderManager {
     if (!provider) throw new Error(`Provider ${id} not found`);
     const apiKey = await this.getApiKey(provider);
     const password = await this.getPassword(provider);
-    UltraDevLog.push('SYSTEM', { event: 'provider_probe_start', id, name: provider.name });
+    JarvisDevLog.push('SYSTEM', { event: 'provider_probe_start', id, name: provider.name });
     try {
       const output = await probeProvider(provider, apiKey, password);
       const { summary, models } = output;
@@ -242,7 +242,7 @@ export class ProviderManager {
         await AppStorage.set(SK.providerAccount(id), JSON.stringify(output.accountData));
       }
       await AppStorage.set(SK.providerProbe(id), JSON.stringify(summary));
-      UltraDevLog.push('SYSTEM', {
+      JarvisDevLog.push('SYSTEM', {
         event: 'provider_probe_done', id,
         status: summary.status, modelsFound: summary.modelsFound,
         hasAccount: summary.hasAccountData, requiresStrongerScope: summary.requiresStrongerScope,
@@ -256,7 +256,7 @@ export class ProviderManager {
     } catch (e: any) {
       const error = e?.message || 'Probe failed';
       await this.updateProvider(id, { status: 'error', probeError: error });
-      UltraDevLog.push('ERROR', { event: 'provider_probe_failed', id, error });
+      JarvisDevLog.push('ERROR', { event: 'provider_probe_failed', id, error });
       return { status: 'error', modelsFound: 0, error };
     }
   }

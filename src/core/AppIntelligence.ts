@@ -4,7 +4,7 @@ import { EnhancedReActLoop } from './EnhancedReActLoop';
 import { ReActLoop } from './ReActLoop';
 import { lookupPackage, findBestMatch } from './AppDirectory';
 import type { ModelRouter } from './ModelRouter';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { CorrIdScope } from '../utils/CorrIdScope';
 import { logAICall } from '../utils/AICallLogger';
 

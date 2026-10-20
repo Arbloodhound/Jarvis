@@ -1,4 +1,4 @@
-import { ActionPlan } from '../types/ultra';
+import { ActionPlan } from '../types/jarvis';
 import { validatePlan } from './CapabilitySchemas';
 import { resolveIntent } from './IntentResolver';
 import { lookupPackage } from './AppDirectory';
@@ -1060,10 +1060,10 @@ export class CommandParser {
   parse(input: string): ActionPlan | null {
     let trimmed = input.trim();
     if (!trimmed) return null;
-    trimmed = trimmed.replace(/^ultra[\s,]+/i, '');
-    // UltraDevLog imported lazily to avoid adding to top-level (circular risk with rules array)
+    trimmed = trimmed.replace(/^jarvis[\s,]+/i, '');
+    // JarvisDevLog imported lazily to avoid adding to top-level (circular risk with rules array)
     let _log: any = null;
-    try { _log = require('../utils/UltraDevLog').UltraDevLog; } catch { _log = null; }
+    try { _log = require('../utils/JarvisDevLog').JarvisDevLog; } catch { _log = null; }
 
     const VERB_CORRECTIONS: Record<string, string> = {
       'opin':'open','ipon':'open','opne':'open','oped':'open','ope':'open','opem':'open','opeen':'open',

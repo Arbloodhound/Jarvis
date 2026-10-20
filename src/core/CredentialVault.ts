@@ -1,6 +1,6 @@
 import { SecureVault } from '../security/SecureVault';
 import AppController from '../native/AppController';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import type { AuthType } from './AuthGate';
 
 const CRED_INDEX_KEY = 'cred_vault_index';

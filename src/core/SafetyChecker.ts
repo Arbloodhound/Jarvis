@@ -1,5 +1,5 @@
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
-import type { ActionPlan, SafetyCheckResult } from '../types/ultra';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
+import type { ActionPlan, SafetyCheckResult } from '../types/jarvis';
 
 const DANGEROUS_PATTERNS: RegExp[] = [
   /\brm\s+-rf\b/i,

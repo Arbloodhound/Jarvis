@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import AppController from '../native/AppController';
 import { performTap, performSwipe, getScreenContentFlat, waitForUiChange } from '../native/AppController';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 export interface ReActStep {
   iteration: number;
@@ -238,7 +238,7 @@ Respond with ONLY a JSON array of strings. No explanation. Example:
         // moveTaskToBack needs a moment to complete
         const skipSelfCheck = iteration === 1 && !!appHint;
         if (!skipSelfCheck && currentPkg === 'com.agent.jarvis') {
-          DebugLog.error('ReActLoop', `SAFETY STOP at iter ${iteration}: foreground package is Agent Ultra — aborting to prevent self-interaction`);
+          DebugLog.error('ReActLoop', `SAFETY STOP at iter ${iteration}: foreground package is Jarvis — aborting to prevent self-interaction`);
           return { success: false, steps, finalObservation: 'ReActLoop detected self-interaction — stopped for safety', goalAchieved: false, error: 'self_interaction' };
         }
 
@@ -291,7 +291,7 @@ Respond with ONLY a JSON array of strings. No explanation. Example:
       if (currentAppPackage === 'com.android.settings') {
         const a11yNode = nodes.find(n => {
           const label = (n.t || n.d || '').trim().toLowerCase();
-          return label.includes('accessibility') && (label.includes('agent ultra') || label.includes('installed apps') || label.includes('vision enhancements'));
+          return label.includes('accessibility') && (label.includes('agent jarvis') || label.includes('installed apps') || label.includes('vision enhancements'));
         });
         if (a11yNode) {
           console.warn(`[REACT] DANGER_ZONE: on accessibility settings — aborting`);

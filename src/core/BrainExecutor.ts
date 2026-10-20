@@ -1,8 +1,8 @@
 import type { ModelRouter } from './ModelRouter';
 import type { TaskExecutor } from './TaskExecutor';
 import type { ConversationManager } from '../services/ConversationManager';
-import type { UltraExecutionResult } from '../types/ultra';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import type { JarvisExecutionResult } from '../types/jarvis';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -625,7 +625,7 @@ export class BrainExecutor {
     taskId: string,
     approvedAction?: boolean,
     pendingState?: { messages: Array<{ role: string; content: string }>; toolCall: { tool: string; params: Record<string, any> } },
-  ): Promise<UltraExecutionResult> {
+  ): Promise<JarvisExecutionResult> {
     DebugLog.systemEvent('BrainExecutor', `START input="${userInput.slice(0, 80)}" approved=${!!approvedAction}`);
 
     // ── RESUME PATH: user approved a pending destructive action ──────────
@@ -715,7 +715,7 @@ export class BrainExecutor {
     taskId: string,
     messages: Array<{ role: string; content: string }>,
     resumeTurn: number,
-  ): Promise<UltraExecutionResult> {
+  ): Promise<JarvisExecutionResult> {
     const MAX_TOOL_TURNS = 12;
     let finalText = '';
     let lastCapability = '';
@@ -810,7 +810,7 @@ export class BrainExecutor {
           role: 'assistant',
           content: approvalText,
           createdAt: Date.now(),
-          source: 'ultra',
+          source: 'jarvis',
         });
 
         return {
@@ -904,7 +904,7 @@ export class BrainExecutor {
         role: 'assistant',
         content: finalText,
         createdAt: Date.now(),
-        source: 'ultra',
+        source: 'jarvis',
         meta: { capability: lastCapability || undefined, data: lastToolData },
       });
     }

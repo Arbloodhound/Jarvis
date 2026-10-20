@@ -1,5 +1,5 @@
 import { Logger } from '../utils/Logger';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface Capability {
   id: string;
@@ -20,7 +20,7 @@ export class CapabilityRegistry {
   }
 
   async initialize(): Promise<void> {
-    UltraDevLog.push('SYSTEM', { event: 'capability_registry_init_start' });
+    JarvisDevLog.push('SYSTEM', { event: 'capability_registry_init_start' });
     const caps: Capability[] = [
       { id: 'file_read', name: 'File Read', description: 'Read files from device storage', riskLevel: 'safe', available: true, permissionsRequired: ['READ_EXTERNAL_STORAGE'] },
       { id: 'file_write', name: 'File Write', description: 'Write files to device storage', riskLevel: 'moderate', available: true, permissionsRequired: ['WRITE_EXTERNAL_STORAGE'] },
@@ -91,7 +91,7 @@ export class CapabilityRegistry {
     ];
     for (const c of caps) this.capabilities.set(c.id, c);
     this.logger.info(`Registered ${this.capabilities.size} capabilities`);
-    UltraDevLog.push('SYSTEM', { event: 'capability_registry_init_done', count: this.capabilities.size });
+    JarvisDevLog.push('SYSTEM', { event: 'capability_registry_init_done', count: this.capabilities.size });
   }
 
   get(id: string): Capability | undefined { return this.capabilities.get(id); }

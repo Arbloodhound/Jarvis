@@ -14,7 +14,7 @@ import { lookupPackage } from './AppDirectory';
 import { ActivityAction } from 'expo-intent-launcher';
 import { resolveSettingsIntent } from './SettingsDirectory';
 import { resolveDeepLink } from './DeepLinkDirectory';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 // ── Types ──────────────────────────────────────────────
 export interface ResolvedIntent {
@@ -317,12 +317,12 @@ const INTENT_PATTERNS: IntentPattern[] = [
  */
 export function resolveIntent(input: string): ResolvedIntent | null {
   const trimmed = input.trim()
-    .replace(/^ultra[\s,]+/i, '')
-    .replace(/^(?:hey\s+)?(?:ultra|agent)\s*,?\s*/i, '');
+    .replace(/^jarvis[\s,]+/i, '')
+    .replace(/^(?:hey\s+)?(?:jarvis|agent)\s*,?\s*/i, '');
 
   // ── Layer 2: Settings intents (checked before all other patterns) ──
   const settingsMatch = resolveSettingsIntent(trimmed);
-  UltraDevLog.settingsIntent(trimmed, !!settingsMatch, settingsMatch?.action, settingsMatch?.label);
+  JarvisDevLog.settingsIntent(trimmed, !!settingsMatch, settingsMatch?.action, settingsMatch?.label);
   if (settingsMatch) {
     return {
       action: settingsMatch.action,
@@ -335,7 +335,7 @@ export function resolveIntent(input: string): ResolvedIntent | null {
   // ── Layer 3: App deep links ──
   const deepLinkMatch = resolveDeepLink(trimmed);
   if (!settingsMatch) {
-    UltraDevLog.deepLink(trimmed, !!deepLinkMatch, deepLinkMatch?.uri, deepLinkMatch?.label);
+    JarvisDevLog.deepLink(trimmed, !!deepLinkMatch, deepLinkMatch?.uri, deepLinkMatch?.label);
   }
   if (deepLinkMatch) {
     return {

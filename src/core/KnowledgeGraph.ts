@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { logAICall } from '../utils/AICallLogger';
 
 export type EntityType = 'person' | 'place' | 'app' | 'preference' | 'routine' | 'account' | 'device' | 'topic';

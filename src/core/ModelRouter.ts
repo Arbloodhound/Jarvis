@@ -1,9 +1,9 @@
 import { SecureVault } from '../security/SecureVault';
 import { CostTracker } from '../services/CostTracker';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { classifyModelType } from '../utils/classifyModelType';
-import type { UltraModelDef } from '../types/ultra';
+import type { JarvisModelDef } from '../types/jarvis';
 
 export interface ModelRouterBridge {
   hasActiveProvider(): boolean;
@@ -612,7 +612,7 @@ export class ModelRouter {
     return this.defaultModel;
   }
 
-  getModel(modelId: string): UltraModelDef | undefined {
+  getModel(modelId: string): JarvisModelDef | undefined {
     const m = this.models.get(modelId);
     if (!m) return undefined;
     return {

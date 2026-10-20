@@ -1,4 +1,4 @@
-import { ActionPlan } from '../types/ultra';
+import { ActionPlan } from '../types/jarvis';
 import { validatePlan } from './CapabilitySchemas';
 import { resolveIntent } from './IntentResolver';
 import { lookupPackage } from './AppDirectory';
@@ -1185,7 +1185,7 @@ const rules: ParseRule[] = [
 ];
 
 const LEADING_POLITE_WRAPPERS: RegExp[] = [
-  /^(?:hey\s+)?ultra[\s,:-]+/i,
+  /^(?:hey\s+)?jarvis[\s,:-]+/i,
   /^(?:please\s+)+/i,
   /^(?:can|could|would|will)\s+you\s+(?:please\s+)?/i,
   /^(?:i\s+need\s+you\s+to|i\s+want\s+you\s+to|i\s+need\s+to|i\s+want\s+to)\s+/i,
@@ -1217,7 +1217,7 @@ function normalizeCommandInput(input: string): string {
   let value = input.trim();
   if (!value) return value;
   value = value.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
-  value = value.replace(/^ultra[\s,]+/i, '');
+  value = value.replace(/^jarvis[\s,]+/i, '');
   let changed = true;
   while (changed) {
     changed = false;
@@ -1247,9 +1247,9 @@ export class CommandParser {
   parse(input: string): ActionPlan | null {
     let trimmed = normalizeCommandInput(input);
     if (!trimmed) return null;
-    // UltraDevLog imported lazily to avoid adding to top-level (circular risk with rules array)
+    // JarvisDevLog imported lazily to avoid adding to top-level (circular risk with rules array)
     let _log: any = null;
-    try { _log = require('../utils/UltraDevLog').UltraDevLog; } catch { _log = null; }
+    try { _log = require('../utils/JarvisDevLog').JarvisDevLog; } catch { _log = null; }
 
     const VERB_CORRECTIONS: Record<string, string> = {
       'opin':'open','ipon':'open','opne':'open','oped':'open','ope':'open','opem':'open','opeen':'open',

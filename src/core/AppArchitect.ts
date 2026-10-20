@@ -1,7 +1,7 @@
 import type { AppSpec } from '../types/appspec';
 import { ModelRouter } from './ModelRouter';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export class AppArchitect {
   private modelRouter: ModelRouter;
@@ -14,13 +14,13 @@ export class AppArchitect {
 
   async designApp(userDescription: string, conversationContext?: string): Promise<AppSpec> {
     this.logger.info(`Designing app from description: ${userDescription.substring(0, 100)}...`);
-    UltraDevLog.push('SYSTEM', { event: 'app_architect_design_start', descriptionLen: userDescription.length, hasContext: !!conversationContext });
+    JarvisDevLog.push('SYSTEM', { event: 'app_architect_design_start', descriptionLen: userDescription.length, hasContext: !!conversationContext });
 
     const systemPrompt = `You are an expert Android application architect. The user will describe an app they want built.
 You must produce a COMPLETE AppSpec as JSON. This spec will be used by an automated build system to generate, compile, and package a real APK.
 
 Rules:
-- Package name format: com.ultra.generated.<shortname> (lowercase, no spaces)
+- Package name format: com.jarvis.generated.<shortname> (lowercase, no spaces)
 - Min SDK: 26, Target SDK: 33
 - Use ONLY standard Android SDK classes unless you specify Maven dependencies
 - CRITICAL: ALL UI must be built PROGRAMMATICALLY in Java code. Do NOT reference any XML layouts, do NOT use setContentView(R.layout.xxx), do NOT create layout XML files. There is no aapt2 or R.java generator available. All views must be created via new LinearLayout(), new TextView(), etc. in code.
@@ -53,15 +53,15 @@ Respond with ONLY valid JSON matching this exact schema (no markdown, no explana
   },
   "files": [
     {
-      "path": "src/com/ultra/generated/example/MainActivity.java",
+      "path": "src/com/jarvis/generated/example/MainActivity.java",
       "purpose": "Main screen with programmatic UI that shows X and handles Y",
-      "dependsOn": ["src/com/ultra/generated/example/DataModel.java"],
+      "dependsOn": ["src/com/jarvis/generated/example/DataModel.java"],
       "status": "pending"
     }
   ],
   "activities": [
     {
-      "className": "com.ultra.generated.example.MainActivity",
+      "className": "com.jarvis.generated.example.MainActivity",
       "isLauncher": true,
       "exported": true
     }

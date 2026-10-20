@@ -4,7 +4,7 @@ import { ModelRouter } from './ModelRouter';
 import { DebugEngine } from './DebugEngine';
 import { StorageManager } from '../services/StorageManager';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { AppArchitect } from './AppArchitect';
 import { ProjectGenerator } from './ProjectGenerator';
 import { MavenResolver } from './MavenResolver';

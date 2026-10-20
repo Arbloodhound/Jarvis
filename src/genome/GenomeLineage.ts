@@ -1,6 +1,6 @@
 import type { Genome, MutationRecord, FitnessMetrics, TaskPerformance } from './types';
 import { createHash } from '../utils/crypto';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface LineageNode {
   genomeId: string;
@@ -29,7 +29,7 @@ export class GenomeLineage {
       mutations: genome.mutations,
       taskPerformance: genome.fitness?.taskPerformance ?? null,
     });
-    UltraDevLog.push('SYSTEM', { event: 'genome_lineage_record', genomeId: genome.id, generation: genome.generation, parentId: genome.parentId, mutationCount: genome.mutations.length, hasfitness: !!genome.fitness, totalNodes: this.nodes.size });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_lineage_record', genomeId: genome.id, generation: genome.generation, parentId: genome.parentId, mutationCount: genome.mutations.length, hasfitness: !!genome.fitness, totalNodes: this.nodes.size });
   }
 
   getAncestry(genomeId: string): LineageNode[] {
@@ -39,7 +39,7 @@ export class GenomeLineage {
       chain.unshift(current);
       current = current.parentId ? this.nodes.get(current.parentId) : undefined;
     }
-    UltraDevLog.push('SYSTEM', { event: 'genome_lineage_ancestry', genomeId, chainLength: chain.length, generations: chain.map(n => n.generation) });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_lineage_ancestry', genomeId, chainLength: chain.length, generations: chain.map(n => n.generation) });
     return chain;
   }
 
@@ -49,11 +49,11 @@ export class GenomeLineage {
       const parent = chain[i - 1];
       const child = chain[i];
       if (child.parentId !== parent.genomeId) {
-        UltraDevLog.push('SYSTEM', { event: 'genome_lineage_chain_broken', genomeId, brokenAt: child.genomeId, parentExpected: child.parentId, parentActual: parent.genomeId });
+        JarvisDevLog.push('SYSTEM', { event: 'genome_lineage_chain_broken', genomeId, brokenAt: child.genomeId, parentExpected: child.parentId, parentActual: parent.genomeId });
         return { valid: false, brokenAt: child.genomeId };
       }
     }
-    UltraDevLog.push('SYSTEM', { event: 'genome_lineage_chain_verified', genomeId, chainLength: chain.length, valid: true });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_lineage_chain_verified', genomeId, chainLength: chain.length, valid: true });
     return { valid: true };
   }
 
@@ -72,7 +72,7 @@ export class GenomeLineage {
     const first = trajectory[0].score;
     const last = trajectory[trajectory.length - 1].score;
     const rate = (last - first) / trajectory.length;
-    UltraDevLog.push('SYSTEM', { event: 'genome_lineage_improvement_rate', genomeId, rate, firstScore: first, lastScore: last, generations: trajectory.length });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_lineage_improvement_rate', genomeId, rate, firstScore: first, lastScore: last, generations: trajectory.length });
     return rate;
   }
 

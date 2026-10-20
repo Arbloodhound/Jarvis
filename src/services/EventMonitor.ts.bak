@@ -1,5 +1,5 @@
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { MemoryManager } from '../core/MemoryManager';
 import type { TaskExecutor } from '../core/TaskExecutor';
 import type { ModelRouter } from '../core/ModelRouter';

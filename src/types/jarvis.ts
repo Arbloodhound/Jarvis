@@ -12,7 +12,7 @@ export interface ApiProvider {
 }
 
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
-export type MessageSource = 'ultra' | 'model' | 'system';
+export type MessageSource = 'jarvis' | 'model' | 'system';
 
 export interface ExecutionStep {
   step: string;
@@ -121,7 +121,7 @@ export interface ConversationMeta {
   starred?: boolean;
 }
 
-export interface UltraModelDef {
+export interface JarvisModelDef {
   id: string;
   contextWindow: number;
   speedTier: 'fast' | 'balanced' | 'heavy';
@@ -136,7 +136,7 @@ export type ExecutionResultType =
   | 'error'
   | 'clarify';
 
-export interface UltraExecutionResult {
+export interface JarvisExecutionResult {
   type: ExecutionResultType;
   message: string;
   success?: boolean;

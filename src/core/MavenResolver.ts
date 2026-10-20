@@ -1,6 +1,6 @@
 import * as ExpoFileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 const FS: any = Platform.OS !== 'web' ? ExpoFileSystem : null;
 const MAVEN_CENTRAL = 'https://repo1.maven.org/maven2';
@@ -15,25 +15,25 @@ export class MavenResolver {
 
   constructor() {
     this.cacheDir = getCacheDir();
-    UltraDevLog.push('SYSTEM', { event: 'maven_resolver_init', cacheDir: this.cacheDir, platform: Platform.OS });
+    JarvisDevLog.push('SYSTEM', { event: 'maven_resolver_init', cacheDir: this.cacheDir, platform: Platform.OS });
   }
 
   async resolveAll(coordinates: string[]): Promise<string[]> {
-    UltraDevLog.push('SYSTEM', { event: 'maven_resolve_all_start', count: coordinates.length });
+    JarvisDevLog.push('SYSTEM', { event: 'maven_resolve_all_start', count: coordinates.length });
     await this.ensureCacheDir();
     const paths: string[] = [];
     for (const coord of coordinates) {
       const path = await this.resolve(coord);
       if (path) paths.push(path);
     }
-    UltraDevLog.push('SYSTEM', { event: 'maven_resolve_all_done', requested: coordinates.length, resolved: paths.length });
+    JarvisDevLog.push('SYSTEM', { event: 'maven_resolve_all_done', requested: coordinates.length, resolved: paths.length });
     return paths;
   }
 
   async resolve(coordinate: string): Promise<string | null> {
     const parts = coordinate.split(':');
     if (parts.length !== 3) {
-      UltraDevLog.push('SYSTEM', { event: 'maven_resolve_invalid_coord', coordinate });
+      JarvisDevLog.push('SYSTEM', { event: 'maven_resolve_invalid_coord', coordinate });
       return null;
     }
     const [group, artifact, version] = parts;
@@ -43,12 +43,12 @@ export class MavenResolver {
 
     const info = await FS.getInfoAsync(localPath);
     if (info.exists && (info as any).size > 0) {
-      UltraDevLog.push('SYSTEM', { event: 'maven_resolve_cache_hit', coordinate, localPath });
+      JarvisDevLog.push('SYSTEM', { event: 'maven_resolve_cache_hit', coordinate, localPath });
       return localPath;
     }
 
     const url = `${MAVEN_CENTRAL}/${groupPath}/${artifact}/${version}/${jarName}`;
-    UltraDevLog.push('SYSTEM', { event: 'maven_resolve_download_start', coordinate, url });
+    JarvisDevLog.push('SYSTEM', { event: 'maven_resolve_download_start', coordinate, url });
 
     try {
       const parentDir = localPath.substring(0, localPath.lastIndexOf('/'));
@@ -56,13 +56,13 @@ export class MavenResolver {
 
       const download = await FS.downloadAsync(url, localPath);
       if (download.status !== 200) {
-        UltraDevLog.push('SYSTEM', { event: 'maven_resolve_download_fail', coordinate, url, httpStatus: download.status, fallback: 'aar' });
+        JarvisDevLog.push('SYSTEM', { event: 'maven_resolve_download_fail', coordinate, url, httpStatus: download.status, fallback: 'aar' });
         return this.resolveAar(group, artifact, version);
       }
-      UltraDevLog.push('SYSTEM', { event: 'maven_resolve_download_ok', coordinate, localPath });
+      JarvisDevLog.push('SYSTEM', { event: 'maven_resolve_download_ok', coordinate, localPath });
       return localPath;
     } catch (e: any) {
-      UltraDevLog.push('SYSTEM', { event: 'maven_resolve_download_error', coordinate, url, error: e?.message });
+      JarvisDevLog.push('SYSTEM', { event: 'maven_resolve_download_error', coordinate, url, error: e?.message });
       return null;
     }
   }
@@ -74,22 +74,22 @@ export class MavenResolver {
 
     const info = await FS.getInfoAsync(localPath);
     if (info.exists && (info as any).size > 0) {
-      UltraDevLog.push('SYSTEM', { event: 'maven_aar_cache_hit', coord: `${group}:${artifact}:${version}`, localPath });
+      JarvisDevLog.push('SYSTEM', { event: 'maven_aar_cache_hit', coord: `${group}:${artifact}:${version}`, localPath });
       return localPath;
     }
 
     const url = `${MAVEN_CENTRAL}/${groupPath}/${artifact}/${version}/${aarName}`;
-    UltraDevLog.push('SYSTEM', { event: 'maven_aar_download_start', coord: `${group}:${artifact}:${version}`, url });
+    JarvisDevLog.push('SYSTEM', { event: 'maven_aar_download_start', coord: `${group}:${artifact}:${version}`, url });
     try {
       const download = await FS.downloadAsync(url, localPath);
       if (download.status !== 200) {
-        UltraDevLog.push('SYSTEM', { event: 'maven_aar_download_fail', coord: `${group}:${artifact}:${version}`, httpStatus: download.status });
+        JarvisDevLog.push('SYSTEM', { event: 'maven_aar_download_fail', coord: `${group}:${artifact}:${version}`, httpStatus: download.status });
         return null;
       }
-      UltraDevLog.push('SYSTEM', { event: 'maven_aar_download_ok', coord: `${group}:${artifact}:${version}`, localPath });
+      JarvisDevLog.push('SYSTEM', { event: 'maven_aar_download_ok', coord: `${group}:${artifact}:${version}`, localPath });
       return localPath;
     } catch (e: any) {
-      UltraDevLog.push('SYSTEM', { event: 'maven_aar_download_error', coord: `${group}:${artifact}:${version}`, error: e?.message });
+      JarvisDevLog.push('SYSTEM', { event: 'maven_aar_download_error', coord: `${group}:${artifact}:${version}`, error: e?.message });
       return null;
     }
   }
@@ -111,10 +111,10 @@ export class MavenResolver {
       const info = await FS.getInfoAsync(this.cacheDir);
       if (info.exists) {
         await FS.deleteAsync(this.cacheDir, { idempotent: true });
-        UltraDevLog.push('SYSTEM', { event: 'maven_cache_cleared', cacheDir: this.cacheDir });
+        JarvisDevLog.push('SYSTEM', { event: 'maven_cache_cleared', cacheDir: this.cacheDir });
       }
     } catch (e: any) {
-      UltraDevLog.push('SYSTEM', { event: 'maven_cache_clear_fail', error: e?.message });
+      JarvisDevLog.push('SYSTEM', { event: 'maven_cache_clear_fail', error: e?.message });
     }
   }
 

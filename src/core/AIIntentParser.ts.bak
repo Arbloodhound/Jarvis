@@ -1,7 +1,7 @@
 import type { ModelRouter } from './ModelRouter';
 import type { CapabilityRegistry } from './CapabilityRegistry';
-import type { ActionPlan } from '../types/ultra';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import type { ActionPlan } from '../types/jarvis';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 export class AIIntentParser {
   constructor(private ai: ModelRouter, private caps: CapabilityRegistry) {}

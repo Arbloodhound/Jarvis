@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
 import DeviceInfo from 'react-native-device-info';
 import AppController from '../native/AppController';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 const isNative = Platform.OS !== 'web';
 

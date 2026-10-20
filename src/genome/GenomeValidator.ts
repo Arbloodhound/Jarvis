@@ -1,5 +1,5 @@
 import type { Genome, MutationResult } from './types';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export class GenomeValidator {
   validate(genome: Genome): { violations: string[]; warnings: string[] } {
@@ -60,7 +60,7 @@ export class GenomeValidator {
       violations.push('Genome must have AI client capability');
     }
 
-    UltraDevLog.push('SYSTEM', { event: 'genome_validate', genomeId: genome.id, generation: genome.generation, capabilityCount: genome.capabilities.length, violations: violations.length, warnings: warnings.length, valid: violations.length === 0 });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_validate', genomeId: genome.id, generation: genome.generation, capabilityCount: genome.capabilities.length, violations: violations.length, warnings: warnings.length, valid: violations.length === 0 });
 
     return { violations, warnings };
   }
@@ -70,10 +70,10 @@ export class GenomeValidator {
     if (!mutation.mutatedGenome) return { valid: false, reason: 'No mutated genome produced' };
     const { violations } = this.validate(mutation.mutatedGenome);
     if (violations.length > 0) {
-      UltraDevLog.push('SYSTEM', { event: 'genome_mutation_validate_fail', genomeId: genome.id, violationCount: violations.length, firstViolation: violations[0] });
+      JarvisDevLog.push('SYSTEM', { event: 'genome_mutation_validate_fail', genomeId: genome.id, violationCount: violations.length, firstViolation: violations[0] });
       return { valid: false, reason: violations[0] };
     }
-    UltraDevLog.push('SYSTEM', { event: 'genome_mutation_validate_ok', genomeId: genome.id });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_mutation_validate_ok', genomeId: genome.id });
     return { valid: true };
   }
 

@@ -4,7 +4,7 @@ import { TaskGraph } from './TaskGraph';
 import { ModelRouter } from './ModelRouter';
 import { CostTracker } from '../services/CostTracker';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 interface SwarmConfig {
   maxConcurrentAgents: number;
@@ -47,7 +47,7 @@ export class Orchestrator {
       graph.addNode({ id: 't1', description: request, assignedModel: this.ai.selectModel('code'), dependencies: [], status: 'pending' });
     }
     this.logger.info(`Decomposed into ${graph.getSize()} subtasks`);
-    UltraDevLog.push('SYSTEM', { event: 'orchestrator_decompose_done', taskId, subtaskCount: graph.getSize() });
+    JarvisDevLog.push('SYSTEM', { event: 'orchestrator_decompose_done', taskId, subtaskCount: graph.getSize() });
     return graph;
   }
 

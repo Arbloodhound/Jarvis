@@ -212,7 +212,7 @@ public class GenomeCompilerNative {
         result = result.replace("{{agentBubbleColor}}", "#1A1A2E");
         result = result.replace("{{textColor}}", "#E0E0E0");
         result = result.replace("{{accentColor}}", "#6C63FF");
-        result = result.replace("{{dbName}}", "ultra_agent.db");
+        result = result.replace("{{dbName}}", "jarvis_agent.db");
         result = result.replace("{{dbVersion}}", "1");
 
         return result;

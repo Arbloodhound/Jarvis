@@ -15,7 +15,7 @@ import type { ProviderManager } from './ProviderManager';
 import type { GroupManager } from './GroupManager';
 import type { RouteHistoryStore } from './RouteHistoryStore';
 import { getAdapterRegistry } from './AdapterRegistry';
-import { UltraDevLog } from '../../utils/UltraDevLog';
+import { JarvisDevLog } from '../../utils/JarvisDevLog';
 
 const FAIL_CLOSED_MSG = 'No saved default is available for this task. Open Settings and assign at least one model to an active group.';
 
@@ -61,7 +61,7 @@ export class GroupRouter {
       if (group && group.isActive) {
         const route = await this.selectFromGroup(group, operation, activeProviders, defaults, ctx.conversationId);
         if (route) {
-          UltraDevLog.push('ROUTE', { event: 'route_resolved', step: 'explicit_group', groupId: group.id, ...this.logRoute(route) });
+          JarvisDevLog.push('ROUTE', { event: 'route_resolved', step: 'explicit_group', groupId: group.id, ...this.logRoute(route) });
           return { ok: true, route };
         }
       }
@@ -74,7 +74,7 @@ export class GroupRouter {
           if (group.tags.includes(tag)) {
             const route = await this.selectFromGroup(group, operation, activeProviders, defaults, ctx.conversationId);
             if (route) {
-              UltraDevLog.push('ROUTE', { event: 'route_resolved', step: 'exact_tag', tag, groupId: group.id, ...this.logRoute(route) });
+              JarvisDevLog.push('ROUTE', { event: 'route_resolved', step: 'exact_tag', tag, groupId: group.id, ...this.logRoute(route) });
               return { ok: true, route };
             }
           }
@@ -89,7 +89,7 @@ export class GroupRouter {
           if (group.aliases.includes(tag)) {
             const route = await this.selectFromGroup(group, operation, activeProviders, defaults, ctx.conversationId);
             if (route) {
-              UltraDevLog.push('ROUTE', { event: 'route_resolved', step: 'alias_tag', tag, groupId: group.id, ...this.logRoute(route) });
+              JarvisDevLog.push('ROUTE', { event: 'route_resolved', step: 'alias_tag', tag, groupId: group.id, ...this.logRoute(route) });
               return { ok: true, route };
             }
           }
@@ -102,33 +102,33 @@ export class GroupRouter {
     if (assignedGroupId) {
       const group = this.groupManager.getById(assignedGroupId);
       if (!group) {
-        UltraDevLog.push('ROUTE', { event: 'route_step4_skip', reason: 'assigned_group_missing', operation, assignedGroupId });
+        JarvisDevLog.push('ROUTE', { event: 'route_step4_skip', reason: 'assigned_group_missing', operation, assignedGroupId });
       } else if (!group.isActive) {
-        UltraDevLog.push('ROUTE', { event: 'route_step4_skip', reason: 'assigned_group_inactive', operation, assignedGroupId, groupName: group.name });
+        JarvisDevLog.push('ROUTE', { event: 'route_step4_skip', reason: 'assigned_group_inactive', operation, assignedGroupId, groupName: group.name });
       } else {
         const validMembers = this.getValidMembers(group, operation, activeProviders);
         if (validMembers.length === 0) {
-          UltraDevLog.push('ROUTE', { event: 'route_step4_skip', reason: 'assigned_group_no_valid_members', operation, assignedGroupId, groupName: group.name, totalMembers: group.members.length });
+          JarvisDevLog.push('ROUTE', { event: 'route_step4_skip', reason: 'assigned_group_no_valid_members', operation, assignedGroupId, groupName: group.name, totalMembers: group.members.length });
         } else {
           const route = await this.selectFromGroup(group, operation, activeProviders, defaults, ctx.conversationId);
           if (route) {
-            UltraDevLog.push('ROUTE', { event: 'route_resolved', step: 'operation_assignment', operation, groupId: group.id, ...this.logRoute(route) });
+            JarvisDevLog.push('ROUTE', { event: 'route_resolved', step: 'operation_assignment', operation, groupId: group.id, ...this.logRoute(route) });
             return { ok: true, route };
           }
         }
       }
     } else {
-      UltraDevLog.push('ROUTE', { event: 'route_step4_skip', reason: 'no_operation_assignment', operation });
+      JarvisDevLog.push('ROUTE', { event: 'route_step4_skip', reason: 'no_operation_assignment', operation });
     }
 
     // Step 5 — conversation sticky routing
     if (defaults.conversationStickyRouting && ctx.conversationId) {
       const history = this.routeHistory.get(ctx.conversationId);
       if (history) {
-        UltraDevLog.push('ROUTE', { event: 'sticky_candidate_found', groupId: history.lastGroupId, providerId: history.lastProviderId, modelId: history.lastModelId });
+        JarvisDevLog.push('ROUTE', { event: 'sticky_candidate_found', groupId: history.lastGroupId, providerId: history.lastProviderId, modelId: history.lastModelId });
         const route = await this.rehydrateHistory(history, operation, activeProviders, activeGroups);
         if (route) {
-          UltraDevLog.push('ROUTE', { event: 'route_resolved', step: 'sticky_routing', conversationId: ctx.conversationId, ...this.logRoute(route) });
+          JarvisDevLog.push('ROUTE', { event: 'route_resolved', step: 'sticky_routing', conversationId: ctx.conversationId, ...this.logRoute(route) });
           return { ok: true, route };
         }
       }
@@ -140,7 +140,7 @@ export class GroupRouter {
       if (group) {
         const route = await this.walkFallbackChain(group, operation, activeProviders, defaults, ctx.conversationId, new Set([assignedGroupId]));
         if (route) {
-          UltraDevLog.push('ROUTE', { event: 'route_resolved', step: 'fallback_chain', originGroupId: assignedGroupId, ...this.logRoute(route) });
+          JarvisDevLog.push('ROUTE', { event: 'route_resolved', step: 'fallback_chain', originGroupId: assignedGroupId, ...this.logRoute(route) });
           return { ok: true, route };
         }
       }
@@ -152,14 +152,14 @@ export class GroupRouter {
       if (fallbackGroup && fallbackGroup.isActive) {
         const route = await this.selectFromGroup(fallbackGroup, operation, activeProviders, defaults, ctx.conversationId);
         if (route) {
-          UltraDevLog.push('ROUTE', { event: 'route_resolved', step: 'global_fallback', groupId: fallbackGroup.id, ...this.logRoute(route) });
+          JarvisDevLog.push('ROUTE', { event: 'route_resolved', step: 'global_fallback', groupId: fallbackGroup.id, ...this.logRoute(route) });
           return { ok: true, route };
         }
       }
     }
 
     // Step 8 — fail closed
-    UltraDevLog.push('ROUTE', { event: 'route_fail_closed', operation });
+    JarvisDevLog.push('ROUTE', { event: 'route_fail_closed', operation });
     return this.failClosed('no_valid_route', `No valid route found for operation '${operation}'.`, FAIL_CLOSED_MSG);
   }
 
@@ -273,24 +273,24 @@ export class GroupRouter {
     const activeProviderMap = new Map(activeProviders.map(p => [p.id, p]));
     return group.members.filter(member => {
       if (!member.enabled) {
-        UltraDevLog.push('ROUTE', { event: 'member_skip', reason: 'disabled', groupId: group.id, modelId: member.modelId });
+        JarvisDevLog.push('ROUTE', { event: 'member_skip', reason: 'disabled', groupId: group.id, modelId: member.modelId });
         return false;
       }
       if (!member.allowedOperations.includes(operation)) {
-        UltraDevLog.push('ROUTE', { event: 'member_skip', reason: 'op_not_allowed', groupId: group.id, modelId: member.modelId, operation, memberOps: member.allowedOperations });
+        JarvisDevLog.push('ROUTE', { event: 'member_skip', reason: 'op_not_allowed', groupId: group.id, modelId: member.modelId, operation, memberOps: member.allowedOperations });
         return false;
       }
       const provider = activeProviderMap.get(member.providerId);
       if (!provider) {
-        UltraDevLog.push('ROUTE', { event: 'member_skip', reason: 'provider_not_active', groupId: group.id, modelId: member.modelId, providerId: member.providerId });
+        JarvisDevLog.push('ROUTE', { event: 'member_skip', reason: 'provider_not_active', groupId: group.id, modelId: member.modelId, providerId: member.providerId });
         return false;
       }
       if (!provider.isActive) {
-        UltraDevLog.push('ROUTE', { event: 'member_skip', reason: 'provider_inactive', groupId: group.id, modelId: member.modelId, providerId: provider.id });
+        JarvisDevLog.push('ROUTE', { event: 'member_skip', reason: 'provider_inactive', groupId: group.id, modelId: member.modelId, providerId: provider.id });
         return false;
       }
       if (provider.status === 'network_error' || provider.status === 'unauthorized') {
-        UltraDevLog.push('ROUTE', { event: 'member_skip', reason: 'provider_error_status', groupId: group.id, modelId: member.modelId, providerId: provider.id, status: provider.status });
+        JarvisDevLog.push('ROUTE', { event: 'member_skip', reason: 'provider_error_status', groupId: group.id, modelId: member.modelId, providerId: provider.id, status: provider.status });
         return false;
       }
       // Trust the group member's modelId as explicit configuration.
@@ -300,7 +300,7 @@ export class GroupRouter {
         : provider.capabilities.adapterIds;
       const adapter = registry.getForOperation(adapterIds, operation);
       if (!adapter) {
-        UltraDevLog.push('ROUTE', { event: 'member_skip', reason: 'no_adapter', groupId: group.id, modelId: member.modelId, providerId: provider.id, adapterIds, operation });
+        JarvisDevLog.push('ROUTE', { event: 'member_skip', reason: 'no_adapter', groupId: group.id, modelId: member.modelId, providerId: provider.id, adapterIds, operation });
         return false;
       }
       return true;
@@ -353,12 +353,12 @@ export class GroupRouter {
   ): Promise<ResolvedRoute | null> {
     const group = activeGroups.find(g => g.id === history.lastGroupId);
     if (!group) {
-      UltraDevLog.push('ROUTE', { event: 'sticky_rejected', reason: 'group_not_active', groupId: history.lastGroupId });
+      JarvisDevLog.push('ROUTE', { event: 'sticky_rejected', reason: 'group_not_active', groupId: history.lastGroupId });
       return null;
     }
     const provider = activeProviders.find(p => p.id === history.lastProviderId);
     if (!provider) {
-      UltraDevLog.push('ROUTE', { event: 'sticky_rejected', reason: 'provider_not_active', providerId: history.lastProviderId });
+      JarvisDevLog.push('ROUTE', { event: 'sticky_rejected', reason: 'provider_not_active', providerId: history.lastProviderId });
       return null;
     }
     const member = group.members.find(m =>
@@ -368,7 +368,7 @@ export class GroupRouter {
       m.allowedOperations.includes(operation)
     );
     if (!member) {
-      UltraDevLog.push('ROUTE', { event: 'sticky_rejected', reason: 'member_not_found_or_not_allowed', modelId: history.lastModelId, operation });
+      JarvisDevLog.push('ROUTE', { event: 'sticky_rejected', reason: 'member_not_found_or_not_allowed', modelId: history.lastModelId, operation });
       return null;
     }
     const registry = getAdapterRegistry();
@@ -377,12 +377,12 @@ export class GroupRouter {
       : provider.capabilities.adapterIds;
     const adapter = registry.getForOperation(adapterIds, operation);
     if (!adapter) {
-      UltraDevLog.push('ROUTE', { event: 'sticky_rejected', reason: 'no_adapter', adapterIds, operation });
+      JarvisDevLog.push('ROUTE', { event: 'sticky_rejected', reason: 'no_adapter', adapterIds, operation });
       return null;
     }
     const route = await this.buildRoute(group, member, operation, activeProviders);
     if (route) {
-      UltraDevLog.push('ROUTE', { event: 'sticky_reused', groupId: group.id, providerId: provider.id, modelId: member.modelId });
+      JarvisDevLog.push('ROUTE', { event: 'sticky_reused', groupId: group.id, providerId: provider.id, modelId: member.modelId });
     }
     return route;
   }

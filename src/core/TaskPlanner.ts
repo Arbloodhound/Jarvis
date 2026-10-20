@@ -1,4 +1,4 @@
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { MemoryManager } from './MemoryManager';
 import type { TaskExecutor } from './TaskExecutor';
 import type { ModelRouter } from './ModelRouter';

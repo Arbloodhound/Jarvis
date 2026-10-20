@@ -1,5 +1,5 @@
 import { ActivityAction } from 'expo-intent-launcher';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface SettingsEntry {
   triggers: string[];
@@ -178,7 +178,7 @@ export const SETTINGS_MAP: SettingsEntry[] = [
 
 export function resolveSettingsIntent(query: string): SettingsEntry | null {
   const q = query.toLowerCase().trim()
-    .replace(/^(?:hey\s+)?(?:ultra|agent)\s*,?\s*/i, '')
+    .replace(/^(?:hey\s+)?(?:jarvis|agent)\s*,?\s*/i, '')
     .replace(/^(?:open|go\s+to|show|show\s+me|launch|take\s+me\s+to|navigate\s+to|bring\s+(?:up|me\s+to)|get\s+to)\s+/i, '')
     .replace(/\s+(?:please|now|for\s+me)$/i, '');
 
@@ -204,6 +204,6 @@ export function resolveSettingsIntent(query: string): SettingsEntry | null {
     }
   }
 
-  UltraDevLog.push('SYSTEM', { event: 'settings_intent_resolve', query: q, found: !!best, label: best?.label ?? null, action: best?.action ?? null, score: bestScore });
+  JarvisDevLog.push('SYSTEM', { event: 'settings_intent_resolve', query: q, found: !!best, label: best?.label ?? null, action: best?.action ?? null, score: bestScore });
   return best;
 }

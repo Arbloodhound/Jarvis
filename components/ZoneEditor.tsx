@@ -8,7 +8,7 @@ import {
   TouchableWithoutFeedback, TextInput, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { UltraDevLog } from '@/src/utils/UltraDevLog';
+import { JarvisDevLog } from '@/src/utils/JarvisDevLog';
 import type { GridAction } from '@/src/types/actionGrid';
 import {
   ZoneConfig, ZoneGridCategory,
@@ -41,7 +41,7 @@ export default function ZoneEditor({ visible, onClose, onSaved, savedTasks }: Zo
 
   useEffect(() => {
     if (visible) {
-      UltraDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'open', trigger: {}, state: {}, data: {}, outcome: 'opened' });
+      JarvisDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'open', trigger: {}, state: {}, data: {}, outcome: 'opened' });
       loadZoneConfig().then(setConfig);
     }
   }, [visible]);
@@ -58,7 +58,7 @@ export default function ZoneEditor({ visible, onClose, onSaved, savedTasks }: Zo
   }, [config, onSaved, onClose]);
 
   const handleClose = useCallback(() => {
-    UltraDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'close', trigger: {}, state: {}, data: {}, outcome: 'dismissed' });
+    JarvisDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'close', trigger: {}, state: {}, data: {}, outcome: 'dismissed' });
     onClose();
   }, [onClose]);
 
@@ -66,7 +66,7 @@ export default function ZoneEditor({ visible, onClose, onSaved, savedTasks }: Zo
 
   const addItem = useCallback((zone: ZoneName, itemId: string, catIdx?: number) => {
     if (!config) return;
-    UltraDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'add_item', trigger: {}, state: {}, data: { zone, itemId, catIdx }, outcome: 'added' });
+    JarvisDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'add_item', trigger: {}, state: {}, data: { zone, itemId, catIdx }, outcome: 'added' });
     const next = { ...config };
     if (zone === 'favorites') {
       if (next.favorites.length >= 7) { Alert.alert('Limit', 'Maximum 7 favorites'); return; }
@@ -83,7 +83,7 @@ export default function ZoneEditor({ visible, onClose, onSaved, savedTasks }: Zo
 
   const removeItem = useCallback((zone: ZoneName, itemId: string, catIdx?: number) => {
     if (!config) return;
-    UltraDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'remove_item', trigger: {}, state: {}, data: { zone, itemId, catIdx }, outcome: 'removed' });
+    JarvisDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'remove_item', trigger: {}, state: {}, data: { zone, itemId, catIdx }, outcome: 'removed' });
     const next = { ...config };
     if (zone === 'favorites') {
       next.favorites = next.favorites.filter(id => id !== itemId);
@@ -98,7 +98,7 @@ export default function ZoneEditor({ visible, onClose, onSaved, savedTasks }: Zo
 
   const moveItem = useCallback((zone: ZoneName, fromIdx: number, toIdx: number, catIdx?: number) => {
     if (!config) return;
-    UltraDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'reorder', trigger: {}, state: {}, data: { zone, from: fromIdx, to: toIdx, catIdx }, outcome: 'reordered' });
+    JarvisDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'reorder', trigger: {}, state: {}, data: { zone, from: fromIdx, to: toIdx, catIdx }, outcome: 'reordered' });
     const next = { ...config };
     let arr: string[];
     if (zone === 'favorites') arr = [...next.favorites];
@@ -119,19 +119,19 @@ export default function ZoneEditor({ visible, onClose, onSaved, savedTasks }: Zo
     if (!config) return;
     if (config.grid.length >= 5) { Alert.alert('Limit', 'Maximum 5 grid categories'); return; }
     const newCat: ZoneGridCategory = { id: `cat_${Date.now().toString(36)}`, label: 'New Category', items: [] };
-    UltraDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'add_category', trigger: {}, state: {}, data: { label: newCat.label }, outcome: 'category_added' });
+    JarvisDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'add_category', trigger: {}, state: {}, data: { label: newCat.label }, outcome: 'category_added' });
     setConfig({ ...config, grid: [...config.grid, newCat] });
   }, [config]);
 
   const deleteCategory = useCallback((idx: number) => {
     if (!config) return;
-    UltraDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'delete_category', trigger: {}, state: {}, data: { index: idx }, outcome: 'category_deleted' });
+    JarvisDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'delete_category', trigger: {}, state: {}, data: { index: idx }, outcome: 'category_deleted' });
     setConfig({ ...config, grid: config.grid.filter((_, i) => i !== idx) });
   }, [config]);
 
   const renameCategory = useCallback((idx: number, newLabel: string) => {
     if (!config || !newLabel.trim()) return;
-    UltraDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'rename_category', trigger: {}, state: {}, data: { index: idx, newLabel: newLabel.trim() }, outcome: 'renamed' });
+    JarvisDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'rename_category', trigger: {}, state: {}, data: { index: idx, newLabel: newLabel.trim() }, outcome: 'renamed' });
     setConfig({
       ...config,
       grid: config.grid.map((g, i) => i === idx ? { ...g, label: newLabel.trim() } : g),
@@ -143,7 +143,7 @@ export default function ZoneEditor({ visible, onClose, onSaved, savedTasks }: Zo
     Alert.alert('Reset Zones', 'Reset all zones to defaults?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Reset', style: 'destructive', onPress: () => {
-        UltraDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'reset_defaults', trigger: {}, state: {}, data: {}, outcome: 'reset' });
+        JarvisDevLog.push('CHAIN', { component: 'ZoneEditor', action: 'reset_defaults', trigger: {}, state: {}, data: {}, outcome: 'reset' });
         setConfig({
           ...DEFAULT_ZONE_CONFIG,
           grid: DEFAULT_ZONE_CONFIG.grid.map(g => ({ ...g, items: [...g.items] })),

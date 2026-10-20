@@ -5,7 +5,7 @@ import DeviceInfo from 'react-native-device-info';
 import NetInfo from '@react-native-community/netinfo';
 import AgentNative from '../native/AgentNative';
 import AppController from '../native/AppController';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface SystemInfoData {
   battery: {
@@ -212,7 +212,7 @@ export class SystemInfoService {
       processCountPromise,
     ]);
 
-    UltraDevLog.systemInfo({
+    JarvisDevLog.systemInfo({
       batteryPct: result.battery.level >= 0 ? result.battery.level : undefined,
       batteryState: result.battery.state,
       lowPower: result.battery.lowPowerMode,

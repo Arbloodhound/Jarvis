@@ -1,4 +1,4 @@
-import { UltraDevLog } from './UltraDevLog';
+import { JarvisDevLog } from './JarvisDevLog';
 
 export type PickerCategory = "text" | "image" | "code" | "video" | "audio" | "reasoning";
 
@@ -42,7 +42,7 @@ let _unknownFallbackCount = 0;
  */
 export function classifyBatchSummary(trigger: string): void {
   if (_summaryCount === 0) return;
-  UltraDevLog.push('SYSTEM', {
+  JarvisDevLog.push('SYSTEM', {
     event: 'classify_model_type_summary',
     trigger,
     totalClassified: _summaryCount,

@@ -1,7 +1,7 @@
 import { ModelRouter } from './ModelRouter';
 import { AgentBus } from './AgentBus';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export class TaskAgent {
   readonly id: string;
@@ -57,7 +57,7 @@ export class TaskAgent {
     this.context.push({ role: 'assistant', content: result.content });
     this.bus.broadcast(this.id, 'result', { agentId: this.id, task: description, result: result.content.substring(0, 2000) });
     this.logger.info(`Completed. Cost: $${result.cost.toFixed(6)}`);
-    UltraDevLog.push('SYSTEM', { event: 'task_agent_execute_done', agentId: this.id, taskId: this.taskId, cost: result.cost, contentLen: result.content.length });
+    JarvisDevLog.push('SYSTEM', { event: 'task_agent_execute_done', agentId: this.id, taskId: this.taskId, cost: result.cost, contentLen: result.content.length });
     return result.content;
   }
 

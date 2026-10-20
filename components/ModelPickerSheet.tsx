@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { UltraDevLog } from "@/src/utils/UltraDevLog";
+import { JarvisDevLog } from "@/src/utils/JarvisDevLog";
 
 const ACCENT = "#e5e5e5";
 const BG = "#000000";
@@ -80,7 +80,7 @@ export default function ModelPickerSheet({
   React.useEffect(() => {
     if (visible) {
       const slideVal = (slideAnim as any)._value ?? SHEET_MAX_HEIGHT;
-      UltraDevLog.pickerOpenDetailed({
+      JarvisDevLog.pickerOpenDetailed({
         requestedFilter: "all",
         effectiveFilter: "all",
         currentMode: ctxCurrentMode,
@@ -99,13 +99,13 @@ export default function ModelPickerSheet({
       slideAnim.setValue(SHEET_MAX_HEIGHT);
       fadeAnim.setValue(0);
       const currentSlide = (slideAnim as any)._value ?? -1;
-      UltraDevLog.pickerAnimate("open", currentSlide, 0, "spring");
+      JarvisDevLog.pickerAnimate("open", currentSlide, 0, "spring");
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
         Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 11, useNativeDriver: true }),
       ]).start((result) => {
         if (!result.finished) {
-          UltraDevLog.error(
+          JarvisDevLog.error(
             "ModelPickerSheet",
             "Open animation did not finish",
             `started=${currentSlide} visible=${visible}`
@@ -114,7 +114,7 @@ export default function ModelPickerSheet({
       });
     } else {
       const currentSlide = (slideAnim as any)._value ?? -1;
-      UltraDevLog.pickerAnimate(
+      JarvisDevLog.pickerAnimate(
         "close",
         currentSlide,
         SHEET_MAX_HEIGHT,
@@ -138,7 +138,7 @@ export default function ModelPickerSheet({
   // Log picker content state once when the picker becomes visible or model list changes.
   useEffect(() => {
     if (!visible) return;
-    UltraDevLog.pickerContentDetailed({
+    JarvisDevLog.pickerContentDetailed({
       requestedFilter: "all",
       effectiveFilter: "all",
       currentMode: ctxCurrentMode,
@@ -153,7 +153,7 @@ export default function ModelPickerSheet({
       defaultModel: ctxDefaultModel,
       note: `ok — ${displayedModels.length} models`,
     });
-    UltraDevLog.push("PICKER_RENDER" as any, {
+    JarvisDevLog.push("PICKER_RENDER" as any, {
       event: "picker_content_rendered",
       rawCount: models.length,
       displayedCount: displayedModels.length,
@@ -168,7 +168,7 @@ export default function ModelPickerSheet({
       return (
         <Pressable
           onPress={() => {
-            UltraDevLog.push("CHAIN", {
+            JarvisDevLog.push("CHAIN", {
               component: "ModelPickerSheet",
               action: "model_select",
               trigger: { modelId: item.id },
@@ -178,14 +178,14 @@ export default function ModelPickerSheet({
             });
             try {
               onSelect(item.id);
-              UltraDevLog.push("EFFECT", {
+              JarvisDevLog.push("EFFECT", {
                 component: "ModelPickerSheet",
                 action: "model_select_dispatched",
                 modelId: item.id,
                 dispatched: true,
               });
             } catch (selErr: any) {
-              UltraDevLog.push("EFFECT", {
+              JarvisDevLog.push("EFFECT", {
                 component: "ModelPickerSheet",
                 action: "model_select_dispatched",
                 modelId: item.id,

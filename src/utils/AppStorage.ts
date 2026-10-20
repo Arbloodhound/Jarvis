@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SecureVault } from '../security/SecureVault';
-import { UltraDevLog } from './UltraDevLog';
+import { JarvisDevLog } from './JarvisDevLog';
 
 // Keys that MUST survive process kills → vault (SecureStore)
 // AsyncStorage doesn't persist across process kills on Samsung.
@@ -31,7 +31,7 @@ export const AppStorage = {
       }
       return await AsyncStorage.getItem(key);
     } catch (e: any) {
-      UltraDevLog.push('STORAGE_READ_ERROR', { key, error: e?.message || 'unknown error' });
+      JarvisDevLog.push('STORAGE_READ_ERROR', { key, error: e?.message || 'unknown error' });
       return null;
     }
   },
@@ -49,7 +49,7 @@ export const AppStorage = {
       }
       await AsyncStorage.setItem(key, value);
     } catch (e: any) {
-      UltraDevLog.push('STORAGE_WRITE_ERROR', { key, error: e?.message || 'unknown error' });
+      JarvisDevLog.push('STORAGE_WRITE_ERROR', { key, error: e?.message || 'unknown error' });
       throw e;
     }
   },
@@ -63,7 +63,7 @@ export const AppStorage = {
       }
       await AsyncStorage.removeItem(key);
     } catch (e: any) {
-      UltraDevLog.push('STORAGE_DELETE_ERROR', { key, error: e?.message || 'unknown error' });
+      JarvisDevLog.push('STORAGE_DELETE_ERROR', { key, error: e?.message || 'unknown error' });
       throw e;
     }
   },

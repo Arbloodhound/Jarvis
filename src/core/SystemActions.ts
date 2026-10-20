@@ -1,5 +1,5 @@
 import { ActivityAction, startActivityAsync } from 'expo-intent-launcher';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface SystemActionResult {
   success: boolean;
@@ -18,7 +18,7 @@ const SYSTEM_ACTIONS: SystemActionEntry[] = [
                'toggle wifi', 'wifi on', 'wifi off', 'switch on wifi', 'switch off wifi'],
     handler: async () => {
       await startActivityAsync(ActivityAction.WIFI_SETTINGS);
-      UltraDevLog.systemAction('wifi toggle', true, "Opened Wi-Fi settings", true);
+      JarvisDevLog.systemAction('wifi toggle', true, "Opened Wi-Fi settings", true);
       return { success: true, routedToSettings: true,
         message: "I've opened Wi-Fi settings. Android no longer allows apps to toggle Wi-Fi directly — tap the switch at the top to turn it on or off." };
     },
@@ -28,7 +28,7 @@ const SYSTEM_ACTIONS: SystemActionEntry[] = [
                'disable bluetooth', 'toggle bluetooth', 'bluetooth on', 'bluetooth off'],
     handler: async () => {
       await startActivityAsync(ActivityAction.BLUETOOTH_SETTINGS);
-      UltraDevLog.systemAction('bluetooth toggle', true, "Opened Bluetooth settings", true);
+      JarvisDevLog.systemAction('bluetooth toggle', true, "Opened Bluetooth settings", true);
       return { success: true, routedToSettings: true,
         message: "I've opened Bluetooth settings. Android no longer allows apps to toggle Bluetooth directly — tap the switch at the top to turn it on or off." };
     },
@@ -38,7 +38,7 @@ const SYSTEM_ACTIONS: SystemActionEntry[] = [
                'enable airplane mode', 'disable airplane mode', 'flight mode on', 'flight mode off'],
     handler: async () => {
       await startActivityAsync(ActivityAction.AIRPLANE_MODE_SETTINGS);
-      UltraDevLog.systemAction('airplane mode toggle', true, "Opened Airplane Mode settings", true);
+      JarvisDevLog.systemAction('airplane mode toggle', true, "Opened Airplane Mode settings", true);
       return { success: true, routedToSettings: true,
         message: "I've opened Airplane Mode settings. Tap the switch to toggle it." };
     },
@@ -48,7 +48,7 @@ const SYSTEM_ACTIONS: SystemActionEntry[] = [
                'brightness up', 'brightness down', 'max brightness', 'lower brightness'],
     handler: async () => {
       await startActivityAsync(ActivityAction.DISPLAY_SETTINGS);
-      UltraDevLog.systemAction('brightness adjust', true, "Opened Display Settings", true);
+      JarvisDevLog.systemAction('brightness adjust', true, "Opened Display Settings", true);
       return { success: true, routedToSettings: true,
         message: "I've opened Display Settings where you can adjust brightness." };
     },

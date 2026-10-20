@@ -1,8 +1,8 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import type { ChatMessage } from "@/src/types/ultra";
-import { UltraDevLog } from "@/src/utils/UltraDevLog";
+import type { ChatMessage } from "@/src/types/jarvis";
+import { JarvisDevLog } from "@/src/utils/JarvisDevLog";
 
 const ACCENT = "#e5e5e5";
 const SURFACE2 = "#1a1a1a";
@@ -103,7 +103,7 @@ export function getQuickReplies(msg: ChatMessage): QuickReply[] {
     return replies;
   }
 
-  if (source === "model" || source === "ultra" || !source) {
+  if (source === "model" || source === "jarvis" || !source) {
     if (content.length > 400) {
       replies.push({ id: "summarize", label: "Summarize", icon: "contract-outline", iconFamily: "ionicons", prompt: "Summarize that more concisely" });
     }
@@ -134,7 +134,7 @@ export default function QuickReplies({ message, onSelect }: QuickRepliesProps) {
         <Pressable
           key={reply.id}
           onPress={() => {
-            UltraDevLog.push('CHAIN', { component: 'QuickReplies', action: 'chip_select', trigger: { replyId: reply.id }, state: { prompt: reply.prompt.slice(0, 40) }, data: { label: reply.label }, outcome: reply.prompt === '__COPY_ERROR__' ? 'copy_error' : 'send_prompt' });
+            JarvisDevLog.push('CHAIN', { component: 'QuickReplies', action: 'chip_select', trigger: { replyId: reply.id }, state: { prompt: reply.prompt.slice(0, 40) }, data: { label: reply.label }, outcome: reply.prompt === '__COPY_ERROR__' ? 'copy_error' : 'send_prompt' });
             onSelect(reply.prompt, message.content);
           }}
           style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}

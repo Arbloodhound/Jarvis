@@ -1,7 +1,7 @@
 // Group Manager — authoritative store for model groups and user defaults
 
 import { AppStorage } from '../../utils/AppStorage';
-import { UltraDevLog } from '../../utils/UltraDevLog';
+import { JarvisDevLog } from '../../utils/JarvisDevLog';
 import type { ModelGroup, GroupMember, UserDefaults, AllowedOperation, SelectionStrategy, ApiProvider } from '../../types/provider';
 import { DEFAULT_USER_DEFAULTS, STORAGE_KEYS as SK } from '../../types/provider';
 
@@ -19,7 +19,7 @@ export class GroupManager {
     if (this.initialized) return;
     await this.load();
     this.initialized = true;
-    UltraDevLog.push('SYSTEM', { event: 'group_manager_init', groupCount: this.groups.size });
+    JarvisDevLog.push('SYSTEM', { event: 'group_manager_init', groupCount: this.groups.size });
   }
 
   private async load(): Promise<void> {
@@ -43,7 +43,7 @@ export class GroupManager {
         this.roundRobinState = new Map(Object.entries(parsed));
       }
     } catch (e: any) {
-      UltraDevLog.push('ERROR', { event: 'group_manager_load_failed', error: e?.message });
+      JarvisDevLog.push('ERROR', { event: 'group_manager_load_failed', error: e?.message });
     }
   }
 
@@ -106,7 +106,7 @@ export class GroupManager {
     };
     this.groups.set(id, group);
     await this.saveGroups();
-    UltraDevLog.push('SYSTEM', { event: 'group_created', id, name: group.name });
+    JarvisDevLog.push('SYSTEM', { event: 'group_created', id, name: group.name });
     return group;
   }
 
@@ -116,7 +116,7 @@ export class GroupManager {
     const updated: ModelGroup = { ...existing, ...updates, updatedAt: Date.now() };
     this.groups.set(id, updated);
     await this.saveGroups();
-    UltraDevLog.push('SYSTEM', { event: 'group_updated', id });
+    JarvisDevLog.push('SYSTEM', { event: 'group_updated', id });
   }
 
   async deleteGroup(id: string): Promise<void> {
@@ -146,7 +146,7 @@ export class GroupManager {
     }
     await this.saveGroups();
     if (changed) await this.saveDefaults();
-    UltraDevLog.push('SYSTEM', { event: 'group_deleted', id });
+    JarvisDevLog.push('SYSTEM', { event: 'group_deleted', id });
   }
 
   async addMember(groupId: string, member: Omit<GroupMember, 'id'>): Promise<GroupMember> {
@@ -191,7 +191,7 @@ export class GroupManager {
   async saveUserDefaults(defaults: Partial<UserDefaults>): Promise<void> {
     this.userDefaults = { ...this.userDefaults, ...defaults };
     await this.saveDefaults();
-    UltraDevLog.push('SYSTEM', { event: 'user_defaults_saved' });
+    JarvisDevLog.push('SYSTEM', { event: 'user_defaults_saved' });
   }
 
   advanceRoundRobin(groupId: string, memberCount: number): number {
@@ -215,7 +215,7 @@ export class GroupManager {
     }
     this.userDefaults = { ...this.userDefaults, groupAssignments: ga };
     await this.saveDefaults();
-    UltraDevLog.push('SYSTEM', { event: 'group_manager_operation_group_set', operation, groupId });
+    JarvisDevLog.push('SYSTEM', { event: 'group_manager_operation_group_set', operation, groupId });
   }
 
   /**
@@ -251,7 +251,7 @@ export class GroupManager {
     }
     if (changed) {
       await this.saveGroups();
-      UltraDevLog.push('SYSTEM', { event: 'group_provider_references_removed', providerId });
+      JarvisDevLog.push('SYSTEM', { event: 'group_provider_references_removed', providerId });
     }
   }
 }

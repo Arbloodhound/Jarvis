@@ -5,13 +5,13 @@ import { FIXED_BUILD_SOURCES } from './templates/BuildTemplates';
 import { AGENT_TEMPLATES } from './templates/AgentTemplates';
 import { GENOME_TEMPLATES } from './templates/GenomeTemplates';
 import { createHash } from '../utils/crypto';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 const VERSION = '1.0.0';
 const SCHEMA_VERSION = '1';
 
 export function createDefaultGenome(): Genome {
-  UltraDevLog.push('SYSTEM', { event: 'genome_factory_create_default_start' });
+  JarvisDevLog.push('SYSTEM', { event: 'genome_factory_create_default_start' });
   const genome: Genome = {
     id: generateId(),
     schemaVersion: SCHEMA_VERSION,
@@ -23,7 +23,7 @@ export function createDefaultGenome(): Genome {
 
     identity: {
       name: 'Jarvis',
-      packageName: 'com.ultra.agent',
+      packageName: 'com.jarvis.agent',
       description: 'Self-improving Android agent capable of building applications and replicating.',
       greeting: 'I am Jarvis. Describe any app and I will build it. I can also improve myself.',
     },
@@ -89,7 +89,7 @@ export function createDefaultGenome(): Genome {
       ecjAsset: 'tools/ecj.dex',
       d8Asset: 'tools/d8.dex',
       androidJarUrl: 'https://raw.githubusercontent.com/nickreserved/AospMirror/main/platforms/android-33/android.jar',
-      signingAlias: 'ultra_sign',
+      signingAlias: 'jarvis_sign',
       signingValidYears: 25,
     },
 
@@ -113,7 +113,7 @@ function capCoreReasoning(): Capability {
     conflicts: [],
     permissions: [],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/core/IntentClassifier.java', content: '', isTemplate: false, generatedBy: 'ai' }],
+    sources: [{ path: 'src/com/jarvis/agent/core/IntentClassifier.java', content: '', isTemplate: false, generatedBy: 'ai' }],
     config: {
       intentCategories: cv('string[]', ['build_app', 'modify_app', 'chat', 'self_improve', 'system_command', 'question'], 'Recognized intent types', true),
       confidenceThreshold: cv('number', 0.7, 'Minimum confidence to act without clarification', true),
@@ -138,7 +138,7 @@ function capCorePlanning(): Capability {
     conflicts: [],
     permissions: [],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/core/ActionPlanner.java', content: '', isTemplate: false, generatedBy: 'ai' }],
+    sources: [{ path: 'src/com/jarvis/agent/core/ActionPlanner.java', content: '', isTemplate: false, generatedBy: 'ai' }],
     config: {
       maxPlanSteps: cv('number', 20, 'Maximum steps in an action plan', true),
       planReviewEnabled: cv('boolean', true, 'AI reviews its own plan before execution', true),
@@ -162,7 +162,7 @@ function capCoreSafety(): Capability {
     conflicts: [],
     permissions: [],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/safety/SafetyGate.java', content: '', isTemplate: false, generatedBy: 'template' }],
+    sources: [{ path: 'src/com/jarvis/agent/safety/SafetyGate.java', content: '', isTemplate: false, generatedBy: 'template' }],
     config: {},
     behaviorSpec: `Intercept all actions before execution. Classify risk tier. For actions requiring approval, display a dialog to the user showing what will happen and why. Cache user approvals for repeated identical actions. Log all decisions. NEVER allow bypassing for blocked actions.`,
     mutable: false,
@@ -183,7 +183,7 @@ function capNetworkAi(): Capability {
     conflicts: [],
     permissions: ['android.permission.INTERNET'],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/network/AiClient.java', content: '', isTemplate: false, generatedBy: 'template' }],
+    sources: [{ path: 'src/com/jarvis/agent/network/AiClient.java', content: '', isTemplate: false, generatedBy: 'template' }],
     config: {},
     behaviorSpec: `HTTP client for AI chat completions API. Support multiple models. Retry with exponential backoff. Stream-capable. Multi-turn conversation context.`,
     mutable: true,
@@ -204,9 +204,9 @@ function capStorageDb(): Capability {
     conflicts: [],
     permissions: [],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/storage/AgentDatabase.java', content: '', isTemplate: false, generatedBy: 'template' }],
+    sources: [{ path: 'src/com/jarvis/agent/storage/AgentDatabase.java', content: '', isTemplate: false, generatedBy: 'template' }],
     config: {
-      dbName: cv('string', 'ultra_agent.db', 'SQLite database name', false),
+      dbName: cv('string', 'jarvis_agent.db', 'SQLite database name', false),
       dbVersion: cv('number', 1, 'Database schema version', true),
     },
     behaviorSpec: `SQLite database with tables: conversations (id, title, created_at, summary), messages (id, conversation_id, role, content, created_at, meta), genome (id, json, hash, created_at), build_history (id, spec_json, apk_path, success, created_at), mutations (id, genome_id, operation, description, created_at). Support schema migration.`,
@@ -228,7 +228,7 @@ function capStorageFiles(): Capability {
     conflicts: [],
     permissions: ['android.permission.WRITE_EXTERNAL_STORAGE', 'android.permission.READ_EXTERNAL_STORAGE'],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/storage/FileManager.java', content: '', isTemplate: false, generatedBy: 'template' }],
+    sources: [{ path: 'src/com/jarvis/agent/storage/FileManager.java', content: '', isTemplate: false, generatedBy: 'template' }],
     config: {},
     behaviorSpec: `File system operations scoped to app directory. Read, write, delete, list, copy. Create project directory structures. Write source files from strings. Read compilation output.`,
     mutable: true,
@@ -250,8 +250,8 @@ function capBuildCompiler(): Capability {
     permissions: [],
     services: [],
     sources: [
-      { path: 'src/com/ultra/agent/build/BuildToolchain.java', content: 'FIXED:build_toolchain', isTemplate: false, generatedBy: 'fixed' },
-      { path: 'src/com/ultra/agent/build/MultiFileCompiler.java', content: 'FIXED:multi_file_compiler', isTemplate: false, generatedBy: 'fixed' },
+      { path: 'src/com/jarvis/agent/build/BuildToolchain.java', content: 'FIXED:build_toolchain', isTemplate: false, generatedBy: 'fixed' },
+      { path: 'src/com/jarvis/agent/build/MultiFileCompiler.java', content: 'FIXED:multi_file_compiler', isTemplate: false, generatedBy: 'fixed' },
     ],
     config: {},
     behaviorSpec: `Compile Java source files using ECJ loaded via DexClassLoader. Convert .class files to DEX using D8. Support custom classpath for dependencies.`,
@@ -274,8 +274,8 @@ function capBuildPackager(): Capability {
     permissions: [],
     services: [],
     sources: [
-      { path: 'src/com/ultra/agent/build/BinaryManifestWriter.java', content: 'FIXED:binary_manifest', isTemplate: false, generatedBy: 'fixed' },
-      { path: 'src/com/ultra/agent/build/ApkPackager.java', content: 'FIXED:apk_packager', isTemplate: false, generatedBy: 'fixed' },
+      { path: 'src/com/jarvis/agent/build/BinaryManifestWriter.java', content: 'FIXED:binary_manifest', isTemplate: false, generatedBy: 'fixed' },
+      { path: 'src/com/jarvis/agent/build/ApkPackager.java', content: 'FIXED:apk_packager', isTemplate: false, generatedBy: 'fixed' },
     ],
     config: {},
     behaviorSpec: `Package compiled DEX + binary manifest into unsigned APK ZIP.`,
@@ -298,9 +298,9 @@ function capBuildSigner(): Capability {
     permissions: [],
     services: [],
     sources: [
-      { path: 'src/com/ultra/agent/build/DerEncoder.java', content: 'FIXED:der_encoder', isTemplate: false, generatedBy: 'fixed' },
-      { path: 'src/com/ultra/agent/build/CertificateGenerator.java', content: 'FIXED:cert_generator', isTemplate: false, generatedBy: 'fixed' },
-      { path: 'src/com/ultra/agent/build/ApkSignerV1.java', content: 'FIXED:apk_signer', isTemplate: false, generatedBy: 'fixed' },
+      { path: 'src/com/jarvis/agent/build/DerEncoder.java', content: 'FIXED:der_encoder', isTemplate: false, generatedBy: 'fixed' },
+      { path: 'src/com/jarvis/agent/build/CertificateGenerator.java', content: 'FIXED:cert_generator', isTemplate: false, generatedBy: 'fixed' },
+      { path: 'src/com/jarvis/agent/build/ApkSignerV1.java', content: 'FIXED:apk_signer', isTemplate: false, generatedBy: 'fixed' },
     ],
     config: {},
     behaviorSpec: `V1 JAR signing with hand-rolled DER/X.509/PKCS7. Generate or load RSA 2048 keypair.`,
@@ -322,7 +322,7 @@ function capBuildPipeline(): Capability {
     conflicts: [],
     permissions: [],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/build/BuildPipeline.java', content: '', isTemplate: false, generatedBy: 'template' }],
+    sources: [{ path: 'src/com/jarvis/agent/build/BuildPipeline.java', content: '', isTemplate: false, generatedBy: 'template' }],
     config: {
       maxDebugIterations: cv('number', 4, 'Max compile-fix cycles per file', true),
       maxGlobalRetries: cv('number', 3, 'Max full recompilation attempts', true),
@@ -347,8 +347,8 @@ function capUiChat(): Capability {
     permissions: [],
     services: [],
     sources: [
-      { path: 'src/com/ultra/agent/ui/MainActivity.java', content: '', isTemplate: false, generatedBy: 'template' },
-      { path: 'src/com/ultra/agent/ui/ChatAdapter.java', content: '', isTemplate: false, generatedBy: 'template' },
+      { path: 'src/com/jarvis/agent/ui/MainActivity.java', content: '', isTemplate: false, generatedBy: 'template' },
+      { path: 'src/com/jarvis/agent/ui/ChatAdapter.java', content: '', isTemplate: false, generatedBy: 'template' },
     ],
     config: {
       maxVisibleMessages: cv('number', 100, 'Messages shown before pagination', true),
@@ -378,7 +378,7 @@ function capSystemShell(): Capability {
     permissions: [],
     services: [],
     sources: [
-      { path: 'src/com/ultra/agent/system/SafeShellExecutor.java', content: 'FIXED:safe_shell', isTemplate: false, generatedBy: 'fixed' },
+      { path: 'src/com/jarvis/agent/system/SafeShellExecutor.java', content: 'FIXED:safe_shell', isTemplate: false, generatedBy: 'fixed' },
     ],
     config: {},
     behaviorSpec: `Hardened shell executor with allowlist, metacharacter rejection, timeout, audit logging.`,
@@ -400,7 +400,7 @@ function capSystemInstaller(): Capability {
     conflicts: [],
     permissions: ['android.permission.REQUEST_INSTALL_PACKAGES'],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/system/AppInstaller.java', content: '', isTemplate: false, generatedBy: 'template' }],
+    sources: [{ path: 'src/com/jarvis/agent/system/AppInstaller.java', content: '', isTemplate: false, generatedBy: 'template' }],
     config: {},
     behaviorSpec: `Install APK files using Intent with FileProvider for API 24+. Request user confirmation through system installer dialog.`,
     mutable: true,
@@ -421,7 +421,7 @@ function capGenomeReader(): Capability {
     conflicts: [],
     permissions: [],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/genome/GenomeManager.java', content: '', isTemplate: false, generatedBy: 'template' }],
+    sources: [{ path: 'src/com/jarvis/agent/genome/GenomeManager.java', content: '', isTemplate: false, generatedBy: 'template' }],
     config: {},
     behaviorSpec: `Read genome from assets/genome.json on first launch, store in database. Load, parse, serialize genomes. Provide current genome to other capabilities.`,
     mutable: false,
@@ -442,7 +442,7 @@ function capGenomeCompiler(): Capability {
     conflicts: [],
     permissions: [],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/genome/GenomeCompilerNative.java', content: '', isTemplate: false, generatedBy: 'template' }],
+    sources: [{ path: 'src/com/jarvis/agent/genome/GenomeCompilerNative.java', content: '', isTemplate: false, generatedBy: 'template' }],
     config: {},
     behaviorSpec: `Compile a genome into a complete Android project: resolve fixed sources, apply templates, use AI to generate behavioral code, produce source files for the build pipeline. The output is a set of source files + manifest config + the genome.json as an asset (so offspring carry their genome). This is the Von Neumann constructor.`,
     mutable: false,
@@ -463,7 +463,7 @@ function capGenomeMutator(): Capability {
     conflicts: [],
     permissions: [],
     services: [],
-    sources: [{ path: 'src/com/ultra/agent/genome/GenomeMutatorNative.java', content: '', isTemplate: false, generatedBy: 'ai' }],
+    sources: [{ path: 'src/com/jarvis/agent/genome/GenomeMutatorNative.java', content: '', isTemplate: false, generatedBy: 'ai' }],
     config: {},
     behaviorSpec: `AI-driven genome modification. Analyze current genome for improvement opportunities. Propose structured mutations. Validate against invariants. Apply mutations to produce new genome. Trigger rebuild and fitness evaluation. Rollback if fitness degrades. Requires user approval for all mutations.`,
     mutable: true,
@@ -484,13 +484,13 @@ function capSenseAccessibility(): Capability {
     conflicts: [],
     permissions: ['android.permission.BIND_ACCESSIBILITY_SERVICE'],
     services: [{
-      className: 'com.ultra.agent.sense.AppControllerService',
+      className: 'com.jarvis.agent.sense.AppControllerService',
       exported: false,
       permission: 'android.permission.BIND_ACCESSIBILITY_SERVICE',
       intentFilters: ['android.accessibilityservice.AccessibilityService'],
     }],
     sources: [
-      { path: 'src/com/ultra/agent/sense/AppControllerService.java', content: 'FIXED:app_controller', isTemplate: false, generatedBy: 'fixed' },
+      { path: 'src/com/jarvis/agent/sense/AppControllerService.java', content: 'FIXED:app_controller', isTemplate: false, generatedBy: 'fixed' },
     ],
     config: {},
     behaviorSpec: `Accessibility service for reading screen content and interacting with other apps. Read UI tree as structured data. Click elements by text or ID. Type text. Scroll. Navigate. Used for testing built apps and interacting with installed apps.`,
@@ -577,7 +577,7 @@ function defaultBehaviorSpecs(): BehaviorSpec[] {
   return [
     {
       id: 'beh.agent.core',
-      targetFile: 'src/com/ultra/agent/core/AgentCore.java',
+      targetFile: 'src/com/jarvis/agent/core/AgentCore.java',
       description: `Main agent loop. Receives user input from UI. Classifies intent using IntentClassifier. Creates action plan using ActionPlanner. Executes plan steps sequentially, checking SafetyGate before each action. Handles errors by replanning. Reports progress and results back to UI. For build_app intents, delegates to BuildPipeline. For self_improve intents, delegates to GenomeMutator.`,
       constraints: [
         'All actions must go through SafetyGate.check() before execution',
@@ -588,7 +588,7 @@ function defaultBehaviorSpecs(): BehaviorSpec[] {
     },
     {
       id: 'beh.intent.classifier',
-      targetFile: 'src/com/ultra/agent/core/IntentClassifier.java',
+      targetFile: 'src/com/jarvis/agent/core/IntentClassifier.java',
       description: `Use AI to classify user messages into intent categories. Parse AI response into structured IntentResult with category, confidence, and extracted parameters. Handle ambiguous intents by asking for clarification.`,
       constraints: [
         'Must handle AI failures gracefully (default to chat intent)',
@@ -598,7 +598,7 @@ function defaultBehaviorSpecs(): BehaviorSpec[] {
     },
     {
       id: 'beh.action.planner',
-      targetFile: 'src/com/ultra/agent/core/ActionPlanner.java',
+      targetFile: 'src/com/jarvis/agent/core/ActionPlanner.java',
       description: `Given classified intent, produce a sequence of executable steps. Each step is an Action with type, params, expected result, and fallback. For build intents, the plan includes: design spec, generate files, compile, fix errors, package, sign, install. For self-improve, the plan includes: analyze, propose mutations, validate, apply, build, test, evaluate.`,
       constraints: [
         'Plans must be bounded (maxPlanSteps from config)',

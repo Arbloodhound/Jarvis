@@ -17,12 +17,12 @@ import { ModelRouter } from './ModelRouter';
 import { MavenResolver } from './MavenResolver';
 import { TestRunner } from './TestRunner';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import * as Battery from 'expo-battery';
 import DeviceInfo from 'react-native-device-info';
 import AppController from '../native/AppController';
 import AgentNative from '../native/AgentNative';
-import type { ActionPlan } from '../types/ultra';
+import type { ActionPlan } from '../types/jarvis';
 import type { Genome } from '../genome/types';
 import { createDefaultGenome } from '../genome/GenomeFactory';
 import { GenomeCompiler } from '../genome/GenomeCompiler';
@@ -242,7 +242,7 @@ export class TaskExecutor {
       } catch (e: any) { DebugLog.error('GenomeLoad', e?.message || 'genome.json parse failed', e?.stack); }
     } else {
       try {
-        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ultra:genome') : null;
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('jarvis:genome') : null;
         if (raw) {
           this.currentGenome = JSON.parse(raw) as Genome;
           return this.currentGenome;
@@ -265,7 +265,7 @@ export class TaskExecutor {
     } else {
       try {
         if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('ultra:genome', JSON.stringify(genome));
+          localStorage.setItem('jarvis:genome', JSON.stringify(genome));
         }
       } catch (e: any) {
         this.logger.error('Failed to persist genome to localStorage: ' + e.message);

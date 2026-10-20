@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import AppController from '../native/AppController';
 import { performTap, performSwipe, getScreenContentFlat } from '../native/AppController';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { CorrIdScope } from '../utils/CorrIdScope';
 
 interface UINode {

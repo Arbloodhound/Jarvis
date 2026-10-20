@@ -4,7 +4,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as Camera from 'expo-camera';
 import * as Location from 'expo-location';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface ProbeResult {
   capability: string;
@@ -33,7 +33,7 @@ export class CapabilityProbe {
   async probe(): Promise<CapabilityProbeResults> {
     if (this.probed) return this.results;
     const isNative = Platform.OS !== 'web';
-    UltraDevLog.push('SYSTEM', { event: 'capability_probe_start', platform: Platform.OS, isNative });
+    JarvisDevLog.push('SYSTEM', { event: 'capability_probe_start', platform: Platform.OS, isNative });
 
     const checks: Array<() => Promise<void>> = [
       async () => {
@@ -155,7 +155,7 @@ export class CapabilityProbe {
     const granted = Object.values(this.results).filter(r => r.granted).length;
     const denied = Object.values(this.results).filter(r => !r.granted && !r.unavailable).length;
     const unavailable = Object.values(this.results).filter(r => r.unavailable).length;
-    UltraDevLog.push('SYSTEM', { event: 'capability_probe_done', platform: Platform.OS, checked: Object.keys(this.results).length, granted, denied, unavailable });
+    JarvisDevLog.push('SYSTEM', { event: 'capability_probe_done', platform: Platform.OS, checked: Object.keys(this.results).length, granted, denied, unavailable });
     return this.results;
   }
 

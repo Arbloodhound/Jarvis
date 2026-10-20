@@ -1,6 +1,6 @@
 import { SecureVault } from '../security/SecureVault';
 import { Logger } from './Logger';
-import { UltraDevLog } from './UltraDevLog';
+import { JarvisDevLog } from './JarvisDevLog';
 import * as FileSystem from 'expo-file-system/legacy';
 
 interface Pattern {
@@ -123,7 +123,7 @@ export class PreferenceLearner {
       }
     }
     await this.persist();
-    UltraDevLog.learnPackage(trigger, packageName, !!existing);
+    JarvisDevLog.learnPackage(trigger, packageName, !!existing);
   }
 
   findPattern(request: string): Pattern | null {
@@ -160,7 +160,7 @@ export class PreferenceLearner {
     const key = `app_alias:${appName.toLowerCase().trim()}`;
     this.preferences.set(key, { key, value: packageName, source: 'user_confirmed', confidence: 1.0, updatedAt: Date.now() });
     await this.persist();
-    UltraDevLog.systemEvent('PreferenceLearner', `Learned alias: "${appName}" → ${packageName}`);
+    JarvisDevLog.systemEvent('PreferenceLearner', `Learned alias: "${appName}" → ${packageName}`);
   }
 
   /**
@@ -182,7 +182,7 @@ export class PreferenceLearner {
     const existed = this.preferences.delete(key);
     if (existed) {
       await this.persist();
-      UltraDevLog.systemEvent('PreferenceLearner', `Forgot alias: "${appName}"`);
+      JarvisDevLog.systemEvent('PreferenceLearner', `Forgot alias: "${appName}"`);
     }
     return existed;
   }
@@ -244,14 +244,14 @@ export class PreferenceLearner {
       const exportData = {
         version: '1.0',
         exportedAt: new Date().toISOString(),
-        source: 'agent-ultra',
+        source: 'jarvis',
         preferred_model: preferredModel,
         learned_patterns: learnedPatterns,
         user_preferences: userPreferences,
       };
 
       const timestamp = Date.now();
-      const filename = `agent_ultra_prefs_${timestamp}.json`;
+      const filename = `agent_jarvis_prefs_${timestamp}.json`;
       const docDir = FileSystem.documentDirectory;
       if (!docDir) {
         throw new Error('FileSystem document directory not available');

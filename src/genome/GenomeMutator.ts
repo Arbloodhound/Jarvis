@@ -3,7 +3,7 @@ import type {
 } from './types';
 import { GenomeValidator } from './GenomeValidator';
 import { createHash } from '../utils/crypto';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 interface AiClient {
   chat: (args: { model: string; messages: Array<{ role: string; content: string }>; max_tokens: number }) => Promise<string>;
@@ -17,7 +17,7 @@ export class GenomeMutator {
     private getModel: () => Promise<string>
   ) {
     this.validator = new GenomeValidator();
-    UltraDevLog.push('SYSTEM', { event: 'genome_mutator_init' });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_mutator_init' });
   }
 
   async proposeMutations(genome: Genome, userGoal?: string): Promise<MutationRequest[]> {
@@ -26,7 +26,7 @@ export class GenomeMutator {
       .map(c => `- ${c.id} (${c.category}, mutable=${c.mutable}): ${c.name}`)
       .join('\n');
 
-    UltraDevLog.push('SYSTEM', { event: 'genome_mutator_propose_start', genomeId: genome.id, generation: genome.generation, hasUserGoal: !!userGoal, capabilityCount: genome.capabilities.length, model });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_mutator_propose_start', genomeId: genome.id, generation: genome.generation, hasUserGoal: !!userGoal, capabilityCount: genome.capabilities.length, model });
 
     const prompt = userGoal
       ? `The user wants: ${userGoal}\n\nAnalyze the genome and propose mutations to achieve this goal.`
@@ -70,16 +70,16 @@ Mutation history length: ${genome.mutations.length}`,
     try {
       const parsed = JSON.parse(response);
       const proposals = Array.isArray(parsed) ? parsed as MutationRequest[] : [];
-      UltraDevLog.push('SYSTEM', { event: 'genome_mutator_propose_done', genomeId: genome.id, proposalCount: proposals.length, operations: proposals.map(p => p.operation) });
+      JarvisDevLog.push('SYSTEM', { event: 'genome_mutator_propose_done', genomeId: genome.id, proposalCount: proposals.length, operations: proposals.map(p => p.operation) });
       return proposals;
     } catch (err: any) {
-      UltraDevLog.push('SYSTEM', { event: 'genome_mutator_propose_parse_fail', genomeId: genome.id, error: err?.message });
+      JarvisDevLog.push('SYSTEM', { event: 'genome_mutator_propose_parse_fail', genomeId: genome.id, error: err?.message });
       return [];
     }
   }
 
   async applyMutations(genome: Genome, mutations: MutationRequest[]): Promise<MutationResult> {
-    UltraDevLog.push('SYSTEM', { event: 'genome_mutator_apply_start', genomeId: genome.id, generation: genome.generation, mutationCount: mutations.length });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_mutator_apply_start', genomeId: genome.id, generation: genome.generation, mutationCount: mutations.length });
     const mutated = this.deepClone(genome);
     const records: MutationRecord[] = [];
     const errors: string[] = [];
@@ -88,15 +88,15 @@ Mutation history length: ${genome.mutations.length}`,
       try {
         const record = this.applyMutation(mutated, mutation);
         records.push(record);
-        UltraDevLog.push('SYSTEM', { event: 'genome_mutator_apply_mutation', genomeId: genome.id, operation: mutation.operation, target: mutation.target });
+        JarvisDevLog.push('SYSTEM', { event: 'genome_mutator_apply_mutation', genomeId: genome.id, operation: mutation.operation, target: mutation.target });
       } catch (error: any) {
         errors.push(`${mutation.operation}/${mutation.target}: ${error.message}`);
-        UltraDevLog.push('SYSTEM', { event: 'genome_mutator_apply_mutation_fail', genomeId: genome.id, operation: mutation.operation, target: mutation.target, error: error?.message });
+        JarvisDevLog.push('SYSTEM', { event: 'genome_mutator_apply_mutation_fail', genomeId: genome.id, operation: mutation.operation, target: mutation.target, error: error?.message });
       }
     }
 
     if (errors.length > 0 && records.length === 0) {
-      UltraDevLog.push('SYSTEM', { event: 'genome_mutator_apply_all_failed', genomeId: genome.id, errors });
+      JarvisDevLog.push('SYSTEM', { event: 'genome_mutator_apply_all_failed', genomeId: genome.id, errors });
       return { success: false, error: errors.join('; '), appliedMutations: [] };
     }
 
@@ -109,11 +109,11 @@ Mutation history length: ${genome.mutations.length}`,
 
     const validation = this.validator.validate(mutated);
     if (validation.violations.length > 0) {
-      UltraDevLog.push('SYSTEM', { event: 'genome_mutator_apply_invalid', genomeId: genome.id, violations: validation.violations.length, firstViolation: validation.violations[0] });
+      JarvisDevLog.push('SYSTEM', { event: 'genome_mutator_apply_invalid', genomeId: genome.id, violations: validation.violations.length, firstViolation: validation.violations[0] });
       return { success: false, error: `Validation failed: ${validation.violations[0]}`, appliedMutations: records };
     }
 
-    UltraDevLog.push('SYSTEM', { event: 'genome_mutator_apply_done', fromGenomeId: genome.id, newGenomeId: mutated.id, newGeneration: mutated.generation, appliedCount: records.length, skippedCount: errors.length, warnings: validation.warnings.length });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_mutator_apply_done', fromGenomeId: genome.id, newGenomeId: mutated.id, newGeneration: mutated.generation, appliedCount: records.length, skippedCount: errors.length, warnings: validation.warnings.length });
     return { success: true, mutatedGenome: mutated, appliedMutations: records };
   }
 
