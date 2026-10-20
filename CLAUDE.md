@@ -1,8 +1,20 @@
-# CLAUDE.md — Agent Ultra Operating Rules
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/CLAUDE.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
+# CLAUDE.md — Jarvis Operating Rules
+
+*Last updated: 2026-10-19.*
 
 ## Project Identity
 
-Agent Ultra is an Android AI assistant app built on Expo/EAS. The developer (Dafarus) is technically capable but has not coded professionally in ~30 years. Every recommendation must be achievable within this reality. Protect against non-programmer blind spots without being condescending.
+Jarvis (Agent Ultra) is an Android AI assistant. The consolidated repository (`Arbloodhound/Jarvis`, all work on `main` since the 2026-10-19 full-branch consolidation) contains:
+
+- `ultra-native/` — the shipping app: native Kotlin Android app, including the harness package `com.agent.ultra.harness`.
+- `desktop/` — a TypeScript desktop app (agent loop, gate, providers, memory, tools, gateway server + CLI).
+- `src/` — the TypeScript app of the Expo / React Native lineage. Its live path is `AgentCore` / `BrainExecutor` / `TaskExecutor`; its `server/` directory is orphaned.
+
+The previous version of this file described the project as "built on Expo/EAS" with a single developer profile. That framing is superseded by the consolidation above. Expo is a lineage of one tree in the repo, not the product framing for the whole repo.
+
+**Current-state discipline:** the only source for current-state facts in session work is the audited state: the 2026-10-19 code audits (pass 2 + supplement), the merge log (`MERGE_LOG_2026-10-19.md`), and `ARCHITECTURE.md`. **CI has not yet compiled the merged tree** — never describe the merged tree as building, passing, or proven until CI runs. Audit verification was grep-level (definitions, call sites, imports), not compilation.
 
 ## Two-Claude Workflow
 
@@ -12,7 +24,7 @@ This project uses two Claude instances with distinct roles:
 
 **Claude Code (this instance)** — Execution, codebase-aware validation, file writes, Git commits, DEVLOG updates. Claude Code works directly in the project folder and validates all proposed changes against the real code before applying.
 
-**The bridge:** When Chat Claude produces solution files, Dafarus downloads them to his local machine. Claude Code reads those files, validates against the actual codebase (correct imports, paths, signatures, no conflicts), and applies if correct or flags issues if not.
+**The bridge:** When Chat Claude produces solution files, the owner downloads them to the local machine. Claude Code reads those files, validates against the actual codebase (correct imports, paths, signatures, no conflicts), and applies if correct or flags issues if not.
 
 **Rule:** When reading a solution file from Chat Claude, always check the intent header at the top of the file before applying. Verify the stated assumptions match the real codebase.
 
@@ -40,20 +52,41 @@ Use one of these explicitly for every conclusion:
 - **RUNTIME DISPROVES CLAIMED FIX** — source patch exists, runtime contradicts success
 - **CANNOT VERIFY FROM CURRENT ARTIFACTS** — limitations prevent honest conclusion
 
+Applied to the merged tree today (2026-10-19): the whole tree is at best SOURCE-FIXED BUT RUNTIME-UNPROVEN for anything that needs compilation or a phone, because CI has not compiled it. Grep-level audit findings are PARTIALLY PROVEN by construction: definitions and call sites were checked; behaviour was not run.
+
 ## Subsystems
 
-Treat the app as these primary subsystems. Always identify which is in scope before doing any work:
+Treat the repo as these primary subsystems, following the audited code map. Always identify which is in scope before doing any work:
 
-- **A. Brain / Cognition** — AgentCore, Cortex, ReActLoop, TaskPlanner, TaskExecutor, IntentResolver, CommandParser, ContextAggregator
-- **B. Provider / Model / Routing** — AiService, ProviderManager, GroupManager, ModelRouter
-- **C. Memory / Learning / State** — MemoryManager, KnowledgeGraph, ConversationManager, PreferenceLearner
-- **D. Actions / Native / Device Control** — SystemActions, AppController, AgentNative, CapabilityRegistry
-- **E. Permissions / Security** — BiometricGate, SecureVault, PermissionBroker
-- **F. Diagnostics / Logging** — UltraDevLog, Logger, ExecutionLedger, EventMonitor
-- **G. Settings / Config** — settings screens, cost/security/dev tool controls
-- **H. Build / Release** — app.json, eas.json, package.json, plugins, build scripts
+- **A. Brain / Cognition (Kotlin)** — `ultra-native` `agent/` (Brain 12-turn loop, Tools, navigation)
+- **B. Gate / Policy (Kotlin)** — `ultra-native` `gate/` (Gate, Manifest, contracts, taint — deny-by-default)
+- **C. Memory / Listening (Kotlin)** — `ultra-native` `listen/` (ambient listening, speech, notes, Librarian, claim promotion) + `ui/` / `data/` (Room, `UltraDatabase` v9)
+- **D. Device / Models / Network (Kotlin)** — `ultra-native` `local/` (on-device models via llama.cpp JNI, downloads), `provider/` (`OpenAiClient`, `ProviderConfig`), `net/` (`TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard`)
+- **E. Research (Kotlin)** — `ultra-native` `research/` (browse, shopping, investigate) + `bench/`
+- **F. Harness** — `com.agent.ultra.harness` inside `ultra-native`: MemoryClaims, ApprovalGrants, Scheduler (+ runtime / receiver), SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, NLI head, bandit (ForYou), `connectors/` (Gmail, Google Calendar / Docs / Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber)
+- **G. Desktop (TypeScript)** — `desktop/`: agent loop, gate (8 ordered checks), providers (Claude cloud + local; no cross-provider fallback), memory (embeddings store / recall; forget → 500-cap trash), tools, gateway server + CLI; tests in `desktop/test` (7 files)
+- **H. TS lineage app** — `src/`: live path `AgentCore` / `BrainExecutor` / `TaskExecutor`; `server/` is orphaned — do not build on it
+- **I. Build / Release** — Gradle build for `ultra-native`, desktop build, GitHub Actions, signing (release builds fail without `keystore.properties`, by design)
+
+The previous version's subsystem list (Expo-era names such as Cortex, ReActLoop, ProviderManager, BiometricGate, UltraDevLog as the primary map) is superseded by the list above. Some of those names survive inside the `src/` lineage; they are not the map for the Kotlin app or the harness.
 
 If work crosses subsystems, state the crossing explicitly and define the dependency order.
+
+Known cross-subsystem state to respect (2026-10-19): harness DB wiring is resolved in the merged tree (`UltraDatabase` v9; entities `ClaimEntity` / `GrantEntity` / `MemoryEmbeddingEntity` / `BanditArmEntity`; accessors `claims()` / `claimForget()` / `grants()` / `embeddings()` / `banditArms()`; `MIGRATION_7_8` + `MIGRATION_8_9` registered) — but `SchedulerReceiver` and `SpotifyRedirectActivity` are still **not** registered in `AndroidManifest.xml`, and two Kotlin unit-test files are broken (see `ARCHITECTURE.md` §F). Do not "fix" adjacent wiring speculatively; each fix needs its own root-cause proof.
+
+## Standing Behaviour Rules
+
+Any behaviour statement, implementation, or doc must match these:
+
+- The agent informs and asks; it does not permit or forbid. Consequential actions (send, post, purchase, delete) stop at confirmation; the user decides.
+- Products / shopping = legitimate-product / company verification + scam screening only. "Plugs" = known non-scammers / trusted sources. `ShoppingCheckout` has no purchase path (prepare / display / track only) — keep it that way.
+- Tor is opt-in, default OFF. Onion URLs NEVER fall back to clearnet. Onion exclusion stays a separate shopping-layer function (`excludeOnion` / `isOnionUrl`).
+- Human verification (CAPTCHA etc.) is the user's: park with the exact link / action, never solve or bypass.
+- Never type into password fields. Screen actions are bound to the snapshot they were planned from; stale screens refused.
+- SMS / email codes and reset links never reach the cloud model (opaque placeholder references only).
+- Purchases always need fresh approval. No lasting grant covers a purchase, anywhere.
+- The agent cannot see the approval card and cannot revoke grants; the user manages grants in settings.
+- Credentials live in the platform vault; the agent sees opaque handles only. Trash is emptied by the user in settings, never by the agent.
 
 ## Session Start Sequence
 
@@ -69,12 +102,12 @@ At the beginning of every session:
 At the end of every session:
 
 1. **Update DEVLOG.md** — what was done, why, what's still open, what to pick up next
-2. **Git commit** — commit all changes with a clear message
+2. **Git commit** — commit all changes with a clear message, on `main` (or a branch the owner named; there is no standing feature branch after the 2026-10-19 consolidation)
 3. **State honest status** — use honesty statuses above
 
 ## Brain Work
 
-When working on the brain/cognition path, actively inspect:
+When working on the brain / cognition path, actively inspect:
 
 - Natural language understanding quality (not just keyword matching)
 - Context aggregation (too much? too little? stale context contamination?)
@@ -89,14 +122,14 @@ Brain failure classes to suspect: understanding failures, planning failures, exe
 
 ## Phone-Use Brain Work
 
-When working on phone/device control, enforce the perceive→think→act→verify loop:
+When working on phone / device control, enforce the perceive → think → act → verify loop:
 
-1. **Perceive** current screen/app state from real evidence
+1. **Perceive** current screen / app state from real evidence
 2. **Think** about what action moves toward the goal
 3. **Act** using a primitive from the action vocabulary
 4. **Verify** the state actually changed as expected
 
-Never emit vague meta-actions. Every action must be concrete, executable, and verifiable.
+Never emit vague meta-actions. Every action must be concrete, executable, and verifiable. Screen actions stay bound to the snapshot they were planned from.
 
 **For full phone-use methodology, read:** SKILLS_REFERENCE.md → Closed-Loop Phone-Use Brain.
 
@@ -111,17 +144,21 @@ Before proposing any fix:
 
 **For full debug methodology, read:** SKILLS_REFERENCE.md → Debug Skill.
 
+Current known defects are a starting point for classification, not a licence to fix them all: the audits list 119 defects (pass 2) and 87 findings (supplement) across different snapshots — 206 findings total, not a deduplicated merged-tree count. Post-merge there are 0 known criticals. Pick defects one at a time, with proof.
+
 ## Direction Challenges
 
 Before enabling any proposed work, pressure-test it:
 
-- Does this move Agent Ultra toward its real goal (a capable, reliable phone AI agent)?
+- Does this move Jarvis toward its real goal (a capable, reliable phone AI agent)?
 - Is this the highest-leverage thing to work on right now?
 - Is this solving the root problem or a symptom?
 - Is there a simpler path?
 - Is something else blocking progress that should be addressed first?
 
 Anti-patterns to catch: solving symptoms instead of root causes, adding features before fundamentals work, using AI where deterministic logic belongs, complexity without capability, architecture theater, parallel half-built paths, speculative infrastructure.
+
+Note: "parallel half-built paths" now has a concrete repo meaning — the tree already carries the Kotlin app, the harness, the desktop app, and the TS lineage app. New parallel paths need explicit justification against that fact.
 
 ## Forbidden Behaviors
 
@@ -135,9 +172,13 @@ Never do any of the following unless explicitly requested AND root-cause-proven:
 - Claiming autonomy beyond what the active path supports
 - Claiming success without proof
 - Declaring "major cleanup" as a standalone task
+- Treating the ~70 dead-code candidates (zero call sites) as confirmed dead code — reflection / JNI / framework callbacks can make some live; each removal needs its own proof
 
 ## File References
 
 - **CLAUDE.md** (this file) — compact operating rules, read every session
 - **SKILLS_REFERENCE.md** — full unmodified Chat Claude skills, read when doing deep work in a specific area
 - **DEVLOG.md** — session-to-session memory, read at start, update at end
+- **ARCHITECTURE.md** — audited architecture map and merged verdicts
+- **MERGE_LOG_2026-10-19.md** — the consolidation record (branch sweep, merges, by-design skips)
+- **archive/2026-10-19/** — pre-replacement living docs (2026-10-19 doc replacement)
