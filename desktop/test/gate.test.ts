@@ -207,3 +207,15 @@ test("control_screen is absent unless turned on", async () => {
   assert.equal(toolsFor({ offlineOnly: false, screenControl: true }).some((t) => t.name === "control_screen"), true);
   assert.equal(toolsFor({ offlineOnly: true, screenControl: true }).some((t) => t.name === "web_fetch"), false);
 });
+
+test("cloud vision cards each look; local vision doesn't", async () => {
+  const { toolsFor } = await import("../src/tools/index.ts");
+  const cloud = toolsFor({ offlineOnly: false, screenControl: false, cloudVision: true });
+  const local = toolsFor({ offlineOnly: false, screenControl: false, cloudVision: false });
+  assert.equal(cloud.find((t) => t.name === "look_at_screen")!.policy.alwaysConfirm, true);
+  assert.equal(cloud.find((t) => t.name === "look_at_image")!.policy.alwaysConfirm, true);
+  assert.notEqual(local.find((t) => t.name === "look_at_screen")!.policy.alwaysConfirm, true);
+  const ep = new Episode("what's on my screen");
+  const CLOUDSEE: ToolPolicy = { effects: ["read"], alwaysConfirm: true };
+  assert.equal(gate.check(ep, "look_at_screen", CLOUDSEE, {}).confirm?.rule, "always_confirm");
+});

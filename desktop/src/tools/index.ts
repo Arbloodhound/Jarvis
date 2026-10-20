@@ -533,10 +533,16 @@ export const ALL_TOOLS: Tool[] = [
   rememberTool, recallTool, forgetTool,
 ];
 
-export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean }): Tool[] {
+export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean }): Tool[] {
   return ALL_TOOLS.filter((t) => {
     if (opts.offlineOnly && t.network) return false;
     if (t.name === "control_screen" && !opts.screenControl) return false;
     return true;
+  }).map((t) => {
+    // With cloud vision, a screenshot or image leaves the computer, so confirm each look.
+    if (opts.cloudVision && (t.name === "look_at_screen" || t.name === "look_at_image")) {
+      return { ...t, policy: { ...t.policy, alwaysConfirm: true } };
+    }
+    return t;
   });
 }
