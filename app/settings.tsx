@@ -950,7 +950,7 @@ export default function SettingsScreen() {
 
         {/* Version tap area */}
         <Pressable onPress={handleVersionTap} style={styles.versionTap}>
-          <Text style={styles.versionText}>Agent Ultra{isDevMode ? '  [DEV]' : ''}</Text>
+          <Text style={styles.versionText}>Jarvis{isDevMode ? '  [DEV]' : ''}</Text>
         </Pressable>
 
       </ScrollView>
