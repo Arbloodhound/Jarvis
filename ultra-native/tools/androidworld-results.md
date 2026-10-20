@@ -1,3 +1,13 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/ultra-native/tools/androidworld-results.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+- These are scored benchmark rounds from September 2026, run on an emulator with cloud models behind a laptop proxy (the body says so itself). They are preserved as the historical record and were **not re-run or re-verified in the 2026-10-19 audits**, which were static, grep-level reading of the code; CI has not yet compiled the merged tree.
+- The 2026-10-19 consolidation (all work now on `main`) does not change any score below. The `bench/` and tools code carries the merged-tree audit verdict "works with defects", and the Gate the rounds exercised was audited as deny-by-default in the merged tree — but neither fact re-measures a single round here.
+- Treat the scores as evidence about those runs, on those seeds, with those brains — not as a current benchmark result for the merged app, and not as evidence about the on-device model, which the emulator setup never ran.
+
+---
+
 # AndroidWorld: routes — every scored round
 
 Scored by AndroidWorld's own checks of the device, not by Ultra. For each experiment the prediction of an
