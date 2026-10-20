@@ -7,7 +7,7 @@
  * against the device's installed app list instead of first-partial-match.
  */
 
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 // ── Common Apps Directory ──────────────────────────────
 // This covers the top ~150 apps by installs. Names are lowercase.
@@ -211,7 +211,7 @@ export function lookupPackage(appName: string): string | undefined {
     .replace(/^(the|a|an|my)\s+/i, '')
     .replace(/\s+app$/i, '');
   const pkg = KNOWN_APPS[key];
-  UltraDevLog.push('SYSTEM', { event: 'app_directory_lookup', query: key, found: !!pkg, pkg: pkg ?? null });
+  JarvisDevLog.push('SYSTEM', { event: 'app_directory_lookup', query: key, found: !!pkg, pkg: pkg ?? null });
   return pkg;
 }
 
@@ -253,7 +253,7 @@ export function findBestMatch(
       score: 100,
       matchType: 'directory',
     };
-    UltraDevLog.push('SYSTEM', { event: 'app_fuzzy_match', query: q, matchType: 'directory', pkg: knownPkg, score: 100 });
+    JarvisDevLog.push('SYSTEM', { event: 'app_fuzzy_match', query: q, matchType: 'directory', pkg: knownPkg, score: 100 });
     return result;
   }
 
@@ -315,7 +315,7 @@ export function findBestMatch(
   }
 
   const finalResult = best && best.score >= threshold ? best : null;
-  UltraDevLog.push('SYSTEM', { event: 'app_fuzzy_match', query: q, installedCount: installedApps.length, found: !!finalResult, matchType: finalResult?.matchType ?? null, score: finalResult?.score ?? 0, pkg: finalResult?.packageName ?? null });
+  JarvisDevLog.push('SYSTEM', { event: 'app_fuzzy_match', query: q, installedCount: installedApps.length, found: !!finalResult, matchType: finalResult?.matchType ?? null, score: finalResult?.score ?? 0, pkg: finalResult?.packageName ?? null });
   return finalResult;
 }
 

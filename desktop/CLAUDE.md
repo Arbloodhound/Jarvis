@@ -8,9 +8,9 @@ The rules in the repo root `CLAUDE.md` apply here too: no hallucination, no drif
 
 ## Scope
 
-`desktop/` is a separate project: a Node.js (22+) TypeScript agent with a local gateway and a browser chat page. It shares ideas with the Android app, not code. Do not edit `ultra-native/` as part of desktop work.
+`desktop/` is a separate project: a Node.js (22+) TypeScript agent with a local gateway and a browser chat page. It shares ideas with the Android app, not code. Do not edit `jarvis-native/` as part of desktop work.
 
-Tor is not part of desktop. Tor lives in the Kotlin app (`ultra-native/`). Do not add Tor claims or Tor work to desktop docs or code on the basis of the Android app's Tor stack.
+Tor is not part of desktop. Tor lives in the Kotlin app (`jarvis-native/`). Do not add Tor claims or Tor work to desktop docs or code on the basis of the Android app's Tor stack.
 
 ## Hard scope rule (same as the phone)
 

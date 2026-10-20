@@ -15,9 +15,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import type { ConversationMeta } from "@/src/types/ultra";
+import type { ConversationMeta } from "@/src/types/jarvis";
 import { AppStorage } from "@/src/utils/AppStorage";
-import { UltraDevLog } from "@/src/utils/UltraDevLog";
+import { JarvisDevLog } from "@/src/utils/JarvisDevLog";
 import { loadZoneConfig, lookupAction } from "@/src/data/ZoneConfig";
 import type { GridAction } from "@/src/types/actionGrid";
 
@@ -204,12 +204,12 @@ export default function ConversationList({
           .filter(Boolean) as Array<{ id: string; label: string; icon: string; capability: string; params: Record<string, any> }>;
         if (resolved.length > 0) {
           setSidebarItems(resolved);
-          UltraDevLog.push('EFFECT', {
+          JarvisDevLog.push('EFFECT', {
             component: 'ConversationList', action: 'sidebar_zone_loaded',
             itemCount: resolved.length, source: 'zone_config', success: true,
           });
         } else {
-          UltraDevLog.push('EFFECT', {
+          JarvisDevLog.push('EFFECT', {
             component: 'ConversationList', action: 'sidebar_zone_loaded',
             itemCount: 0, source: 'fallback_toggle_tree', success: true,
             note: 'Zone sidebar empty or all IDs orphaned — using TOGGLE_TREE',
@@ -217,7 +217,7 @@ export default function ConversationList({
         }
       }
     }).catch(() => {
-      UltraDevLog.push('EFFECT', {
+      JarvisDevLog.push('EFFECT', {
         component: 'ConversationList', action: 'sidebar_zone_loaded',
         source: 'fallback_toggle_tree', success: false,
         note: 'Zone config load failed — using TOGGLE_TREE',
@@ -231,7 +231,7 @@ export default function ConversationList({
         Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 11, useNativeDriver: true }),
         Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
       ]).start();
-      UltraDevLog.push('SIDEBAR_OPEN', { convCount: conversations.length, folderCount: folders.length });
+      JarvisDevLog.push('SIDEBAR_OPEN', { convCount: conversations.length, folderCount: folders.length });
     } else {
       Animated.parallel([
         Animated.timing(slideAnim, { toValue: -DRAWER_WIDTH, duration: 200, useNativeDriver: true }),
@@ -243,7 +243,7 @@ export default function ConversationList({
   const handleCreateFolder = useCallback(async () => {
     const name = newFolderName.trim();
     if (!name) {
-      UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'create_folder', trigger: {}, state: { folderCount: folders.length }, data: { name: '' }, outcome: 'EMPTY:no_name_cancelled' });
+      JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'create_folder', trigger: {}, state: { folderCount: folders.length }, data: { name: '' }, outcome: 'EMPTY:no_name_cancelled' });
       return;
     }
     const id = `folder_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -252,7 +252,7 @@ export default function ConversationList({
     setFolders(updated);
     setNewFolderName("");
     setShowNewFolder(false);
-    UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'create_folder', trigger: {}, state: { folderCount: folders.length }, data: { name, id }, outcome: 'folder_created' });
+    JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'create_folder', trigger: {}, state: { folderCount: folders.length }, data: { name, id }, outcome: 'folder_created' });
     try {
       await AppStorage.set('user_folders', JSON.stringify(updated.filter(f => !f.isSystem)));
     } catch {}
@@ -260,18 +260,18 @@ export default function ConversationList({
 
   const handleFolderTap = useCallback((folder: Folder) => {
     if (folder.id === "folder_logs") {
-      UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'folder_tap', trigger: { folderId: folder.id }, state: {}, data: { name: folder.name }, outcome: 'open_logs' });
+      JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'folder_tap', trigger: { folderId: folder.id }, state: {}, data: { name: folder.name }, outcome: 'open_logs' });
       onClose();
       onOpenLogs();
       return;
     }
-    UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'folder_tap', trigger: { folderId: folder.id }, state: {}, data: { name: folder.name }, outcome: 'folder_preview_alert' });
+    JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'folder_tap', trigger: { folderId: folder.id }, state: {}, data: { name: folder.name }, outcome: 'folder_preview_alert' });
     Alert.alert(folder.name, 'Folder view coming in the next update. You can create and organize folders now.');
   }, [onClose, onOpenLogs]);
 
   const handleConvSelect = useCallback((id: string) => {
-    UltraDevLog.push('SIDEBAR_CONV_SELECT', { convId: id });
-    UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'conv_select', trigger: { convId: id }, state: { total: conversations.length }, data: {}, outcome: 'conversation_switched' });
+    JarvisDevLog.push('SIDEBAR_CONV_SELECT', { convId: id });
+    JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'conv_select', trigger: { convId: id }, state: { total: conversations.length }, data: {}, outcome: 'conversation_switched' });
     onSelect(id);
   }, [onSelect, conversations.length]);
 
@@ -313,7 +313,7 @@ export default function ConversationList({
               </View>
               <Text style={styles.drawerBrand}>Jarvis</Text>
             </View>
-            <Pressable onPress={() => { UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'close', trigger: {}, state: { convCount: conversations.length }, data: {}, outcome: 'drawer_closed' }); onClose(); }} style={styles.closeBtn}>
+            <Pressable onPress={() => { JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'close', trigger: {}, state: { convCount: conversations.length }, data: {}, outcome: 'drawer_closed' }); onClose(); }} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={DIM} />
             </Pressable>
           </View>
@@ -321,7 +321,7 @@ export default function ConversationList({
           {/* ── New Chat (plain row, no green bg) ──────── */}
           <Pressable
             testID="sidebar_new_chat"
-            onPress={() => { UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'new_chat', trigger: {}, state: { convCount: conversations.length }, data: {}, outcome: 'new_conversation_started' }); onNewChat(); onClose(); }}
+            onPress={() => { JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'new_chat', trigger: {}, state: { convCount: conversations.length }, data: {}, outcome: 'new_conversation_started' }); onNewChat(); onClose(); }}
             style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
           >
             <Ionicons name="add-outline" size={20} color={TEXT} />
@@ -331,7 +331,7 @@ export default function ConversationList({
           {/* ── Settings (gear moved here) ─────────────── */}
           <Pressable
             testID="sidebar_settings"
-            onPress={() => { UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'open_settings', trigger: {}, state: {}, data: {}, outcome: 'settings_opened' }); onClose(); onOpenSettings(); }}
+            onPress={() => { JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'open_settings', trigger: {}, state: {}, data: {}, outcome: 'settings_opened' }); onClose(); onOpenSettings(); }}
             style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
           >
             <Ionicons name="settings-outline" size={20} color={TEXT} />
@@ -340,7 +340,7 @@ export default function ConversationList({
 
           {/* ── Toggle Tree ──────────────────────────────── */}
           <Pressable
-            onPress={() => { const next = !toggleTreeOpen; UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'toggle_tree', trigger: {}, state: { wasOpen: toggleTreeOpen }, data: {}, outcome: next ? 'toggles_expanded' : 'toggles_collapsed' }); setToggleTreeOpen(next); }}
+            onPress={() => { const next = !toggleTreeOpen; JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'toggle_tree', trigger: {}, state: { wasOpen: toggleTreeOpen }, data: {}, outcome: next ? 'toggles_expanded' : 'toggles_collapsed' }); setToggleTreeOpen(next); }}
             style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
             testID="toggle_tree_root"
           >
@@ -349,7 +349,7 @@ export default function ConversationList({
             {onOpenZoneEditor && (
               <Pressable
                 onPress={() => {
-                  UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'zone_edit_tap', trigger: { source: 'sidebar_toggles' }, state: {}, data: {}, outcome: 'opening_zone_editor' });
+                  JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'zone_edit_tap', trigger: { source: 'sidebar_toggles' }, state: {}, data: {}, outcome: 'opening_zone_editor' });
                   onClose();
                   setTimeout(() => onOpenZoneEditor(), 300);
                 }}
@@ -369,8 +369,8 @@ export default function ConversationList({
                   key={toggle.id}
                   testID={toggle.id}
                   onPress={() => {
-                    UltraDevLog.push('TOGGLE_TAP', { id: toggle.id, capability: toggle.capability });
-                    UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'execute_toggle', trigger: { id: toggle.id }, state: {}, data: { capability: toggle.capability }, outcome: onExecuteToggle ? 'toggle_executed' : 'FAIL:no_handler' });
+                    JarvisDevLog.push('TOGGLE_TAP', { id: toggle.id, capability: toggle.capability });
+                    JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'execute_toggle', trigger: { id: toggle.id }, state: {}, data: { capability: toggle.capability }, outcome: onExecuteToggle ? 'toggle_executed' : 'FAIL:no_handler' });
                     onExecuteToggle?.(toggle.capability, toggle.params);
                   }}
                   style={({ pressed }) => [styles.toggleBtn, pressed && styles.toggleBtnPressed]}
@@ -394,7 +394,7 @@ export default function ConversationList({
               <Pressable
                 key={cmd.id}
                 testID={`quick_${cmd.id}`}
-                onPress={() => { UltraDevLog.push('SIDEBAR_QUICK', { command: cmd.command }); onClose(); onQuickCommand?.(cmd.command); }}
+                onPress={() => { JarvisDevLog.push('SIDEBAR_QUICK', { command: cmd.command }); onClose(); onQuickCommand?.(cmd.command); }}
                 style={({ pressed }) => [styles.quickActionBtn, pressed && styles.quickActionBtnPressed]}
               >
                 <Ionicons name={cmd.icon} size={16} color={TEXT_DIM} />
@@ -454,7 +454,7 @@ export default function ConversationList({
               <Pressable onPress={handleCreateFolder} style={styles.newFolderSave}>
                 <Ionicons name="checkmark" size={16} color={ACCENT} />
               </Pressable>
-              <Pressable onPress={() => { UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'cancel_new_folder', trigger: {}, state: {}, data: {}, outcome: 'cancelled' }); setShowNewFolder(false); setNewFolderName(""); }} style={styles.newFolderCancel}>
+              <Pressable onPress={() => { JarvisDevLog.push('CHAIN', { component: 'ConversationList', action: 'cancel_new_folder', trigger: {}, state: {}, data: {}, outcome: 'cancelled' }); setShowNewFolder(false); setNewFolderName(""); }} style={styles.newFolderCancel}>
                 <Ionicons name="close" size={16} color={DIM} />
               </Pressable>
             </View>

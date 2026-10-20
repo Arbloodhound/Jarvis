@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import AppController from '../native/AppController';
 import { performTap, performSwipe, getScreenContentFlat } from '../native/AppController';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { CorrIdScope } from '../utils/CorrIdScope';
 
 interface UINode {
@@ -68,7 +68,7 @@ export class EnhancedReActLoop {
       try {
         try {
           const currentPkg = await AppController.getActivePackage();
-          if (currentPkg === 'com.agent.ultra') {
+          if (currentPkg === 'com.agent.jarvis') {
             DebugLog.error('EnhancedReActLoop', `SAFETY STOP iter ${iteration}: self-interaction`);
             return { success: false, goalAchieved: false, steps, finalObservation: 'Stopped: self-interaction', totalIterations: iteration, error: 'self_interaction' };
           }

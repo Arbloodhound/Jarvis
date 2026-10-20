@@ -1,4 +1,4 @@
-import { UltraDevLog as DebugLog } from './UltraDevLog';
+import { JarvisDevLog as DebugLog } from './JarvisDevLog';
 import { CorrIdScope } from './CorrIdScope';
 
 function truncateMiddle(text: string, maxLen: number): string {

@@ -1,7 +1,7 @@
 import { ModelRouter } from './ModelRouter';
 import { PreferenceLearner } from '../utils/PreferenceLearner';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 interface FixAttempt {
   errorHash: string;
@@ -49,7 +49,7 @@ export class DebugEngine {
     const triedFixes: string[] = [];
 
     this.logger.info(`Starting debug loop for task ${taskId}`);
-    UltraDevLog.push('SYSTEM', { event: 'debug_engine_loop_start', taskId, codeLen: code.length, errorLen: error.length, maxAttempts: this.maxAttempts });
+    JarvisDevLog.push('SYSTEM', { event: 'debug_engine_loop_start', taskId, codeLen: code.length, errorLen: error.length, maxAttempts: this.maxAttempts });
 
     while (attemptCount < this.maxAttempts) {
       attemptCount++;

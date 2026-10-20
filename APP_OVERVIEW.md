@@ -1,17 +1,17 @@
 > **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/APP_OVERVIEW.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
-# Jarvis (Agent Ultra): plain-language overview
+# Jarvis (Jarvis): plain-language overview
 
 *Written 2026-10-19 for the owner. Short rule of thumb: **built and audited in code** is not the same as **proven on your phone**. Everything below is the first kind unless it says otherwise. Your phone test is what proves it.*
 
 ## 1. What it is
 
-An AI assistant that lives on your Pixel (GrapheneOS), written mainly in Kotlin in `ultra-native/`. It can hear you, talk, run tools on the phone, and drive other apps by tapping and typing through Android's accessibility service. It can think with a model that runs **on the phone** (no internet) or with a **cloud** model when you choose it.
+An AI assistant that lives on your Pixel (GrapheneOS), written mainly in Kotlin in `jarvis-native/`. It can hear you, talk, run tools on the phone, and drive other apps by tapping and typing through Android's accessibility service. It can think with a model that runs **on the phone** (no internet) or with a **cloud** model when you choose it.
 
 The repo now holds three codebases together on `main`:
 
-- **`ultra-native/`** — the Kotlin Android app. This is the shipping app, and the subject of most of this overview.
-- **The harness** — a package inside the Android app (`com.agent.ultra.harness`) that carries memory, approvals, scheduling, skills, and connectors in a Muse-style harness layer. It is built and wired into the database (see §5), with two manifest gaps still open (see §8).
+- **`jarvis-native/`** — the Kotlin Android app. This is the shipping app, and the subject of most of this overview.
+- **The harness** — a package inside the Android app (`com.agent.jarvis.harness`) that carries memory, approvals, scheduling, skills, and connectors in a Muse-style harness layer. It is built and wired into the database (see §5), with two manifest gaps still open (see §8).
 - **`desktop/`** — a TypeScript desktop app with its own agent loop, gate, providers, memory, and tools.
 - **`src/`** — the older TypeScript app (Expo / React Native lineage). Its live path still exists; its `server/` folder is orphaned and crashes at startup — do not rely on it.
 
@@ -34,7 +34,7 @@ At the level the audits verified, the Android app is organised as:
 - **`agent/`** — Brain (12-turn loop), Tools, navigation.
 - **`gate/`** — the policy Gate, Manifest, contracts, and taint tracking. Deny-by-default.
 - **`listen/`** — ambient listening, speech, notes, the Librarian, and claim promotion.
-- **`ui/` + `data/`** — screens and Room storage (`UltraDatabase`, now v9 in the merged tree).
+- **`ui/` + `data/`** — screens and Room storage (`JarvisDatabase`, now v9 in the merged tree).
 - **`local/`** — on-device models via llama.cpp JNI, plus downloads.
 - **`net/`** — Tor support (`TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard`). Tor is opt-in and off by default.
 - **`provider/`** — cloud provider client and configuration.
@@ -59,7 +59,7 @@ One voice-related finding **was** verified, and it matters: **voiceprint speaker
 Two layers, both present in the merged tree:
 
 - **App memory (`listen/` + `data/`)** — heard lines become notes through the Librarian; claim promotion decides what gets kept.
-- **Harness memory (`com.agent.ultra.harness`)** — memory claims carry kind, salience, and confidence, with provenance and supersede chains, hybrid search, and query-time temporal decay. `UltraDatabase` v9 stores them: entities include `ClaimEntity`, `GrantEntity`, `MemoryEmbeddingEntity`, and `BanditArmEntity`, with DAO accessors `claims()`, `claimForget()`, `grants()`, `embeddings()`, and `banditArms()`. This wiring was the audits' one critical defect on the old lineage and is **resolved in the merged tree**.
+- **Harness memory (`com.agent.jarvis.harness`)** — memory claims carry kind, salience, and confidence, with provenance and supersede chains, hybrid search, and query-time temporal decay. `JarvisDatabase` v9 stores them: entities include `ClaimEntity`, `GrantEntity`, `MemoryEmbeddingEntity`, and `BanditArmEntity`, with DAO accessors `claims()`, `claimForget()`, `grants()`, `embeddings()`, and `banditArms()`. This wiring was the audits' one critical defect on the old lineage and is **resolved in the merged tree**.
 
 Known memory defects (open, from the audits): claim promotion can never supersede, and it stores a model paraphrase as the claim's verbatim quote. A claim checker and a "For You" feed exist in the harness (ClaimVerifier lenses fail closed; the feed uses a bandit), but do not over-read that: promotion quality is exactly where the defects sit.
 
@@ -87,7 +87,7 @@ Open safety findings you should also know (all from the audits, all still open p
 - Supplement (the `ccr` branch, 118 files): **87 findings (0 critical, 12 high, 31 medium, 44 low)**.
 - Together that is 206 findings across two audits of *different* snapshots — not a single deduplicated count for the merged tree.
 - Post-merge: **0 known criticals** (the one critical was the database wiring in §5, now resolved).
-- Per-subsystem verdicts in one line: Tor (`net/`) and `UltraDatabase` (`data/`) work as designed; `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, bench / tools, harness internals, the desktop app, and the TypeScript live path all **work with defects**; Kotlin unit tests (2 files), the TypeScript `server/`, and harness manifest wiring are **broken**.
+- Per-subsystem verdicts in one line: Tor (`net/`) and `JarvisDatabase` (`data/`) work as designed; `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, bench / tools, harness internals, the desktop app, and the TypeScript live path all **work with defects**; Kotlin unit tests (2 files), the TypeScript `server/`, and harness manifest wiring are **broken**.
 
 Earlier claims in this overview about test totals (including a "1633 passing checks" figure) were not re-verified in the 2026-10-19 audits and have been removed. **CI has not compiled the merged tree** — no test total for the merged tree exists yet.
 

@@ -8,7 +8,7 @@ Self-contained pickup doc. Read this first, then `CLAUDE.md` and `MERGE_LOG_2026
 
 - **Repo:** `Arbloodhound/Jarvis` (private). **All work is now on `main`** (tip `c8043e1c`). `claude/shopping-integration` (`adbd9e84`) is also current. The old work branch `muse/v5-delta-port` was merged during consolidation (merge `4cff5d07`); do not start new work there.
 - **Branches:** 58 total — 51 were already contained, 2 merged in consolidation, 4 remain unmerged by design (`claude/broken-fixes`, `claude/download-all`, `claude/fast-reasoning` — empty tip commits; `claude/offline-navigation-wip` — superseded WIP snapshot). No branch was deleted; no history was rewritten.
-- **Tree:** `ultra-native/` Kotlin Android app (the shipping app, package `com.agent.ultra`), `desktop/` TypeScript app, `src/` TS app (Expo/RN lineage), and the harness package `com.agent.ultra.harness` inside `ultra-native`.
+- **Tree:** `jarvis-native/` Kotlin Android app (the shipping app, package `com.agent.jarvis`), `desktop/` TypeScript app, `src/` TS app (Expo/RN lineage), and the harness package `com.agent.jarvis.harness` inside `jarvis-native`.
 - **CI has not yet compiled the merged tree.** Kotlin is source-only until CI runs. Audit verification was grep-level (definitions / call sites / imports), not compilation.
 
 ## Audited state
@@ -19,16 +19,16 @@ Self-contained pickup doc. Read this first, then `CLAUDE.md` and `MERGE_LOG_2026
 
 ## Resolved in the merged tree
 
-- **Harness DB wiring (was the 1 critical):** `UltraDatabase` is v9; entities include `ClaimEntity` / `GrantEntity` / `MemoryEmbeddingEntity` / `BanditArmEntity`; DAO accessors `claims()` / `claimForget()` / `grants()` / `embeddings()` / `banditArms()`; `MIGRATION_7_8` + `MIGRATION_8_9` defined and registered. Field-verified against the harness entities by the supplement audit.
+- **Harness DB wiring (was the 1 critical):** `JarvisDatabase` is v9; entities include `ClaimEntity` / `GrantEntity` / `MemoryEmbeddingEntity` / `BanditArmEntity`; DAO accessors `claims()` / `claimForget()` / `grants()` / `embeddings()` / `banditArms()`; `MIGRATION_7_8` + `MIGRATION_8_9` defined and registered. Field-verified against the harness entities by the supplement audit.
 
 ## Harness package (exists in the merged tree)
 
-`com.agent.ultra.harness` contains: MemoryClaims (kind/salience/confidence, provenance, supersede chains, hybrid search + query-time temporal decay), ApprovalGrants (grant levels + command binding), Scheduler + SchedulerRuntime/SchedulerReceiver, SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, NLI head, bandit (ForYou), and `connectors/` (Gmail, Google Calendar/Docs/Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber).
+`com.agent.jarvis.harness` contains: MemoryClaims (kind/salience/confidence, provenance, supersede chains, hybrid search + query-time temporal decay), ApprovalGrants (grant levels + command binding), Scheduler + SchedulerRuntime/SchedulerReceiver, SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, NLI head, bandit (ForYou), and `connectors/` (Gmail, Google Calendar/Docs/Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber).
 
 ## Still open (post-merge)
 
 - `SchedulerReceiver` and `SpotifyRedirectActivity` exist in the harness but are **not registered in `AndroidManifest.xml`** (2 manifest registrations).
-- `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import `com.agent.ultra.bench.TestKitActivity`, which exists only in `src/debug` — the unit-test source set cannot resolve it (2 broken unit tests).
+- `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import `com.agent.jarvis.bench.TestKitActivity`, which exists only in `src/debug` — the unit-test source set cannot resolve it (2 broken unit tests).
 - TS `server/` is orphaned: nothing calls it, it registers no routes, and it crashes at startup in the audited tree.
 - ~70 dead-code candidates (zero call sites) — candidates only; reflection/JNI/framework callbacks can make some live.
 - CI compile of the merged tree is pending.

@@ -34,8 +34,8 @@ export class ErrorBoundary extends Component<
       this.props.onError(error, info.componentStack);
     }
     try {
-      const { UltraDevLog } = require('@/src/utils/UltraDevLog');
-      UltraDevLog.errorBoundary(error.message + (error.stack ? '\n' + error.stack.slice(0, 500) : ''), info.componentStack);
+      const { JarvisDevLog } = require('@/src/utils/JarvisDevLog');
+      JarvisDevLog.errorBoundary(error.message + (error.stack ? '\n' + error.stack.slice(0, 500) : ''), info.componentStack);
     } catch {}
   }
 

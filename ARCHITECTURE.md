@@ -12,28 +12,28 @@ All work is consolidated on `main` (tip `c8043e1c` — merge commits `ae030b9f` 
 
 - 58 branches swept: 51 already contained; 2 merged during consolidation (`muse/v5-delta-port` → `claude/shopping-integration`, `4cff5d07`; `ccr-c9b6f798-uako9v` → `claude/shopping-integration`, `adbd9e84`; then `claude/shopping-integration` → `main`, `ae030b9f`); 4 remain unmerged by design: `claude/broken-fixes`, `claude/download-all`, `claude/fast-reasoning` (empty tip commits), `claude/offline-navigation-wip` (superseded WIP snapshot). No branch was deleted; no history was rewritten.
 - Post-merge tree:
-  - `ultra-native/` — Kotlin Android app (the shipping app), containing the harness package `com.agent.ultra.harness`.
+  - `jarvis-native/` — Kotlin Android app (the shipping app), containing the harness package `com.agent.jarvis.harness`.
   - `desktop/` — TypeScript desktop app.
   - `src/` — TypeScript app (Expo / React Native lineage).
 
 ```mermaid
 flowchart LR
   subgraph REPO["Arbloodhound/Jarvis — main"]
-    UN["ultra-native/ Kotlin Android app<br/>(shipping app)"]
+    UN["jarvis-native/ Kotlin Android app<br/>(shipping app)"]
     DT["desktop/ TypeScript app"]
     TS["src/ TypeScript app<br/>(Expo / RN lineage)"]
   end
-  UN --> HARNESS["com.agent.ultra.harness<br/>(inside ultra-native)"]
+  UN --> HARNESS["com.agent.jarvis.harness<br/>(inside jarvis-native)"]
 ```
 
-## A · ultra-native Kotlin app (audited map)
+## A · jarvis-native Kotlin app (audited map)
 
 | Package | Role (as audited) | Verdict (merged view) |
 |---|---|---|
 | `agent/` | Brain (12-turn loop), Tools, navigation | works with defects |
 | `gate/` | Gate, Manifest, contracts, taint — deny-by-default | works with defects |
 | `listen/` | Ambient listening, speech, notes, Librarian, claim promotion | works with defects |
-| `ui/` + `data/` | Screens; Room, `UltraDatabase` | works as designed within old main alone; `data/` / `UltraDatabase` works as designed post-merge (see §D) |
+| `ui/` + `data/` | Screens; Room, `JarvisDatabase` | works as designed within old main alone; `data/` / `JarvisDatabase` works as designed post-merge (see §D) |
 | `local/` | On-device models via llama.cpp JNI, downloads | works with defects |
 | `net/` | `TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard` | works as designed (Tor property; defects at margins only) |
 | `provider/` | `OpenAiClient`, `ProviderConfig` | works with defects |
@@ -62,12 +62,12 @@ flowchart TD
   BRAIN --> LOCAL["local/ on-device models<br/>llama.cpp JNI"]
   BRAIN --> PROV["provider/ cloud<br/>OpenAiClient"]
   BRAIN --> LISTEN["listen/ notes · Librarian · claims"]
-  LISTEN --> DATA["data/ Room · UltraDatabase v9"]
+  LISTEN --> DATA["data/ Room · JarvisDatabase v9"]
 ```
 
-## B · Harness package `com.agent.ultra.harness`
+## B · Harness package `com.agent.jarvis.harness`
 
-The harness lives inside `ultra-native`. Audited contents:
+The harness lives inside `jarvis-native`. Audited contents:
 
 | Component | Role (as audited) |
 |---|---|
@@ -95,14 +95,14 @@ Harness verdict: internal logic **works with defects**. The grant keying is call
 
 ```mermaid
 flowchart LR
-  BRAIN2["agent/ Brain + Tools"] --> H["com.agent.ultra.harness"]
+  BRAIN2["agent/ Brain + Tools"] --> H["com.agent.jarvis.harness"]
   H --> MC["MemoryClaims"]
   H --> AG["ApprovalGrants"]
   H --> SCH["Scheduler"]
   H --> SK["SkillStore (lazy)"]
   H --> CONN["connectors/<br/>Gmail · Calendar · Docs · Drive · Spotify"]
   CONN --> VAULT["CredentialVault<br/>Keystore AES-GCM"]
-  MC --> DB2["UltraDatabase v9<br/>claims / grants / embeddings / bandit"]
+  MC --> DB2["JarvisDatabase v9<br/>claims / grants / embeddings / bandit"]
   AG --> DB2
 ```
 
@@ -119,11 +119,11 @@ Audited shape:
 
 Verdict: desktop app **works with defects**.
 
-## D · Storage: `UltraDatabase` v9 (post-merge)
+## D · Storage: `JarvisDatabase` v9 (post-merge)
 
 The pass-2 critical defect — harness database wiring missing — is **resolved in the merged tree**. Field-verified by the supplement audit against the harness entities:
 
-- `UltraDatabase` is **v9** (the previous version of this document said v7; that is superseded).
+- `JarvisDatabase` is **v9** (the previous version of this document said v7; that is superseded).
 - Entities include `ClaimEntity` / `GrantEntity` / `MemoryEmbeddingEntity` / `BanditArmEntity`.
 - DAO accessors include `claims()` / `claimForget()` / `grants()` / `embeddings()` / `banditArms()`.
 - `MIGRATION_7_8` + `MIGRATION_8_9` are defined and registered.
@@ -147,7 +147,7 @@ Any other database, preference-file, or model-file inventory from the previous v
 ### Still open (post-merge)
 
 - **Manifest wiring (broken):** `SchedulerReceiver` and `SpotifyRedirectActivity` exist in the harness but are not registered in `AndroidManifest.xml`.
-- **Kotlin unit tests (broken, 2 files):** `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import `com.agent.ultra.bench.TestKitActivity`, which exists only in `src/debug` — the unit-test source set cannot resolve it.
+- **Kotlin unit tests (broken, 2 files):** `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import `com.agent.jarvis.bench.TestKitActivity`, which exists only in `src/debug` — the unit-test source set cannot resolve it.
 - **TS `server/` (broken / orphaned):** see §E.
 - **~70 dead-code candidates** (zero call sites) — candidates only; reflection / JNI / framework callbacks can make some live.
 - **Notable highs:** recipe runs can self-confirm steps past the Gate; Gate secret patterns miss phone-shaped secrets (bare OTPs / cards never taint); cloud API key in plaintext SharedPreferences; GGUF downloads verified by size only / no integrity check before native load; voiceprint speaker tags default ON against their own doc comment; desktop broadcasts unredacted tool args to all clients; desktop sends screenshots to cloud Vision ungated; desktop macOS / Windows screen control reports success for actions it didn't perform; Kotlin `screenshot` tool bypasses the protected-app check; ActionGate single global waiter (concurrent Brains can complete each other's questions); raw-coordinate taps ungated when no label within 200px; claim promotion can never supersede and stores a model paraphrase as the claim's verbatim quote; TS live path bypasses its own SafetyChecker / PermissionBroker; harness grant keying is the weak core (grant invariants).
@@ -163,7 +163,7 @@ Any other database, preference-file, or model-file inventory from the previous v
 
 ### Per-subsystem verdicts (merged view)
 
-- **Works as designed:** `net/` Tor property (defects at margins only), `data/` UltraDatabase (post-merge), desktop tests (1 low), `ui/` + `data/` within old main alone.
+- **Works as designed:** `net/` Tor property (defects at margins only), `data/` JarvisDatabase (post-merge), desktop tests (1 low), `ui/` + `data/` within old main alone.
 - **Works with defects:** `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, `bench/` + tools, harness internal logic, desktop app, TS live path.
 - **Broken:** Kotlin unit tests (2 files), TS `server/` (orphaned), harness manifest wiring (2 unregistered components).
 

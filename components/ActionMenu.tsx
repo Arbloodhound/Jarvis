@@ -9,7 +9,7 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { UltraDevLog } from "@/src/utils/UltraDevLog";
+import { JarvisDevLog } from "@/src/utils/JarvisDevLog";
 
 const BG = "#000000";
 const SURFACE = "#161616";
@@ -47,7 +47,7 @@ export default function ActionMenu({
 }: ActionMenuProps) {
   const handleSelect = useCallback(
     (id: string) => {
-      UltraDevLog.push('CHAIN', { component: 'ActionMenu', action: 'item_select', trigger: { itemId: id }, state: {}, data: {}, outcome: 'selected' });
+      JarvisDevLog.push('CHAIN', { component: 'ActionMenu', action: 'item_select', trigger: { itemId: id }, state: {}, data: {}, outcome: 'selected' });
       onClose();
       setTimeout(() => onSelect(id), 100);
     },
@@ -58,7 +58,7 @@ export default function ActionMenu({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <TouchableWithoutFeedback onPress={() => { UltraDevLog.push('CHAIN', { component: 'ActionMenu', action: 'backdrop_close', trigger: {}, state: {}, data: {}, outcome: 'dismissed' }); onClose(); }}>
+      <TouchableWithoutFeedback onPress={() => { JarvisDevLog.push('CHAIN', { component: 'ActionMenu', action: 'backdrop_close', trigger: {}, state: {}, data: {}, outcome: 'dismissed' }); onClose(); }}>
         <View style={styles.backdrop} testID="ActionMenu">
           <TouchableWithoutFeedback>
             <View style={[styles.menu, { right: anchorRight, top: anchorTop }]}>

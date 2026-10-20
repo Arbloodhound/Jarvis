@@ -1,4 +1,4 @@
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface TaskChallenge {
   id: string;
@@ -51,7 +51,7 @@ interface AiClient {
 }
 
 export function getDefaultChallenges(packageName: string): TaskChallenge[] {
-  UltraDevLog.push('SYSTEM', { event: 'task_challenges_get_defaults', packageName });
+  JarvisDevLog.push('SYSTEM', { event: 'task_challenges_get_defaults', packageName });
   return [
     {
       id: 'ch_launch_verify',

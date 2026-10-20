@@ -4,7 +4,7 @@ import type { SecureVault } from '../../security/SecureVault';
 import type { ProviderManager } from './ProviderManager';
 import type { GroupManager } from './GroupManager';
 import { AppStorage } from '../../utils/AppStorage';
-import { UltraDevLog } from '../../utils/UltraDevLog';
+import { JarvisDevLog } from '../../utils/JarvisDevLog';
 import { STORAGE_KEYS as SK } from '../../types/provider';
 
 const MIGRATION_FLAG = SK.migrationComplete;
@@ -21,7 +21,7 @@ export async function runLegacyMigration(
     const done = await AppStorage.get(MIGRATION_FLAG);
     if (done === 'true') return;
 
-    UltraDevLog.push('SYSTEM', { event: 'legacy_migration_start' });
+    JarvisDevLog.push('SYSTEM', { event: 'legacy_migration_start' });
 
     // Detect legacy API key
     let legacyApiKey: string | null = null;
@@ -38,7 +38,7 @@ export async function runLegacyMigration(
     // If no legacy API key, nothing to migrate — just mark done
     if (!legacyApiKey) {
       await AppStorage.set(MIGRATION_FLAG, 'true');
-      UltraDevLog.push('SYSTEM', { event: 'legacy_migration_skip', reason: 'no_legacy_key' });
+      JarvisDevLog.push('SYSTEM', { event: 'legacy_migration_skip', reason: 'no_legacy_key' });
       return;
     }
 
@@ -62,7 +62,7 @@ export async function runLegacyMigration(
       }
     }
 
-    UltraDevLog.push('SYSTEM', { event: 'legacy_migration_creating_provider', baseUrl: legacyBaseUrl, hasModel: !!legacyModel });
+    JarvisDevLog.push('SYSTEM', { event: 'legacy_migration_creating_provider', baseUrl: legacyBaseUrl, hasModel: !!legacyModel });
 
     // Create migrated provider
     const provider = await providerManager.addProvider({
@@ -128,7 +128,7 @@ export async function runLegacyMigration(
       await AppStorage.remove(mKey).catch(() => {});
     }
 
-    UltraDevLog.push('SYSTEM', {
+    JarvisDevLog.push('SYSTEM', {
       event: 'legacy_migration_complete',
       providerId: provider.id,
       groupId: group.id,
@@ -136,7 +136,7 @@ export async function runLegacyMigration(
       legacyModel,
     });
   } catch (e: any) {
-    UltraDevLog.push('ERROR', { event: 'legacy_migration_failed', error: e?.message });
+    JarvisDevLog.push('ERROR', { event: 'legacy_migration_failed', error: e?.message });
     // Non-fatal — app continues without migration
   }
 }

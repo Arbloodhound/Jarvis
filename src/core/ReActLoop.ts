@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import AppController from '../native/AppController';
 import { performTap, performSwipe, getScreenContentFlat, waitForUiChange } from '../native/AppController';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 export interface ReActStep {
   iteration: number;
@@ -237,8 +237,8 @@ Respond with ONLY a JSON array of strings. No explanation. Example:
         // Skip self-check only for iteration 1 when we have an appHint —
         // moveTaskToBack needs a moment to complete
         const skipSelfCheck = iteration === 1 && !!appHint;
-        if (!skipSelfCheck && currentPkg === 'com.agent.ultra') {
-          DebugLog.error('ReActLoop', `SAFETY STOP at iter ${iteration}: foreground package is Agent Ultra — aborting to prevent self-interaction`);
+        if (!skipSelfCheck && currentPkg === 'com.agent.jarvis') {
+          DebugLog.error('ReActLoop', `SAFETY STOP at iter ${iteration}: foreground package is Jarvis — aborting to prevent self-interaction`);
           return { success: false, steps, finalObservation: 'ReActLoop detected self-interaction — stopped for safety', goalAchieved: false, error: 'self_interaction' };
         }
 
@@ -250,7 +250,7 @@ Respond with ONLY a JSON array of strings. No explanation. Example:
           || (expectedPkg === 'com.android.settings' && currentPkg?.startsWith('com.android.settings'))
           || (expectedPkg?.startsWith('com.android.settings') && currentPkg === 'com.android.settings');
         if (expectedPkg && currentPkg && !isSameApp
-            && currentPkg !== 'com.agent.ultra' && !OVERLAY_PKGS.includes(currentPkg)) {
+            && currentPkg !== 'com.agent.jarvis' && !OVERLAY_PKGS.includes(currentPkg)) {
           wrongAppBackAttempts++;
           console.warn(`[REACT] WRONG_APP iter=${iteration}: expected=${expectedPkg} got=${currentPkg} attempt=${wrongAppBackAttempts}`);
           DebugLog.error('ReActLoop', `WRONG APP at iter ${iteration}: expected=${expectedPkg} got=${currentPkg} (attempt ${wrongAppBackAttempts})`);
@@ -291,7 +291,7 @@ Respond with ONLY a JSON array of strings. No explanation. Example:
       if (currentAppPackage === 'com.android.settings') {
         const a11yNode = nodes.find(n => {
           const label = (n.t || n.d || '').trim().toLowerCase();
-          return label.includes('accessibility') && (label.includes('agent ultra') || label.includes('installed apps') || label.includes('vision enhancements'));
+          return label.includes('accessibility') && (label.includes('agent jarvis') || label.includes('installed apps') || label.includes('vision enhancements'));
         });
         if (a11yNode) {
           console.warn(`[REACT] DANGER_ZONE: on accessibility settings — aborting`);
@@ -326,7 +326,7 @@ Respond with ONLY a JSON array of strings. No explanation. Example:
           // Verify we're on the correct app before declaring success
           if (expectedPkg) {
             const donePkg = await AppController.getActivePackage().catch(() => '');
-            if (donePkg === 'com.agent.ultra' || (donePkg && donePkg !== expectedPkg)) {
+            if (donePkg === 'com.agent.jarvis' || (donePkg && donePkg !== expectedPkg)) {
               DebugLog.error('ReActLoop', `DONE rejected: on ${donePkg}, expected ${expectedPkg}`);
               return { success: false, steps, finalObservation: `Goal declared done but wrong app active (${donePkg})`, goalAchieved: false, error: 'wrong_app_at_done' };
             }
@@ -469,7 +469,7 @@ Respond: ACTION: <action> // <one-word reason>`;
         // Verify we're on the correct app before declaring success
         if (expectedPkg) {
           const donePkg = await AppController.getActivePackage().catch(() => '');
-          if (donePkg === 'com.agent.ultra' || (donePkg && donePkg !== expectedPkg)) {
+          if (donePkg === 'com.agent.jarvis' || (donePkg && donePkg !== expectedPkg)) {
             DebugLog.error('ReActLoop', `DONE rejected: on ${donePkg}, expected ${expectedPkg}`);
             return { success: false, steps, finalObservation: `Goal declared done but wrong app active (${donePkg})`, goalAchieved: false, error: 'wrong_app_at_done' };
           }
@@ -519,7 +519,7 @@ Respond: ACTION: <action> // <one-word reason>`;
     // Reject goalAchieved if we're on the wrong app
     if (goalAchieved && expectedPkg) {
       const finalPkg = await AppController.getActivePackage().catch(() => '');
-      if (finalPkg === 'com.agent.ultra' || (finalPkg && finalPkg !== expectedPkg)) {
+      if (finalPkg === 'com.agent.jarvis' || (finalPkg && finalPkg !== expectedPkg)) {
         DebugLog.error('ReActLoop', `goalAchieved overridden: on ${finalPkg}, expected ${expectedPkg}`);
         goalAchieved = false;
       }

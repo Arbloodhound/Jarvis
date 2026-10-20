@@ -1,7 +1,7 @@
 import { NativeModules, Platform, AppState } from 'react-native';
 import { ProactiveEngine, ProactiveSuggestion } from './ProactiveEngine';
 import { DeviceSignals } from './DeviceSignals';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 const isNative = Platform.OS !== 'web';
 let _orchestratorInstance: BackgroundOrchestrator | null = null;

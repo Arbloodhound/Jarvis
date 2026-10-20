@@ -168,7 +168,7 @@ Standing rule for the fix loop: fixes land one defect at a time with proof (see 
   - "search my notes for Lisbon", "what's in my memory about Sam" or "read me my to-do list" answers from them.
   - "open my notes" or "show my memory" opens the screen. If you say it to the phone with the app closed, Jarvis reads them out.
 
-Harness note (2026-10-19): underneath, the harness memory layer (`MemoryClaims`) stores claims with provenance and supersede chains in `UltraDatabase` v9, and forgetting moves items to a trash that only **you** can empty in settings — the agent cannot purge it. If forget / trash behaviour differs from that, report it as a bug.
+Harness note (2026-10-19): underneath, the harness memory layer (`MemoryClaims`) stores claims with provenance and supersede chains in `JarvisDatabase` v9, and forgetting moves items to a trash that only **you** can empty in settings — the agent cannot purge it. If forget / trash behaviour differs from that, report it as a bug.
 
 ---
 

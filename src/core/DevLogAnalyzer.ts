@@ -1,4 +1,4 @@
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import type { ModelRouter } from './ModelRouter';
 import { logAICall } from '../utils/AICallLogger';
 

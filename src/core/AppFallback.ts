@@ -1,4 +1,4 @@
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 interface FallbackEntry {
   appNames: string[];

@@ -1,1 +1,0 @@
-{ global: Java_com_agent_ultra_listen_WhisperNative_*; local: *; };

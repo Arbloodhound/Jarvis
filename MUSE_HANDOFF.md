@@ -20,19 +20,19 @@ The six harness base files named in the previous version (`MemoryClaims`, `Appro
 
 ## 2. What the harness package now contains
 
-`com.agent.ultra.harness` in the merged tree contains: MemoryClaims (kind/salience/confidence, provenance, supersede chains, hybrid search + query-time temporal decay), ApprovalGrants (grant levels + command binding), Scheduler + SchedulerRuntime/SchedulerReceiver, SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, NLI head, bandit (ForYou), and `connectors/` (Gmail, Google Calendar/Docs/Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber).
+`com.agent.jarvis.harness` in the merged tree contains: MemoryClaims (kind/salience/confidence, provenance, supersede chains, hybrid search + query-time temporal decay), ApprovalGrants (grant levels + command binding), Scheduler + SchedulerRuntime/SchedulerReceiver, SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, NLI head, bandit (ForYou), and `connectors/` (Gmail, Google Calendar/Docs/Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber).
 
 Earlier framings of these as "proposed", "awaiting approval", or "not yet built" are superseded: the code exists in the merged tree per the audits. What remains open is wiring and verification, listed in §4 — not construction.
 
 ## 3. Resolved
 
-- **Harness DB wiring (was the pass-2 critical):** UltraDatabase is v9; entities include ClaimEntity/GrantEntity/MemoryEmbeddingEntity/BanditArmEntity; DAO accessors `claims()`/`claimForget()`/`grants()`/`embeddings()`/`banditArms()`; MIGRATION_7_8 + MIGRATION_8_9 defined and registered. Field-verified by the supplement audit.
+- **Harness DB wiring (was the pass-2 critical):** JarvisDatabase is v9; entities include ClaimEntity/GrantEntity/MemoryEmbeddingEntity/BanditArmEntity; DAO accessors `claims()`/`claimForget()`/`grants()`/`embeddings()`/`banditArms()`; MIGRATION_7_8 + MIGRATION_8_9 defined and registered. Field-verified by the supplement audit.
 - Audits: pass 2 found 119 defects (1 critical / 16 high / 41 medium / 61 low); supplement found 87 findings (0 critical / 12 high / 31 medium / 44 low). Post-merge: **0 known criticals**.
 
 ## 4. Still open
 
 - 2 manifest registrations: `SchedulerReceiver` and `SpotifyRedirectActivity` exist but are not registered in `AndroidManifest.xml`.
-- 2 broken unit tests: `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import the debug-only `com.agent.ultra.bench.TestKitActivity`.
+- 2 broken unit tests: `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import the debug-only `com.agent.jarvis.bench.TestKitActivity`.
 - TS `server/` orphaned (nothing calls it; crashes at startup in the audited tree).
 - ~70 dead-code candidates (zero call sites; candidates only).
 - CI compile of the merged tree pending.

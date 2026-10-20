@@ -2,7 +2,7 @@ import { DeviceContext, DeviceSnapshot } from './DeviceContext';
 import { MemoryManager } from './MemoryManager';
 import { DevLogAnalyzer } from './DevLogAnalyzer';
 import type { ModelRouter } from './ModelRouter';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { logAICall, logContextBudget } from '../utils/AICallLogger';
 
 function estimateTokens(text: string): number { return Math.ceil((text || '').length / 4); }

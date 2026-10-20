@@ -1,4 +1,4 @@
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface TaskNode {
   id: string;
@@ -15,17 +15,17 @@ export class TaskGraph {
 
   constructor() {
     this.nodes = new Map();
-    UltraDevLog.push('SYSTEM', { event: 'task_graph_init' });
+    JarvisDevLog.push('SYSTEM', { event: 'task_graph_init' });
   }
 
   addNode(node: TaskNode): void {
     this.nodes.set(node.id, node);
-    UltraDevLog.push('SYSTEM', { event: 'task_graph_add_node', nodeId: node.id, deps: node.dependencies, status: node.status, model: node.assignedModel });
+    JarvisDevLog.push('SYSTEM', { event: 'task_graph_add_node', nodeId: node.id, deps: node.dependencies, status: node.status, model: node.assignedModel });
   }
 
   getNode(id: string): TaskNode | undefined {
     const n = this.nodes.get(id);
-    if (!n) UltraDevLog.push('SYSTEM', { event: 'task_graph_node_not_found', nodeId: id });
+    if (!n) JarvisDevLog.push('SYSTEM', { event: 'task_graph_node_not_found', nodeId: id });
     return n;
   }
 
@@ -49,7 +49,7 @@ export class TaskGraph {
     const n = this.nodes.get(id);
     if (n) {
       n.status = 'running';
-      UltraDevLog.push('SYSTEM', { event: 'task_graph_mark_running', nodeId: id });
+      JarvisDevLog.push('SYSTEM', { event: 'task_graph_mark_running', nodeId: id });
     }
   }
 
@@ -58,7 +58,7 @@ export class TaskGraph {
     if (n) {
       n.status = 'completed';
       n.result = result;
-      UltraDevLog.push('SYSTEM', { event: 'task_graph_mark_completed', nodeId: id });
+      JarvisDevLog.push('SYSTEM', { event: 'task_graph_mark_completed', nodeId: id });
     }
   }
 
@@ -67,7 +67,7 @@ export class TaskGraph {
     if (n) {
       n.status = 'failed';
       n.error = error;
-      UltraDevLog.push('SYSTEM', { event: 'task_graph_mark_failed', nodeId: id, error: error.slice(0, 200) });
+      JarvisDevLog.push('SYSTEM', { event: 'task_graph_mark_failed', nodeId: id, error: error.slice(0, 200) });
     }
   }
 
@@ -95,7 +95,7 @@ export class TaskGraph {
       batch.forEach((id) => visited.add(id));
       order.push(batch);
     }
-    UltraDevLog.push('SYSTEM', { event: 'task_graph_execution_order', batchCount: order.length, totalNodes: this.nodes.size });
+    JarvisDevLog.push('SYSTEM', { event: 'task_graph_execution_order', batchCount: order.length, totalNodes: this.nodes.size });
     return order;
   }
 

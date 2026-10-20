@@ -1,5 +1,5 @@
 import { SecureVault } from '../security/SecureVault';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 export type TaskStatus = 'pending' | 'active' | 'paused' | 'completed' | 'failed' | 'cancelled';
 

@@ -1,5 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface UINode {
   className: string;
@@ -101,125 +101,125 @@ const noopController: AppControllerInterface = {
 function createNativeController(): AppControllerInterface {
   const native = NativeModules.AppController;
   if (!native) {
-    UltraDevLog.push('SYSTEM', { event: 'app_controller_init', available: false, reason: 'no_native_module', platform: Platform.OS });
+    JarvisDevLog.push('SYSTEM', { event: 'app_controller_init', available: false, reason: 'no_native_module', platform: Platform.OS });
     return noopController;
   }
-  UltraDevLog.push('SYSTEM', { event: 'app_controller_init', available: true, platform: Platform.OS });
+  JarvisDevLog.push('SYSTEM', { event: 'app_controller_init', available: true, platform: Platform.OS });
 
   return {
     getScreenContent: async () => {
       try {
         const json = await native.getScreenContent();
         const parsed = JSON.parse(json) as UINode;
-        UltraDevLog.push('SYSTEM', { event: 'native_call_ok', method: 'getScreenContent' });
+        JarvisDevLog.push('SYSTEM', { event: 'native_call_ok', method: 'getScreenContent' });
         return parsed;
       } catch (error: any) {
-        UltraDevLog.push('SYSTEM', { event: 'native_call_fail', method: 'getScreenContent', error: error?.message });
+        JarvisDevLog.push('SYSTEM', { event: 'native_call_fail', method: 'getScreenContent', error: error?.message });
         return emptyNode;
       }
     },
     getScreenContentFlat: async () => {
       if (!native.getScreenContentFlat) {
-        UltraDevLog.push('SYSTEM', { event: 'native_call_noop', method: 'getScreenContentFlat', reason: 'method_missing' });
+        JarvisDevLog.push('SYSTEM', { event: 'native_call_noop', method: 'getScreenContentFlat', reason: 'method_missing' });
         return '[]';
       }
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'getScreenContentFlat' });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'getScreenContentFlat' });
       return native.getScreenContentFlat();
     },
     performClick: (nodeSelector: string) => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performClick', selectorLen: nodeSelector.length });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performClick', selectorLen: nodeSelector.length });
       return native.performClick(nodeSelector);
     },
     performTap: (x: number, y: number) => {
       if (!native.performTap) {
-        UltraDevLog.push('SYSTEM', { event: 'native_call_noop', method: 'performTap', reason: 'method_missing' });
+        JarvisDevLog.push('SYSTEM', { event: 'native_call_noop', method: 'performTap', reason: 'method_missing' });
         return Promise.resolve(false);
       }
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performTap', x, y });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performTap', x, y });
       return native.performTap(x, y);
     },
     performSwipe: (x1: number, y1: number, x2: number, y2: number, durationMs: number) => {
       if (!native.performSwipe) {
-        UltraDevLog.push('SYSTEM', { event: 'native_call_noop', method: 'performSwipe', reason: 'method_missing' });
+        JarvisDevLog.push('SYSTEM', { event: 'native_call_noop', method: 'performSwipe', reason: 'method_missing' });
         return Promise.resolve(false);
       }
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performSwipe', x1, y1, x2, y2, durationMs });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performSwipe', x1, y1, x2, y2, durationMs });
       return native.performSwipe(x1, y1, x2, y2, durationMs);
     },
     performScroll: (direction: string) => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performScroll', direction });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performScroll', direction });
       return native.performScroll(direction);
     },
     performText: (nodeSelector: string, text: string) => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performText', selectorLen: nodeSelector.length, textLen: text.length });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performText', selectorLen: nodeSelector.length, textLen: text.length });
       return native.performText(nodeSelector, text);
     },
     performBack: () => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performBack' });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performBack' });
       return native.performBack();
     },
     performHome: () => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performHome' });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'performHome' });
       return native.performHome();
     },
     getActivePackage: () => native.getActivePackage(),
     isServiceEnabled: () => native.isServiceEnabled(),
     openAccessibilitySettings: () => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'openAccessibilitySettings' });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'openAccessibilitySettings' });
       return native.openAccessibilitySettings();
     },
     allowPackage: (pkg: string) => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'allowPackage', pkg });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'allowPackage', pkg });
       return native.allowPackage(pkg);
     },
     revokePackage: (pkg: string) => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'revokePackage', pkg });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'revokePackage', pkg });
       return native.revokePackage(pkg);
     },
     waitForUiChange: (timeoutMs: number) => {
       if (!native.waitForUiChange) {
-        UltraDevLog.push('SYSTEM', { event: 'native_call_noop', method: 'waitForUiChange', reason: 'method_missing' });
+        JarvisDevLog.push('SYSTEM', { event: 'native_call_noop', method: 'waitForUiChange', reason: 'method_missing' });
         return Promise.resolve(false);
       }
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'waitForUiChange', timeoutMs });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'waitForUiChange', timeoutMs });
       return native.waitForUiChange(timeoutMs);
     },
     performQuickSettings: () => native.performQuickSettings ? native.performQuickSettings() : Promise.resolve(false),
     takeScreenshot: () => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'takeScreenshot', available: !!native.takeScreenshot });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'takeScreenshot', available: !!native.takeScreenshot });
       return native.takeScreenshot ? native.takeScreenshot() : Promise.resolve(false);
     },
     toggleQuickSetting: (tileLabel: string) => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'toggleQuickSetting', tileLabel });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'toggleQuickSetting', tileLabel });
       return native.toggleQuickSetting ? native.toggleQuickSetting(tileLabel) : Promise.resolve(false);
     },
     setSecureSetting: (namespace: string, key: string, value: number) => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'setSecureSetting', namespace, key, value });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'setSecureSetting', namespace, key, value });
       return native.setSecureSetting ? native.setSecureSetting(namespace, key, value) : Promise.resolve(false);
     },
     getSecureSetting: (namespace: string, key: string) => {
       return native.getSecureSetting ? native.getSecureSetting(namespace, key) : Promise.resolve(-1);
     },
     setVolume: (streamType: string, level: number) => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'setVolume', streamType, level });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'setVolume', streamType, level });
       return native.setVolume ? native.setVolume(streamType, level) : Promise.resolve(0);
     },
     getVolume: (streamType: string) => native.getVolume ? native.getVolume(streamType) : Promise.resolve(0),
     adjustVolume: (direction: 'up' | 'down') => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'adjustVolume', direction });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'adjustVolume', direction });
       return native.adjustVolume ? native.adjustVolume(direction) : Promise.resolve(0);
     },
     blockPackage: (pkg: string) => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'blockPackage', pkg });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'blockPackage', pkg });
       return native.blockPackage ? native.blockPackage(pkg) : Promise.resolve(false);
     },
     unblockPackage: (pkg: string) => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'unblockPackage', pkg });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'unblockPackage', pkg });
       return native.unblockPackage ? native.unblockPackage(pkg) : Promise.resolve(false);
     },
     getBlockedPackages: () => native.getBlockedPackages ? native.getBlockedPackages() : Promise.resolve([]),
     getSystemStateSnapshot: () => {
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'getSystemStateSnapshot' });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'getSystemStateSnapshot' });
       return native.getSystemStateSnapshot ? native.getSystemStateSnapshot() : Promise.resolve('{"error":"not_available"}');
     },
     drainAccessibilityLogs: () => native.drainAccessibilityLogs ? native.drainAccessibilityLogs() : Promise.resolve([]),
@@ -231,10 +231,10 @@ function createNativeController(): AppControllerInterface {
     startBackgroundService: () => {
       const bridge = NativeModules.AppController;
       if (!bridge?.startBackgroundService) {
-        UltraDevLog.push('SYSTEM', { event: 'native_call_noop', method: 'startBackgroundService', reason: 'method_missing' });
+        JarvisDevLog.push('SYSTEM', { event: 'native_call_noop', method: 'startBackgroundService', reason: 'method_missing' });
         return Promise.resolve(false);
       }
-      UltraDevLog.push('SYSTEM', { event: 'native_call_start', method: 'startBackgroundService' });
+      JarvisDevLog.push('SYSTEM', { event: 'native_call_start', method: 'startBackgroundService' });
       return bridge.startBackgroundService();
     },
     performImeAction: async () => {
@@ -266,7 +266,7 @@ function createNativeController(): AppControllerInterface {
 
 const AppController: AppControllerInterface =
   Platform.OS !== 'web' ? createNativeController() : (() => {
-    UltraDevLog.push('SYSTEM', { event: 'app_controller_init', available: false, reason: 'web_platform', platform: Platform.OS });
+    JarvisDevLog.push('SYSTEM', { event: 'app_controller_init', available: false, reason: 'web_platform', platform: Platform.OS });
     return noopController;
   })();
 

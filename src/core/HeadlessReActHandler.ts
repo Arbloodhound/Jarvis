@@ -1,5 +1,5 @@
 import { AppRegistry, Platform, DeviceEventEmitter } from 'react-native';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 export interface HeadlessReActResult {
   taskId: string;
@@ -98,11 +98,11 @@ const headlessReActHandler = async (taskData: any) => {
     }
 
     // Read the screen AFTER task completes — the brain needs to see what happened
-    // But ONLY if we're still on the target app, not Agent Ultra
+    // But ONLY if we're still on the target app, not Jarvis
     let screenAfter = '';
     try {
       const currentPkg = await AppController.getActivePackage();
-      if (currentPkg && currentPkg !== 'com.agent.ultra') {
+      if (currentPkg && currentPkg !== 'com.agent.jarvis') {
         const screenFlat = await AppController.getScreenContentFlat();
         const nodes = JSON.parse(screenFlat);
         if (Array.isArray(nodes) && nodes.length > 0) {
@@ -113,7 +113,7 @@ const headlessReActHandler = async (taskData: any) => {
             .join(' | ');
         }
       } else {
-        console.warn('[HEADLESS] skipping screen read — Agent Ultra is foreground');
+        console.warn('[HEADLESS] skipping screen read — Jarvis is foreground');
       }
     } catch {}
 

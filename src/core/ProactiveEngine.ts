@@ -3,7 +3,7 @@ import { KnowledgeGraph } from './KnowledgeGraph';
 import { DeviceContext, CalendarEvent } from './DeviceContext';
 import type { ModelRouter } from './ModelRouter';
 import { SecureVault } from '../security/SecureVault';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { logAICall } from '../utils/AICallLogger';
 
 export interface ProactiveSuggestion {

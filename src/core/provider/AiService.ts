@@ -23,7 +23,7 @@ import type {
   VideoOptions,
   EmbeddingsOptions,
 } from './CapabilityAdapters';
-import { UltraDevLog } from '../../utils/UltraDevLog';
+import { JarvisDevLog } from '../../utils/JarvisDevLog';
 import { CorrIdScope } from '../../utils/CorrIdScope';
 
 const FAIL_CLOSED_MSG =
@@ -195,7 +195,7 @@ export class AiService {
         conversationId: opts.conversationId,
       });
       if (grResult.ok) {
-        UltraDevLog.push('ROUTE' as any, {
+        JarvisDevLog.push('ROUTE' as any, {
           event: 'route_resolved',
           step: 'group_router',
           corrId,
@@ -206,7 +206,7 @@ export class AiService {
       }
       // no_groups or no_providers → GroupRouter not applicable; fall through to legacy scan.
       if (grResult.error.code === 'no_groups' || grResult.error.code === 'no_providers') {
-        UltraDevLog.push('ROUTE' as any, {
+        JarvisDevLog.push('ROUTE' as any, {
           event: 'group_router_skip',
           corrId,
           operation,
@@ -215,7 +215,7 @@ export class AiService {
         });
       } else {
         // no_valid_route — all groups checked and nothing works; fail closed.
-        UltraDevLog.push('ROUTE' as any, {
+        JarvisDevLog.push('ROUTE' as any, {
           event: 'route_fail_closed',
           corrId,
           operation,
@@ -234,7 +234,7 @@ export class AiService {
       if (preferred && this.providerHasModel(preferred, opts.manualModelId)) {
         const route = await this.buildRoute(preferred, opts.manualModelId, operation);
         if (route) {
-          UltraDevLog.push('ROUTE' as any, {
+          JarvisDevLog.push('ROUTE' as any, {
             event: 'route_resolved',
             step: 'preferred_provider_qualified',
             preferredProviderId: opts.preferredProviderId,
@@ -244,7 +244,7 @@ export class AiService {
         }
       }
       // Preferred provider unavailable/missing — log and fall through.
-      UltraDevLog.push('ROUTE' as any, {
+      JarvisDevLog.push('ROUTE' as any, {
         event: 'preferred_provider_not_matched',
         preferredProviderId: opts.preferredProviderId,
         manualModelId: opts.manualModelId,
@@ -258,7 +258,7 @@ export class AiService {
         if (!this.providerHasModel(provider, opts.manualModelId)) continue;
         const route = await this.buildRoute(provider, opts.manualModelId, operation);
         if (route) {
-          UltraDevLog.push('ROUTE' as any, {
+          JarvisDevLog.push('ROUTE' as any, {
             event: 'route_resolved',
             step: 'manual_override',
             ...routeLogFields(route),
@@ -267,7 +267,7 @@ export class AiService {
         }
       }
       // Manual model not found in any provider — fall through to first-available
-      UltraDevLog.push('ROUTE' as any, {
+      JarvisDevLog.push('ROUTE' as any, {
         event: 'manual_model_not_matched',
         manualModelId: opts.manualModelId,
         operation,
@@ -284,7 +284,7 @@ export class AiService {
       for (const modelId of modelIds) {
         const route = await this.buildRoute(provider, modelId, operation);
         if (route) {
-          UltraDevLog.push('ROUTE' as any, {
+          JarvisDevLog.push('ROUTE' as any, {
             event: 'route_resolved',
             step: 'first_available',
             ...routeLogFields(route),
@@ -295,7 +295,7 @@ export class AiService {
     }
 
     // Fail closed
-    UltraDevLog.push('ROUTE' as any, {
+    JarvisDevLog.push('ROUTE' as any, {
       event: 'route_fail_closed',
       operation,
       activeProviderCount: activeProviders.length,
@@ -330,7 +330,7 @@ export class AiService {
       taskId: input.taskId,
       agentId: input.agentId,
     };
-    UltraDevLog.push('AI_REQUEST' as any, {
+    JarvisDevLog.push('AI_REQUEST' as any, {
       event: 'ai_vision_start',
       ...routeLogFields(route),
       model,
@@ -340,7 +340,7 @@ export class AiService {
     const t0 = Date.now();
     const result: AdapterResult<NormalizedAiResponse> = await adapter.invokeChat(route, opts);
     if (!result.ok) {
-      UltraDevLog.push('ERROR', {
+      JarvisDevLog.push('ERROR', {
         event: 'ai_vision_failed',
         ...routeLogFields(route),
         error: result.error.message,
@@ -348,7 +348,7 @@ export class AiService {
       });
       throw new Error(`Vision request failed [${result.error.code}]: ${result.error.message}`);
     }
-    UltraDevLog.push('AI_RESPONSE', {
+    JarvisDevLog.push('AI_RESPONSE', {
       event: 'ai_vision_done',
       ...routeLogFields(route),
       model,
@@ -379,12 +379,12 @@ export class AiService {
       taskId: input.taskId,
       agentId: input.agentId,
     };
-    UltraDevLog.push('AI_REQUEST', { event: 'ai_text_start', ...routeLogFields(route), model });
+    JarvisDevLog.push('AI_REQUEST', { event: 'ai_text_start', ...routeLogFields(route), model });
     const t0 = Date.now();
     const result: AdapterResult<NormalizedAiResponse> = await adapter.invokeChat(route, opts);
     console.warn(`[AISVC_TIMING] invokeChat: ${Date.now() - t0}ms agent=${input.agentId || 'unknown'}`);
     if (!result.ok) {
-      UltraDevLog.push('ERROR', {
+      JarvisDevLog.push('ERROR', {
         event: 'ai_text_failed',
         ...routeLogFields(route),
         error: result.error.message,
@@ -392,7 +392,7 @@ export class AiService {
       });
       throw new Error(`AI request failed [${result.error.code}]: ${result.error.message}`);
     }
-    UltraDevLog.push('AI_RESPONSE', {
+    JarvisDevLog.push('AI_RESPONSE', {
       event: 'ai_text_done',
       ...routeLogFields(route),
       model,
@@ -425,7 +425,7 @@ export class AiService {
       stylePreset: input.stylePreset,
       taskId: input.taskId,
     };
-    UltraDevLog.push('AI_REQUEST', {
+    JarvisDevLog.push('AI_REQUEST', {
       event: 'ai_image_start',
       ...routeLogFields(route),
       model,
@@ -433,14 +433,14 @@ export class AiService {
     });
     const result: AdapterResult<NormalizedImageResponse> = await adapter.invokeImage(route, opts);
     if (!result.ok) {
-      UltraDevLog.push('ERROR', {
+      JarvisDevLog.push('ERROR', {
         event: 'ai_image_failed',
         ...routeLogFields(route),
         error: result.error.message,
       });
       throw new Error(`Image generation failed [${result.error.code}]: ${result.error.message}`);
     }
-    UltraDevLog.push('AI_RESPONSE', {
+    JarvisDevLog.push('AI_RESPONSE', {
       event: 'ai_image_done',
       ...routeLogFields(route),
       model,
@@ -458,7 +458,7 @@ export class AiService {
     if (!adapter) throw new Error(`Adapter '${route.adapterId}' not found`);
     const model = input.model ?? route.modelId;
     const opts: SpeechOptions = { model, text: input.text, voice: input.voice, taskId: input.taskId };
-    UltraDevLog.push('AI_REQUEST', {
+    JarvisDevLog.push('AI_REQUEST', {
       event: 'ai_speech_start',
       ...routeLogFields(route),
       model,
@@ -466,14 +466,14 @@ export class AiService {
     });
     const result: AdapterResult<NormalizedAudioResponse> = await adapter.invokeAudio(route, opts);
     if (!result.ok) {
-      UltraDevLog.push('ERROR', {
+      JarvisDevLog.push('ERROR', {
         event: 'ai_speech_failed',
         ...routeLogFields(route),
         error: result.error.message,
       });
       throw new Error(`Speech generation failed [${result.error.code}]: ${result.error.message}`);
     }
-    UltraDevLog.push('AI_RESPONSE', { event: 'ai_speech_done', ...routeLogFields(route), model });
+    JarvisDevLog.push('AI_RESPONSE', { event: 'ai_speech_done', ...routeLogFields(route), model });
     return result.value;
   }
 
@@ -492,10 +492,10 @@ export class AiService {
       duration: input.duration,
       taskId: input.taskId,
     };
-    UltraDevLog.push('AI_REQUEST', { event: 'ai_video_start', ...routeLogFields(route), model });
+    JarvisDevLog.push('AI_REQUEST', { event: 'ai_video_start', ...routeLogFields(route), model });
     const jobResult: AdapterResult<NormalizedVideoJob> = await adapter.invokeVideoQueue(route, opts);
     if (!jobResult.ok) {
-      UltraDevLog.push('ERROR', {
+      JarvisDevLog.push('ERROR', {
         event: 'ai_video_queue_failed',
         ...routeLogFields(route),
         error: jobResult.error.message,
@@ -503,10 +503,10 @@ export class AiService {
       throw new Error(`Video queue failed [${jobResult.error.code}]: ${jobResult.error.message}`);
     }
     const { jobId } = jobResult.value;
-    UltraDevLog.push('SYSTEM', { event: 'ai_video_queued', ...routeLogFields(route), jobId });
+    JarvisDevLog.push('SYSTEM', { event: 'ai_video_queued', ...routeLogFields(route), jobId });
     const pollResult: AdapterResult<NormalizedVideoResult> = await adapter.invokeVideoPoll(route, jobId);
     if (!pollResult.ok) {
-      UltraDevLog.push('ERROR', {
+      JarvisDevLog.push('ERROR', {
         event: 'ai_video_poll_failed',
         ...routeLogFields(route),
         jobId,
@@ -516,7 +516,7 @@ export class AiService {
         `Video polling failed [${pollResult.error.code}]: ${pollResult.error.message}`
       );
     }
-    UltraDevLog.push('AI_RESPONSE', {
+    JarvisDevLog.push('AI_RESPONSE', {
       event: 'ai_video_done',
       ...routeLogFields(route),
       model,

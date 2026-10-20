@@ -6,7 +6,7 @@ The previous version of this file (2026-10-15) was a build request: it listed th
 
 **CI has not yet compiled the merged tree.** Kotlin is source-only until CI runs. Audit verification was grep-level (definitions/call sites/imports), not compilation.
 
-## 0. What now exists — harness package `com.agent.ultra.harness`
+## 0. What now exists — harness package `com.agent.jarvis.harness`
 
 Per the 2026-10-19 audits, the package contains:
 
@@ -26,13 +26,13 @@ Per the 2026-10-19 audits, the package contains:
 
 ## 1. Wire-in status
 
-- **DB wiring — RESOLVED in the merged tree** (was the pass-2 audit's 1 critical): UltraDatabase is v9; entities include ClaimEntity/GrantEntity/MemoryEmbeddingEntity/BanditArmEntity; DAO accessors `claims()`/`claimForget()`/`grants()`/`embeddings()`/`banditArms()`; MIGRATION_7_8 + MIGRATION_8_9 defined and registered. Field-verified against the harness entities by the supplement audit. Post-merge: **0 known criticals**.
+- **DB wiring — RESOLVED in the merged tree** (was the pass-2 audit's 1 critical): JarvisDatabase is v9; entities include ClaimEntity/GrantEntity/MemoryEmbeddingEntity/BanditArmEntity; DAO accessors `claims()`/`claimForget()`/`grants()`/`embeddings()`/`banditArms()`; MIGRATION_7_8 + MIGRATION_8_9 defined and registered. Field-verified against the harness entities by the supplement audit. Post-merge: **0 known criticals**.
 - **Manifest wiring — STILL OPEN (2 registrations):** `SchedulerReceiver` and `SpotifyRedirectActivity` exist in the harness but are not registered in `AndroidManifest.xml`.
 
 ## 2. Still open (complete post-merge list from FACTS)
 
 - 2 manifest registrations (above).
-- 2 broken unit tests: `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import `com.agent.ultra.bench.TestKitActivity`, which exists only in `src/debug` — the unit-test source set cannot resolve it.
+- 2 broken unit tests: `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import `com.agent.jarvis.bench.TestKitActivity`, which exists only in `src/debug` — the unit-test source set cannot resolve it.
 - TS `server/` orphaned: nothing calls it, registers no routes, crashes at startup in the audited tree.
 - ~70 dead-code candidates (zero call sites) — candidates only; reflection/JNI/framework callbacks can make some live.
 - CI compile pending.

@@ -50,19 +50,19 @@ screen_test.png
 .replit
 
 # The host harness stub is not the Expo android/ project folder.
-!ultra-native/tools/host-harness/stub/android/
-ultra-native/tools/host-harness/tiny-qwen3.gguf
+!jarvis-native/tools/host-harness/stub/android/
+jarvis-native/tools/host-harness/tiny-qwen3.gguf
 
 # Push rules (v3 PUSH_CHECKLIST): never commit these.
 # Model files: multi-GB, the app downloads them in-app.
 *.gguf
 *.onnx
 mmproj*
-ultra-native/**/models/
-# Signing keys and service configs. (ultra-native/ci/test-debug.keystore is tracked on purpose: test-only key, see
-# ultra-native/ci/README.md; already-tracked files are unaffected by this list.)
+jarvis-native/**/models/
+# Signing keys and service configs. (jarvis-native/ci/test-debug.keystore is tracked on purpose: test-only key, see
+# jarvis-native/ci/README.md; already-tracked files are unaffected by this list.)
 *.keystore
-!ultra-native/ci/test-debug.keystore
+!jarvis-native/ci/test-debug.keystore
 google-services.json
 local.properties
 # Personal data from the owner's phone: results files can hold heard speech, SMS text and contact names.

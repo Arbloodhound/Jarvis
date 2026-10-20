@@ -1,4 +1,4 @@
-Agent Ultra — Android agent with an on-device language model and a policy gate
+Jarvis — Android agent with an on-device language model and a policy gate
 Copyright (c) 2026 Dafarus (dafarusd). All rights reserved.
 
 ============================================================
@@ -36,7 +36,7 @@ THIRD-PARTY COMPONENTS
 
 llama.cpp — https://github.com/ggml-org/llama.cpp — MIT License.
 llama.cpp's source is not included in this repository. The native library
-(ultra-native/app/src/main/cpp) links against llama.cpp static libraries
+(jarvis-native/app/src/main/cpp) links against llama.cpp static libraries
 built separately (see README), so published APKs contain compiled llama.cpp
 code. Its license:
 

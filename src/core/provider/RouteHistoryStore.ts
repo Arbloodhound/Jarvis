@@ -1,7 +1,7 @@
 // Route history — persists per conversation for sticky routing and last_known_good
 
 import { AppStorage } from '../../utils/AppStorage';
-import { UltraDevLog } from '../../utils/UltraDevLog';
+import { JarvisDevLog } from '../../utils/JarvisDevLog';
 import type { RouteHistory, ResolvedRoute } from '../../types/provider';
 import { STORAGE_KEYS as SK } from '../../types/provider';
 
@@ -26,7 +26,7 @@ export class RouteHistoryStore {
         }
       }
     } catch (e: any) {
-      UltraDevLog.push('ERROR', { event: 'route_history_load_failed', error: e?.message });
+      JarvisDevLog.push('ERROR', { event: 'route_history_load_failed', error: e?.message });
     }
   }
 
@@ -62,7 +62,7 @@ export class RouteHistoryStore {
       }
     }
     if (changed) await this.save();
-    UltraDevLog.push('SYSTEM', { event: 'route_history_provider_cleared', providerId });
+    JarvisDevLog.push('SYSTEM', { event: 'route_history_provider_cleared', providerId });
   }
 
   async invalidateGroup(groupId: string): Promise<void> {

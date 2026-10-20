@@ -19,7 +19,7 @@ import * as Sharing from "expo-sharing";
 import { LogFolder, type LogFile } from "@/src/services/LogFolder";
 import { SecureVault } from "@/src/security/SecureVault";
 import { getAgentCoreInstance } from "@/src/core/AgentCore";
-import { UltraDevLog as DebugLog, UltraDevLog } from "@/src/utils/UltraDevLog";
+import { JarvisDevLog as DebugLog, JarvisDevLog } from "@/src/utils/JarvisDevLog";
 import UsageIndicator, { ModelUsage } from "@/components/UsageIndicator";
 import BlockedAppsTab from "@/components/BlockedAppsTab";
 import type {
@@ -88,8 +88,8 @@ export default function SettingsScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
 
   useEffect(() => {
-    UltraDevLog.setCurrentScreen('SettingsScreen');
-    return () => UltraDevLog.setCurrentScreen('ChatScreen');
+    JarvisDevLog.setCurrentScreen('SettingsScreen');
+    return () => JarvisDevLog.setCurrentScreen('ChatScreen');
   }, []);
 
   const initialTab = (['costs', 'security', 'devtools', 'blocked'] as SettingsTab[]).includes(params.tab as SettingsTab)
@@ -205,13 +205,13 @@ export default function SettingsScreen() {
     // Refresh session status whenever logs load
     try {
       const { sessionIndex, sessionIds, currentSessionId, prevSessionId } =
-        await UltraDevLog.buildSessionIndexFromDurableFile();
+        await JarvisDevLog.buildSessionIndexFromDurableFile();
       const bugReportFile = (await LogFolder.listLogs()).find(f => f.name === 'bug-report.txt');
       setSessionStatus({
         currentSessionId,
         distinctSessions: sessionIds.length > 0 ? sessionIds.length : 1,
         allSessionIds: sessionIds.length > 0 ? sessionIds : [currentSessionId],
-        lastFlushedSeq: UltraDevLog.getLastFlushedSeq(),
+        lastFlushedSeq: JarvisDevLog.getLastFlushedSeq(),
         durableAvailable: sessionIndex.size > 0,
         prevSessionId: prevSessionId ?? null,
         lastBugReportTs: bugReportFile
@@ -220,10 +220,10 @@ export default function SettingsScreen() {
       });
     } catch {
       setSessionStatus({
-        currentSessionId: UltraDevLog.getSessionId(),
+        currentSessionId: JarvisDevLog.getSessionId(),
         distinctSessions: 1,
-        allSessionIds: [UltraDevLog.getSessionId()],
-        lastFlushedSeq: UltraDevLog.getLastFlushedSeq(),
+        allSessionIds: [JarvisDevLog.getSessionId()],
+        lastFlushedSeq: JarvisDevLog.getLastFlushedSeq(),
         durableAvailable: false,
         prevSessionId: null,
         lastBugReportTs: null,
@@ -911,7 +911,7 @@ export default function SettingsScreen() {
               <Pressable
                 style={[styles.btn, styles.primaryBtn, { marginTop: 4 }]}
                 onPress={async () => {
-                  const ok = await UltraDevLog.generateBugReportFile();
+                  const ok = await JarvisDevLog.generateBugReportFile();
                   if (ok) { await loadLogs(); Alert.alert('Done', 'bug-report.txt created (current session).'); }
                   else Alert.alert('Error', 'Could not write bug-report.txt');
                 }}
@@ -923,7 +923,7 @@ export default function SettingsScreen() {
                 style={[styles.btn, sessionStatus?.prevSessionId ? styles.secondaryBtn : styles.secondaryBtn, { marginTop: 8, opacity: sessionStatus?.prevSessionId ? 1 : 0.4 }]}
                 disabled={!sessionStatus?.prevSessionId}
                 onPress={async () => {
-                  const { ok, prevSessionId } = await UltraDevLog.generateBugReportFilePrevSession();
+                  const { ok, prevSessionId } = await JarvisDevLog.generateBugReportFilePrevSession();
                   if (ok) {
                     await loadLogs();
                     Alert.alert('Done', `Previous session report created.\nSession: ${prevSessionId?.slice(-8)}`);

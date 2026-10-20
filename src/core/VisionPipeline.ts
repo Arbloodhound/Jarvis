@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import * as ExpoFileSystem from 'expo-file-system/legacy';
 import AppController from '../native/AppController';
 import type { ModelRouter } from './ModelRouter';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { logAICall } from '../utils/AICallLogger';
 
 const FileSystem: any = Platform.OS !== 'web' ? ExpoFileSystem : null;

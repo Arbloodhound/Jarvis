@@ -1,6 +1,6 @@
 import { fetch } from "expo/fetch";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { UltraDevLog } from "../src/utils/UltraDevLog";
+import { JarvisDevLog } from "../src/utils/JarvisDevLog";
 
 /**
  * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
@@ -21,7 +21,7 @@ export function getApiUrl(): string {
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    UltraDevLog.push('SYSTEM', { event: 'query_client_request_fail', status: res.status, url: res.url });
+    JarvisDevLog.push('SYSTEM', { event: 'query_client_request_fail', status: res.status, url: res.url });
     throw new Error(`${res.status}: ${text}`);
   }
 }
@@ -59,7 +59,7 @@ export const getQueryFn: <T>(options: {
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      UltraDevLog.push('SYSTEM', { event: 'query_client_401_null', url: url.toString() });
+      JarvisDevLog.push('SYSTEM', { event: 'query_client_401_null', url: url.toString() });
       return null;
     }
 

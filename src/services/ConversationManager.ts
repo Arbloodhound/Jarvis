@@ -1,12 +1,12 @@
 import * as ExpoFileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
-import type { ChatMessage, Conversation, ConversationMeta } from '../types/ultra';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
+import type { ChatMessage, Conversation, ConversationMeta } from '../types/jarvis';
 
 const FileSystem: any = Platform.OS !== 'web' ? ExpoFileSystem : null;
 
-const PREFIX = 'ultra:conv:';
-const INDEX_KEY = 'ultra:conv:index';
+const PREFIX = 'jarvis:conv:';
+const INDEX_KEY = 'jarvis:conv:index';
 const MEMORY = new Map<string, Conversation>();
 
 function now() { return Date.now(); }

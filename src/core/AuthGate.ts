@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import AppController from '../native/AppController';
 import { getScreenContentFlat } from '../native/AppController';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 export type AuthType = 'biometric' | 'pin' | 'password' | 'pattern' | 'two_factor' | 'unknown';
 

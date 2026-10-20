@@ -16,7 +16,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import TouchInterceptor from "@/components/TouchInterceptor";
 import { queryClient } from "@/lib/query-client";
-import { UltraDevLog } from '@/src/utils/UltraDevLog';
+import { JarvisDevLog } from '@/src/utils/JarvisDevLog';
 import { AgentCoreProvider } from '@/src/context/AgentCoreContext';
 import '@/src/core/HeadlessReActHandler'; // registers HeadlessJS task for background ReActLoop
 
@@ -58,7 +58,7 @@ export default function RootLayout() {
   }, [fontsLoaded, fontError]);
 
   useEffect(() => {
-    UltraDevLog.collectEnvelopeContext();
+    JarvisDevLog.collectEnvelopeContext();
   }, []);
 
   // Global JS error capture — catches everything React ErrorBoundary misses
@@ -68,8 +68,8 @@ export default function RootLayout() {
       const error = event?.reason;
       const message = error?.message || error?.toString?.() || 'Unknown rejection';
       const stack = error?.stack || '';
-      UltraDevLog.error('UNHANDLED_REJECTION', message, stack);
-      console.error('[Ultra] Unhandled rejection:', message);
+      JarvisDevLog.error('UNHANDLED_REJECTION', message, stack);
+      console.error('[Jarvis] Unhandled rejection:', message);
     };
 
     // Uncaught synchronous errors (rare in React Native but possible)
@@ -77,20 +77,20 @@ export default function RootLayout() {
       const error = event?.error || event;
       const message = error?.message || error?.toString?.() || 'Unknown error';
       const stack = error?.stack || '';
-      UltraDevLog.error('UNCAUGHT_ERROR', message, stack);
-      console.error('[Ultra] Uncaught error:', message);
+      JarvisDevLog.error('UNCAUGHT_ERROR', message, stack);
+      console.error('[Jarvis] Uncaught error:', message);
     };
 
     // React Native's global error handler
     const prevHandler = (global as any).ErrorUtils?.getGlobalHandler?.();
     (global as any).ErrorUtils?.setGlobalHandler?.((error: Error, isFatal?: boolean) => {
       try {
-        UltraDevLog.error(
+        JarvisDevLog.error(
           isFatal ? 'FATAL_JS_ERROR' : 'JS_ERROR',
           error?.message || 'Unknown',
           error?.stack || ''
         );
-        UltraDevLog.flushToFile();
+        JarvisDevLog.flushToFile();
         if (isFatal) {
           import('../src/services/DebugScreenshots').then(m => m.DebugScreenshots.capture('fatal_error')).catch(() => {});
         }

@@ -1,11 +1,11 @@
 export const AGENT_TEMPLATES: Record<string, string> = {
 
-'UltraApplication.java': `package {{packageName}};
+'JarvisApplication.java': `package {{packageName}};
 
 import android.app.Application;
 
-public class UltraApplication extends Application {
-    private static UltraApplication instance;
+public class JarvisApplication extends Application {
+    private static JarvisApplication instance;
     private AgentDatabase database;
     private AiClient aiClient;
 
@@ -17,7 +17,7 @@ public class UltraApplication extends Application {
         aiClient = new AiClient("{{apiBaseUrl}}", "{{defaultModel}}");
     }
 
-    public static UltraApplication getInstance() { return instance; }
+    public static JarvisApplication getInstance() { return instance; }
     public AgentDatabase getDatabase() { return database; }
     public AiClient getAiClient() { return aiClient; }
 }`,
@@ -351,7 +351,7 @@ public class FileManager {
     private final File baseDir;
 
     public FileManager(Context context) {
-        this.baseDir = new File(context.getFilesDir(), "ultra_projects");
+        this.baseDir = new File(context.getFilesDir(), "jarvis_projects");
         this.baseDir.mkdirs();
     }
 
@@ -587,7 +587,7 @@ public class MainActivity extends Activity {
     }
 
     private void initAgent() {
-        UltraApplication app = UltraApplication.getInstance();
+        JarvisApplication app = JarvisApplication.getInstance();
         agentCore = new AgentCore(
             app.getAiClient(),
             app.getDatabase(),
@@ -719,7 +719,7 @@ public class MainActivity extends Activity {
 
         EditText apiInput = new EditText(this);
         apiInput.setTextColor(TEXT_COLOR);
-        String current = UltraApplication.getInstance().getDatabase().getSetting("api_key", "");
+        String current = JarvisApplication.getInstance().getDatabase().getSetting("api_key", "");
         apiInput.setText(current);
         apiInput.setHint("Enter API key");
         layout.addView(apiInput);
@@ -729,8 +729,8 @@ public class MainActivity extends Activity {
             .setView(layout)
             .setPositiveButton("Save", (d, w) -> {
                 String key = apiInput.getText().toString().trim();
-                UltraApplication.getInstance().getDatabase().setSetting("api_key", key);
-                UltraApplication.getInstance().getAiClient().setApiKey(key);
+                JarvisApplication.getInstance().getDatabase().setSetting("api_key", key);
+                JarvisApplication.getInstance().getAiClient().setApiKey(key);
                 addMessage("assistant", "API key updated.");
             })
             .setNegativeButton("Cancel", null)

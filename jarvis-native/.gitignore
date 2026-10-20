@@ -1,0 +1,17 @@
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+.cxx/
+.kotlin/
+# Expo-era debug key — anyone holding it can sign over Build 29/30 installs.
+# Backup lives in ~/keys/agent-jarvis-debug.keystore.
+app/debug.keystore
+tools/brainbench/
+tools/__pycache__/
+tools/learnrun*.log
+tools/learnrun/
+# Prebuilt sherpa-onnx TTS library, fetched (pinned + sha256) by ondevice-brain/fetch-sherpa.sh.
+app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so

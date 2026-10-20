@@ -1,5 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 const exec = async (cmd: string): Promise<string> => {
   try {
@@ -35,7 +35,7 @@ export class DeviceDiagnostics {
       }
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('AUDIO_STATE', state);
+        JarvisDevLog.push('AUDIO_STATE', state);
       }
     } catch {}
   }
@@ -78,7 +78,7 @@ export class DeviceDiagnostics {
       }
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('THERMAL', state);
+        JarvisDevLog.push('THERMAL', state);
       }
     } catch {}
   }
@@ -112,14 +112,14 @@ export class DeviceDiagnostics {
       }
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('MEMORY', state);
+        JarvisDevLog.push('MEMORY', state);
       }
     } catch {}
   }
 
   static async logRenderStats(): Promise<void> {
     try {
-      const raw = await exec('dumpsys gfxinfo com.agent.ultra');
+      const raw = await exec('dumpsys gfxinfo com.agent.jarvis');
       if (!raw) return;
 
       const state: Record<string, any> = {};
@@ -144,7 +144,7 @@ export class DeviceDiagnostics {
       if (vsyncMatch) state.missedVsync = parseInt(vsyncMatch[1]);
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('RENDER_STATS', state);
+        JarvisDevLog.push('RENDER_STATS', state);
       }
     } catch {}
   }
@@ -156,12 +156,12 @@ export class DeviceDiagnostics {
 
       const state: Record<string, any> = {};
 
-      state.ultraEnabled = raw.includes('com.agent.ultra') && raw.includes('isEnabled=true');
+      state.jarvisEnabled = raw.includes('com.agent.jarvis') && raw.includes('isEnabled=true');
 
       const enabledMatches = raw.match(/isEnabled=true/g);
       state.enabledServiceCount = enabledMatches ? enabledMatches.length : 0;
 
-      UltraDevLog.push('A11Y_DUMPSYS', state);
+      JarvisDevLog.push('A11Y_DUMPSYS', state);
     } catch {}
   }
 
@@ -182,7 +182,7 @@ export class DeviceDiagnostics {
       if (validatedMatch) state.validated = validatedMatch[1] === 'true';
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('NET_CONNECTIVITY', state);
+        JarvisDevLog.push('NET_CONNECTIVITY', state);
       }
     } catch {}
   }
@@ -210,7 +210,7 @@ export class DeviceDiagnostics {
       if (stateMatch) state.wifiEnabled = stateMatch[1].toLowerCase();
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('WIFI_STATE', state);
+        JarvisDevLog.push('WIFI_STATE', state);
       }
     } catch {}
   }
@@ -234,7 +234,7 @@ export class DeviceDiagnostics {
       if (tasks.length > 0) state.recentTasks = tasks;
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('ACTIVITY_STACK', state);
+        JarvisDevLog.push('ACTIVITY_STACK', state);
       }
     } catch {}
   }
@@ -256,7 +256,7 @@ export class DeviceDiagnostics {
       if (screenMatch) state.screenOn = screenMatch[1] === 'true';
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('WINDOW_STATE', state);
+        JarvisDevLog.push('WINDOW_STATE', state);
       }
     } catch {}
   }
@@ -277,13 +277,13 @@ export class DeviceDiagnostics {
       const wakeLocks = raw.match(/Wake Locks: size=(\d+)/);
       if (wakeLocks) state.wakeLockCount = parseInt(wakeLocks[1]);
 
-      if (raw.includes('com.agent.ultra')) state.ultraHasWakeLock = true;
+      if (raw.includes('com.agent.jarvis')) state.jarvisHasWakeLock = true;
 
       const stayOnMatch = raw.match(/mStayOn=(true|false)/);
       if (stayOnMatch) state.stayOn = stayOnMatch[1] === 'true';
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('POWER_STATE', state);
+        JarvisDevLog.push('POWER_STATE', state);
       }
     } catch {}
   }
@@ -298,14 +298,14 @@ export class DeviceDiagnostics {
       const idleMatch = raw.match(/mState=(\w+)/);
       if (idleMatch) state.idleState = idleMatch[1];
 
-      state.ultraWhitelisted = raw.includes('com.agent.ultra');
+      state.jarvisWhitelisted = raw.includes('com.agent.jarvis');
 
-      if (raw.match(/Whitelist[\s\S]*com\.agent\.ultra/i)) {
+      if (raw.match(/Whitelist[\s\S]*com\.agent\.jarvis/i)) {
         state.whitelistType = 'system_or_user';
       }
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('DEVICE_IDLE', state);
+        JarvisDevLog.push('DEVICE_IDLE', state);
       }
     } catch {}
   }
@@ -317,14 +317,14 @@ export class DeviceDiagnostics {
       if (!raw) return;
       const state: Record<string, any> = {};
 
-      const ultraAlarms = (raw.match(/com\.agent\.ultra/g) || []).length;
-      state.ultraAlarmCount = ultraAlarms;
+      const jarvisAlarms = (raw.match(/com\.agent\.jarvis/g) || []).length;
+      state.jarvisAlarmCount = jarvisAlarms;
 
       const pendingMatch = raw.match(/Pending alarm batches:\s*(\d+)/);
       if (pendingMatch) state.totalPendingBatches = parseInt(pendingMatch[1]);
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('ALARM_STATE', state);
+        JarvisDevLog.push('ALARM_STATE', state);
       }
     } catch {}
   }
@@ -336,13 +336,13 @@ export class DeviceDiagnostics {
       if (!raw) return;
       const state: Record<string, any> = {};
 
-      const ultraNotifs = (raw.match(/com\.agent\.ultra/g) || []).length;
-      state.ultraNotificationRefs = ultraNotifs;
+      const jarvisNotifs = (raw.match(/com\.agent\.jarvis/g) || []).length;
+      state.jarvisNotificationRefs = jarvisNotifs;
 
-      state.hasForegroundNotification = raw.includes('com.agent.ultra') && raw.includes('foreground');
+      state.hasForegroundNotification = raw.includes('com.agent.jarvis') && raw.includes('foreground');
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('NOTIFICATION_STATE', state);
+        JarvisDevLog.push('NOTIFICATION_STATE', state);
       }
     } catch {}
   }
@@ -350,7 +350,7 @@ export class DeviceDiagnostics {
   // ── Package Permissions (our app) ────────────────
   static async logPackagePermissions(): Promise<void> {
     try {
-      const raw = await exec('dumpsys package com.agent.ultra');
+      const raw = await exec('dumpsys package com.agent.jarvis');
       if (!raw) return;
       const state: Record<string, any> = {};
 
@@ -380,7 +380,7 @@ export class DeviceDiagnostics {
       state.batteryOptimExempt = raw.includes('IGNORE_BATTERY_OPTIMIZATIONS') || false;
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('PACKAGE_STATE', state);
+        JarvisDevLog.push('PACKAGE_STATE', state);
       }
     } catch {}
   }
@@ -395,11 +395,11 @@ export class DeviceDiagnostics {
       const totalMatch = raw.match(/([\d.]+)%\s+TOTAL/);
       if (totalMatch) state.totalCpuPercent = parseFloat(totalMatch[1]);
 
-      const ultraMatch = raw.match(/([\d.]+)%\s+\d+\/com\.agent\.ultra/);
-      if (ultraMatch) state.ultraCpuPercent = parseFloat(ultraMatch[1]);
+      const jarvisMatch = raw.match(/([\d.]+)%\s+\d+\/com\.agent\.jarvis/);
+      if (jarvisMatch) state.jarvisCpuPercent = parseFloat(jarvisMatch[1]);
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('CPU_STATE', state);
+        JarvisDevLog.push('CPU_STATE', state);
       }
     } catch {}
   }
@@ -411,17 +411,17 @@ export class DeviceDiagnostics {
       if (!raw) return;
       const state: Record<string, any> = {};
 
-      const ultraLine = raw.split('\n').find(l => l.includes('com.agent.ultra'));
-      if (ultraLine) {
-        state.procLine = ultraLine.trim().slice(0, 120);
-        if (ultraLine.includes('Top')) state.wasTop = true;
-        if (ultraLine.includes('Fg')) state.wasForeground = true;
-        if (ultraLine.includes('Bg')) state.wasBackground = true;
-        if (ultraLine.includes('Cached')) state.wasCached = true;
+      const jarvisLine = raw.split('\n').find(l => l.includes('com.agent.jarvis'));
+      if (jarvisLine) {
+        state.procLine = jarvisLine.trim().slice(0, 120);
+        if (jarvisLine.includes('Top')) state.wasTop = true;
+        if (jarvisLine.includes('Fg')) state.wasForeground = true;
+        if (jarvisLine.includes('Bg')) state.wasBackground = true;
+        if (jarvisLine.includes('Cached')) state.wasCached = true;
       }
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('PROC_STATE', state);
+        JarvisDevLog.push('PROC_STATE', state);
       }
     } catch {}
   }
@@ -433,7 +433,7 @@ export class DeviceDiagnostics {
       if (!raw) return;
       const state: Record<string, any> = {};
 
-      const uidRaw = await exec('dumpsys package com.agent.ultra | grep userId=');
+      const uidRaw = await exec('dumpsys package com.agent.jarvis | grep userId=');
       const uidMatch = uidRaw.match(/userId=(\d+)/);
       if (!uidMatch) return;
       const uid = uidMatch[1];
@@ -449,7 +449,7 @@ export class DeviceDiagnostics {
       }
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('NET_STATS', state);
+        JarvisDevLog.push('NET_STATS', state);
       }
     } catch {}
   }
@@ -471,7 +471,7 @@ export class DeviceDiagnostics {
       if (focusMatch) state.inputFocusedWindow = focusMatch[1].slice(0, 60);
 
       if (Object.keys(state).length > 0) {
-        UltraDevLog.push('INPUT_STATE', state);
+        JarvisDevLog.push('INPUT_STATE', state);
       }
     } catch {}
   }
@@ -513,7 +513,7 @@ export class DeviceDiagnostics {
       if (ringerMatch) state.ringerMode = ringerMatch[1];
       const activeMatch = raw.match(/isMusicActive\(\):\s*(true|false)/i);
       if (activeMatch) state.musicActive = activeMatch[1] === 'true';
-      UltraDevLog.push('AUDIO_STATE', state);
+      JarvisDevLog.push('AUDIO_STATE', state);
     } catch {}
   }
 }

@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import * as FileSystemModule from 'expo-file-system/legacy';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface LogFile {
   name: string;
@@ -28,7 +28,7 @@ export class LogFolder {
     if (!fs) return '';
     const docDir = fs?.documentDirectory;
     if (!docDir) return '';
-    this.LOGS_DIR_CACHE = `${docDir}agent-ultra-logs`;
+    this.LOGS_DIR_CACHE = `${docDir}jarvis-logs`;
     return this.LOGS_DIR_CACHE;
   }
 
@@ -36,10 +36,10 @@ export class LogFolder {
     const fs = this.getFS();
     const dir = this.getLogsDir();
     if (!fs || !dir || this.initialized || this.initFailed) {
-      UltraDevLog.push('SYSTEM', { event: 'log_folder_init_skip', hasFs: !!fs, hasDir: !!dir, initialized: this.initialized, initFailed: this.initFailed, platform: Platform.OS });
+      JarvisDevLog.push('SYSTEM', { event: 'log_folder_init_skip', hasFs: !!fs, hasDir: !!dir, initialized: this.initialized, initFailed: this.initFailed, platform: Platform.OS });
       return;
     }
-    UltraDevLog.push('SYSTEM', { event: 'log_folder_init_start', dir });
+    JarvisDevLog.push('SYSTEM', { event: 'log_folder_init_start', dir });
     try {
       const info = await fs.getInfoAsync(dir);
       if (!info.exists) {
@@ -49,19 +49,19 @@ export class LogFolder {
         const existingFiles = await fs.readDirectoryAsync(dir);
         let cleaned = 0;
         for (const f of existingFiles) {
-          if (/^agent-ultra-(debug|debuglog|raw)-\d{4}-\d{2}-\d{2}T/.test(f)) {
+          if (/^jarvis-(debug|debuglog|raw)-\d{4}-\d{2}-\d{2}T/.test(f)) {
             try { await fs.deleteAsync(`${dir}/${f}`); cleaned++; } catch {}
           }
         }
         if (cleaned > 0) {
-          UltraDevLog.push('SYSTEM', { event: 'log_folder_cleanup', dir, cleanedCount: cleaned });
+          JarvisDevLog.push('SYSTEM', { event: 'log_folder_cleanup', dir, cleanedCount: cleaned });
         }
       } catch {}
       this.initialized = true;
-      UltraDevLog.push('SYSTEM', { event: 'log_folder_init_ok', dir });
+      JarvisDevLog.push('SYSTEM', { event: 'log_folder_init_ok', dir });
     } catch (err: any) {
       this.initFailed = true;
-      UltraDevLog.push('SYSTEM', { event: 'log_folder_init_fail', dir, error: err?.message });
+      JarvisDevLog.push('SYSTEM', { event: 'log_folder_init_fail', dir, error: err?.message });
     }
   }
 
@@ -69,21 +69,21 @@ export class LogFolder {
     const fs = this.getFS();
     const dir = this.getLogsDir();
     if (!fs || !dir) {
-      UltraDevLog.push('SYSTEM', { event: 'log_folder_write_skip', filename, reason: 'no_fs_or_dir' });
+      JarvisDevLog.push('SYSTEM', { event: 'log_folder_write_skip', filename, reason: 'no_fs_or_dir' });
       return false;
     }
     if (this.initFailed) {
-      UltraDevLog.push('SYSTEM', { event: 'log_folder_write_skip', filename, reason: 'init_failed' });
+      JarvisDevLog.push('SYSTEM', { event: 'log_folder_write_skip', filename, reason: 'init_failed' });
       return false;
     }
     await this.initialize();
     try {
       const filePath = `${dir}/${filename}`;
       await fs.writeAsStringAsync(filePath, content);
-      UltraDevLog.push('SYSTEM', { event: 'log_folder_write_ok', filename, filePath, sizeBytes: content.length });
+      JarvisDevLog.push('SYSTEM', { event: 'log_folder_write_ok', filename, filePath, sizeBytes: content.length });
       return true;
     } catch (err: any) {
-      UltraDevLog.push('SYSTEM', { event: 'log_folder_write_fail', filename, error: err?.message });
+      JarvisDevLog.push('SYSTEM', { event: 'log_folder_write_fail', filename, error: err?.message });
       return false;
     }
   }
@@ -103,10 +103,10 @@ export class LogFolder {
       } else {
         await fs.writeAsStringAsync(filePath, content);
       }
-      UltraDevLog.push('SYSTEM', { event: 'log_folder_append_ok', filename, appendBytes: content.length });
+      JarvisDevLog.push('SYSTEM', { event: 'log_folder_append_ok', filename, appendBytes: content.length });
       return true;
     } catch (err: any) {
-      UltraDevLog.push('SYSTEM', { event: 'log_folder_append_fail', filename, error: err?.message });
+      JarvisDevLog.push('SYSTEM', { event: 'log_folder_append_fail', filename, error: err?.message });
       return false;
     }
   }
@@ -116,18 +116,18 @@ export class LogFolder {
       const fs = this.getFS();
       const dir = this.getLogsDir();
       if (!fs || !dir) {
-        UltraDevLog.push('SYSTEM', { event: 'log_folder_list_skip', reason: 'no_fs_or_dir' });
+        JarvisDevLog.push('SYSTEM', { event: 'log_folder_list_skip', reason: 'no_fs_or_dir' });
         return [];
       }
       try { await this.initialize(); } catch (initErr: any) {
-        UltraDevLog.push('SYSTEM', { event: 'log_folder_list_init_fail', error: initErr?.message });
+        JarvisDevLog.push('SYSTEM', { event: 'log_folder_list_init_fail', error: initErr?.message });
         return [];
       }
       try {
         const info = await fs.getInfoAsync(dir);
         if (!info || !info.exists) return [];
       } catch (infoErr: any) {
-        UltraDevLog.push('SYSTEM', { event: 'log_folder_list_info_fail', error: infoErr?.message });
+        JarvisDevLog.push('SYSTEM', { event: 'log_folder_list_info_fail', error: infoErr?.message });
         return [];
       }
       try {
@@ -151,14 +151,14 @@ export class LogFolder {
           } catch {}
         }
         const sorted = logFiles.sort((a, b) => b.createdAt - a.createdAt);
-        UltraDevLog.push('SYSTEM', { event: 'log_folder_list_ok', dir, count: sorted.length });
+        JarvisDevLog.push('SYSTEM', { event: 'log_folder_list_ok', dir, count: sorted.length });
         return sorted;
       } catch (readErr: any) {
-        UltraDevLog.push('SYSTEM', { event: 'log_folder_list_read_fail', error: readErr?.message });
+        JarvisDevLog.push('SYSTEM', { event: 'log_folder_list_read_fail', error: readErr?.message });
         return [];
       }
     } catch (err: any) {
-      UltraDevLog.push('SYSTEM', { event: 'log_folder_list_unexpected_fail', error: err?.message });
+      JarvisDevLog.push('SYSTEM', { event: 'log_folder_list_unexpected_fail', error: err?.message });
       return [];
     }
   }

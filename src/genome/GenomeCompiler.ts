@@ -2,7 +2,7 @@ import type { Genome, SourceEntry, GenomeBuildOutput, BehaviorSpec } from './typ
 import { AGENT_TEMPLATES } from './templates/AgentTemplates';
 import { GENOME_TEMPLATES } from './templates/GenomeTemplates';
 import { createHash } from '../utils/crypto';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 interface AiClient {
   chat: (args: { model: string; messages: Array<{ role: string; content: string }>; max_tokens: number }) => Promise<string>;
@@ -53,7 +53,7 @@ export class GenomeCompiler {
     for (const spec of genome.behaviorSpecs) {
       const content = await this.generateBehavioralSource(genome, spec, sources);
       sources.push({
-        path: spec.targetFile.replace('com/ultra/agent', pkgPath),
+        path: spec.targetFile.replace('com/jarvis/agent', pkgPath),
         content,
         isTemplate: false,
         generatedBy: 'ai',
@@ -135,7 +135,7 @@ export class GenomeCompiler {
       defaultMaxTokens: genome.ai.models[0]?.maxTokens || 2000,
       maxRetries: genome.ai.maxRetries,
       temperature: genome.ai.temperature,
-      dbName: 'ultra_agent.db',
+      dbName: 'jarvis_agent.db',
       dbVersion: 1,
       backgroundColor: '#0F0F1A',
       userBubbleColor: '#2A2A3E',

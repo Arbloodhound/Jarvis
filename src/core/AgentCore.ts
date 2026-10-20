@@ -20,7 +20,7 @@ import { SafetyChecker } from './SafetyChecker';
 import { CommandParser } from './CommandParser';
 import { validatePlan } from './CapabilitySchemas';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { MemoryManager } from './MemoryManager';
 import { EventMonitor } from '../services/EventMonitor';
 import { TierService } from '../services/TierService';
@@ -34,13 +34,13 @@ import { AIIntentParser } from './AIIntentParser';
 import { BrainExecutor } from './BrainExecutor';
 import type {
   ChatMessage,
-  UltraExecutionResult,
+  JarvisExecutionResult,
   ActionPlan,
   PromptTrace,
   ExecutionResultType,
   ExecutionStep,
   TraceLedgerEvent,
-} from '../types/ultra';
+} from '../types/jarvis';
 
 class SimpleEmitter {
   private listeners: Map<string, Array<(...args: any[]) => void>> = new Map();
@@ -331,8 +331,8 @@ export class AgentCore extends SimpleEmitter {
     const imperative = /^(open|send|read|delete|find|show|create|build|run|execute|launch|call|write|list|take|share|pick|choose|select|where|what'?s?|how|get|text|make|start|switch|generate|play|schedule|email|mail|dial|navigate|directions?|timer|map|turn|set|search|google|look|flash|torch|flashlight|mute|unmute|silence|dim|brighten|copy|paste|capture|grab|clip|notify|check|battery|network|storage|ram|memory|disk|space|wifi|bluetooth|system|device|status|info|phone|cpu|temp|weather|remind|wake|alarm|volume|ringer|brightness|screenshot|record|scan|download|upload|install|uninstall|update|sync|pair|connect|disconnect|reset|clear|lock|unlock|enable|disable|activate|deactivate|toggle|browse|visit|go|stop|pause|resume|skip|next|previous|repeat|shuffle|queue|bookmark|save|note|jot|remember|forget|recall|settings|camera|contacts|messages|photos|gallery|apps|calendar|maps|clock|calculator|location|gps|coordinates|where'?s)\b/i.test(t);
     if (imperative) return 'command';
     if (/^(gps|my\s+(?:location|coordinates|gps))\b/i.test(t)) return 'command';
-    const ultraCommand = /^ultra[\s,]+(?:open|send|read|delete|find|show|create|build|run|execute|launch|call|write|list|take|share|pick|choose|select|where|what|how|get|text|make|start|switch|generate|play|schedule|email|mail|dial|navigate|directions?|timer|map|turn|set|search|google|look|flash|torch|mute|unmute|silence|dim|brighten|copy|paste|capture|grab|check|battery|network|storage|ram|memory|disk|space|wifi|system|device|status|info|weather|remind|wake|alarm|volume|ringer|brightness|screenshot|record|scan|download|upload|install|uninstall|update|sync|pair|connect|disconnect|reset|clear|lock|unlock|enable|disable|activate|deactivate|toggle|browse|visit|go|stop|pause|resume|skip|next|previous|repeat|shuffle|queue|bookmark|save|note|jot|remember|forget|recall)\b/i;
-    if (ultraCommand.test(t)) return 'command';
+    const jarvisCommand = /^jarvis[\s,]+(?:open|send|read|delete|find|show|create|build|run|execute|launch|call|write|list|take|share|pick|choose|select|where|what|how|get|text|make|start|switch|generate|play|schedule|email|mail|dial|navigate|directions?|timer|map|turn|set|search|google|look|flash|torch|mute|unmute|silence|dim|brighten|copy|paste|capture|grab|check|battery|network|storage|ram|memory|disk|space|wifi|system|device|status|info|weather|remind|wake|alarm|volume|ringer|brightness|screenshot|record|scan|download|upload|install|uninstall|update|sync|pair|connect|disconnect|reset|clear|lock|unlock|enable|disable|activate|deactivate|toggle|browse|visit|go|stop|pause|resume|skip|next|previous|repeat|shuffle|queue|bookmark|save|note|jot|remember|forget|recall)\b/i;
+    if (jarvisCommand.test(t)) return 'command';
     return 'conversation';
   }
 
@@ -568,7 +568,7 @@ You are always on. Always capable. Always direct.`;
     return null;
   }
 
-  async execute(args: ExecuteArgs): Promise<UltraExecutionResult> {
+  async execute(args: ExecuteArgs): Promise<JarvisExecutionResult> {
     if (!this.ready) return { type: 'error', message: 'Agent not initialized', taskId: '' };
     if (!this.ai.hasApiKey()) {
       return {
@@ -594,14 +594,14 @@ You are always on. Always capable. Always direct.`;
     );
   }
 
-  async handleConfirmation(confirmed: boolean, originalRequest: string, conversationId: string): Promise<UltraExecutionResult> {
+  async handleConfirmation(confirmed: boolean, originalRequest: string, conversationId: string): Promise<JarvisExecutionResult> {
     if (!confirmed) {
       const cancelMsg: ChatMessage = {
         id: uid('msg'),
         role: 'assistant',
         content: 'Cancelled.',
         createdAt: Date.now(),
-        source: 'ultra',
+        source: 'jarvis',
       };
       await this.conversations.addMessage(conversationId, cancelMsg);
       return { type: 'action_result', message: 'Cancelled.' };
@@ -632,7 +632,7 @@ You are always on. Always capable. Always direct.`;
     conversationId: string,
     userInput: string,
     args: ExecuteArgs,
-  ): Promise<UltraExecutionResult> {
+  ): Promise<JarvisExecutionResult> {
     DebugLog.systemEvent('KernelResolvedPlan', `Executing resolved follow-up via kernel: ${plan.capability}`);
     const step = (phase: string, detail: string, success: boolean) =>
       DebugLog.agentStep(taskId, phase, detail, success);
@@ -661,7 +661,7 @@ You are always on. Always capable. Always direct.`;
         role: 'assistant',
         content: capTierCheck.reason,
         createdAt: Date.now(),
-        source: 'ultra',
+        source: 'jarvis',
         meta: { mode: 'command', capability: plan.capability, tierBlocked: true, needsUpgrade: capTierCheck.needsUpgrade },
       };
       await this.conversations.addMessage(conversationId, tierMsg);
@@ -675,7 +675,7 @@ You are always on. Always capable. Always direct.`;
         role: 'assistant',
         content: approvalMsg,
         createdAt: Date.now(),
-        source: 'ultra',
+        source: 'jarvis',
         meta: { mode: 'command', capability: plan.capability, requiresApproval: true },
       };
       await this.conversations.addMessage(conversationId, approvalChatMsg);
@@ -705,7 +705,7 @@ You are always on. Always capable. Always direct.`;
       role: 'assistant',
       content: summary,
       createdAt: Date.now(),
-      source: 'ultra',
+      source: 'jarvis',
       meta: { mode: 'command', capability: plan.capability },
     };
     await this.conversations.addMessage(conversationId, resultMsg);

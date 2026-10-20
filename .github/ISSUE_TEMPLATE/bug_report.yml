@@ -1,5 +1,5 @@
 name: Bug report
-description: Something Agent Ultra did wrong, or didn't do
+description: Something Jarvis did wrong, or didn't do
 labels: [bug]
 body:
   - type: markdown
@@ -47,5 +47,5 @@ body:
     id: logs
     attributes:
       label: Logs (optional)
-      description: "`adb logcat -s UltraGate UltraLlm` output helps. Strip anything personal first."
+      description: "`adb logcat -s JarvisGate JarvisLlm` output helps. Strip anything personal first."
       render: text

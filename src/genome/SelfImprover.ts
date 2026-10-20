@@ -9,7 +9,7 @@ import { GenomeLineage } from './GenomeLineage';
 import { TaskEvaluator } from './TaskEvaluator';
 import { getDefaultChallenges, generateChallengesForGoal } from './TaskChallenges';
 import { BuildOrchestrator } from '../core/BuildOrchestrator';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 interface SafetyGate {
   requestApproval: (action: string, details: string) => Promise<boolean>;

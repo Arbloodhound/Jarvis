@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { ChatMessage } from '@/src/types/ultra';
+import type { ChatMessage } from '@/src/types/jarvis';
 import { getContextActions } from '@/src/data/contextRules';
-import { UltraDevLog } from '@/src/utils/UltraDevLog';
+import { JarvisDevLog } from '@/src/utils/JarvisDevLog';
 
 interface ContextBarProps {
   message: ChatMessage;
@@ -31,10 +31,10 @@ export default function ContextBar({ message, onExecutePlan, onSendPrompt }: Con
           key={action.id}
           onPress={() => {
             if (action.execute.type === 'plan') {
-              UltraDevLog.push('CHAIN', { component: 'ContextBar', action: 'chip_tap', trigger: { actionId: action.id }, state: { type: 'plan' }, data: { capability: action.execute.capability }, outcome: 'execute_plan' });
+              JarvisDevLog.push('CHAIN', { component: 'ContextBar', action: 'chip_tap', trigger: { actionId: action.id }, state: { type: 'plan' }, data: { capability: action.execute.capability }, outcome: 'execute_plan' });
               onExecutePlan(action.execute.capability, action.execute.params);
             } else {
-              UltraDevLog.push('CHAIN', { component: 'ContextBar', action: 'chip_tap', trigger: { actionId: action.id }, state: { type: 'prompt' }, data: { text: action.execute.text.slice(0, 40) }, outcome: 'send_prompt' });
+              JarvisDevLog.push('CHAIN', { component: 'ContextBar', action: 'chip_tap', trigger: { actionId: action.id }, state: { type: 'prompt' }, data: { text: action.execute.text.slice(0, 40) }, outcome: 'send_prompt' });
               onSendPrompt(action.execute.text);
             }
           }}

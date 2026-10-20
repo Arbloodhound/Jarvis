@@ -1,4 +1,4 @@
-import { CapabilitySchema, ActionPlan, ParamDef } from '../types/ultra';
+import { CapabilitySchema, ActionPlan, ParamDef } from '../types/jarvis';
 
 const schemas: CapabilitySchema[] = [
   {

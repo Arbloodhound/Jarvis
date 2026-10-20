@@ -1,7 +1,7 @@
 import { SecureVault } from '../security/SecureVault';
 import { AppStorage } from '../utils/AppStorage';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 interface CostEntry {
   timestamp: number;

@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 const MAX_SCREENSHOTS = 20;
 const DIR_NAME = 'debug_screenshots';
@@ -32,10 +32,10 @@ export class DebugScreenshots {
 
       await DebugScreenshots.enforceCap();
 
-      UltraDevLog.push('DEBUG_SCREENSHOT', { reason, filepath, timestamp: Date.now() });
+      JarvisDevLog.push('DEBUG_SCREENSHOT', { reason, filepath, timestamp: Date.now() });
       return filepath;
     } catch (e: any) {
-      UltraDevLog.push('DEBUG_SCREENSHOT_FAIL', { reason, error: e?.message });
+      JarvisDevLog.push('DEBUG_SCREENSHOT_FAIL', { reason, error: e?.message });
       return null;
     }
   }

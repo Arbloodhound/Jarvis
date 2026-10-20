@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { SecureVault } from '@/src/security/SecureVault';
 import { AgentCore, setAgentCoreInstance } from '@/src/core/AgentCore';
-import { UltraDevLog } from '@/src/utils/UltraDevLog';
+import { JarvisDevLog } from '@/src/utils/JarvisDevLog';
 
 export interface AgentCoreContextValue {
   core: AgentCore | null;
@@ -66,7 +66,7 @@ export function AgentCoreProvider({ children }: { children: React.ReactNode }) {
         setAgentCoreInstance(c);
         setIsReady(true);
 
-        UltraDevLog.push('CONTEXT_PROVIDER', {
+        JarvisDevLog.push('CONTEXT_PROVIDER', {
           providerName: 'AgentCoreProvider',
           renderCount: 1,
           coreInstanceId: c.getInstanceId(),
@@ -76,7 +76,7 @@ export function AgentCoreProvider({ children }: { children: React.ReactNode }) {
         if (!mountedRef.current) return;
         const msg = 'Init failed: ' + (err?.message ?? 'unknown');
         setStatus(msg);
-        UltraDevLog.push('ERROR', {
+        JarvisDevLog.push('ERROR', {
           context: 'AgentCoreProvider',
           message: err?.message ?? 'unknown',
           stack: (err?.stack ?? '').slice(0, 500),

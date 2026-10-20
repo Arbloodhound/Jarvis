@@ -1,6 +1,6 @@
 // Auth header builder — supports bearer, api_key_header, basic, custom_header, none
 
-import { UltraDevLog } from '../../utils/UltraDevLog';
+import { JarvisDevLog } from '../../utils/JarvisDevLog';
 import type { AuthMode } from '../../types/provider';
 
 export interface AuthHeaderInput {
@@ -17,44 +17,44 @@ export function buildAuthHeaders(input: AuthHeaderInput): Record<string, string>
   switch (authMode) {
     case 'bearer': {
       if (!apiKey) {
-        UltraDevLog.push('SYSTEM', { event: 'auth_header_missing_material', authMode, reason: 'no_api_key' });
+        JarvisDevLog.push('SYSTEM', { event: 'auth_header_missing_material', authMode, reason: 'no_api_key' });
         return {};
       }
-      UltraDevLog.push('SYSTEM', { event: 'auth_header_built', authMode, headerName: 'Authorization', prefix: 'Bearer' });
+      JarvisDevLog.push('SYSTEM', { event: 'auth_header_built', authMode, headerName: 'Authorization', prefix: 'Bearer' });
       return { Authorization: `Bearer ${apiKey}` };
     }
     case 'api_key_header': {
       const headerName = customAuthHeaderName || 'X-API-Key';
       if (!apiKey) {
-        UltraDevLog.push('SYSTEM', { event: 'auth_header_missing_material', authMode, reason: 'no_api_key', headerName });
+        JarvisDevLog.push('SYSTEM', { event: 'auth_header_missing_material', authMode, reason: 'no_api_key', headerName });
         return {};
       }
-      UltraDevLog.push('SYSTEM', { event: 'auth_header_built', authMode, headerName, prefix: 'none' });
+      JarvisDevLog.push('SYSTEM', { event: 'auth_header_built', authMode, headerName, prefix: 'none' });
       return { [headerName]: apiKey };
     }
     case 'basic': {
       if (!apiKey) {
-        UltraDevLog.push('SYSTEM', { event: 'auth_header_missing_material', authMode, reason: 'no_api_key' });
+        JarvisDevLog.push('SYSTEM', { event: 'auth_header_missing_material', authMode, reason: 'no_api_key' });
         return {};
       }
       const hasPassword = !!password;
-      UltraDevLog.push('SYSTEM', { event: 'auth_header_built', authMode, headerName: 'Authorization', prefix: 'Basic', hasPassword });
+      JarvisDevLog.push('SYSTEM', { event: 'auth_header_built', authMode, headerName: 'Authorization', prefix: 'Basic', hasPassword });
       const credentials = password ? `${apiKey}:${password}` : apiKey;
       const encoded = btoa(credentials);
       return { Authorization: `Basic ${encoded}` };
     }
     case 'custom_header': {
       if (!customAuthHeaderName || !apiKey) {
-        UltraDevLog.push('SYSTEM', { event: 'auth_header_missing_material', authMode, reason: !customAuthHeaderName ? 'no_header_name' : 'no_api_key' });
+        JarvisDevLog.push('SYSTEM', { event: 'auth_header_missing_material', authMode, reason: !customAuthHeaderName ? 'no_header_name' : 'no_api_key' });
         return {};
       }
       const prefix = customAuthHeaderPrefix ? customAuthHeaderPrefix + ' ' : '';
-      UltraDevLog.push('SYSTEM', { event: 'auth_header_built', authMode, headerName: customAuthHeaderName, prefix: customAuthHeaderPrefix || 'none' });
+      JarvisDevLog.push('SYSTEM', { event: 'auth_header_built', authMode, headerName: customAuthHeaderName, prefix: customAuthHeaderPrefix || 'none' });
       return { [customAuthHeaderName]: `${prefix}${apiKey}` };
     }
     case 'none':
     default:
-      UltraDevLog.push('SYSTEM', { event: 'auth_header_built', authMode: authMode || 'none', headerName: 'none', prefix: 'none' });
+      JarvisDevLog.push('SYSTEM', { event: 'auth_header_built', authMode: authMode || 'none', headerName: 'none', prefix: 'none' });
       return {};
   }
 }

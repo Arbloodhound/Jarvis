@@ -1,6 +1,6 @@
 import type { Genome, FitnessMetrics, TaskPerformance } from './types';
 import type { OverallEvaluation } from './TaskChallenges';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export class GenomeFitness {
   async evaluate(
@@ -20,7 +20,7 @@ export class GenomeFitness {
       runtimeCrashes: number;
     }
   ): Promise<FitnessMetrics> {
-    UltraDevLog.push('SYSTEM', { event: 'genome_fitness_evaluate_start', genomeId: genome.id, generation: genome.generation, buildSuccess: buildResult.success, hasTestResults: !!testResults });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_fitness_evaluate_start', genomeId: genome.id, generation: genome.generation, buildSuccess: buildResult.success, hasTestResults: !!testResults });
 
     const metrics: FitnessMetrics = {
       buildSuccess: buildResult.success,
@@ -38,7 +38,7 @@ export class GenomeFitness {
     };
 
     metrics.overallScore = this.computeOverallScore(metrics);
-    UltraDevLog.push('SYSTEM', { event: 'genome_fitness_evaluate_done', genomeId: genome.id, overallScore: metrics.overallScore, capabilityScore: metrics.capabilityScore, buildSuccess: metrics.buildSuccess });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_fitness_evaluate_done', genomeId: genome.id, overallScore: metrics.overallScore, capabilityScore: metrics.capabilityScore, buildSuccess: metrics.buildSuccess });
     return metrics;
   }
 
@@ -53,7 +53,7 @@ export class GenomeFitness {
     },
     taskEvaluation: OverallEvaluation
   ): Promise<FitnessMetrics> {
-    UltraDevLog.push('SYSTEM', { event: 'genome_fitness_evaluate_with_tasks_start', genomeId: genome.id, generation: genome.generation, challengeCount: taskEvaluation.results.length, buildSuccess: buildResult.success });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_fitness_evaluate_with_tasks_start', genomeId: genome.id, generation: genome.generation, challengeCount: taskEvaluation.results.length, buildSuccess: buildResult.success });
 
     const failedChallenges = taskEvaluation.results
       .filter(r => !r.passed)
@@ -86,7 +86,7 @@ export class GenomeFitness {
     };
 
     metrics.overallScore = this.computeOverallScore(metrics);
-    UltraDevLog.push('SYSTEM', { event: 'genome_fitness_evaluate_with_tasks_done', genomeId: genome.id, overallScore: metrics.overallScore, challengesPassed: taskPerf.challengesPassed, challengesTotal: taskPerf.challengesTotal, totalCrashes: taskEvaluation.totalCrashes });
+    JarvisDevLog.push('SYSTEM', { event: 'genome_fitness_evaluate_with_tasks_done', genomeId: genome.id, overallScore: metrics.overallScore, challengesPassed: taskPerf.challengesPassed, challengesTotal: taskPerf.challengesTotal, totalCrashes: taskEvaluation.totalCrashes });
     return metrics;
   }
 

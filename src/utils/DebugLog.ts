@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as ExpoFileSystem from 'expo-file-system/legacy';
 import { LogFolder } from '@/src/services/LogFolder';
-import { UltraDevLog } from './UltraDevLog';
+import { JarvisDevLog } from './JarvisDevLog';
 
 const FileSystem: any = Platform.OS !== 'web' ? ExpoFileSystem : null;
 
@@ -406,17 +406,17 @@ export class DebugLog {
   }
 
   static async exportAll(): Promise<string> {
-    const ultraEntries = UltraDevLog.getEntries().map(e => JSON.stringify({ _src: 'ultra', ...e })).join('\n');
+    const jarvisEntries = JarvisDevLog.getEntries().map(e => JSON.stringify({ _src: 'jarvis', ...e })).join('\n');
 
     if (Platform.OS === 'web') {
       const base = DebugLog.entries.map(e => JSON.stringify(e)).join('\n');
-      return ultraEntries ? base + '\n' + ultraEntries : base;
+      return jarvisEntries ? base + '\n' + jarvisEntries : base;
     }
     try {
       const filePath = DebugLog.getFilePath();
       if (!filePath) {
         const base = DebugLog.entries.map(e => JSON.stringify(e)).join('\n');
-        return ultraEntries ? base + '\n' + ultraEntries : base;
+        return jarvisEntries ? base + '\n' + jarvisEntries : base;
       }
       const info = await FileSystem.getInfoAsync(filePath);
       let content = '';
@@ -425,12 +425,12 @@ export class DebugLog {
       } else {
         content = DebugLog.entries.map(e => JSON.stringify(e)).join('\n');
       }
-      if (ultraEntries) content = content + '\n' + ultraEntries;
+      if (jarvisEntries) content = content + '\n' + jarvisEntries;
       await LogFolder.writeLog(`debuglog-session-export.jsonl`, content);
       return content;
     } catch {}
     const base = DebugLog.entries.map(e => JSON.stringify(e)).join('\n');
-    const combined = ultraEntries ? base + '\n' + ultraEntries : base;
+    const combined = jarvisEntries ? base + '\n' + jarvisEntries : base;
     await LogFolder.writeLog(`debuglog-session-export.jsonl`, combined);
     return combined;
   }

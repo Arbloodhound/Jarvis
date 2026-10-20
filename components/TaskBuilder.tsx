@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { GridCategory, GridAction, TaskTemplate, TaskStep, TaskRunResult } from '@/src/types/actionGrid';
-import { UltraDevLog } from '@/src/utils/UltraDevLog';
+import { JarvisDevLog } from '@/src/utils/JarvisDevLog';
 
 const BG = '#000';
 const SURFACE = '#111';
@@ -64,19 +64,19 @@ export default function TaskBuilder({
   const addStep = useCallback((action: GridAction) => {
     const cat = categories.find(c => c.actions.some(a => a.id === action.id));
     const step = makeStep(action, cat?.label || '');
-    UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'add_step', trigger: { actionId: action.id }, state: { stepCount: steps.length }, data: { capability: action.capability, cat: cat?.label }, outcome: 'step_added' });
+    JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'add_step', trigger: { actionId: action.id }, state: { stepCount: steps.length }, data: { capability: action.capability, cat: cat?.label }, outcome: 'step_added' });
     setSteps(prev => [...prev, step]);
     setView('main');
   }, [categories, steps.length]);
 
   const deleteStep = useCallback((stepId: string) => {
-    UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'delete_step', trigger: { stepId }, state: { stepCount: steps.length }, data: {}, outcome: 'step_deleted' });
+    JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'delete_step', trigger: { stepId }, state: { stepCount: steps.length }, data: {}, outcome: 'step_deleted' });
     setSteps(prev => prev.filter(s => s.id !== stepId));
   }, [steps.length]);
 
   const handleSave = useCallback(() => {
     if (!taskName.trim() || steps.length === 0) {
-      UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'save', trigger: {}, state: { taskName: taskName.trim(), stepCount: steps.length }, data: {}, outcome: 'EMPTY:validation_failed' });
+      JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'save', trigger: {}, state: { taskName: taskName.trim(), stepCount: steps.length }, data: {}, outcome: 'EMPTY:validation_failed' });
       return;
     }
     const template: TaskTemplate = {
@@ -89,7 +89,7 @@ export default function TaskBuilder({
       useCount: 0,
       createdAt: editTemplate?.createdAt || Date.now(),
     };
-    UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'save', trigger: {}, state: { stepCount: steps.length }, data: { name: taskName.trim(), isEdit: !!editTemplate }, outcome: 'task_saved' });
+    JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'save', trigger: {}, state: { stepCount: steps.length }, data: { name: taskName.trim(), isEdit: !!editTemplate }, outcome: 'task_saved' });
     onSave(template);
     onClose();
     setTaskName('');
@@ -100,18 +100,18 @@ export default function TaskBuilder({
 
   const handleTestRun = useCallback(async () => {
     if (steps.length === 0) {
-      UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'test_run', trigger: {}, state: { stepCount: 0 }, data: {}, outcome: 'EMPTY:no_steps' });
+      JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'test_run', trigger: {}, state: { stepCount: 0 }, data: {}, outcome: 'EMPTY:no_steps' });
       return;
     }
-    UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'test_run', trigger: {}, state: { stepCount: steps.length }, data: {}, outcome: 'running' });
+    JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'test_run', trigger: {}, state: { stepCount: steps.length }, data: {}, outcome: 'running' });
     setTesting(true);
     setTestResult(null);
     try {
       const result = await onTestRun(steps);
-      UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'test_run', trigger: {}, state: {}, data: { success: result.overallSuccess, stepCount: result.steps.length }, outcome: result.overallSuccess ? 'all_passed' : 'FAIL:some_steps_failed' });
+      JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'test_run', trigger: {}, state: {}, data: { success: result.overallSuccess, stepCount: result.steps.length }, outcome: result.overallSuccess ? 'all_passed' : 'FAIL:some_steps_failed' });
       setTestResult(result);
     } catch (e: any) {
-      UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'test_run', trigger: {}, state: {}, data: { error: e.message }, outcome: 'FAIL:exception' });
+      JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'test_run', trigger: {}, state: {}, data: { error: e.message }, outcome: 'FAIL:exception' });
       setTestResult({
         templateId: 'test',
         startedAt: Date.now(),
@@ -126,7 +126,7 @@ export default function TaskBuilder({
   }, [steps, onTestRun]);
 
   const applyParamFix = useCallback((step: TaskStep) => {
-    UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'apply_param_fix', trigger: { stepId: step.id }, state: { editCount: Object.keys(paramEdits).length }, data: {}, outcome: 'params_updated' });
+    JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'apply_param_fix', trigger: { stepId: step.id }, state: { editCount: Object.keys(paramEdits).length }, data: {}, outcome: 'params_updated' });
     const updated = steps.map(s => {
       if (s.id !== step.id) return s;
       const newParams = { ...s.params };
@@ -139,7 +139,7 @@ export default function TaskBuilder({
   }, [steps, paramEdits]);
 
   const handleClose = useCallback(() => {
-    UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'close', trigger: {}, state: { stepCount: steps.length, isEdit: !!editTemplate }, data: {}, outcome: 'dismissed' });
+    JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'close', trigger: {}, state: { stepCount: steps.length, isEdit: !!editTemplate }, data: {}, outcome: 'dismissed' });
     onClose();
     setView('main');
     setTestResult(null);
@@ -178,7 +178,7 @@ export default function TaskBuilder({
               <Text style={styles.saveBtnText}>Save</Text>
             </Pressable>
           ) : (
-            <Pressable onPress={() => { UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'back_to_main', trigger: {}, state: { view }, data: {}, outcome: 'main_view' }); setView('main'); }}>
+            <Pressable onPress={() => { JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'back_to_main', trigger: {}, state: { view }, data: {}, outcome: 'main_view' }); setView('main'); }}>
               <Text style={styles.backText}>Back</Text>
             </Pressable>
           )}
@@ -332,7 +332,7 @@ export default function TaskBuilder({
               {categories.map(cat => (
                 <Pressable
                   key={cat.id}
-                  onPress={() => { UltraDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'category_select', trigger: { catId: cat.id }, state: { prev: selectedCatId }, data: { label: cat.label }, outcome: `category_${cat.id}` }); setSelectedCatId(cat.id); }}
+                  onPress={() => { JarvisDevLog.push('CHAIN', { component: 'TaskBuilder', action: 'category_select', trigger: { catId: cat.id }, state: { prev: selectedCatId }, data: { label: cat.label }, outcome: `category_${cat.id}` }); setSelectedCatId(cat.id); }}
                   style={[styles.catTab, selectedCatId === cat.id && { backgroundColor: cat.color + '33', borderColor: cat.color }]}
                 >
                   <Ionicons name={cat.icon as any} size={14} color={selectedCatId === cat.id ? cat.color : DIM} />

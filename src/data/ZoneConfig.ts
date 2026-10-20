@@ -1,5 +1,5 @@
 /**
- * ZoneConfig — Customizable Zones for Agent Ultra
+ * ZoneConfig — Customizable Zones for Jarvis
  *
  * Three zones (favorites row, grid categories, sidebar toggles)
  * all draw items from the same pool (DEFAULT_CATEGORIES actions).
@@ -7,7 +7,7 @@
  */
 
 import { AppStorage } from '@/src/utils/AppStorage';
-import { UltraDevLog } from '@/src/utils/UltraDevLog';
+import { JarvisDevLog } from '@/src/utils/JarvisDevLog';
 import { DEFAULT_CATEGORIES } from '@/src/data/defaultGrid';
 import type { GridAction } from '@/src/types/actionGrid';
 
@@ -72,7 +72,7 @@ export function resolveActions(ids: string[]): GridAction[] {
     if (action) {
       resolved.push(action);
     } else {
-      UltraDevLog.push('EFFECT', {
+      JarvisDevLog.push('EFFECT', {
         component: 'ZoneConfig', action: 'resolve_orphan',
         itemId: id, success: false,
         note: `Action "${id}" in zone config but not found in action pool — skipped`,
@@ -92,7 +92,7 @@ export async function loadZoneConfig(): Promise<ZoneConfig> {
       const parsed = JSON.parse(raw) as ZoneConfig;
       // Validate structure
       if (Array.isArray(parsed.favorites) && Array.isArray(parsed.grid) && Array.isArray(parsed.sidebar)) {
-        UltraDevLog.push('EFFECT', {
+        JarvisDevLog.push('EFFECT', {
           component: 'ZoneConfig', action: 'load_config',
           source: 'storage', success: true,
           favCount: parsed.favorites.length,
@@ -103,9 +103,9 @@ export async function loadZoneConfig(): Promise<ZoneConfig> {
       }
     }
   } catch (e: any) {
-    UltraDevLog.error('ZoneConfig', `Failed to load zone_config: ${e?.message}`);
+    JarvisDevLog.error('ZoneConfig', `Failed to load zone_config: ${e?.message}`);
   }
-  UltraDevLog.push('EFFECT', {
+  JarvisDevLog.push('EFFECT', {
     component: 'ZoneConfig', action: 'load_config',
     source: 'default_fallback', success: true,
     note: 'No saved zone_config or parse failed — using defaults',
@@ -123,14 +123,14 @@ export async function saveZoneConfig(config: ZoneConfig): Promise<boolean> {
       sidebar: config.sidebar,
     };
     await AppStorage.set('zone_config', JSON.stringify(clamped));
-    UltraDevLog.push('EFFECT', {
+    JarvisDevLog.push('EFFECT', {
       component: 'ZoneConfig', action: 'save_config',
       zones: { favCount: clamped.favorites.length, gridCats: clamped.grid.length, sidebarCount: clamped.sidebar.length },
       success: true,
     });
     return true;
   } catch (e: any) {
-    UltraDevLog.push('EFFECT', {
+    JarvisDevLog.push('EFFECT', {
       component: 'ZoneConfig', action: 'save_config',
       success: false, error: e?.message,
     });

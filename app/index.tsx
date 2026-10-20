@@ -25,12 +25,12 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { UltraDevLog as DebugLog, UltraDevLog } from "@/src/utils/UltraDevLog";
+import { JarvisDevLog as DebugLog, JarvisDevLog } from "@/src/utils/JarvisDevLog";
 import { classifyModelType } from "@/src/utils/classifyModelType";
 import type { AgentCore } from "@/src/core/AgentCore";
 import type { ExecuteArgs } from "@/src/core/AgentCore";
 import { useAgentCore } from "@/src/context/AgentCoreContext";
-import type { ChatMessage, UltraExecutionResult, ConversationMeta, PromptTrace } from "@/src/types/ultra";
+import type { ChatMessage, JarvisExecutionResult, ConversationMeta, PromptTrace } from "@/src/types/jarvis";
 import ConversationList from "@/components/ConversationList";
 import PromptViewer from "@/components/PromptViewer";
 import ActionMenu, { ActionMenuItem } from "@/components/ActionMenu";
@@ -43,7 +43,7 @@ import TaskBuilder from "@/components/TaskBuilder";
 import SystemInfoCard from "@/components/SystemInfoCard";
 import OnboardingScreen from "@/components/OnboardingScreen";
 import type { TaskTemplate, TaskStep, TaskRunResult } from "@/src/types/actionGrid";
-import type { ActionPlan } from "@/src/types/ultra";
+import type { ActionPlan } from "@/src/types/jarvis";
 import { DEFAULT_CATEGORIES } from "@/src/data/defaultGrid";
 
 // ── Color Palette (softened green accent) ──────────────
@@ -53,7 +53,7 @@ const SURFACE = "#111111";
 const SURFACE2 = "#1a1a1a";
 const DIM = "#666666";
 const AI_COLOR = "#6bc5ff";
-const ULTRA_COLOR = ACCENT;
+const JARVIS_COLOR = ACCENT;
 const WARN_COLOR = "#ff6600";
 const BLOCKED_COLOR = "#ff4444";
 
@@ -100,16 +100,16 @@ export default function ChatScreen() {
   const router = useRouter();
 
   useEffect(() => {
-    UltraDevLog.setCurrentScreen('ChatScreen');
+    JarvisDevLog.setCurrentScreen('ChatScreen');
     loadZoneConfig().then(zc => {
       setZoneConfig(zc);
-      UltraDevLog.push('EFFECT', {
+      JarvisDevLog.push('EFFECT', {
         component: 'ChatScreen', action: 'zone_config_loaded',
         favCount: zc.favorites.length, gridCats: zc.grid.length,
         sidebarCount: zc.sidebar.length, success: true,
       });
     });
-    return () => UltraDevLog.setCurrentScreen('unknown');
+    return () => JarvisDevLog.setCurrentScreen('unknown');
   }, []);
 
   // Voice input: listen for speech recognition results
@@ -260,8 +260,8 @@ export default function ChatScreen() {
   // ── N1: Component Lifecycle Sensor ────────────────
   const compIdRef = useRef('');
   useEffect(() => {
-    compIdRef.current = UltraDevLog.componentMount('ChatScreen');
-    return () => UltraDevLog.componentUnmount('ChatScreen', compIdRef.current);
+    compIdRef.current = JarvisDevLog.componentMount('ChatScreen');
+    return () => JarvisDevLog.componentUnmount('ChatScreen', compIdRef.current);
   }, []);
 
   // ── V5 Fix 13: Proactive suggestion tracking ──────
@@ -289,7 +289,7 @@ export default function ChatScreen() {
         if (expired.length > 0) {
           for (const s of expired) {
             const wasVisible = visibleSuggestionIds.current.has(s.id);
-            UltraDevLog.push('PROACTIVE_SUGGEST' as any, {
+            JarvisDevLog.push('PROACTIVE_SUGGEST' as any, {
               event: 'suggestion_expired',
               suggestionId: s.id,
               title: s.title,
@@ -309,9 +309,9 @@ export default function ChatScreen() {
 
   // ── AppState Lifecycle Sensor + A11y Health Monitor ─
   useEffect(() => {
-    UltraDevLog.installAppStateListener();
-    UltraDevLog.startA11yDrain();
-    UltraDevLog.startHeartbeat();
+    JarvisDevLog.installAppStateListener();
+    JarvisDevLog.startA11yDrain();
+    JarvisDevLog.startHeartbeat();
 
     const { AppState } = require('react-native');
     const healthSub = AppState.addEventListener('change', async (nextState: string) => {
@@ -339,7 +339,7 @@ export default function ChatScreen() {
               a11yStatus = 'active';
             }
 
-            UltraDevLog.push('A11Y_STATE', {
+            JarvisDevLog.push('A11Y_STATE', {
               state: a11yState?.state || 'unknown',
               eventAgeSec: Math.round(a11yState?.eventAgeSec || -1),
               lastEventPkg: a11yState?.lastEventPkg || '',
@@ -367,9 +367,9 @@ export default function ChatScreen() {
     });
 
     return () => {
-      UltraDevLog.removeAppStateListener();
-      UltraDevLog.stopA11yDrain();
-      UltraDevLog.stopHeartbeat();
+      JarvisDevLog.removeAppStateListener();
+      JarvisDevLog.stopA11yDrain();
+      JarvisDevLog.stopHeartbeat();
       healthSub.remove();
     };
   }, [agentCore]);
@@ -384,7 +384,7 @@ export default function ChatScreen() {
       if (elapsed > 0) {
         const fps = Math.round((frameCount / elapsed) * 1000);
         if (fps < 30) {
-          UltraDevLog.push('RENDER_PERF', { fps, frameCount, elapsed, warning: 'low_fps' });
+          JarvisDevLog.push('RENDER_PERF', { fps, frameCount, elapsed, warning: 'low_fps' });
         }
       }
       frameCount = 0;
@@ -402,13 +402,13 @@ export default function ChatScreen() {
 
   // ── Init (mount-only: device info + network) ───────
   useEffect(() => {
-    UltraDevLog.checkProcessRestart();
+    JarvisDevLog.checkProcessRestart();
     DebugLog.uiInit("start", "Beginning app initialization");
 
     try {
       const { Dimensions: Dims } = require('react-native');
       const win = Dims.get('window');
-      UltraDevLog.deviceInfo({
+      JarvisDevLog.deviceInfo({
         os: Platform.OS,
         osVersion: String(Platform.Version),
         model: Device.modelName ?? 'unknown',
@@ -417,18 +417,18 @@ export default function ChatScreen() {
         totalMemory: Device.totalMemory ?? undefined,
       });
     } catch (diErr: any) {
-      UltraDevLog.push('INIT_CHECKPOINT', { point: 'device_info_failed', error: diErr?.message });
+      JarvisDevLog.push('INIT_CHECKPOINT', { point: 'device_info_failed', error: diErr?.message });
     }
 
     try {
       NetInfo.fetch().then(state => {
-        UltraDevLog.networkStatus(!!state.isConnected, state.type);
+        JarvisDevLog.networkStatus(!!state.isConnected, state.type);
       }).catch(() => {});
       netInfoUnsubscribeRef.current = NetInfo.addEventListener(state => {
-        UltraDevLog.networkStatus(!!state.isConnected, state.type, state.isConnected ? undefined : 'WARN: went offline');
+        JarvisDevLog.networkStatus(!!state.isConnected, state.type, state.isConnected ? undefined : 'WARN: went offline');
       });
     } catch (netErr: any) {
-      UltraDevLog.push('INIT_CHECKPOINT', { point: 'netinfo_failed', error: netErr?.message });
+      JarvisDevLog.push('INIT_CHECKPOINT', { point: 'netinfo_failed', error: netErr?.message });
     }
   }, []);
 
@@ -465,7 +465,7 @@ export default function ChatScreen() {
               try { await AsyncStorage.removeItem(key); } catch {}
             }
             await vault!.set('installed_version_code', currentVersionCode);
-            UltraDevLog.push('VERSION_RESET', {
+            JarvisDevLog.push('VERSION_RESET', {
               previous: storedVersionCode || '(none)',
               current: currentVersionCode,
               clearedKeys: RESET_ON_UPGRADE,
@@ -473,7 +473,7 @@ export default function ChatScreen() {
             });
           }
         } catch (vErr: any) {
-          UltraDevLog.push('VERSION_RESET', { error: vErr?.message, note: 'WARN: version check failed' });
+          JarvisDevLog.push('VERSION_RESET', { error: vErr?.message, note: 'WARN: version check failed' });
         }
 
         // ── Migrate AsyncStorage → Vault (one-time per session) ──
@@ -492,7 +492,7 @@ export default function ChatScreen() {
             const asVal = await AsyncStorage.getItem(key);
             if (asVal) {
               await vault!.set(key, asVal);
-              UltraDevLog.push('STORAGE_MIGRATE', { key, from: 'async', to: 'vault', size: asVal.length });
+              JarvisDevLog.push('STORAGE_MIGRATE', { key, from: 'async', to: 'vault', size: asVal.length });
             }
           } catch {}
         }
@@ -559,7 +559,7 @@ export default function ChatScreen() {
                       const { startActivityAsync } = await import('expo-intent-launcher');
                       await startActivityAsync(
                         'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-                        { data: 'package:com.agent.ultra' }
+                        { data: 'package:com.agent.jarvis' }
                       );
                     } catch {
                       const { Linking } = require('react-native');
@@ -581,7 +581,7 @@ export default function ChatScreen() {
         }
 
       } catch (err: any) {
-        UltraDevLog.push('INIT_FATAL', { message: err?.message ?? 'Unknown', stack: (err?.stack ?? '').slice(0, 500) });
+        JarvisDevLog.push('INIT_FATAL', { message: err?.message ?? 'Unknown', stack: (err?.stack ?? '').slice(0, 500) });
         DebugLog.uiError("init", err?.message ?? "Unknown init error");
         setStatus("Init failed: " + (err?.message ?? "unknown"));
       }
@@ -596,11 +596,11 @@ export default function ChatScreen() {
     useCallback(() => {
       if (!agentCore) return;
       const deps = { agentCore: !!agentCore };
-      UltraDevLog.focusEffectTriggered(deps, prevFocusDepsRef.current);
+      JarvisDevLog.focusEffectTriggered(deps, prevFocusDepsRef.current);
       prevFocusDepsRef.current = deps;
       const now = Date.now();
       if (now - lastFocusTime.current < 2000) {
-        UltraDevLog.focusEffectSuppressed(now - lastFocusTime.current);
+        JarvisDevLog.focusEffectSuppressed(now - lastFocusTime.current);
         return;
       }
       lastFocusTime.current = now;
@@ -630,7 +630,7 @@ export default function ChatScreen() {
 
   // ── Result handler ─────────────────────────────────
   const handleResult = useCallback(
-    async (result: UltraExecutionResult, core: AgentCore, convId: string) => {
+    async (result: JarvisExecutionResult, core: AgentCore, convId: string) => {
       if (result.type === "approval_required") {
         setPendingReplay({ userInput: result.data?.replayUserInput || "", type: "approval", pendingState: result.data?.pendingState });
       }
@@ -644,10 +644,10 @@ export default function ChatScreen() {
   const handleSend = useCallback(async (overrideText?: string) => {
     const text = (overrideText || input).trim();
     if (!text || isProcessing || !agentCore || !conversationId) {
-      UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'send', trigger: {}, state: { hasText: !!text, isProcessing, hasCore: !!agentCore }, data: {}, outcome: 'EMPTY:guard_failed' });
+      JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'send', trigger: {}, state: { hasText: !!text, isProcessing, hasCore: !!agentCore }, data: {}, outcome: 'EMPTY:guard_failed' });
       return;
     }
-    UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'send', trigger: {}, state: { isSlash: text.startsWith('/'), textLen: text.length }, data: {}, outcome: 'sending' });
+    JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'send', trigger: {}, state: { isSlash: text.startsWith('/'), textLen: text.length }, data: {}, outcome: 'sending' });
 
     // ── Slash commands: handle locally ──
     if (text.startsWith('/')) {
@@ -700,7 +700,7 @@ export default function ChatScreen() {
           response = 'Unknown: ' + cmd + '. Type /help';
         }
       } catch (e: any) { response = 'Error: ' + (e?.message || 'unknown'); }
-      UltraDevLog.slashCommand(cmd, response, Date.now() - slashStart);
+      JarvisDevLog.slashCommand(cmd, response, Date.now() - slashStart);
       const sysMsg: ChatMessage = {
         id: `msg_cmd_${Date.now()}`,
         role: 'assistant',
@@ -714,14 +714,14 @@ export default function ChatScreen() {
       return;
     }
 
-    UltraDevLog.newRun();
-    UltraDevLog.sendAttempt(text, "chat", activeModelId || '', conversationId, messages.length, isProcessing);
+    JarvisDevLog.newRun();
+    JarvisDevLog.sendAttempt(text, "chat", activeModelId || '', conversationId, messages.length, isProcessing);
     DebugLog.uiSendMessage(text.length, "chat", activeModelId, isProcessing);
     snapUI("before_send");
     if (!overrideText) setInput("");
     setIsProcessing(true);
     setContextBarDismissed(false);
-    UltraDevLog.processingState(true, 'handleSend_start');
+    JarvisDevLog.processingState(true, 'handleSend_start');
     setStatus("Processing...");
 
     const optimisticId = `optimistic_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -732,7 +732,7 @@ export default function ChatScreen() {
 
     const _sendStart = Date.now();
     try {
-      let result: UltraExecutionResult;
+      let result: JarvisExecutionResult;
 
       if (pendingImage) {
         const imageData = pendingImage;
@@ -749,7 +749,7 @@ export default function ChatScreen() {
             role: 'assistant',
             content: visionResult.content,
             createdAt: Date.now(),
-            source: 'ultra',
+            source: 'jarvis',
             meta: { mode: 'vision', model: visionResult.model, cost: visionResult.cost },
           };
           await agentCore.getConversationManager().addMessage(conversationId, visionMsg);
@@ -760,7 +760,7 @@ export default function ChatScreen() {
             role: 'assistant',
             content: `Vision failed: ${visionErr.message}`,
             createdAt: Date.now(),
-            source: 'ultra' as any,
+            source: 'jarvis' as any,
             meta: { mode: 'command' as any },
           };
           await agentCore.getConversationManager().addMessage(conversationId, vErrMsg).catch(() => {});
@@ -769,10 +769,10 @@ export default function ChatScreen() {
       } else {
         result = await agentCore.execute({ conversationId, userInput: text });
       }
-      UltraDevLog.sendComplete(result?.taskId ?? '(unknown)', result?.type !== 'error', Date.now() - _sendStart, true, false);
+      JarvisDevLog.sendComplete(result?.taskId ?? '(unknown)', result?.type !== 'error', Date.now() - _sendStart, true, false);
       await handleResult(result, agentCore, conversationId);
     } catch (err: any) {
-      UltraDevLog.error('handleSend', err?.message || 'unknown', err?.stack);
+      JarvisDevLog.error('handleSend', err?.message || 'unknown', err?.stack);
       const isAbort = err?.message?.includes("aborted") || err?.message?.includes("timed out");
       if (isAbort) {
         setStatus("Stopped");
@@ -782,7 +782,7 @@ export default function ChatScreen() {
           role: 'assistant',
           content: `Request failed: ${err?.message || 'unknown error'}`,
           createdAt: Date.now(),
-          source: 'ultra' as any,
+          source: 'jarvis' as any,
           meta: { mode: 'command' as any },
         };
         await agentCore.getConversationManager().addMessage(conversationId, sendErrMsg).catch(() => {});
@@ -790,7 +790,7 @@ export default function ChatScreen() {
       await reloadMessages(agentCore, conversationId);
     } finally {
       setIsProcessing(false);
-      UltraDevLog.processingState(false, 'handleSend_finally');
+      JarvisDevLog.processingState(false, 'handleSend_finally');
       setStatus("Ready");
       setBuildPhase(null);
       setGenomePhase(null);
@@ -836,14 +836,14 @@ export default function ChatScreen() {
   // ── Approval handlers ──────────────────────────────
   const handleApprove = useCallback(async () => {
     if (!agentCore || !conversationId || !pendingReplay) {
-      UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'approve', trigger: {}, state: { hasReplay: !!pendingReplay }, data: {}, outcome: 'FAIL:guard_failed' });
+      JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'approve', trigger: {}, state: { hasReplay: !!pendingReplay }, data: {}, outcome: 'FAIL:guard_failed' });
       return;
     }
-    UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'approve', trigger: {}, state: { replayType: pendingReplay.type }, data: {}, outcome: 'executing' });
+    JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'approve', trigger: {}, state: { replayType: pendingReplay.type }, data: {}, outcome: 'executing' });
     const replay = pendingReplay;
     setPendingReplay(null);
     setIsProcessing(true);
-    UltraDevLog.processingState(true, 'handleApprove');
+    JarvisDevLog.processingState(true, 'handleApprove');
     setStatus("Executing approved action...");
     try {
       const args: ExecuteArgs = { conversationId, userInput: replay.userInput, replay: true };
@@ -853,35 +853,35 @@ export default function ChatScreen() {
       }
       const result = await agentCore.execute(args);
       await handleResult(result, agentCore, conversationId);
-      UltraDevLog.push('EFFECT', { component: 'ChatScreen', action: 'approve', success: result.type !== 'error', resultType: result.type });
+      JarvisDevLog.push('EFFECT', { component: 'ChatScreen', action: 'approve', success: result.type !== 'error', resultType: result.type });
     } catch (e: any) {
-      UltraDevLog.push('EFFECT', { component: 'ChatScreen', action: 'approve', success: false, error: e?.message });
-      UltraDevLog.error('handleApprove', e?.message || 'approval execute failed', e?.stack);
+      JarvisDevLog.push('EFFECT', { component: 'ChatScreen', action: 'approve', success: false, error: e?.message });
+      JarvisDevLog.error('handleApprove', e?.message || 'approval execute failed', e?.stack);
       await reloadMessages(agentCore, conversationId);
     }
     setIsProcessing(false);
-    UltraDevLog.processingState(false, 'handleApprove_done');
+    JarvisDevLog.processingState(false, 'handleApprove_done');
     setStatus("Ready");
   }, [agentCore, conversationId, pendingReplay, handleResult, reloadMessages]);
 
   const handleDeny = useCallback(async () => {
     if (!agentCore || !conversationId || !pendingReplay) {
-      UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'deny', trigger: {}, state: { hasReplay: !!pendingReplay }, data: {}, outcome: 'FAIL:guard_failed' });
+      JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'deny', trigger: {}, state: { hasReplay: !!pendingReplay }, data: {}, outcome: 'FAIL:guard_failed' });
       return;
     }
-    UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'deny', trigger: {}, state: { replayType: pendingReplay.type }, data: {}, outcome: 'denied' });
+    JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'deny', trigger: {}, state: { replayType: pendingReplay.type }, data: {}, outcome: 'denied' });
     const replay = pendingReplay;
     setPendingReplay(null);
     const cm = agentCore.getConversationManager();
-    await cm.addMessage(conversationId, { id: `msg_${Math.random().toString(36).slice(2)}_${Date.now()}`, role: "assistant", content: "Cancelled.", createdAt: Date.now(), source: "ultra" });
+    await cm.addMessage(conversationId, { id: `msg_${Math.random().toString(36).slice(2)}_${Date.now()}`, role: "assistant", content: "Cancelled.", createdAt: Date.now(), source: "jarvis" });
     await reloadMessages(agentCore, conversationId);
-    UltraDevLog.push('EFFECT', { component: 'ChatScreen', action: 'deny_cancel', success: true, replayType: replay.type });
+    JarvisDevLog.push('EFFECT', { component: 'ChatScreen', action: 'deny_cancel', success: true, replayType: replay.type });
   }, [agentCore, conversationId, pendingReplay, reloadMessages]);
 
   // ── Conversation management ────────────────────────
   const handleNewChat = useCallback(async () => {
     if (!agentCore) return;
-    UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'new_chat', trigger: {}, state: { prevConvId: conversationId ?? 'none' }, data: {}, outcome: 'creating_conversation' });
+    JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'new_chat', trigger: {}, state: { prevConvId: conversationId ?? 'none' }, data: {}, outcome: 'creating_conversation' });
     const cm = agentCore.getConversationManager();
     const conv = await cm.createConversation();
     setConversationId(conv.id);
@@ -891,12 +891,12 @@ export default function ChatScreen() {
     setPendingReplay(null);
     setConvListVisible(false);
     await refreshConversations(agentCore);
-    UltraDevLog.push('EFFECT', { component: 'ChatScreen', action: 'new_chat', success: true, newConvId: conv.id });
+    JarvisDevLog.push('EFFECT', { component: 'ChatScreen', action: 'new_chat', success: true, newConvId: conv.id });
   }, [agentCore, refreshConversations]);
 
   const handleSelectConversation = useCallback(async (id: string) => {
     if (!agentCore) return;
-    UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'select_conversation', trigger: { convId: id }, state: { prevConvId: conversationId ?? 'none' }, data: {}, outcome: 'loading_conversation' });
+    JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'select_conversation', trigger: { convId: id }, state: { prevConvId: conversationId ?? 'none' }, data: {}, outcome: 'loading_conversation' });
     DebugLog.uiConvSwitch(conversationId ?? "none", id);
     snapUI("conv_switch");
     setConversationId(id);
@@ -906,12 +906,12 @@ export default function ChatScreen() {
     setConversationStarred(!!conv?.meta?.starred);
     await reloadMessages(agentCore, id);
     setConvListVisible(false);
-    UltraDevLog.push('EFFECT', { component: 'ChatScreen', action: 'select_conversation', success: true, convId: id });
+    JarvisDevLog.push('EFFECT', { component: 'ChatScreen', action: 'select_conversation', success: true, convId: id });
   }, [agentCore, reloadMessages, conversationId]);
 
   const handleDeleteConversation = useCallback(async (id: string) => {
     if (!agentCore) return;
-    UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'delete_conversation', trigger: { convId: id }, state: { isActive: id === conversationId }, data: {}, outcome: 'deleting' });
+    JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'delete_conversation', trigger: { convId: id }, state: { isActive: id === conversationId }, data: {}, outcome: 'deleting' });
     const cm = agentCore.getConversationManager();
     await cm.deleteConversation(id);
     if (id === conversationId) {
@@ -928,7 +928,7 @@ export default function ChatScreen() {
       }
     }
     await refreshConversations(agentCore);
-    UltraDevLog.push('EFFECT', { component: 'ChatScreen', action: 'delete_conversation', success: true, deletedId: id });
+    JarvisDevLog.push('EFFECT', { component: 'ChatScreen', action: 'delete_conversation', success: true, deletedId: id });
   }, [agentCore, conversationId, reloadMessages, refreshConversations]);
 
   const [renameModalVisible, setRenameModalVisible] = useState(false);
@@ -936,7 +936,7 @@ export default function ChatScreen() {
 
   const handleRenameConversation = useCallback(() => {
     if (!agentCore || !conversationId) return;
-    UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'rename_conversation', trigger: {}, state: { convId: conversationId, platform: Platform.OS }, data: { currentTitle: conversationTitle }, outcome: Platform.OS === 'web' ? 'web_prompt' : 'modal_opened' });
+    JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'rename_conversation', trigger: {}, state: { convId: conversationId, platform: Platform.OS }, data: { currentTitle: conversationTitle }, outcome: Platform.OS === 'web' ? 'web_prompt' : 'modal_opened' });
     if (Platform.OS === "web") {
       const name = window.prompt("Rename conversation:", conversationTitle);
       if (name?.trim()) {
@@ -953,7 +953,7 @@ export default function ChatScreen() {
 
   const confirmRename = useCallback(() => {
     if (!agentCore || !conversationId || !renameText.trim()) return;
-    UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'confirm_rename', trigger: {}, state: { convId: conversationId }, data: { newTitle: renameText.trim() }, outcome: 'renamed' });
+    JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'confirm_rename', trigger: {}, state: { convId: conversationId }, data: { newTitle: renameText.trim() }, outcome: 'renamed' });
     agentCore.getConversationManager().updateTitle(conversationId, renameText.trim()).then(() => {
       setConversationTitle(renameText.trim());
       refreshConversations(agentCore);
@@ -1030,15 +1030,15 @@ export default function ChatScreen() {
     const tierFiltered = tierService ? tierService.filterModelsForTier(result) : result;
     const counts: Record<string, number> = {};
     tierFiltered.forEach((m: any) => { counts[m.type] = (counts[m.type] || 0) + 1; });
-    UltraDevLog.modelState("picker_classification", counts);
+    JarvisDevLog.modelState("picker_classification", counts);
     return tierFiltered;
   }, [agentCore, activeModelId, getResolvedCurrentModelId]);
 
   const handleModelSelect = useCallback(async (compositeKey: string) => {
     if (!agentCore) return;
     const resolvedPrev = getResolvedCurrentModelId();
-    UltraDevLog.pickerSelect(compositeKey, compositeKey, resolvedPrev || '');
-    UltraDevLog.pickerClose('model_select');
+    JarvisDevLog.pickerSelect(compositeKey, compositeKey, resolvedPrev || '');
+    JarvisDevLog.pickerClose('model_select');
     DebugLog.uiPickerSelect(compositeKey, resolvedPrev);
     snapUI("model_select");
     // compositeKey may be "providerId::modelId" or a bare "modelId".
@@ -1046,7 +1046,7 @@ export default function ChatScreen() {
     await agentCore.setDefaultModel(compositeKey);
     setActiveModelId(compositeKey);
     const confirmedComposite = agentCore.getDefaultModelId() || agentCore.getDefaultModel();
-    UltraDevLog.push('EFFECT', {
+    JarvisDevLog.push('EFFECT', {
       component: 'ChatScreen', action: 'model_select_result',
       requested: compositeKey, previous: resolvedPrev,
       confirmed: confirmedComposite, match: confirmedComposite === compositeKey,
@@ -1057,15 +1057,15 @@ export default function ChatScreen() {
   // ── Action Grid execution ──────────────────────────
   const handleGridExecute = useCallback(async (capability: string, params: Record<string, any>) => {
     if (!agentCore) return;
-    UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'grid_execute', trigger: { capability }, state: { hasConvId: !!conversationId }, data: { params }, outcome: 'running' });
+    JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'grid_execute', trigger: { capability }, state: { hasConvId: !!conversationId }, data: { params }, outcome: 'running' });
     setGridCollapsed(true);
     const plan: ActionPlan = { capability, params, reason: 'Action Grid' };
     try {
-      UltraDevLog.gridTap(capability, params);
-      UltraDevLog.processingState(true, 'gridAction_start');
+      JarvisDevLog.gridTap(capability, params);
+      JarvisDevLog.processingState(true, 'gridAction_start');
       setIsProcessing(true);
       const result = await agentCore.getTaskExecutor().runWithPlan(plan, `grid_${capability}_${Date.now()}`);
-      UltraDevLog.push('EFFECT', {
+      JarvisDevLog.push('EFFECT', {
         component: 'ChatScreen', action: 'grid_execute_result', capability,
         success: result.success !== false,
         summary: (result.summary || '').slice(0, 200),
@@ -1076,7 +1076,7 @@ export default function ChatScreen() {
         role: 'assistant',
         content: result.summary || `${capability}: ${result.success ? 'Done' : 'Failed'}`,
         createdAt: Date.now(),
-        source: 'ultra',
+        source: 'jarvis',
         meta: { capability, mode: 'command' },
       };
       if (conversationId) {
@@ -1084,10 +1084,10 @@ export default function ChatScreen() {
         await reloadMessages(agentCore, conversationId);
       }
     } catch (err: any) {
-      UltraDevLog.error('gridAction', err.message);
-      UltraDevLog.push('EFFECT', { component: 'ChatScreen', action: 'grid_execute_result', capability, success: false, error: err?.message });
+      JarvisDevLog.error('gridAction', err.message);
+      JarvisDevLog.push('EFFECT', { component: 'ChatScreen', action: 'grid_execute_result', capability, success: false, error: err?.message });
     } finally {
-      UltraDevLog.processingState(false, 'gridAction_finally');
+      JarvisDevLog.processingState(false, 'gridAction_finally');
       setIsProcessing(false);
     }
   }, [agentCore, conversationId, reloadMessages]);
@@ -1097,11 +1097,11 @@ export default function ChatScreen() {
     if (!agentCore) return;
     const plan: ActionPlan = { capability, params, reason: 'Context Bar' };
     try {
-      UltraDevLog.contextTap(capability, params);
-      UltraDevLog.processingState(true, 'contextAction_start');
+      JarvisDevLog.contextTap(capability, params);
+      JarvisDevLog.processingState(true, 'contextAction_start');
       setIsProcessing(true);
       const result = await agentCore.getTaskExecutor().runWithPlan(plan, `ctx_${capability}_${Date.now()}`);
-      UltraDevLog.push('EFFECT', {
+      JarvisDevLog.push('EFFECT', {
         component: 'ChatScreen', action: 'context_execute_result', capability,
         success: result.success !== false,
         summary: (result.summary || '').slice(0, 200),
@@ -1112,7 +1112,7 @@ export default function ChatScreen() {
         role: 'assistant',
         content: result.summary || `${capability}: ${result.success ? 'Done' : 'Failed'}`,
         createdAt: Date.now(),
-        source: 'ultra',
+        source: 'jarvis',
         meta: { capability, mode: 'command' },
       };
       if (conversationId) {
@@ -1120,10 +1120,10 @@ export default function ChatScreen() {
         await reloadMessages(agentCore, conversationId);
       }
     } catch (err: any) {
-      UltraDevLog.error('contextAction', err.message);
-      UltraDevLog.push('EFFECT', { component: 'ChatScreen', action: 'context_execute_result', capability, success: false, error: err?.message });
+      JarvisDevLog.error('contextAction', err.message);
+      JarvisDevLog.push('EFFECT', { component: 'ChatScreen', action: 'context_execute_result', capability, success: false, error: err?.message });
     } finally {
-      UltraDevLog.processingState(false, 'contextAction_finally');
+      JarvisDevLog.processingState(false, 'contextAction_finally');
       setIsProcessing(false);
     }
   }, [agentCore, conversationId, reloadMessages]);
@@ -1192,12 +1192,12 @@ export default function ChatScreen() {
   // ── Misc handlers ──────────────────────────────────
   const openConvList = useCallback(async () => {
     if (agentCore) await refreshConversations(agentCore);
-    UltraDevLog.modalEvent('convList', 'open');
+    JarvisDevLog.modalEvent('convList', 'open');
     setConvListVisible(true);
   }, [agentCore, refreshConversations]);
 
   const openPromptViewer = useCallback((trace: PromptTrace) => {
-    UltraDevLog.modalEvent('promptViewer', 'open');
+    JarvisDevLog.modalEvent('promptViewer', 'open');
     setSelectedTrace(trace);
     setPromptViewerVisible(true);
   }, []);
@@ -1214,11 +1214,11 @@ export default function ChatScreen() {
   const getMessageStyle = (msg: ChatMessage) => {
     if (msg.role === "user") return "user" as const;
     if (msg.role === "system") return "system" as const;
-    if (msg.source === "ultra") {
+    if (msg.source === "jarvis" || (msg.source as string) === "ultra") { // "ultra" = source key stored by pre-rename builds
       if (msg.meta?.isBuildLog) return "buildLog" as const;
       const risk = msg.meta?.risk;
       if (risk === "dangerous" || risk === "blocked") return "blocked" as const;
-      return "ultra" as const;
+      return "jarvis" as const;
     }
     return "ai" as const;
   };
@@ -1247,13 +1247,13 @@ export default function ChatScreen() {
           <View
             onLayout={(e) => {
             const { height, width } = e.nativeEvent.layout;
-            UltraDevLog.messageRendered(
+            JarvisDevLog.messageRendered(
               item.id, item.role as 'user' | 'assistant' | 'system', item.content.length,
               height,
               msgIndex >= 0 ? msgIndex : 0,
               scrollOffsetRef.current, listHeightRef.current,
             );
-            UltraDevLog.bubbleDiag(
+            JarvisDevLog.bubbleDiag(
               item.id, item.role, height, width, item.content.length,
               msgIndex >= 0 ? msgIndex : 0, msgStyle,
             );
@@ -1261,7 +1261,7 @@ export default function ChatScreen() {
           style={[
             styles.messageBubble,
             msgStyle === "user" ? styles.userBubble :
-            msgStyle === "ultra" ? styles.ultraBubble :
+            msgStyle === "jarvis" ? styles.jarvisBubble :
             msgStyle === "ai" ? styles.aiBubble :
             msgStyle === "blocked" ? styles.blockedBubble :
             msgStyle === "buildLog" ? styles.buildLogBubble :
@@ -1272,8 +1272,8 @@ export default function ChatScreen() {
           {/* Header with icon */}
           {!isUser && (
             <View style={styles.messageHeader}>
-              {msgStyle === "ultra" ? (
-                <MaterialCommunityIcons name="robot" size={14} color={ULTRA_COLOR} />
+              {msgStyle === "jarvis" ? (
+                <MaterialCommunityIcons name="robot" size={14} color={JARVIS_COLOR} />
               ) : msgStyle === "ai" ? (
                 <Ionicons name="sparkles" size={14} color={AI_COLOR} />
               ) : msgStyle === "blocked" ? (
@@ -1285,13 +1285,13 @@ export default function ChatScreen() {
               )}
               <Text style={[
                 styles.roleLabel,
-                msgStyle === "ultra" ? { color: ULTRA_COLOR } :
+                msgStyle === "jarvis" ? { color: JARVIS_COLOR } :
                 msgStyle === "ai" ? { color: AI_COLOR } :
                 msgStyle === "blocked" ? { color: BLOCKED_COLOR } :
                 msgStyle === "buildLog" ? { color: "#ff9900" } :
                 { color: DIM },
               ]}>
-                {msgStyle === "ultra" ? "ULTRA" :
+                {msgStyle === "jarvis" ? "JARVIS" :
                  msgStyle === "ai" ? "AI" :
                  msgStyle === "blocked" ? "BLOCKED" :
                  msgStyle === "buildLog" ? "BUILD LOG" :
@@ -1384,12 +1384,12 @@ export default function ChatScreen() {
                 hitSlop={8}
                 style={styles.copyBtn}
                 onPress={async () => {
-                  UltraDevLog.push('CHAIN', { component: 'ChatScreen', action: 'share_message', trigger: { msgId: item.id }, state: {}, data: { contentLength: item.content.length }, outcome: 'sharing' });
+                  JarvisDevLog.push('CHAIN', { component: 'ChatScreen', action: 'share_message', trigger: { msgId: item.id }, state: {}, data: { contentLength: item.content.length }, outcome: 'sharing' });
                   try {
                     const shareResult = await Share.share({ message: item.content });
-                    UltraDevLog.push('EFFECT', { component: 'ChatScreen', action: 'share_message', success: shareResult.action !== Share.dismissedAction, shareAction: shareResult.action });
+                    JarvisDevLog.push('EFFECT', { component: 'ChatScreen', action: 'share_message', success: shareResult.action !== Share.dismissedAction, shareAction: shareResult.action });
                   } catch (e: any) {
-                    UltraDevLog.push('EFFECT', { component: 'ChatScreen', action: 'share_message', success: false, error: e?.message });
+                    JarvisDevLog.push('EFFECT', { component: 'ChatScreen', action: 'share_message', success: false, error: e?.message });
                   }
                 }}
               >
@@ -1507,7 +1507,7 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           onLayout={(e) => { listHeightRef.current = e.nativeEvent.layout.height; }}
           onScroll={(e) => {
-            scrollOffsetRef.current = UltraDevLog.listScrolled(
+            scrollOffsetRef.current = JarvisDevLog.listScrolled(
               e.nativeEvent.contentOffset.y,
               e.nativeEvent.layoutMeasurement.height,
               e.nativeEvent.contentSize.height,
@@ -1572,7 +1572,7 @@ export default function ChatScreen() {
                 const resolvedModelId = getResolvedCurrentModelId();
                 const resolvedDefaultModel = mr?.getDefaultModelId?.() ?? agentCore?.getDefaultModel() ?? null;
                 DebugLog.uiPickerOpen('all', 'chat', resolvedModelId);
-                UltraDevLog.apiStateSnapshot({
+                JarvisDevLog.apiStateSnapshot({
                   reason: 'picker_open',
                   sourceOfTruth: 'picker_open',
                   providerCount: (agentCore as any)?.getProviderManager?.()?.getActive?.()?.length ?? 0,
@@ -1587,7 +1587,7 @@ export default function ChatScreen() {
                   bridgeAttached: mr?.isBridgeAttached?.() ?? false,
                   bridgeHasActiveProvider: (agentCore as any)?.hasApiKey?.() ?? false,
                 });
-                UltraDevLog.modelInventorySync({
+                JarvisDevLog.modelInventorySync({
                   reason: 'picker_open',
                   source: pickerSource,
                   providerBackedModelCount: routedModels.length,
@@ -1596,7 +1596,7 @@ export default function ChatScreen() {
                   selectedModel: resolvedModelId,
                   defaultModel: resolvedDefaultModel,
                 });
-                UltraDevLog.pickerOpenDetailed({
+                JarvisDevLog.pickerOpenDetailed({
                   entryPoint: 'manual_model_browser',
                   requestedFilter: 'unrestricted',
                   effectiveFilter: 'all',
@@ -1611,7 +1611,7 @@ export default function ChatScreen() {
                   slideAnimCurrentValue: 0,
                   note: 'ok — manual model browser, intentionally unrestricted',
                 });
-                UltraDevLog.modalEvent('modelPicker', 'open', { modelCount: allModels.length });
+                JarvisDevLog.modalEvent('modelPicker', 'open', { modelCount: allModels.length });
                 snapUI("picker_open");
                 pickerLogCtxRef.current = {
                   currentMode: 'chat',
@@ -1763,7 +1763,7 @@ export default function ChatScreen() {
         onSelect={handleSelectConversation}
         onDelete={handleDeleteConversation}
         onNewChat={handleNewChat}
-        onClose={() => { UltraDevLog.modalEvent('convList', 'close'); setConvListVisible(false); }}
+        onClose={() => { JarvisDevLog.modalEvent('convList', 'close'); setConvListVisible(false); }}
         onOpenSettings={() => router.push("/settings")}
         onOpenLogs={() => {
           router.push("/settings?tab=logs");
@@ -1801,8 +1801,8 @@ export default function ChatScreen() {
         currentModelId={getResolvedCurrentModelId() || agentCore?.getDefaultModel() || ""}
         onSelect={handleModelSelect}
         onClose={() => {
-          UltraDevLog.pickerClose('close_button');
-          UltraDevLog.modalEvent('modelPicker', 'close', { how: 'close_button' });
+          JarvisDevLog.pickerClose('close_button');
+          JarvisDevLog.modalEvent('modelPicker', 'close', { how: 'close_button' });
           setModelPickerVisible(false);
         }}
         logContext={pickerLogCtxRef.current ?? undefined}
@@ -1884,7 +1884,7 @@ const styles = StyleSheet.create({
   messageListContent: { paddingHorizontal: 16, paddingVertical: 8 },
   messageBubble: { borderRadius: 12, padding: 12, marginBottom: 8, maxWidth: "85%" },
   userBubble: { backgroundColor: "#2a2a2a", alignSelf: "flex-end" },
-  ultraBubble: { backgroundColor: SURFACE, alignSelf: "flex-start", borderWidth: 1, borderColor: "#2a2a2a" },
+  jarvisBubble: { backgroundColor: SURFACE, alignSelf: "flex-start", borderWidth: 1, borderColor: "#2a2a2a" },
   aiBubble: { backgroundColor: SURFACE, alignSelf: "flex-start", borderWidth: 1, borderColor: "#1a2a3a" },
   blockedBubble: { backgroundColor: "#1a0a0a", alignSelf: "flex-start", borderWidth: 1, borderColor: "#3a1a1a" },
   buildLogBubble: { backgroundColor: "#1a1400", alignSelf: "flex-start", borderWidth: 1, borderColor: "#3a2a00", maxWidth: "95%" },

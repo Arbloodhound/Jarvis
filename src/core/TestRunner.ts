@@ -3,7 +3,7 @@ import AppController from '../native/AppController';
 import AgentNative from '../native/AgentNative';
 import { ModelRouter } from './ModelRouter';
 import { Logger } from '../utils/Logger';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 export interface TestStep {
   description: string;
@@ -44,7 +44,7 @@ export class TestRunner {
 
   async generateTestPlan(appDescription: string, spec: AppSpec): Promise<TestPlan> {
     this.logger.info(`Generating test plan for ${spec.appName}`);
-    UltraDevLog.push('SYSTEM', { event: 'test_runner_generate_plan_start', appName: spec.appName, packageName: spec.packageName });
+    JarvisDevLog.push('SYSTEM', { event: 'test_runner_generate_plan_start', appName: spec.appName, packageName: spec.packageName });
 
     const filesContext = spec.files
       .filter(f => f.purpose)

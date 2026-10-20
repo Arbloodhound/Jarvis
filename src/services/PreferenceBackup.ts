@@ -4,10 +4,10 @@ import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { SecureVault } from '../security/SecureVault';
 import { LogFolder } from './LogFolder';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 const EXPORT_VERSION = '1.1';
-const EXPORT_SOURCE = 'agent-ultra';
+const EXPORT_SOURCE = 'jarvis';
 
 const EXPORTABLE_KEYS = [
   'preferred_model',
@@ -106,10 +106,10 @@ export async function exportPreferences(): Promise<{ success: boolean; message: 
     }
 
     const json = JSON.stringify(data, null, 2);
-    await LogFolder.writeLog('agent-ultra-preferences-backup.json', json);
+    await LogFolder.writeLog('jarvis-preferences-backup.json', json);
 
     const filePath = Platform.OS !== 'web'
-      ? `${FileSystem.documentDirectory}agent-ultra-logs/agent-ultra-preferences-backup.json`
+      ? `${FileSystem.documentDirectory}jarvis-logs/jarvis-preferences-backup.json`
       : null;
 
     if (filePath) {
@@ -123,13 +123,13 @@ export async function exportPreferences(): Promise<{ success: boolean; message: 
     }
 
     const keyCount = Object.keys(data).length - 3;
-    UltraDevLog.preferenceBackup('export', true, keyCount);
+    JarvisDevLog.preferenceBackup('export', true, keyCount);
     return {
       success: true,
       message: 'Preferences exported successfully. API keys are excluded for security — only API names and base URLs are saved.',
     };
   } catch (err: any) {
-    UltraDevLog.preferenceBackup('export', false, 0, err.message);
+    JarvisDevLog.preferenceBackup('export', false, 0, err.message);
     return { success: false, message: `Export failed: ${err.message}` };
   }
 }
@@ -158,7 +158,9 @@ export async function importPreferences(): Promise<{ success: boolean; message: 
       return { success: false, message: 'Invalid file — could not parse JSON.' };
     }
 
-    if (!rawData.version || !rawData.source || rawData.source !== EXPORT_SOURCE) {
+    // 'agent-ultra' is the EXPORT_SOURCE value written by pre-rename builds; it stays
+    // accepted forever so backups exported before the rename remain importable.
+    if (!rawData.version || !rawData.source || (rawData.source !== EXPORT_SOURCE && rawData.source !== 'agent-ultra')) {
       return { success: false, message: 'Invalid backup file — not a Jarvis preferences backup.' };
     }
 
@@ -191,13 +193,13 @@ export async function importPreferences(): Promise<{ success: boolean; message: 
       }
     }
 
-    UltraDevLog.preferenceBackup('import', true, imported.length);
+    JarvisDevLog.preferenceBackup('import', true, imported.length);
     return {
       success: true,
       message: `Restored ${imported.length} settings.\n\nNote: API keys were not included in the backup — please re-enter them in API Setup. Restart the app to apply all changes.`,
     };
   } catch (err: any) {
-    UltraDevLog.preferenceBackup('import', false, 0, err.message);
+    JarvisDevLog.preferenceBackup('import', false, 0, err.message);
     return { success: false, message: `Import failed: ${err.message}` };
   }
 }

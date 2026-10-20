@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { UltraDevLog } from './UltraDevLog';
+import { JarvisDevLog } from './JarvisDevLog';
 
 function simpleHash(input: string): string {
   let hash = 0;
@@ -40,13 +40,13 @@ async function loadCryptoModule(): Promise<any> {
   if (Platform.OS !== 'web') {
     try {
       _cryptoModule = require('expo-crypto');
-      UltraDevLog.push('SYSTEM', { event: 'crypto_module_loaded', source: 'expo-crypto', platform: Platform.OS });
+      JarvisDevLog.push('SYSTEM', { event: 'crypto_module_loaded', source: 'expo-crypto', platform: Platform.OS });
     } catch {
       _cryptoModule = null;
-      UltraDevLog.push('SYSTEM', { event: 'crypto_module_load_fail', source: 'expo-crypto', fallback: 'simpleHash', platform: Platform.OS });
+      JarvisDevLog.push('SYSTEM', { event: 'crypto_module_load_fail', source: 'expo-crypto', fallback: 'simpleHash', platform: Platform.OS });
     }
   } else {
-    UltraDevLog.push('SYSTEM', { event: 'crypto_module_skip', reason: 'web_platform', fallback: 'simpleHash' });
+    JarvisDevLog.push('SYSTEM', { event: 'crypto_module_skip', reason: 'web_platform', fallback: 'simpleHash' });
   }
   return _cryptoModule;
 }
@@ -63,13 +63,13 @@ export async function createHashAsync(input: string): Promise<string> {
         crypto.CryptoDigestAlgorithm.SHA256,
         input
       );
-      UltraDevLog.push('SYSTEM', { event: 'crypto_hash_ok', algorithm: 'SHA256', source: 'expo-crypto', inputLen: input.length });
+      JarvisDevLog.push('SYSTEM', { event: 'crypto_hash_ok', algorithm: 'SHA256', source: 'expo-crypto', inputLen: input.length });
       return digest;
     } catch (err: any) {
-      UltraDevLog.push('SYSTEM', { event: 'crypto_hash_fail', algorithm: 'SHA256', error: err?.message, fallback: 'simpleHash' });
+      JarvisDevLog.push('SYSTEM', { event: 'crypto_hash_fail', algorithm: 'SHA256', error: err?.message, fallback: 'simpleHash' });
       return simpleHash(input);
     }
   }
-  UltraDevLog.push('SYSTEM', { event: 'crypto_hash_ok', algorithm: 'simpleHash', source: 'fallback', inputLen: input.length });
+  JarvisDevLog.push('SYSTEM', { event: 'crypto_hash_ok', algorithm: 'simpleHash', source: 'fallback', inputLen: input.length });
   return simpleHash(input);
 }

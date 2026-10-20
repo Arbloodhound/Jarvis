@@ -3,7 +3,7 @@
 import { buildAuthHeaders } from './AuthHeaders';
 import { buildEndpointUrl } from './UrlNormalize';
 import { getAdapterRegistry } from './AdapterRegistry';
-import { UltraDevLog } from '../../utils/UltraDevLog';
+import { JarvisDevLog } from '../../utils/JarvisDevLog';
 import type { ApiProvider, DiscoveredModel, ProbeSummary, ProviderStatus, ProbeEndpointResult } from '../../types/provider';
 
 const PROBE_TIMEOUT_MS = 12000;
@@ -102,7 +102,7 @@ export async function probeProvider(
 ): Promise<ProbeOutput> {
   const probedAt = Date.now();
 
-  UltraDevLog.push('SYSTEM', {
+  JarvisDevLog.push('SYSTEM', {
     event: 'probe_start',
     providerId: provider.id,
     providerName: provider.name,
@@ -142,7 +142,7 @@ export async function probeProvider(
   for (const adapterId of provider.capabilities.adapterIds) {
     const adapter = registry.get(adapterId);
     if (!adapter) {
-      UltraDevLog.push('SYSTEM', { event: 'probe_adapter_not_found', providerId: provider.id, adapterId });
+      JarvisDevLog.push('SYSTEM', { event: 'probe_adapter_not_found', providerId: provider.id, adapterId });
       continue;
     }
     const fakeRoute = {
@@ -163,16 +163,16 @@ export async function probeProvider(
     try {
       const results = await adapter.probePlan(fakeRoute);
       endpointResults.push(...results);
-      UltraDevLog.push('SYSTEM', { event: 'probe_adapter_plan', providerId: provider.id, adapterId, endpointCount: results.length, statuses: results.map(r => r.errorCode) });
+      JarvisDevLog.push('SYSTEM', { event: 'probe_adapter_plan', providerId: provider.id, adapterId, endpointCount: results.length, statuses: results.map(r => r.errorCode) });
     } catch (err: any) {
-      UltraDevLog.push('SYSTEM', { event: 'probe_adapter_plan_error', providerId: provider.id, adapterId, error: err?.message });
+      JarvisDevLog.push('SYSTEM', { event: 'probe_adapter_plan_error', providerId: provider.id, adapterId, error: err?.message });
     }
   }
 
   // 2. Always try /models for model listing
   if (provider.capabilities.supportsModelListing) {
     const modelsUrl = buildEndpointUrl(provider.baseUrl, '/models');
-    UltraDevLog.push('SYSTEM', { event: 'probe_models_endpoint_attempt', providerId: provider.id, url: modelsUrl });
+    JarvisDevLog.push('SYSTEM', { event: 'probe_models_endpoint_attempt', providerId: provider.id, url: modelsUrl });
     const modelsResult = await safeFetchJson(modelsUrl, authHeaders);
     endpointResults.push({
       url: modelsUrl,
@@ -184,19 +184,19 @@ export async function probeProvider(
     if (modelsResult.ok && modelsResult.data) {
       models = parseDiscoveredModels(modelsResult.data, provider.id);
       status = 'ok';
-      UltraDevLog.push('SYSTEM', { event: 'probe_models_ok', providerId: provider.id, modelCount: models.length });
+      JarvisDevLog.push('SYSTEM', { event: 'probe_models_ok', providerId: provider.id, modelCount: models.length });
     } else if (modelsResult.errorCode === 'unauthorized') {
       status = 'unauthorized';
       probeError = 'Invalid API key or unauthorized.';
-      UltraDevLog.push('SYSTEM', { event: 'probe_models_unauthorized', providerId: provider.id });
+      JarvisDevLog.push('SYSTEM', { event: 'probe_models_unauthorized', providerId: provider.id });
     } else if (modelsResult.errorCode === 'network_error') {
       status = 'network_error';
       probeError = 'Could not reach provider. Check URL and network.';
-      UltraDevLog.push('SYSTEM', { event: 'probe_models_network_error', providerId: provider.id });
+      JarvisDevLog.push('SYSTEM', { event: 'probe_models_network_error', providerId: provider.id });
     } else if (modelsResult.errorCode) {
       status = 'error';
       probeError = `Models endpoint: ${modelsResult.errorCode}`;
-      UltraDevLog.push('SYSTEM', { event: 'probe_models_error', providerId: provider.id, errorCode: modelsResult.errorCode, httpStatus: modelsResult.status });
+      JarvisDevLog.push('SYSTEM', { event: 'probe_models_error', providerId: provider.id, errorCode: modelsResult.errorCode, httpStatus: modelsResult.status });
     }
   }
 
@@ -211,12 +211,12 @@ export async function probeProvider(
         hasAccountData = true;
         rawAccountSnapshotCapped = capSnap(accountData);
         endpointResults.push({ url, reachable: true, status: res.status, errorCode: 'ok', rawSnapshotCapped: rawAccountSnapshotCapped });
-        UltraDevLog.push('SYSTEM', { event: 'probe_account_ok', providerId: provider.id, path });
+        JarvisDevLog.push('SYSTEM', { event: 'probe_account_ok', providerId: provider.id, path });
         break;
       } else if (res.requiresStrongerScope) {
         requiresStrongerScope = true;
         endpointResults.push({ url, reachable: true, status: res.status, errorCode: 'forbidden_scope', requiresStrongerScope: true });
-        UltraDevLog.push('SYSTEM', { event: 'probe_account_scope_required', providerId: provider.id, path });
+        JarvisDevLog.push('SYSTEM', { event: 'probe_account_scope_required', providerId: provider.id, path });
         break;
       } else {
         endpointResults.push({ url, reachable: res.status > 0, status: res.status, errorCode: res.errorCode });
@@ -234,7 +234,7 @@ export async function probeProvider(
         hasBillingData = true;
         rawBillingSnapshotCapped = capSnap(redactSecrets(res.data));
         endpointResults.push({ url, reachable: true, status: res.status, errorCode: 'ok', rawSnapshotCapped: rawBillingSnapshotCapped });
-        UltraDevLog.push('SYSTEM', { event: 'probe_billing_ok', providerId: provider.id, path });
+        JarvisDevLog.push('SYSTEM', { event: 'probe_billing_ok', providerId: provider.id, path });
         break;
       } else if (res.requiresStrongerScope) {
         requiresStrongerScope = true;
@@ -256,7 +256,7 @@ export async function probeProvider(
         hasUsageData = true;
         rawUsageSnapshotCapped = capSnap(redactSecrets(res.data));
         endpointResults.push({ url, reachable: true, status: res.status, errorCode: 'ok', rawSnapshotCapped: rawUsageSnapshotCapped });
-        UltraDevLog.push('SYSTEM', { event: 'probe_usage_ok', providerId: provider.id, path });
+        JarvisDevLog.push('SYSTEM', { event: 'probe_usage_ok', providerId: provider.id, path });
         break;
       } else {
         endpointResults.push({ url, reachable: res.status > 0, status: res.status, errorCode: res.errorCode });
@@ -292,7 +292,7 @@ export async function probeProvider(
     error: probeError,
   };
 
-  UltraDevLog.push('SYSTEM', {
+  JarvisDevLog.push('SYSTEM', {
     event: 'probe_complete',
     providerId: provider.id,
     status,

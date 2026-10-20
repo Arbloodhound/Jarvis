@@ -1,6 +1,6 @@
 // URL normalization — always store base URL, never operation endpoints
 
-import { UltraDevLog } from '../../utils/UltraDevLog';
+import { JarvisDevLog } from '../../utils/JarvisDevLog';
 
 const OPERATION_SUFFIXES = [
   '/chat/completions',
@@ -27,7 +27,7 @@ export interface NormalizeResult {
 export function normalizeProviderUrl(raw: string): NormalizeResult {
   const trimmed = (raw || '').trim();
   if (!trimmed) {
-    UltraDevLog.push('SYSTEM', { event: 'url_normalize_fail', raw: '[empty]', reason: 'empty' });
+    JarvisDevLog.push('SYSTEM', { event: 'url_normalize_fail', raw: '[empty]', reason: 'empty' });
     return { ok: false, url: '', error: 'URL is empty.' };
   }
 
@@ -51,11 +51,11 @@ export function normalizeProviderUrl(raw: string): NormalizeResult {
   try {
     new URL(url);
   } catch {
-    UltraDevLog.push('SYSTEM', { event: 'url_normalize_fail', raw: trimmed, normalized: url, reason: 'invalid_url' });
+    JarvisDevLog.push('SYSTEM', { event: 'url_normalize_fail', raw: trimmed, normalized: url, reason: 'invalid_url' });
     return { ok: false, url: '', error: `Invalid URL: ${trimmed}` };
   }
 
-  UltraDevLog.push('SYSTEM', { event: 'url_normalize_ok', normalized: url, strippedSuffix: strippedSuffix || null });
+  JarvisDevLog.push('SYSTEM', { event: 'url_normalize_ok', normalized: url, strippedSuffix: strippedSuffix || null });
   return { ok: true, url, strippedSuffix };
 }
 

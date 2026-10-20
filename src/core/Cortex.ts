@@ -14,7 +14,7 @@ import { VisionPipeline } from './VisionPipeline';
 import { AppIntelligence, AppDataResult } from './AppIntelligence';
 import AppController from '../native/AppController';
 import { Platform } from 'react-native';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 import { CorrIdScope } from '../utils/CorrIdScope';
 import { logAICall, logContextBudget } from '../utils/AICallLogger';
 

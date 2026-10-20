@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { UltraDevLog } from "@/src/utils/UltraDevLog";
+import { JarvisDevLog } from "@/src/utils/JarvisDevLog";
 
 export type ErrorFallbackProps = {
   error: Error;
@@ -35,7 +35,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
 
   const handleRestart = () => {
-    UltraDevLog.push('CHAIN', { component: 'ErrorFallback', action: 'restart', trigger: {}, state: { errorMsg: error.message.slice(0, 60) }, data: {}, outcome: 'reset_called' });
+    JarvisDevLog.push('CHAIN', { component: 'ErrorFallback', action: 'restart', trigger: {}, state: { errorMsg: error.message.slice(0, 60) }, data: {}, outcome: 'reset_called' });
     resetError();
   };
 
@@ -57,7 +57,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
     <View style={[styles.container, { backgroundColor: theme.background }]} testID="ErrorFallback">
       {__DEV__ ? (
         <Pressable
-          onPress={() => { UltraDevLog.push('CHAIN', { component: 'ErrorFallback', action: 'show_details', trigger: {}, state: { errorMsg: error.message.slice(0, 60) }, data: {}, outcome: 'modal_opened' }); setIsModalVisible(true); }}
+          onPress={() => { JarvisDevLog.push('CHAIN', { component: 'ErrorFallback', action: 'show_details', trigger: {}, state: { errorMsg: error.message.slice(0, 60) }, data: {}, outcome: 'modal_opened' }); setIsModalVisible(true); }}
           accessibilityLabel="View error details"
           accessibilityRole="button"
           style={({ pressed }) => [
@@ -127,7 +127,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                   Error Details
                 </Text>
                 <Pressable
-                  onPress={() => { UltraDevLog.push('CHAIN', { component: 'ErrorFallback', action: 'close_details', trigger: {}, state: {}, data: {}, outcome: 'modal_dismissed' }); setIsModalVisible(false); }}
+                  onPress={() => { JarvisDevLog.push('CHAIN', { component: 'ErrorFallback', action: 'close_details', trigger: {}, state: {}, data: {}, outcome: 'modal_dismissed' }); setIsModalVisible(false); }}
                   accessibilityLabel="Close error details"
                   accessibilityRole="button"
                   style={({ pressed }) => [

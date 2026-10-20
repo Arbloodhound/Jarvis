@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import type { AppControllerInterface, UINode } from '../native/AppController';
 import type { TaskChallenge, ChallengeResult, ChallengeStep, SuccessCriterion, OverallEvaluation } from './TaskChallenges';
-import { UltraDevLog } from '../utils/UltraDevLog';
+import { JarvisDevLog } from '../utils/JarvisDevLog';
 
 const isNative = Platform.OS !== 'web';
 
@@ -31,7 +31,7 @@ export class TaskEvaluator {
   ) {
     this.appController = appController || null;
     this.installer = installer || null;
-    UltraDevLog.push('SYSTEM', { event: 'task_evaluator_init', hasController: !!appController, hasInstaller: !!installer, platform: Platform.OS });
+    JarvisDevLog.push('SYSTEM', { event: 'task_evaluator_init', hasController: !!appController, hasInstaller: !!installer, platform: Platform.OS });
   }
 
   async evaluateOffspring(
@@ -40,10 +40,10 @@ export class TaskEvaluator {
     challenges: TaskChallenge[],
     onProgress?: ProgressCallback
   ): Promise<OverallEvaluation> {
-    UltraDevLog.push('SYSTEM', { event: 'task_evaluator_evaluate_start', packageName, apkPath, challengeCount: challenges.length, isNative, hasController: !!this.appController });
+    JarvisDevLog.push('SYSTEM', { event: 'task_evaluator_evaluate_start', packageName, apkPath, challengeCount: challenges.length, isNative, hasController: !!this.appController });
 
     if (!isNative || !this.appController) {
-      UltraDevLog.push('SYSTEM', { event: 'task_evaluator_web_fallback', packageName, reason: !isNative ? 'web_platform' : 'no_controller' });
+      JarvisDevLog.push('SYSTEM', { event: 'task_evaluator_web_fallback', packageName, reason: !isNative ? 'web_platform' : 'no_controller' });
       return this.createWebFallbackResult(challenges);
     }
 
@@ -52,10 +52,10 @@ export class TaskEvaluator {
       if (this.installer) {
         await this.installer.installApk(apkPath);
         await this.delay(3000);
-        UltraDevLog.push('SYSTEM', { event: 'task_evaluator_install_ok', packageName });
+        JarvisDevLog.push('SYSTEM', { event: 'task_evaluator_install_ok', packageName });
       }
     } catch (e) {
-      UltraDevLog.push('SYSTEM', { event: 'task_evaluator_install_fail', packageName, error: (e as Error).message });
+      JarvisDevLog.push('SYSTEM', { event: 'task_evaluator_install_fail', packageName, error: (e as Error).message });
       return this.createFailedResult(challenges, `Install failed: ${(e as Error).message}`);
     }
 
@@ -67,11 +67,11 @@ export class TaskEvaluator {
 
     for (const challenge of challenges) {
       onProgress?.('testing', `Running: ${challenge.name}`);
-      UltraDevLog.push('SYSTEM', { event: 'task_evaluator_challenge_start', challengeId: challenge.id, challengeName: challenge.name, difficulty: challenge.difficulty });
+      JarvisDevLog.push('SYSTEM', { event: 'task_evaluator_challenge_start', challengeId: challenge.id, challengeName: challenge.name, difficulty: challenge.difficulty });
       const result = await this.runChallenge(packageName, challenge);
       results.push(result);
       totalCrashes += result.crashCount;
-      UltraDevLog.push('SYSTEM', { event: 'task_evaluator_challenge_done', challengeId: challenge.id, passed: result.passed, partialScore: result.partialScore, crashCount: result.crashCount, executionTimeMs: result.executionTimeMs });
+      JarvisDevLog.push('SYSTEM', { event: 'task_evaluator_challenge_done', challengeId: challenge.id, passed: result.passed, partialScore: result.partialScore, crashCount: result.crashCount, executionTimeMs: result.executionTimeMs });
     }
 
     const totalTime = Date.now() - overallStart;
@@ -90,7 +90,7 @@ export class TaskEvaluator {
       totalTimeMs: totalTime,
     };
 
-    UltraDevLog.push('SYSTEM', { event: 'task_evaluator_evaluate_done', packageName, challengeCount: challenges.length, passed: passedResults.length, passRate, weightedScore: evaluation.weightedScore, totalCrashes, totalTimeMs: totalTime });
+    JarvisDevLog.push('SYSTEM', { event: 'task_evaluator_evaluate_done', packageName, challengeCount: challenges.length, passed: passedResults.length, passRate, weightedScore: evaluation.weightedScore, totalCrashes, totalTimeMs: totalTime });
     return evaluation;
   }
 

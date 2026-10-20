@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppStorage } from '@/src/utils/AppStorage';
-import { UltraDevLog } from '@/src/utils/UltraDevLog';
+import { JarvisDevLog } from '@/src/utils/JarvisDevLog';
 import type { GridCategory, GridAction, GridConfig, TaskTemplate } from '@/src/types/actionGrid';
 import { DEFAULT_CATEGORIES, DEFAULT_GRID_CONFIG, getGridForMode } from '@/src/data/defaultGrid';
 import { ZoneConfig, resolveActions, lookupAction as zoneLookup } from '@/src/data/ZoneConfig';
@@ -54,13 +54,13 @@ export default function ActionGrid({
         try {
           const parsed = JSON.parse(raw);
           setConfig(parsed);
-          UltraDevLog.push('GRID_LOAD', { favCount: parsed.favorites?.length ?? 0, hiddenCount: parsed.hiddenCategories?.length ?? 0, source: 'storage' });
+          JarvisDevLog.push('GRID_LOAD', { favCount: parsed.favorites?.length ?? 0, hiddenCount: parsed.hiddenCategories?.length ?? 0, source: 'storage' });
         } catch (e: any) {
           console.warn('[ActionGrid] config parse failed:', e?.message);
-          UltraDevLog.push('GRID_LOAD', { favCount: DEFAULT_GRID_CONFIG.favorites.length, hiddenCount: 0, source: 'default' });
+          JarvisDevLog.push('GRID_LOAD', { favCount: DEFAULT_GRID_CONFIG.favorites.length, hiddenCount: 0, source: 'default' });
         }
       } else {
-        UltraDevLog.push('GRID_LOAD', { favCount: DEFAULT_GRID_CONFIG.favorites.length, hiddenCount: 0, source: 'default' });
+        JarvisDevLog.push('GRID_LOAD', { favCount: DEFAULT_GRID_CONFIG.favorites.length, hiddenCount: 0, source: 'default' });
       }
     }).catch(() => {});
   }, []);
@@ -70,7 +70,7 @@ export default function ActionGrid({
   const saveConfig = useCallback(async (newConfig: GridConfig) => {
     setConfig(newConfig);
     await AppStorage.set('action_grid_config', JSON.stringify(newConfig));
-    UltraDevLog.push('GRID_SAVE', { favCount: newConfig.favorites.length, hiddenCount: newConfig.hiddenCategories.length });
+    JarvisDevLog.push('GRID_SAVE', { favCount: newConfig.favorites.length, hiddenCount: newConfig.hiddenCategories.length });
   }, []);
 
   const allCategories = getGridForMode("chat", DEFAULT_CATEGORIES.map(c => {
@@ -131,26 +131,26 @@ export default function ActionGrid({
     .filter(Boolean) as GridAction[];
 
   const handleActionPress = useCallback((action: GridAction) => {
-    UltraDevLog.push('GRID_TAP', { actionId: action.id, capability: action.capability, label: action.label, requiresInput: !!action.requiresInput });
+    JarvisDevLog.push('GRID_TAP', { actionId: action.id, capability: action.capability, label: action.label, requiresInput: !!action.requiresInput });
     if (action.capability === '__task__') {
       const template = savedTasks.find(t => t.id === action.params.templateId);
-      UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'action_press', trigger: { actionId: action.id }, state: {}, data: { capability: '__task__' }, outcome: template ? 'run_task' : 'FAIL:task_template_missing' });
+      JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'action_press', trigger: { actionId: action.id }, state: {}, data: { capability: '__task__' }, outcome: template ? 'run_task' : 'FAIL:task_template_missing' });
       if (template) onRunTask(template);
       return;
     }
     if (action.requiresInput && action.inputKey) {
-      UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'action_press', trigger: { actionId: action.id }, state: {}, data: { capability: action.capability }, outcome: 'show_input' });
+      JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'action_press', trigger: { actionId: action.id }, state: {}, data: { capability: action.capability }, outcome: 'show_input' });
       setInputState({ actionId: action.id, value: '', action });
       setTimeout(() => inputRef.current?.focus(), 80);
       return;
     }
-    UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'action_press', trigger: { actionId: action.id }, state: {}, data: { capability: action.capability }, outcome: 'execute' });
+    JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'action_press', trigger: { actionId: action.id }, state: {}, data: { capability: action.capability }, outcome: 'execute' });
     const execStart = Date.now();
     try {
       onExecute(action.capability, action.params);
-      UltraDevLog.push('EFFECT', { component: 'ActionGrid', action: 'action_execute_dispatched', capability: action.capability, durationMs: Date.now() - execStart, dispatched: true });
+      JarvisDevLog.push('EFFECT', { component: 'ActionGrid', action: 'action_execute_dispatched', capability: action.capability, durationMs: Date.now() - execStart, dispatched: true });
     } catch (execErr: any) {
-      UltraDevLog.push('EFFECT', { component: 'ActionGrid', action: 'action_execute_dispatched', capability: action.capability, durationMs: Date.now() - execStart, dispatched: false, error: execErr?.message });
+      JarvisDevLog.push('EFFECT', { component: 'ActionGrid', action: 'action_execute_dispatched', capability: action.capability, durationMs: Date.now() - execStart, dispatched: false, error: execErr?.message });
     }
   }, [savedTasks, onRunTask, onExecute]);
 
@@ -158,12 +158,12 @@ export default function ActionGrid({
     if (!inputState) return;
     const { action, value } = inputState;
     if (!value.trim()) {
-      UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'input_submit', trigger: { actionId: inputState.actionId }, state: {}, data: { value: '' }, outcome: 'EMPTY:no_input_dismissed' });
+      JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'input_submit', trigger: { actionId: inputState.actionId }, state: {}, data: { value: '' }, outcome: 'EMPTY:no_input_dismissed' });
       setInputState(null);
       return;
     }
     const params = { ...action.params, [action.inputKey!]: value.trim() };
-    UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'input_submit', trigger: { actionId: action.id }, state: {}, data: { capability: action.capability }, outcome: 'execute_with_input' });
+    JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'input_submit', trigger: { actionId: action.id }, state: {}, data: { capability: action.capability }, outcome: 'execute_with_input' });
     onExecute(action.capability, params);
     setInputState(null);
   }, [inputState, onExecute]);
@@ -173,8 +173,8 @@ export default function ActionGrid({
     const newFavs = isFav
       ? config.favorites.filter(f => f !== actionId)
       : [...config.favorites, actionId];
-    UltraDevLog.push('GRID_FAV_TOGGLE', { actionId, added: !isFav, totalFavs: newFavs.length });
-    UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'toggleFavorite', trigger: { actionId }, state: { wasFav: isFav }, data: { newTotal: newFavs.length }, outcome: isFav ? 'removed_favorite' : 'added_favorite' });
+    JarvisDevLog.push('GRID_FAV_TOGGLE', { actionId, added: !isFav, totalFavs: newFavs.length });
+    JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'toggleFavorite', trigger: { actionId }, state: { wasFav: isFav }, data: { newTotal: newFavs.length }, outcome: isFav ? 'removed_favorite' : 'added_favorite' });
     saveConfig({ ...config, favorites: newFavs });
   }, [config, saveConfig]);
 
@@ -183,12 +183,12 @@ export default function ActionGrid({
     const newHidden = isHidden
       ? config.hiddenCategories.filter(h => h !== catId)
       : [...config.hiddenCategories, catId];
-    UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'toggleHideCategory', trigger: { catId }, state: { wasHidden: isHidden }, data: { newHiddenCount: newHidden.length }, outcome: isHidden ? 'category_shown' : 'category_hidden' });
+    JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'toggleHideCategory', trigger: { catId }, state: { wasHidden: isHidden }, data: { newHiddenCount: newHidden.length }, outcome: isHidden ? 'category_shown' : 'category_hidden' });
     saveConfig({ ...config, hiddenCategories: newHidden });
   }, [config, saveConfig]);
 
   const resetDefaults = useCallback(() => {
-    UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'reset_defaults', trigger: {}, state: { favCount: config.favorites.length, hiddenCount: config.hiddenCategories.length }, data: {}, outcome: 'reset_to_defaults' });
+    JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'reset_defaults', trigger: {}, state: { favCount: config.favorites.length, hiddenCount: config.hiddenCategories.length }, data: {}, outcome: 'reset_to_defaults' });
     saveConfig(DEFAULT_GRID_CONFIG);
     setEditMode(false);
   }, [saveConfig, config]);
@@ -234,7 +234,7 @@ export default function ActionGrid({
         {onOpenZoneEditor && (
           <Pressable
             onPress={() => {
-              UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'zone_edit_tap', trigger: { source: 'favorites_row' }, state: {}, data: {}, outcome: 'opening_zone_editor' });
+              JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'zone_edit_tap', trigger: { source: 'favorites_row' }, state: {}, data: {}, outcome: 'opening_zone_editor' });
               onOpenZoneEditor();
             }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -244,7 +244,7 @@ export default function ActionGrid({
           </Pressable>
         )}
         <Pressable
-          onPress={() => { UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'chevron_toggle', trigger: {}, state: { collapsed }, data: {}, outcome: collapsed ? 'expanding' : 'collapsing' }); onToggle(); }}
+          onPress={() => { JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'chevron_toggle', trigger: {}, state: { collapsed }, data: {}, outcome: collapsed ? 'expanding' : 'collapsing' }); onToggle(); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={styles.chevronBtn}
         >
@@ -261,7 +261,7 @@ export default function ActionGrid({
         style={[styles.expandedContainer, { height: expandedHeight }]}
         onLayout={(e) => {
           const h = Math.round(e.nativeEvent.layout.height);
-          UltraDevLog.push('EFFECT', {
+          JarvisDevLog.push('EFFECT', {
             component: 'ActionGrid',
             action: 'chevron_expand',
             measuredHeight: h,
@@ -283,7 +283,7 @@ export default function ActionGrid({
             <View style={styles.expandedHeaderRight}>
               {onOpenZoneEditor && (
                 <Pressable onPress={() => {
-                  UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'zone_edit_tap', trigger: { source: 'grid_header' }, state: {}, data: {}, outcome: 'opening_zone_editor' });
+                  JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'zone_edit_tap', trigger: { source: 'grid_header' }, state: {}, data: {}, outcome: 'opening_zone_editor' });
                   onOpenZoneEditor();
                 }} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                   <Ionicons name="options-outline" size={16} color={DIM} />
@@ -295,7 +295,7 @@ export default function ActionGrid({
                 </Pressable>
               )}
               <Pressable
-                onPress={() => { const next = !editMode; UltraDevLog.push('CHAIN', { component: 'ActionGrid', action: 'edit_mode_toggle', trigger: {}, state: { wasEditing: editMode }, data: {}, outcome: next ? 'edit_mode_on' : 'edit_mode_off' }); setEditMode(next); }}
+                onPress={() => { const next = !editMode; JarvisDevLog.push('CHAIN', { component: 'ActionGrid', action: 'edit_mode_toggle', trigger: {}, state: { wasEditing: editMode }, data: {}, outcome: next ? 'edit_mode_on' : 'edit_mode_off' }); setEditMode(next); }}
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <Ionicons name={editMode ? 'checkmark' : 'pencil'} size={16} color={editMode ? ACCENT : DIM} />

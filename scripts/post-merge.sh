@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Post-merge setup script for Agent Ultra
+# Post-merge setup script for Jarvis
 # Runs after task merges to ensure environment consistency
 
 echo "=== Post-Merge Setup Starting ==="

@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AppController from '@/src/native/AppController';
 import AgentNativeModule from '@/src/native/AgentNative';
-import { UltraDevLog } from '@/src/utils/UltraDevLog';
+import { JarvisDevLog } from '@/src/utils/JarvisDevLog';
 
 const ACCENT = '#e5e5e5';
 const BG = '#000000';
@@ -69,7 +69,7 @@ export default function BlockedAppsTab({ isNative }: BlockedAppsTabProps) {
   }, [installedApps, searchQuery]);
 
   const toggleBlock = useCallback(async (pkg: string, isBlocked: boolean) => {
-    UltraDevLog.push('CHAIN', { component: 'BlockedAppsTab', action: 'toggle_block', trigger: { pkg }, state: { wasBlocked: isBlocked }, data: {}, outcome: isBlocked ? 'unblocking' : 'blocking' });
+    JarvisDevLog.push('CHAIN', { component: 'BlockedAppsTab', action: 'toggle_block', trigger: { pkg }, state: { wasBlocked: isBlocked }, data: {}, outcome: isBlocked ? 'unblocking' : 'blocking' });
     setToggling(pkg);
     try {
       if (isBlocked) {
@@ -102,7 +102,7 @@ export default function BlockedAppsTab({ isNative }: BlockedAppsTabProps) {
       <View style={s.empty}>
         <Ionicons name="lock-closed-outline" size={36} color={DIM} />
         <Text style={s.emptyText}>Accessibility service must be enabled to manage blocked apps</Text>
-        <Pressable style={s.settingsBtn} onPress={() => { UltraDevLog.push('CHAIN', { component: 'BlockedAppsTab', action: 'open_accessibility', trigger: {}, state: {}, data: {}, outcome: 'opening_settings' }); AppController.openAccessibilitySettings(); }}>
+        <Pressable style={s.settingsBtn} onPress={() => { JarvisDevLog.push('CHAIN', { component: 'BlockedAppsTab', action: 'open_accessibility', trigger: {}, state: {}, data: {}, outcome: 'opening_settings' }); AppController.openAccessibilitySettings(); }}>
           <Text style={s.settingsBtnText}>Open Accessibility Settings</Text>
         </Pressable>
       </View>

@@ -1,5 +1,5 @@
 import { PermissionsAndroid, Platform } from 'react-native';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 /**
  * Standard dangerous permissions that can be safely batched in requestMultiple().
@@ -159,7 +159,7 @@ export class PermissionBroker {
           const IntentLauncher = await import('expo-intent-launcher');
           await IntentLauncher.startActivityAsync(
             'android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION',
-            { data: 'package:com.agent.ultra' }
+            { data: 'package:com.agent.jarvis' }
           ).catch(() => {});
           // Re-check after settings return
           const grantedAfter = await AgentNative.isAllFilesAccessGranted().catch(() => false);

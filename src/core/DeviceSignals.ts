@@ -1,7 +1,7 @@
 import { Platform, AppState } from 'react-native';
 import * as Battery from 'expo-battery';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UltraDevLog as DebugLog } from '../utils/UltraDevLog';
+import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 
 export type UserActivity = 'sleeping' | 'commuting' | 'at_work' | 'at_home' | 'exercising' | 'socializing' | 'browsing' | 'unknown';
 
