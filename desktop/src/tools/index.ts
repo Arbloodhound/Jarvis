@@ -13,6 +13,14 @@ import type { Embedder } from "../embeddings.js";
 import type { Memory } from "../memory.js";
 import type { Vision } from "../vision.js";
 import * as os from "./platform.js";
+import { shoppingTools } from "./shopping.js";
+
+export {
+  excludeOnion, extractListings, extractNavLinks, extractPrices, extractReputation, extractReviews,
+  fetchMarketplace, fetchProductCheck, fetchProductReviews, fetchSellerCheck, parseEbayResults,
+  parseListingPage, runMarketplaceNav, scanScamSignals, sortRowsMechanically,
+  type ListingRow, type NavSession,
+} from "./shopping.js";
 
 /**
  * Every tool Jarvis can use on the computer. Each one declares its effects for
@@ -668,6 +676,7 @@ export const ALL_TOOLS: Tool[] = [
   webSearchTool, webFetchTool, openUrlTool, openAppTool,
   clipboardReadTool, clipboardWriteTool, notifyTool, screenshotTool, seeScreenTool, seeImageTool, controlScreenTool, systemInfoTool,
   rememberTool, recallTool, forgetTool,
+  ...shoppingTools(),
 ];
 
 export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean }): Tool[] {
