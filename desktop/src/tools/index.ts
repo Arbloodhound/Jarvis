@@ -319,19 +319,156 @@ export function parseDuckDuckGo(html: string): Array<{ title: string; url: strin
   return out;
 }
 
+export type SearchResult = { title: string; url: string; snippet: string };
+
+/**
+ * DuckDuckGo sometimes answers a direct fetch with an HTTP 202 bot-challenge
+ * page ("bots use DuckDuckGo too", anomaly-modal markup) instead of results.
+ * That page parses to zero results, so challenge and genuine emptiness must
+ * be told apart explicitly — a challenge means "try the next provider".
+ */
+export function isDuckDuckGoChallenge(html: string, status: number): boolean {
+  return status === 202 || html.includes("anomaly-modal") || html.includes("bots use DuckDuckGo too");
+}
+
+export function parseBing(html: string): SearchResult[] {
+  const out: SearchResult[] = [];
+  // One <li class="b_algo"> per organic result; title link and snippet inside.
+  for (const block of html.split(/<li[^>]+class="[^"]*\bb_algo\b[^"]*"/).slice(1)) {
+    const a = /<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/.exec(block);
+    if (!a) continue;
+    let href = a[1]!.replace(/&amp;/g, "&");
+    // Bing wraps result links in a ck/a redirect whose u= param is "a1" + base64url(target).
+    const u = /[?&]u=([^&]+)/.exec(href);
+    if (/bing\.com\/ck\/a/.test(href) && u?.[1]?.startsWith("a1")) {
+      try { href = Buffer.from(u[1].slice(2).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"); } catch { /* keep the redirect href */ }
+    }
+    if (/bing\.com\/ck\/a/.test(href)) continue; // undecodable redirect: not a usable link
+    const sn = /<div[^>]+class="[^"]*\bb_caption\b[^"]*"[^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/.exec(block) ?? /<p[^>]*>([\s\S]*?)<\/p>/.exec(block);
+    out.push({ title: htmlToText(a[2]!), url: href, snippet: htmlToText(sn?.[1] ?? "") });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+export function isBingChallenge(html: string, status: number): boolean {
+  return html.includes("b_captcha") || /please solve the challenge/i.test(html);
+}
+
+export function parseBrave(html: string): SearchResult[] {
+  const out: SearchResult[] = [];
+  // One <div class="snippet" data-type="web"> per organic result.
+  for (const block of html.split(/<div[^>]+data-type="web"/).slice(1)) {
+    const a = /<a[^>]*href="(https?:[^"]+)"[^>]*>/.exec(block);
+    if (!a) continue;
+    const t = /<div[^>]+class="[^"]*\btitle\b[^"]*"[^>]*>([\s\S]*?)<\/div>/.exec(block);
+    if (!t) continue;
+    const sn = /generic-snippet[\s\S]*?<div[^>]+class="[^"]*\bcontent\b[^"]*"[^>]*>([\s\S]*?)<\/div>/.exec(block);
+    out.push({ title: htmlToText(t[1]!), url: a[1]!.replace(/&amp;/g, "&"), snippet: htmlToText(sn?.[1] ?? "") });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+export function isBraveChallenge(html: string, status: number): boolean {
+  return /<title>[^<]*captcha/i.test(html) || html.includes("search-captcha");
+}
+
+export interface SearchProvider {
+  name: string;
+  buildUrl(query: string): string;
+  parse(html: string): SearchResult[];
+  challenge(html: string, status: number): boolean;
+}
+
+/**
+ * Search providers, in order. DuckDuckGo first (the long-standing default);
+ * Bing and Brave are independent fallbacks for networks where DuckDuckGo
+ * bot-walls direct fetches. Every fetch goes through safeFetch — same SSRF
+ * guard, same redirect policy, no proxy, no API keys.
+ */
+export const SEARCH_PROVIDERS: SearchProvider[] = [
+  {
+    name: "DuckDuckGo",
+    buildUrl: (q) => `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`,
+    parse: parseDuckDuckGo,
+    challenge: isDuckDuckGoChallenge,
+  },
+  {
+    name: "Bing",
+    buildUrl: (q) => `https://www.bing.com/search?q=${encodeURIComponent(q)}`,
+    parse: parseBing,
+    challenge: isBingChallenge,
+  },
+  {
+    name: "Brave",
+    buildUrl: (q) => `https://search.brave.com/search?q=${encodeURIComponent(q)}`,
+    parse: parseBrave,
+    challenge: isBraveChallenge,
+  },
+];
+
+export interface WebSearchOutcome {
+  results: SearchResult[];
+  /** Provider that produced the results, or null when none did. */
+  provider: string | null;
+  /** Providers that were challenged, errored or unreachable, in order. */
+  blocked: string[];
+  text: string;
+}
+
+/**
+ * The fallback chain: first provider yielding real results wins. A challenge
+ * page or a failed fetch falls through to the next provider — it is NOT
+ * reported as "no results". The honest empty message comes only after every
+ * provider has been tried.
+ */
+export async function runWebSearch(
+  query: string,
+  signal: AbortSignal,
+  fetchFn: (url: string, signal: AbortSignal) => Promise<Fetched> = safeFetch,
+): Promise<WebSearchOutcome> {
+  const blocked: string[] = [];
+  let sawGenuineEmpty = false;
+  for (const p of SEARCH_PROVIDERS) {
+    let res: Fetched;
+    try {
+      res = await fetchFn(p.buildUrl(query), signal);
+    } catch (err) {
+      if (signal.aborted) throw err;
+      blocked.push(p.name);
+      continue;
+    }
+    if (res.status >= 400 || p.challenge(res.body, res.status)) { blocked.push(p.name); continue; }
+    const results = p.parse(res.body);
+    if (results.length) {
+      return {
+        results,
+        provider: p.name,
+        blocked,
+        text: results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n"),
+      };
+    }
+    sawGenuineEmpty = true;
+  }
+  const allBlocked = blocked.length === SEARCH_PROVIDERS.length && !sawGenuineEmpty;
+  const text = allBlocked
+    ? `No results for "${query}". Do not make any up. (DuckDuckGo, Bing and Brave were all tried; none returned results — they may be unreachable or blocking automated requests on this network.)`
+    : `No results for "${query}". Do not make any up.`;
+  return { results: [], provider: null, blocked, text };
+}
+
 const webSearchTool = tool({
   name: "web_search",
-  description: "Search the web (DuckDuckGo). Returns titles, links and snippets. If nothing is found, say so; never invent results.",
+  description: "Search the web (DuckDuckGo first, then Bing, then Brave if a provider is blocked). Returns titles, links and snippets. If nothing is found, say so; never invent results.",
   schema: z.object({ query: z.string().min(1) }),
   policy: { effects: ["egress"], egressArgs: ["query"] },
   outside: true,
   network: true,
   parallelSafe: true,
   async run({ query }, ctx) {
-    const res = await safeFetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, ctx.signal);
-    const results = parseDuckDuckGo(res.body);
-    if (!results.length) return `No results for "${query}". Do not make any up.`;
-    return results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n");
+    const outcome = await runWebSearch(query, ctx.signal);
+    return outcome.text;
   },
 });
 
