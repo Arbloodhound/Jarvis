@@ -146,6 +146,28 @@ public final class Harness {
         if (!extOk) fails++;
         System.out.println("extend " + (extOk ? "OK" : "MISMATCH\n   carried: " + ext + "\n   fresh:   " + extFresh));
 
+        // 5c. switch: two long prompts that share nothing past the first word, alternated (the
+        // chat answer vs the tool pick on the phone). The later ones start from a prompt snapshot
+        // ("snapshot restored" in the native log). Each must equal what the plain prefix reuse
+        // gives: a second engine that runs only the prompt the snapshot was taken from, then this
+        // one. Not a fresh engine: reuse itself differs from a cold prefill near a tie (float
+        // order, see nativeGenerate), and the unchanged shim shows that same difference here.
+        StringBuilder xb = new StringBuilder("Tools: "), yb = new StringBuilder("Chat: ");
+        // The tiny model reads about a token a character: ~300 tokens each, over kSnapMinTokens.
+        for (int i = 0; i < 26; i++) { xb.append("open app ").append(i).append(". "); yb.append("word ").append(i).append(" twice. "); }
+        String X = xb.toString(), Y = yb.toString();
+        String[][] sw = { { X, null }, { Y, null }, { X + B, X }, { Y + B, Y }, { X, X + B } };
+        for (int i = 0; i < sw.length; i++) {
+            String carried = gen(h, sw[i][0], 2, null);
+            long f = load(2);
+            if (sw[i][1] != null) gen(f, sw[i][1], 2, piece -> "\uFFFF");   // leaves exactly that prompt cached
+            String ref = gen(f, sw[i][0], 2, null);
+            LlmNative.nativeFree(f);
+            boolean ok = carried.equals(ref);
+            if (!ok) fails++;
+            System.out.println("switch[" + i + "] " + (ok ? "OK" : "MISMATCH\n   carried: " + carried + "\n   plain reuse: " + ref));
+        }
+
         // 6. draft
         String draft = System.getProperty("draft", "");
         if (!draft.isEmpty()) {

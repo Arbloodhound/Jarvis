@@ -10,7 +10,8 @@ import org.junit.Test
 /** The thinker + librarian pair: presets, memory need, and who gives way. */
 class TwoModelsTest {
     private val mib = 1_048_576L
-    private val headroom = LocalModelEngine.MIN_AVAIL_BYTES
+    /** The librarian's margin: every headroom use below is a librarian decision. */
+    private val headroom = LocalModelEngine.LIBRARIAN_MIN_AVAIL_BYTES
 
     // Real file sizes (Hub listing): Qwen3-1.7B-Q4_0 and Qwen3-8B-Q4_K_S.
     private val librarianBytes = 1_056_782_912L
@@ -82,6 +83,20 @@ class TwoModelsTest {
     /** A resident thinker is already outside availMem: nothing is subtracted for it. */
     @Test fun librarianBesideResidentThinkerCountsOnlyAvail() =
         assertEquals(LoadDecision.LOAD, decide(Role.LIBRARIAN, 3_000_000_000L, librarianNeed, true, 0))
+
+    /** Phone DIAG 2026-10-20, listening on, resident thinker: need 1,678 MB, 1,958-2,110 MB free.
+     *  Refused all 5 times with the 500 MB margin; loads with the librarian's own margin. */
+    @Test fun librarianLoadsInThePixelsListeningOnRefusals() {
+        val need = 1_678L * mib
+        // The old margin could not be met at the best reading of the run.
+        assertTrue(2_110L * mib < need + LocalModelEngine.MIN_AVAIL_BYTES)
+        for (freeMb in listOf(1_958L, 1_993L, 2_039L, 2_044L, 2_110L))
+            assertEquals(LoadDecision.LOAD, decide(Role.LIBRARIAN, freeMb * mib, need, true, 0))
+    }
+
+    /** The thinker keeps the full margin. */
+    @Test fun thinkerKeepsTheFullMargin() =
+        assertTrue(LocalModelEngine.MIN_AVAIL_BYTES > LocalModelEngine.LIBRARIAN_MIN_AVAIL_BYTES)
 
     @Test fun librarianIsRefusedAloneWhenMemoryIsShort() =
         assertEquals(LoadDecision.REFUSE, decide(Role.LIBRARIAN, 1_500_000_000L, librarianNeed, false, 0))

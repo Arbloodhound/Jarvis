@@ -437,6 +437,11 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 val r = generate(build(), maxTokens = 1)
                 android.util.Log.i("JarvisLlm", "prompt warm-up ok=${r.isSuccess} in ${System.currentTimeMillis() - t1}ms")
             }
+            // Owner, 2026-10-20: the action model stays loaded beside the brain. It loaded only on
+            // its first tool call (61 s cold on the Pixel), so it follows the brain in here. It
+            // loads after the brain: its load waits while the brain wants the engine.
+            if (ok && role == Role.THINKER && com.agent.jarvis.ui.JarvisPrefs.actionModel(context))
+                librarian(context).let { lib -> if (lib !== this@LocalModelEngine) lib.preloadInBackground("beside the brain ($reason)") }
         }
     }
 
@@ -491,8 +496,9 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         busyWhile {
             if (handle != 0L) return true
             val avail = availableRam()
-            if (avail > 0 && avail < MIN_AVAIL_BYTES) {
-                android.util.Log.w("JarvisLlm", "refusing load: avail=${avail / 1_048_576}MB need=${MIN_AVAIL_BYTES / 1_048_576}MB")
+            val minAvail = if (role == Role.LIBRARIAN) LIBRARIAN_MIN_AVAIL_BYTES else MIN_AVAIL_BYTES
+            if (avail > 0 && avail < minAvail) {
+                android.util.Log.w("JarvisLlm", "refusing load: avail=${avail / 1_048_576}MB need=${minAvail / 1_048_576}MB")
                 return false
             }
             val t0 = System.currentTimeMillis()
@@ -902,8 +908,9 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         ): LoadDecision {
             if (availBytes <= 0) return LoadDecision.LOAD
             val room = availBytes - (if (otherLoaded) otherMappedBytes.coerceAtLeast(0) else 0L)
+            val margin = if (role == Role.LIBRARIAN) LIBRARIAN_MIN_AVAIL_BYTES else MIN_AVAIL_BYTES
             return when {
-                room >= needBytes + MIN_AVAIL_BYTES -> LoadDecision.LOAD
+                room >= needBytes + margin -> LoadDecision.LOAD
                 role == Role.LIBRARIAN -> LoadDecision.REFUSE
                 otherLoaded -> LoadDecision.LIBRARIAN_YIELDS
                 else -> LoadDecision.LOAD
@@ -1069,6 +1076,19 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         /** Over a 10 GB download: 5, 10, 20, 40, then 60 s apart — about 25 minutes of trying. */
         const val MAX_DOWNLOAD_ATTEMPTS = 30
         const val MIN_AVAIL_BYTES = 500L * 1024 * 1024
+
+        /**
+         * The librarian's (Settings: action model) margin beyond its need, in place of
+         * [MIN_AVAIL_BYTES]. Owner, 2026-10-20: keep the action model loaded. With listening on
+         * it was refused 5 times in 17 minutes, needing 1,678 + 500 MB with 1,958-2,110 MB free
+         * (phone DIAG 2026-10-20), and every tool decision fell back to the 4B. Its need already
+         * counts its weights (mapped: page cache Android can drop and read back) and its KV and
+         * compute buffer; what it really took from free memory when it loaded was ~616 MB
+         * (2,299 -> 1,683 MB). availMem also leaves out what Android reclaims from cached apps
+         * before it touches Jarvis's foreground service. 200 MB keeps a margin and lets it load
+         * in every refusal of that run (1,878 <= 1,958). Runtime-unproven.
+         */
+        const val LIBRARIAN_MIN_AVAIL_BYTES = 200L * 1024 * 1024
         /** Free memory a resident load must leave behind, beyond the model file itself. */
         const val RESIDENT_HEADROOM_BYTES = 1_024L * 1024 * 1024
 

@@ -61,7 +61,84 @@ struct Engine {
     // thinker accepted. specDrafted = -1: that generate ran without the draft.
     int specDrafted = -1;
     int specAccepted = 0;
+    // Saved KV of recent prompts (snapshotPrompt / restoreSnapshot), most recently used first.
+    struct Snap { std::vector<llama_token> tokens; std::vector<uint8_t> state; };
+    std::vector<Snap> snaps;
 };
+
+// Prompt snapshots. Only the longest prefix shared with the PREVIOUS call is kept in the KV,
+// and Jarvis alternates prompts that share almost nothing: the chat answer (~940 tokens), the
+// tool pick (~1,330) and the reply writer (~100-200). Every switch re-read the whole prompt:
+// "reused=7 of 1333 prompt tokens", 66-71 s on the Pixel 10 Pro's 4B thinker (phone DIAG
+// 2026-10-20), against 6-15 s when the same prompt came back. So the KV of each prompt is
+// copied out after its prefill, and a later prompt that shares far more with a copy than with
+// the live cache starts from that copy. A copy holds one prompt (~78 KB a token for Qwen3 4B
+// and 8B at q8_0: ~104 MB for 1,333 tokens); a prompt that shares most of an older copy
+// replaces it, so the store holds one copy per kind of prompt, at most kSnapMax and
+// kSnapMaxBytes.
+void resetCache(Engine *engine);
+
+constexpr int kSnapMax = 2;
+constexpr size_t kSnapMaxBytes = 224u * 1024 * 1024;
+constexpr int kSnapMinTokens = 256;   // shorter prompts re-read in a few seconds anyway
+constexpr int kSnapMinGain = 128;     // restore only when it saves at least this many tokens
+
+int commonPrefix(const std::vector<llama_token> &a, const std::vector<llama_token> &b, int lim) {
+    int n = 0;
+    lim = std::min<int>(lim, (int) std::min(a.size(), b.size()));
+    while (n < lim && a[n] == b[n]) n++;
+    return n;
+}
+
+// After a prefill, while the memory holds exactly engine->cached (the prompt): keep a copy.
+void snapshotPrompt(Engine *engine) {
+    if (engine->recurrent || (int) engine->cached.size() < kSnapMinTokens) return;
+    const size_t n = llama_state_seq_get_size(engine->ctx, 0);
+    if (n == 0 || n > kSnapMaxBytes) return;
+    auto &snaps = engine->snaps;
+    // The same kind of prompt as an older copy (shares at least half of it) supersedes it.
+    for (auto it = snaps.begin(); it != snaps.end();) {
+        const int shared = commonPrefix(it->tokens, engine->cached, (int) it->tokens.size());
+        if (shared * 2 >= (int) it->tokens.size()) it = snaps.erase(it); else ++it;
+    }
+    Engine::Snap s;
+    s.state.resize(n);
+    if (llama_state_seq_get_data(engine->ctx, s.state.data(), n, 0) != n) return;
+    s.tokens = engine->cached;
+    snaps.insert(snaps.begin(), std::move(s));
+    size_t total = 0;
+    for (size_t i = 0; i < snaps.size(); i++) {
+        total += snaps[i].state.size();
+        if ((int) i >= kSnapMax || total > kSnapMaxBytes) { snaps.resize(i); break; }
+    }
+}
+
+// Before the prefix check: when a copy shares at least kSnapMinGain more tokens with [tokens]
+// than the live cache does, load it into sequence 0, so the usual prefix reuse runs against
+// it. On a failed load the memory is cleared (a full prefill, the old behaviour).
+void restoreSnapshot(Engine *engine, const std::vector<llama_token> &tokens) {
+    if (engine->recurrent || engine->snaps.empty()) return;
+    const int lim = (int) tokens.size() - 1;
+    const int live = commonPrefix(engine->cached, tokens, lim);
+    int best = -1, bestShared = live + kSnapMinGain - 1;
+    for (size_t i = 0; i < engine->snaps.size(); i++) {
+        const int shared = commonPrefix(engine->snaps[i].tokens, tokens, lim);
+        if (shared > bestShared) { bestShared = shared; best = (int) i; }
+    }
+    if (best < 0) return;
+    resetCache(engine);
+    Engine::Snap s = std::move(engine->snaps[best]);
+    engine->snaps.erase(engine->snaps.begin() + best);
+    if (llama_state_seq_set_data(engine->ctx, s.state.data(), s.state.size(), 0) == 0) {
+        LOGE("snapshot restore failed; full prefill");
+        resetCache(engine);
+        return;
+    }
+    engine->cached = s.tokens;
+    LOGI("snapshot restored: %d of %d prompt tokens shared (live cache shared %d)",
+         bestShared, (int) tokens.size(), live);
+    engine->snaps.insert(engine->snaps.begin(), std::move(s));
+}
 
 // Runs the pinned pool for one generation. The caller is ggml's worker 0, but ggml pins it
 // only when it kicks off a PAUSED pool and then never unpins it, which would leave a shared
@@ -666,6 +743,7 @@ Java_com_agent_jarvis_local_LlmNative_nativeGenerate(
     // memory disagree, an SWA cache already dropped early positions, seq_rm refuses
     // a partial removal, positions would not continue at p — falls back to a full
     // clear, i.e. exactly the old behaviour.
+    restoreSnapshot(engine, tokens);
     llama_memory_t mem = llama_get_memory(engine->ctx);
     const int nPrompt = (int) tokens.size();
     int reuse = 0;
@@ -732,6 +810,7 @@ Java_com_agent_jarvis_local_LlmNative_nativeGenerate(
     llama_batch batch = llama_batch_get_one(tokens.data() + reuse, nPrompt - reuse);
     if (llama_decode(engine->ctx, batch) != 0) { LOGE("prompt decode failed"); resetCache(engine); return -4; }
     engine->cached = tokens;
+    snapshotPrompt(engine);
 
     // Sampler: low-temp deterministic-ish for agent work. top_k(40) first: on its
     // own, top_p softmaxes the whole vocabulary (~151k for Qwen) every token and
