@@ -38,7 +38,7 @@ function terminalHooks(rl: ReturnType<typeof createInterface>, input: { closed: 
         return;
       }
       if (thinking && e.type !== "confirm") { process.stdout.write("\n"); thinking = false; }
-      if (e.type === "run_start") process.stdout.write(dim(`(${e.brain})\n`));
+      if (e.type === "run_start") process.stdout.write(dim(`(${e.brain} · route: ${e.route.tier}/${e.route.mode} — ${e.route.reason})\n`));
       else if (e.type === "text") process.stdout.write(e.delta);
       else if (e.type === "tool_start") process.stdout.write(dim(`\n→ ${e.name} ${JSON.stringify(e.args).slice(0, 160)}\n`));
       else if (e.type === "tool_end") process.stdout.write(dim(`  ${e.ok ? "✓" : "✗"} ${e.summary.split("\n")[0]?.slice(0, 160) ?? ""}\n`));
@@ -171,7 +171,7 @@ async function main(): Promise<void> {
   if (cmd === "ask") {
     const text = rest.join(" ").trim() || pipedText;
     if (!text) { console.log('Usage: jarvis ask "what\'s in my Downloads folder?"'); rl.close(); return; }
-    await rt.agent.run(text, hooks);
+    await rt.agent.run(text, hooks, { channel: "cli" });
     rl.close();
     return;
   }
@@ -185,7 +185,7 @@ async function main(): Promise<void> {
         break; // Piped input ended: end the chat instead of dying on a closed readline.
       }
       if (!line) continue;
-      await rt.agent.run(line, hooks);
+      await rt.agent.run(line, hooks, { channel: "cli" });
     }
   }
   console.log(HELP);

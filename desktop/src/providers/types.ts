@@ -20,7 +20,7 @@ export interface ToolResult {
 
 export type Turn =
   | { role: "user"; text: string }
-  | { role: "assistant"; text: string; toolCalls: ToolCall[]; raw?: unknown; brain?: string }
+  | { role: "assistant"; text: string; toolCalls: ToolCall[]; raw?: unknown; brain?: string; route?: import("../agent/router.js").Route }
   | { role: "tool"; results: ToolResult[] };
 
 export interface ToolSpec {
@@ -48,6 +48,13 @@ export interface TurnRequest {
   signal: AbortSignal;
   onText: (delta: string) => void;
   onThinking: (delta: string) => void;
+  /**
+   * The router's thinking effort for this run (agent/router.ts). When set it
+   * overrides the provider's configured default: the cloud brain sends it as
+   * output_config.effort; a local server gets it as reasoning_effort when it
+   * accepts that knob. Absent = the provider's configured default.
+   */
+  effort?: "low" | "medium" | "high";
 }
 
 export interface Provider {

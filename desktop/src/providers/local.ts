@@ -38,6 +38,10 @@ export class LocalProvider implements Provider {
           model: this.model,
           stream: true,
           temperature: 0.2,
+          // The router's per-run effort, in the OpenAI-compatible knob.
+          // Servers without reasoning support ignore unknown fields; where
+          // no knob is honoured the tier still labels the run (router.ts).
+          ...(req.effort ? { reasoning_effort: req.effort } : {}),
           messages: toChat(req.system, req.turns),
           tools: req.tools.length
             ? req.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } }))
