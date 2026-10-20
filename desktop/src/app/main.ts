@@ -184,6 +184,7 @@ function refreshTray(): void {
     { label: "Offline only", type: "checkbox", checked: s.offlineOnly, click: (i) => set({ offlineOnly: i.checked }) },
     { label: "Semantic memory", type: "checkbox", checked: s.embeddings, click: (i) => set({ embeddings: i.checked }) },
     { label: "Screen control (experimental)", type: "checkbox", checked: s.screenControl, click: (i) => set({ screenControl: i.checked }) },
+    { label: "Tor for web tools", type: "checkbox", checked: s.tor, click: (i) => set({ tor: i.checked }) },
     { type: "separator" },
     {
       label: "Start at login",

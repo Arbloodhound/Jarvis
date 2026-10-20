@@ -3,9 +3,10 @@ import { lookup as dnsLookup, type LookupOptions } from "node:dns";
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
-import { BlockList, isIP, type LookupFunction } from "node:net";
+import { BlockList, createConnection, isIP, type LookupFunction } from "node:net";
 import { arch, cpus, freemem, homedir, hostname, platform, release, totalmem, uptime } from "node:os";
 import path from "node:path";
+import { SocksProxyAgent } from "socks-proxy-agent";
 import { z } from "zod";
 import type { ToolPolicy } from "../gate/gate.js";
 import { resolvePath } from "../gate/gate.js";
@@ -28,6 +29,8 @@ export interface ToolContext {
   embedder: Embedder | null;
   vision: Vision | null;
   signal: AbortSignal;
+  /** How web tools fetch. Set per run by toolsFor (Tor transport when on); direct safeFetch otherwise. */
+  webFetch?: WebFetchFn;
 }
 
 export interface Tool<S extends z.ZodType = z.ZodType> {
@@ -236,15 +239,65 @@ export function htmlToText(html: string): string {
 
 interface Fetched { status: number; type: string; body: string; url: string }
 
+/** The fetch the web tools run: one URL in, the final page out (redirects followed). */
+export type WebFetchFn = (url: string, signal: AbortSignal) => Promise<Fetched>;
+
+// ---------- Tor transport ----------
+
+/** Tor routing for web tools: a SOCKS proxy on this computer (127.0.0.1), remote DNS. */
+export interface TorSettings {
+  enabled: boolean;
+  /** SOCKS port of a local Tor daemon (9050) or Tor Browser (9150). */
+  socksPort: number;
+}
+
+export const TOR_DISABLED: TorSettings = { enabled: false, socksPort: 9050 };
+
+/** .onion names exist only inside Tor; the local resolver has never heard of them. */
+export function isOnionUrl(u: URL): boolean {
+  return u.hostname.toLowerCase().endsWith(".onion");
+}
+
+const ONION_NEEDS_TOR =
+  "That is a .onion address. Jarvis opens .onion addresses only with Tor on (the Tor setting, or \"tor.enabled\" in config) — and only through the Tor proxy, never over the regular internet.";
+
+const torDown = (port: number) =>
+  `Tor is on but no Tor proxy is reachable at 127.0.0.1:${port}. Start Tor (or Tor Browser, which uses port 9150), or turn Tor off. Web tools will not fall back to a direct connection.`;
+
+/**
+ * Does a SOCKS5 proxy answer on 127.0.0.1:port? A greeting handshake only —
+ * no traffic leaves the computer, so it is safe to ask any time (the CLI's
+ * `where` line and the settings page use it for the Tor status).
+ */
+export function probeTorProxy(port: number, timeoutMs = 1500): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const sock = createConnection({ host: "127.0.0.1", port });
+    const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      sock.destroy();
+      resolve(ok);
+    };
+    sock.setTimeout(timeoutMs, () => done(false));
+    sock.once("error", () => done(false));
+    sock.once("connect", () => sock.write(Buffer.from([0x05, 0x01, 0x00]))); // version 5, one method offered: no auth
+    sock.once("data", (d) => done(d.length >= 2 && d[0] === 0x05 && d[1] === 0x00));
+  });
+}
+
 const MAX_BODY = 3 * 1024 * 1024;
 
-function getOnce(u: URL, signal: AbortSignal): Promise<Fetched & { location?: string }> {
+function getOnce(u: URL, signal: AbortSignal, agent?: SocksProxyAgent, timeoutMs = 20_000): Promise<Fetched & { location?: string }> {
   return new Promise((resolve, reject) => {
     const mod = u.protocol === "https:" ? https : http;
     const req = mod.request(u, {
       method: "GET",
-      lookup: publicOnlyLookup as unknown as LookupFunction,
-      signal: AbortSignal.any([signal, AbortSignal.timeout(20000)]),
+      // Direct path only: the checked-DNS lookup pins the address that was
+      // vetted to the connection that is made. On the Tor path there is no
+      // lookup at all — the agent carries the hostname to the proxy.
+      ...(agent ? { agent } : { lookup: publicOnlyLookup as unknown as LookupFunction }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
       headers: {
         "user-agent": "Mozilla/5.0 (Jarvis desktop agent)",
         accept: "text/html,application/json,text/plain;q=0.9,*/*;q=0.5",
@@ -274,15 +327,55 @@ function getOnce(u: URL, signal: AbortSignal): Promise<Fetched & { location?: st
   });
 }
 
-export async function safeFetch(raw: string, signal: AbortSignal): Promise<Fetched> {
+/**
+ * One fetch, redirects followed by hand (each hop re-checked). Two modes:
+ *
+ * - Direct (the default, unchanged): the connection's own DNS lookup is the
+ *   SSRF check (publicOnlyLookup), so the address vetted is the address used.
+ * - Tor (tor.enabled): every hop goes through the local SOCKS proxy with
+ *   socks5h semantics — the hostname travels to the proxy UNRESOLVED and
+ *   the exit node resolves it. That is the only way .onion names resolve at
+ *   all, and it keeps lookups off the local resolver. The direct path's
+ *   rebinding defense cannot translate here (we cannot vet an address the
+ *   exit chose), so the load is carried by what still applies: the scheme,
+ *   local-name and literal-address blocks in assertPublicUrl run on every
+ *   hop before anything is fetched, in both modes.
+ *
+ * .onion is refused outright unless Tor is on — never fetched direct. Tor
+ * on but no proxy answering fails closed with a clear error; there is no
+ * silent fallback to a direct fetch.
+ */
+async function fetchChain(raw: string, signal: AbortSignal, tor: TorSettings): Promise<Fetched> {
+  let agent: SocksProxyAgent | undefined;
+  if (tor.enabled) {
+    // Prove the proxy answers before fetching anything (greeting handshake,
+    // this computer only). A dead proxy is a clear refusal, not a fallback.
+    if (!(await probeTorProxy(tor.socksPort))) throw new Error(torDown(tor.socksPort));
+    agent = new SocksProxyAgent(`socks5h://127.0.0.1:${tor.socksPort}`);
+  }
   let url = raw;
   for (let hop = 0; hop < 5; hop++) {
     const u = assertPublicUrl(url);
-    const res = await getOnce(u, signal);
+    if (isOnionUrl(u) && !tor.enabled) throw new Error(ONION_NEEDS_TOR);
+    // Tor gets a longer leash: a cold onion connection first fetches the
+    // service's descriptor and builds a rendezvous circuit, which takes
+    // far longer than a clearnet handshake (measured: ~2 min on a cold,
+    // proxied Tor; ~4 s warm). The direct path keeps its 20 s ceiling.
+    const res = await getOnce(u, signal, agent, tor.enabled ? 120_000 : 20_000);
     if (res.status >= 300 && res.status < 400 && res.location) { url = new URL(res.location, url).toString(); continue; }
     return res;
   }
   throw new Error("Too many redirects.");
+}
+
+export async function safeFetch(raw: string, signal: AbortSignal): Promise<Fetched> {
+  return fetchChain(raw, signal, TOR_DISABLED);
+}
+
+/** The web fetch for one run: through Tor when on, direct when off. */
+export function makeWebFetch(tor: TorSettings): WebFetchFn {
+  if (!tor.enabled) return safeFetch;
+  return (url, signal) => fetchChain(url, signal, tor);
 }
 
 const webFetchTool = tool({
@@ -294,7 +387,7 @@ const webFetchTool = tool({
   network: true,
   parallelSafe: true,
   async run({ url }, ctx) {
-    const res = await safeFetch(url, ctx.signal);
+    const res = await (ctx.webFetch ?? safeFetch)(url, ctx.signal);
     const text = res.type.includes("html") ? htmlToText(res.body) : res.body;
     return `${res.status} ${url}\n${text.length > MAX_FETCH ? text.slice(0, MAX_FETCH) + "\n[… cut]" : text}`;
   },
@@ -467,7 +560,7 @@ const webSearchTool = tool({
   network: true,
   parallelSafe: true,
   async run({ query }, ctx) {
-    const outcome = await runWebSearch(query, ctx.signal);
+    const outcome = await runWebSearch(query, ctx.signal, ctx.webFetch ?? safeFetch);
     return outcome.text;
   },
 });
@@ -670,16 +763,33 @@ export const ALL_TOOLS: Tool[] = [
   rememberTool, recallTool, forgetTool,
 ];
 
-export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean }): Tool[] {
+export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean; tor?: TorSettings }): Tool[] {
   return ALL_TOOLS.filter((t) => {
     if (opts.offlineOnly && t.network) return false;
     if (t.name === "control_screen" && !opts.screenControl) return false;
     return true;
   }).map((t) => {
+    let out = t;
     // With cloud vision, a screenshot or image leaves the computer, so confirm each look.
-    if (opts.cloudVision && (t.name === "look_at_screen" || t.name === "look_at_image")) {
-      return { ...t, policy: { ...t.policy, alwaysConfirm: true } };
+    if (opts.cloudVision && (out.name === "look_at_screen" || out.name === "look_at_image")) {
+      out = { ...out, policy: { ...out.policy, alwaysConfirm: true } };
     }
-    return t;
+    // Tor is transport, not a new tool: the same web search/fetch, fetching
+    // through the proxy. The binding is built per toolsFor call — and the
+    // agent asks for its tools per run — so a settings toggle takes effect
+    // on the next run without a restart. Offline-only still wins above:
+    // with it on, these tools are filtered out before this point.
+    if (opts.tor?.enabled && (out.name === "web_search" || out.name === "web_fetch")) {
+      const webFetch = makeWebFetch(opts.tor);
+      const orig = out;
+      out = {
+        ...orig,
+        description: orig.name === "web_fetch"
+          ? `${orig.description} Tor is on: the request goes through Tor, and .onion addresses work.`
+          : orig.description,
+        run: (args, ctx) => orig.run(args, { ...ctx, webFetch }),
+      };
+    }
+    return out;
   });
 }

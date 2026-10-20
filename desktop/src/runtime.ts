@@ -8,7 +8,7 @@ import { Memory } from "./memory.js";
 import { ClaudeProvider } from "./providers/claude.js";
 import { LocalProvider } from "./providers/local.js";
 import type { Provider } from "./providers/types.js";
-import { toolsFor } from "./tools/index.js";
+import { probeTorProxy, toolsFor } from "./tools/index.js";
 
 /**
  * Wires config, memory, gate, brains and tools into one Agent. Shared by the
@@ -25,7 +25,7 @@ export class Runtime {
       provider: () => this.provider(),
       embedder: () => this.embedder(),
       vision: () => this.vision(),
-      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud" }),
+      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort } }),
       gate: new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd),
       memory: this.memory,
       audit: new AuditLog(p.audit),
@@ -101,11 +101,26 @@ export class Runtime {
     saveConfig(this.cfg, this.p);
   }
 
-  update(change: { brain?: Config["brain"]; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean }): void {
+  /** Last Tor proxy probe: true = a proxy answered, false = none did, null = not probed (or Tor off). */
+  private torReachable: boolean | null = null;
+
+  /** Probe the configured Tor proxy once and remember the answer for state(). */
+  async refreshTorStatus(): Promise<boolean> {
+    if (!this.cfg.tor.enabled) { this.torReachable = null; return false; }
+    this.torReachable = await probeTorProxy(this.cfg.tor.socksPort);
+    return this.torReachable;
+  }
+
+  update(change: { brain?: Config["brain"]; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean }): void {
     if (change.brain === "cloud" || change.brain === "local") this.cfg.brain = change.brain;
     if (typeof change.offlineOnly === "boolean") this.cfg.offlineOnly = change.offlineOnly;
     if (typeof change.embeddings === "boolean") this.cfg.embeddings.enabled = change.embeddings;
     if (typeof change.screenControl === "boolean") this.cfg.screenControl.enabled = change.screenControl;
+    if (typeof change.tor === "boolean") {
+      this.cfg.tor.enabled = change.tor;
+      this.torReachable = null;
+      if (change.tor) void this.refreshTorStatus();
+    }
     saveConfig(this.cfg, this.p);
   }
 
@@ -123,6 +138,9 @@ export class Runtime {
       embedderId: this.embedder()?.id ?? null,
       vision: this.vision()?.label ?? null,
       screenControl: this.cfg.screenControl.enabled,
+      tor: this.cfg.tor.enabled,
+      torPort: this.cfg.tor.socksPort,
+      torReachable: this.torReachable,
     };
   }
 }

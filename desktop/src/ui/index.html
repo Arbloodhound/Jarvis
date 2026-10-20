@@ -81,6 +81,7 @@
   <label class="switch"><input type="checkbox" id="offline"> Offline only</label>
   <label class="switch"><input type="checkbox" id="embed"> Semantic memory</label>
   <label class="switch" title="Experimental: let Jarvis type and click. Every action still asks you."><input type="checkbox" id="screenctl"> Screen control</label>
+  <label class="switch" title="Send web search and fetch through a local Tor proxy (127.0.0.1:9050; Tor Browser uses 9150). .onion links open only with this on."><input type="checkbox" id="tor"> Tor</label>
   <button id="new" type="button" class="plain" title="Start a new conversation (what Jarvis remembers about you stays)">New chat</button>
   <span class="spacer"></span>
   <span class="status" id="status">Connecting…</span>
@@ -122,9 +123,10 @@
     $("offline").checked = !!state.offlineOnly;
     $("embed").checked = !!state.embeddings;
     $("screenctl").checked = !!state.screenControl;
+    $("tor").checked = !!state.tor;
     const model = state.brain === "cloud" ? state.cloudModel : state.localModel;
     $("model").textContent = model || "model…";
-    status.textContent = `${state.answering || ""}${state.embeddings && state.embedderId ? " · memory: " + state.embedderId : ""}${state.busy ? " · working" : ""}`;
+    status.textContent = `${state.answering || ""}${state.embeddings && state.embedderId ? " · memory: " + state.embedderId : ""}${state.tor ? ` · tor: ${state.torReachable == null ? "on" : state.torReachable ? "proxy ok" : "NO PROXY"}` : ""}${state.busy ? " · working" : ""}`;
     sendBtn.textContent = state.busy ? "Stop" : "Send";
     sendBtn.classList.toggle("stop", !!state.busy);
   }
@@ -248,6 +250,7 @@
   pInput.addEventListener("keydown", (ev) => { if (ev.key === "Enter") chooseModel(pInput.value); if (ev.key === "Escape") picker.classList.remove("open"); });
   $("embed").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", embeddings: ev.target.checked }));
   $("screenctl").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", screenControl: ev.target.checked }));
+  $("tor").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", tor: ev.target.checked }));
   $("b-local").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "local" }));
   $("b-cloud").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "cloud" }));
   $("offline").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", offlineOnly: ev.target.checked }));

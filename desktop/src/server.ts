@@ -32,7 +32,7 @@ type ClientMsg =
   | { type: "send"; text: string }
   | { type: "confirm"; cardId: string; allow: boolean }
   | { type: "stop" }
-  | { type: "settings"; brain?: "local" | "cloud"; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean }
+  | { type: "settings"; brain?: "local" | "cloud"; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean }
   | { type: "set_model"; which: "local" | "cloud"; model: string }
   | { type: "list_models" }
   | { type: "state" }
@@ -61,6 +61,8 @@ export interface Gateway {
 
 export async function startServer(rt: Runtime, token: string, port: number, opts: ServerOptions = {}): Promise<Gateway> {
   const host = "127.0.0.1";
+  // If Tor was left on in config, learn early whether its proxy answers.
+  if (rt.cfg.tor.enabled) void rt.refreshTorStatus();
   // Filled in once the real port is known (it may be a fallback).
   const allowedHosts = new Set<string>();
   const allowedOrigins = new Set<string>();
@@ -170,6 +172,11 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
       } else if (msg.type === "settings") {
         rt.update(msg);
         broadcast({ type: "state", ...rt.state() });
+        // A Tor toggle also refreshes the proxy probe, then re-pushes state
+        // so the settings row can show whether a proxy actually answers.
+        if (typeof msg.tor === "boolean") {
+          void rt.refreshTorStatus().then(() => broadcast({ type: "state", ...rt.state() }));
+        }
       } else if (msg.type === "set_model" && (msg.which === "local" || msg.which === "cloud") && typeof msg.model === "string") {
         rt.setModel(msg.which, msg.model);
         broadcast({ type: "state", ...rt.state() });

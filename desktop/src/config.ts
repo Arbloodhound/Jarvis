@@ -43,6 +43,13 @@ export interface Config {
   };
   /** Synthetic keyboard/mouse. Off by default; experimental; every action still needs a card. */
   screenControl: { enabled: boolean };
+  /**
+   * Web tools through a local Tor proxy. Off by default. The proxy is a Tor
+   * (or Tor Browser) SOCKS listener on this computer; the port is the only
+   * knob — 9050 for a Tor daemon, 9150 for Tor Browser. .onion addresses
+   * open only while this is on, and only through the proxy.
+   */
+  tor: { enabled: boolean; socksPort: number };
   port: number;
   writableRoots: string[];
   /**
@@ -87,6 +94,7 @@ export function defaults(p: Paths): Config {
     embeddings: { enabled: false, baseUrl: "", model: "embeddinggemma-2", dims: 256 },
     vision: { baseUrl: "", model: "qwen3-vl" },
     screenControl: { enabled: false },
+    tor: { enabled: false, socksPort: 9050 },
     port: 7337,
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
@@ -123,6 +131,7 @@ export function loadConfig(p: Paths = paths()): Config {
     embeddings: { ...base.embeddings, ...(raw.embeddings ?? {}) },
     vision: { ...base.vision, ...(raw.vision ?? {}) },
     screenControl: { ...base.screenControl, ...(raw.screenControl ?? {}) },
+    tor: { ...base.tor, ...(raw.tor ?? {}) },
   };
 }
 
