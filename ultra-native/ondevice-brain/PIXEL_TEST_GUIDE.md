@@ -1,3 +1,5 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/PIXEL_TEST_GUIDE.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
 # Test run on the Pixel 10 Pro (replaces the G15 run)
 
 **What this proves:** the real on-device brain, the 10 GB Qwen3-30B-A3B MoE, fits and runs on
@@ -9,6 +11,8 @@ It replaces both the G15 run and the PocketPal check: we test the real model in 
 
 Use the **debug APK** for this run (the accelerator check and the benchmark only exist in the
 debug build). The release build comes after, for handover.
+
+> **Status as of 2026-10-19:** preserved as a test procedure. What this run would prove — the 10 GB MoE fitting and running at usable speed, accelerator paths, voice, ambient listening — are objectives, not recorded results: on-device runtime behaviour was **not re-verified in the 2026-10-19 audits** (static, grep-level reading only), and CI has not yet compiled the merged tree. Model sizes, memory figures, and speed expectations in this guide are the pre-consolidation bundle's own and stand until a run on the merged build replaces them. One audit finding matters before the download step: GGUF downloads are verified by size only, with no integrity check before native load.
 
 ---
 
@@ -24,8 +28,9 @@ debug build). The release build comes after, for handover.
 
 ## 1. Install
 
-- [ ] Uninstall any earlier Jarvis / Agent Ultra first (every GitHub build has a different debug
-      key, so a new one won't install over an old one).
+- [ ] Uninstall any earlier Jarvis / Agent Ultra that was NOT installed from a GitHub debug
+      build (GitHub debug builds share the test debug keystore in `ci/`, so they install over
+      each other; other builds may use a different key and won't).
 - [ ] Install `app-debug.apk` (tap it, or `adb install -r app-debug.apk`). Open it and grant the
       permissions it asks for.
 
