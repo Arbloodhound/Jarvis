@@ -1,3 +1,20 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/V3_REVIEW_REPLY.md`. CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
+The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
+This reply records what was taken from the JARVIS v3 handoff (Tier-A quick replies, the 'never silent' measures, paused-confirmation expiry, price formats, eval cases, scam phrase families) and what was not taken, with reasons.
+The audits do not re-run or re-verify the v3 package, its `verify.sh` / eval claims, or the individual taken / not-taken decisions recorded here — those specifics are not covered.
+On the Gate topics this reply discusses, the merged view is mixed: Gate is deny-by-default, taint blocks can neither be auto-approved nor operator-overridden, and manifest load failure is deny-all (checked clean).
+Still open on related ground: the TS live path bypasses its own SafetyChecker / PermissionBroker, and harness grant keying is described in the audits as the weak core (grant invariants).
+The desktop gate architecture was assessed as strong (layered checks, SSRF defence, redaction in audit log/confirm cards) despite findings against the desktop app.
+Standing rule, unchanged: the agent informs and asks; consequential actions stop at confirmation and the user decides.
+
+---
+
 # Reply to the JARVIS v3 handoff — what was taken, what wasn't, and why
 
 From the Jarvis build session, 2026-10-09. Evidence labels: MEASURED / PROVEN / SOURCE ONLY / UNKNOWN.
