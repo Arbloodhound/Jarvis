@@ -1,10 +1,16 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/tools/REAL_TASKS.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
 # 20 real tasks — phone checklist
 
 Type or say each one with the cloud brain **off** (the default). Mark it **Pass** only if the phone
 actually did the thing, not just if Jarvis said it did. Pass rate = passes ÷ 20.
 
-The app-side routing for all 20 is checked by `RealTasksTest` (20/20 on the right path). This sheet
-covers what that test can't: whether the model picks the right tool and the tool works on the phone.
+The app-side routing for all 20 is checked by `RealTasksTest` (20/20 on the right path when this
+sheet was written; that result was not re-verified in the 2026-10-19 audits, which were static,
+grep-level reading — and separately, two other Kotlin unit-test files, `HistoryPolicyTest.kt` and
+`MemoryBriefTest.kt`, are broken in the merged tree). This sheet covers what that test can't:
+whether the model picks the right tool and the tool works on the phone. On-device behaviour
+itself was not re-verified in the 2026-10-19 audits, and CI has not yet compiled the merged tree.
 
 | # | Say / type | Path | Pass when… | Pass? |
 |---|---|---|---|---|
