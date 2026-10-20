@@ -326,7 +326,7 @@ export class TaskExecutor {
     if (!result.granted && !result.canRequest) {
       return {
         blocked: true,
-        message: `${result.label} permission was denied. Please enable it in device Settings > Apps > Agent Ultra > Permissions.`,
+        message: `${result.label} permission was denied. Please enable it in device Settings > Apps > Jarvis > Permissions.`,
       };
     }
     return { blocked: false, message: '' };
@@ -738,7 +738,7 @@ export class TaskExecutor {
           console.warn('[TASK] camera_capture: permission status=' + status);
           if (status !== 'granted') {
             console.warn('[TASK] camera_capture: FAIL permission_denied');
-            return { success: false, error: 'Camera permission not granted. Enable in Settings > Apps > Agent Ultra > Permissions.' };
+            return { success: false, error: 'Camera permission not granted. Enable in Settings > Apps > Jarvis > Permissions.' };
           }
           const camResult = await ImagePicker.launchCameraAsync({
             mediaTypes: ['images'],
@@ -786,7 +786,7 @@ export class TaskExecutor {
         if (!isNative) return { error: 'Gallery access requires a device' };
         const perm = await MediaLibrary.requestPermissionsAsync();
         if (perm.status !== 'granted') {
-          return { success: false, error: 'Photos permission not granted. Enable in Settings > Apps > Agent Ultra > Permissions.' };
+          return { success: false, error: 'Photos permission not granted. Enable in Settings > Apps > Jarvis > Permissions.' };
         }
         if (params.action === 'pick') {
           const pickResult = await ImagePicker.launchImageLibraryAsync({
@@ -1346,7 +1346,7 @@ export class TaskExecutor {
           }
         }
         try {
-          const shareResult = await Share.share({ message: 'Shared from Agent Ultra' });
+          const shareResult = await Share.share({ message: 'Shared from Jarvis' });
           return { success: true, action: shareResult.action };
         } catch (e: any) {
           return { error: 'Share failed: ' + e.message };
@@ -1518,7 +1518,7 @@ export class TaskExecutor {
         const enabled = await AppController.isServiceEnabled();
         if (!enabled) {
           await AppController.openAccessibilitySettings();
-          return { error: 'Accessibility service not enabled. Opening settings — please enable Agent Ultra accessibility service.' };
+          return { error: 'Accessibility service not enabled. Opening settings — please enable Jarvis accessibility service.' };
         }
         const targetPackage = params.targetPackage;
         const action = params.action;
@@ -1578,7 +1578,7 @@ export class TaskExecutor {
         const serviceEnabled = await AppController.isServiceEnabled().catch(() => false);
         if (!serviceEnabled) {
           await AppController.openAccessibilitySettings();
-          return { success: false, summary: 'Enable Agent Ultra in Accessibility Settings first' };
+          return { success: false, summary: 'Enable Jarvis in Accessibility Settings first' };
         }
 
         if (appHint) {
@@ -1962,7 +1962,7 @@ export class TaskExecutor {
           extra: {
             'android.intent.extra.alarm.HOUR': parsed.hour,
             'android.intent.extra.alarm.MINUTES': parsed.minute,
-            'android.intent.extra.alarm.MESSAGE': params.label || 'Ultra alarm',
+            'android.intent.extra.alarm.MESSAGE': params.label || 'Jarvis alarm',
             'android.intent.extra.alarm.SKIP_UI': false,
           },
         });
@@ -1973,7 +1973,7 @@ export class TaskExecutor {
         await IntentLauncher.startActivityAsync('android.intent.action.SET_TIMER', {
           extra: {
             'android.intent.extra.alarm.LENGTH': seconds,
-            'android.intent.extra.alarm.MESSAGE': 'Ultra timer',
+            'android.intent.extra.alarm.MESSAGE': 'Jarvis timer',
             'android.intent.extra.alarm.SKIP_UI': true,
           },
         });
