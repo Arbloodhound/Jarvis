@@ -53,6 +53,30 @@ class OpenAiClient(
         messages: List<ChatMessage>,
         maxTokens: Int,
         temperature: Double,
+    ): Result<String> = retryWithoutTemperature { completeOnce(messages, maxTokens, temperature) }
+
+    /**
+     * Newer models refuse the field outright (Pixel cloud check, 3.0.73, claude-opus-5-5:
+     * "HTTP 400: `temperature` is deprecated for this model"). On that error the request goes again
+     * without it, and this client never sends it again.
+     */
+    @Volatile var temperatureRejected = false
+        private set
+
+    private suspend fun retryWithoutTemperature(send: suspend () -> Result<String>): Result<String> {
+        val r = send()
+        if (!temperatureRejected && r.exceptionOrNull()?.message?.let { rejectedTemperature(it) } == true) {
+            temperatureRejected = true
+            android.util.Log.i("UltraProvider", "provider rejected temperature; sent without it from now on")
+            return send()
+        }
+        return r
+    }
+
+    private suspend fun completeOnce(
+        messages: List<ChatMessage>,
+        maxTokens: Int,
+        temperature: Double,
     ): Result<String> = withContext(Dispatchers.IO) {
         lastFinishReason = null
         try {
@@ -64,7 +88,7 @@ class OpenAiClient(
                 .put("model", config.model)
                 .put("messages", msgs)
                 .put("max_tokens", maxTokens)
-                .put("temperature", temperature)
+                .also { if (!temperatureRejected) it.put("temperature", temperature) }
                 .put("stream", false)
                 .also { applyVeniceParameters(it) }
 
@@ -118,11 +142,11 @@ class OpenAiClient(
         onToken: (String) -> Unit,
     ): Result<String> {
         val useTools = tools != null && !nativeToolsRejected
-        val r = streamOnce(messages, maxTokens, temperature, if (useTools) tools else null, onToken)
+        val r = retryWithoutTemperature { streamOnce(messages, maxTokens, temperature, if (useTools) tools else null, onToken) }
         if (useTools && r.exceptionOrNull()?.message?.let { NativeTools.rejectedTools(it) } == true) {
             nativeToolsRejected = true
             android.util.Log.i("UltraProvider", "provider rejected native tools; text protocol from now on")
-            return streamOnce(messages, maxTokens, temperature, null, onToken)
+            return retryWithoutTemperature { streamOnce(messages, maxTokens, temperature, null, onToken) }
         }
         return r
     }
@@ -148,7 +172,7 @@ class OpenAiClient(
                 .put("model", config.model)
                 .put("messages", msgs)
                 .put("max_tokens", maxTokens)
-                .put("temperature", temperature)
+                .also { if (!temperatureRejected) it.put("temperature", temperature) }
                 .put("stream", true)
                 .also { applyVeniceParameters(it) }
             if (tools != null) bodyJson.put("tools", tools).put("tool_choice", "auto")
@@ -241,5 +265,10 @@ class OpenAiClient(
     companion object {
         /** Production deadline for one model call (connect to last streamed byte). */
         const val DEFAULT_CALL_TIMEOUT_MS = 180_000L
+
+        /** A 400 that names temperature as deprecated or unsupported. Pure, JVM-tested. */
+        fun rejectedTemperature(error: String): Boolean =
+            error.startsWith("HTTP 400") && error.contains("temperature") &&
+                Regex("deprecated|not supported|unsupported", RegexOption.IGNORE_CASE).containsMatchIn(error)
     }
 }
