@@ -3,6 +3,12 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-20 — DIAG button: SEND and RESET; RAM report adds kernel lines
+- Finished DIAG used to stay on SEND with no way to start over. Now two separate buttons: SEND (share) and RESET (back to DIAG).
+- RamReport adds slab, kernel stacks, page tables, vmalloc, shared, locked. Other apps can't be listed one by one (Android).
+- Action model: owner never chose. v3.0.74 shipped "4 cores, not kept loaded" (my pick, should have asked). He decides after
+  the RAM DIAG. 1642 JVM tests, 0 failures.
+
 ## 2026-10-20 — owner's answers: ambient "both", action model 4 cores, RAM count
 - Ambient (owner chose "both"): while the brain answers, background speech waits (AmbientBacklog.next): only wake-window
   speech and short clips (<=1.5 s, a bare "stop") go at once during a run. Held clips are transcribed afterwards with

@@ -27,6 +27,7 @@ class RamReportTest {
         val self = mapOf("VmRSS" to 3000L, "RssFile" to 2400L, "RssAnon" to 600L, "VmHWM" to 3500L)
         val out = RamReport.lines(mem, self, listOf("native-heap" to 400L), listOf("main brain loaded"))
         assertTrue(out[0], "in use 11481 MB" in out[0])
+        assertTrue(out.any { it.startsWith("RAM phone kernel: slab 0") })
         assertTrue(out.any { "Android + other apps (rest of in use): 8481 MB" in it })
         assertTrue(out.any { "swap used 2048 of 8192 MB" in it })
         assertTrue(out.any { "native-heap 400 MB" in it })

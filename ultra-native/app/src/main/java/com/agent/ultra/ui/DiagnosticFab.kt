@@ -10,8 +10,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -38,8 +40,10 @@ import kotlin.math.roundToInt
 /**
  * The floating diagnostic button drawn over every app screen (MainActivity). Tap to run the live
  * diagnostic: it glows green with a countdown while it captures the real app for 5 minutes
- * ([LiveDiagnostic]), tap again to stop early. When it finishes it turns into a "Send diagnostic"
- * chip that opens the share sheet. Draggable so it never sits on top of what the owner needs.
+ * ([LiveDiagnostic]), tap again to stop early. When it finishes it shows two separate buttons:
+ * SEND (share sheet) and RESET (back to DIAG for a new capture), so neither is hit by accident
+ * (owner, 2026-10-20: it used to stay on SEND with no way to start over).
+ * Draggable so it never sits on top of what the owner needs.
  */
 @Composable
 fun DiagnosticFab(modifier: Modifier = Modifier) {
@@ -70,18 +74,23 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
             },
         contentAlignment = Alignment.Center,
     ) {
+        val done = file
+        if (!running && done != null) {
+            // Finished: SEND and RESET as two buttons, apart, so one is never hit for the other.
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Chip("SEND", green) { LiveDiagnostic.share(ctx, done) }
+                Chip("RESET", Color(0xFFF59E0B)) { LiveDiagnostic.lastFile.value = null }
+            }
+            return@Box
+        }
         Box(
             modifier = Modifier
-                .size(if (running || file != null) 84.dp else 60.dp)
+                .size(if (running) 84.dp else 60.dp)
                 .background(bg, CircleShape)
                 .border(2.dp, if (running) green else green.copy(alpha = 0.5f), CircleShape)
                 .pointerInput(running, file) {
                     detectTapGestures(
-                        onTap = {
-                            val done = file
-                            if (!running && done != null) LiveDiagnostic.share(ctx, done)
-                            else LiveDiagnostic.toggle(ctx)
-                        },
+                        onTap = { LiveDiagnostic.toggle(ctx) },
                     )
                 },
             contentAlignment = Alignment.Center,
@@ -92,16 +101,25 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
                         Text("REC", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text(mmss(remaining), color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 15.sp)
                     }
-                    file != null -> {
-                        Text("SEND", color = green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text("diag", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
-                    }
                     else -> Text("DIAG", color = green, fontWeight = FontWeight.Bold, fontSize = 13.sp,
                         textAlign = TextAlign.Center)
                 }
             }
         }
     }
+}
+
+/** One round button of the finished state. */
+@Composable
+private fun Chip(label: String, color: Color, onTap: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(64.dp)
+            .background(Color(0xFF2A2A2E), CircleShape)
+            .border(2.dp, color, CircleShape)
+            .pointerInput(label) { detectTapGestures(onTap = { onTap() }) },
+        contentAlignment = Alignment.Center,
+    ) { Text(label, color = color, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
 }
 
 private fun mmss(sec: Int): String = "%d:%02d".format(sec / 60, sec % 60)

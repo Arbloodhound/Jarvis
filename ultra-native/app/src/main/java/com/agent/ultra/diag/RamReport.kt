@@ -27,6 +27,9 @@ object RamReport {
         out += "RAM phone detail: free ${mem["MemFree"] ?: 0} · cached files ${mem["Cached"] ?: 0} · " +
             "app memory (anon) ${mem["AnonPages"] ?: 0} · mapped files ${mem["Mapped"] ?: 0} · " +
             "swap used ${(mem["SwapTotal"] ?: 0) - (mem["SwapFree"] ?: 0)} of ${mem["SwapTotal"] ?: 0} MB"
+        out += "RAM phone kernel: slab ${mem["Slab"] ?: 0} · kernel stacks ${mem["KernelStack"] ?: 0} · " +
+            "page tables ${mem["PageTables"] ?: 0} · vmalloc ${mem["VmallocUsed"] ?: 0} · shared ${mem["Shmem"] ?: 0} · " +
+            "locked ${mem["Mlocked"] ?: 0} MB"
         out += "RAM Jarvis: $jarvis MB resident (model files ${self["RssFile"] ?: 0} MB · " +
             "own memory ${self["RssAnon"] ?: 0} MB) · peak ${self["VmHWM"] ?: 0} MB"
         if (appParts.isNotEmpty()) out += "RAM Jarvis parts: " + appParts.joinToString(" · ") { "${it.first} ${it.second} MB" }
