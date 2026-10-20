@@ -125,8 +125,8 @@ fun DownloadsCard(modifier: Modifier = Modifier) {
     val assets = liveAssets(run.running) ?: return
     if (!DownloadPlan.showCard(assets, dismissed = false)) return
     KeepScreenOnDuring(run)
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(14.dp), modifier = modifier) {
-        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(16.dp), modifier = modifier) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(DownloadPlan.cardText(assets), style = MaterialTheme.typography.bodyMedium)
             val current = assets.firstOrNull { run.items[it.id] is DownloadPlan.ItemState.Running }
             val failed = run.items.count { it.value is DownloadPlan.ItemState.Failed }
