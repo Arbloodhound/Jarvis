@@ -1,0 +1,77 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+ios/
+android/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+.vercel
+
+.env
+
+# Signing key password. Never commit.
+keystore.properties
+build-*.apk
+logdump.txt
+screen_test.png
+
+# Replit build config, kept locally, out of the repo
+.replit
+
+# The host harness stub is not the Expo android/ project folder.
+!ultra-native/tools/host-harness/stub/android/
+ultra-native/tools/host-harness/tiny-qwen3.gguf
+
+# Push rules (v3 PUSH_CHECKLIST): never commit these.
+# Model files: multi-GB, the app downloads them in-app.
+*.gguf
+*.onnx
+mmproj*
+ultra-native/**/models/
+# Signing keys and service configs. (ultra-native/ci/test-debug.keystore is tracked on purpose: test-only key, see
+# ultra-native/ci/README.md; already-tracked files are unaffected by this list.)
+*.keystore
+!ultra-native/ci/test-debug.keystore
+google-services.json
+local.properties
+# Personal data from the owner's phone: results files can hold heard speech, SMS text and contact names.
+# Commit only the numbers, never the files.
+Jarvis-results-*.txt
+kit-results.txt
+# App audit logs and notifications (the app's own rule: no user text leaves the phone).
+gate_audit*.jsonl
+notifications.log
+# Build output anywhere.
+build/
+.gradle/

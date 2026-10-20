@@ -1,0 +1,17 @@
+ultra-full-source.txt filter=lfs diff=lfs merge=lfs -text
+
+# The Expo/React Native version at the root is history, not the product.
+# Keep it out of GitHub's language stats so the repo reads as Kotlin.
+app/** linguist-vendored
+components/** linguist-vendored
+constants/** linguist-vendored
+lib/** linguist-vendored
+server/** linguist-vendored
+shared/** linguist-vendored
+src/** linguist-vendored
+scripts/** linguist-vendored
+tools/** linguist-vendored
+plugins/** linguist-vendored
+patches/** linguist-vendored
+*.config.js linguist-vendored
+*.config.ts linguist-vendored

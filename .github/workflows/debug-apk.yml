@@ -1,0 +1,181 @@
+# Builds the DEBUG APK on GitHub (no signing secrets needed), for testing on a phone.
+# Run it: Actions -> "Debug APK" -> Run workflow (once this file is on main), push a tag like
+# debug-<anything>, or push to a claude/** branch with "[apk]" in the commit message.
+# The APK is attached to the run as "app-debug" (kept 14 days).
+name: Debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['debug-*']
+    branches: ['claude/**']
+
+permissions:
+  contents: read
+
+env:
+  # The NDK the llama/whisper static libs are built with; also part of their cache keys.
+  NATIVE_NDK: '27.2.12479018'
+
+jobs:
+  debug:
+    # Branch pushes build only when asked, so ordinary pushes don't spend build minutes.
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[apk]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          # Caches ~/.gradle/caches and ~/.gradle/wrapper, keyed on these files.
+          cache: gradle
+          cache-dependency-path: |
+            ultra-native/**/*.gradle*
+            ultra-native/gradle/wrapper/gradle-wrapper.properties
+            ultra-native/gradle/libs.versions.toml
+            ultra-native/gradle.properties
+
+      - name: Android SDK packages
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null
+          # r27c for the llama/whisper static libs; 27.0 is what AGP 8.7 builds the JNI libs with.
+          "$SDKM" "platforms;android-35" "build-tools;35.0.0" "ndk;$NATIVE_NDK" "ndk;27.0.12077973" > /dev/null
+
+      - name: CMake 3.28.3 (app/build.gradle.kts pins it; not an SDK package)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/cmake"
+          "$RUNNER_TEMP/cmake/bin/pip" install -q cmake==3.28.3 ninja
+          echo "$RUNNER_TEMP/cmake/bin" >> "$GITHUB_PATH"
+
+      # Native library caches. Exact keys only, no restore-keys: a key names the pinned source
+      # commit, the build script's own hash (which also covers the pin and every compiler flag),
+      # the NDK and the CMake version, so any change to those misses and rebuilds from scratch.
+      - name: Native cache keys
+        id: native
+        run: |
+          D=ultra-native/ondevice-brain
+          llama=$(grep -oE 'LLAMA_SHA:-[0-9a-f]{40}' "$D/build-llama-android.sh" | head -1 | cut -d- -f2)
+          whisper=$(grep -oE 'WHISPER_SHA:-[0-9a-f]{40}' "$D/build-whisper-android.sh" | head -1 | cut -d- -f2)
+          [ -n "$llama" ] && [ -n "$whisper" ] || { echo "::error::pinned llama/whisper commit not found in the build scripts"; exit 1; }
+          echo "llama=$llama" >> "$GITHUB_OUTPUT"
+          echo "whisper=$whisper" >> "$GITHUB_OUTPUT"
+
+      - name: Restore llama.cpp libs
+        id: llama-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/llama-android
+          key: llama-${{ runner.os }}-ndk${{ env.NATIVE_NDK }}-cmake3.28.3-${{ steps.native.outputs.llama }}-${{ hashFiles('ultra-native/ondevice-brain/build-llama-android.sh') }}
+
+      - name: Restore whisper.cpp libs
+        id: whisper-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/whisper-android
+          key: whisper-${{ runner.os }}-ndk${{ env.NATIVE_NDK }}-cmake3.28.3-${{ steps.native.outputs.whisper }}-${{ hashFiles('ultra-native/ondevice-brain/build-whisper-android.sh') }}
+
+      # Only the downloaded archive is cached; fetch-sherpa.sh always runs and re-checks its
+      # sha256 (re-downloading on mismatch) and the 16 KB alignment before copying the library.
+      - name: Restore sherpa-onnx archive
+        id: sherpa-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/sherpa-onnx
+          key: sherpa-${{ hashFiles('ultra-native/ondevice-brain/fetch-sherpa.sh') }}
+
+      - name: Build llama.cpp libs (cache miss)
+        if: steps.llama-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake --version | head -1
+          ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/build-llama-android.sh
+
+      - name: Build whisper.cpp libs (cache miss)
+        if: steps.whisper-cache.outputs.cache-hit != 'true'
+        run: ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/build-whisper-android.sh
+
+      - name: sherpa-onnx voice library
+        run: SHERPA_CACHE="$HOME/.cache/sherpa-onnx" ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/fetch-sherpa.sh
+
+      # CMakeLists.txt only warns when a CPU variant is missing, so check the (restored or built)
+      # outputs are all there before anything is linked against them.
+      - name: Check the native libs are complete
+        run: |
+          for d in "$HOME/llama-android" "$HOME/whisper-android"; do
+            for v in lib lib-dotprod lib-i8mm; do
+              [ -f "$d/$v/libggml-cpu.a" ] || { echo "::error::$d/$v/libggml-cpu.a missing"; exit 1; }
+            done
+          done
+          # mtmd (on-device vision, ultra_vlm.cpp) is linked into every ultra_llm variant.
+          for v in lib lib-dotprod lib-i8mm; do
+            for a in libmtmd.a libvendor-hash.a; do
+              [ -f "$HOME/llama-android/$v/$a" ] || { echo "::error::~/llama-android/$v/$a missing"; exit 1; }
+            done
+          done
+          for f in llama-android/lib/libllama.a llama-android/include/llama.h \
+                   llama-android/include/mtmd.h llama-android/include/mtmd-helper.h \
+                   whisper-android/lib/libwhisper.a whisper-android/include/whisper.h; do
+            [ -f "$HOME/$f" ] || { echo "::error::~/$f missing"; exit 1; }
+          done
+
+      - name: Save llama.cpp libs
+        if: steps.llama-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/llama-android
+          key: ${{ steps.llama-cache.outputs.cache-primary-key }}
+
+      - name: Save whisper.cpp libs
+        if: steps.whisper-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/whisper-android
+          key: ${{ steps.whisper-cache.outputs.cache-primary-key }}
+
+      - name: Save sherpa-onnx archive
+        if: steps.sherpa-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/sherpa-onnx
+          key: ${{ steps.sherpa-cache.outputs.cache-primary-key }}
+
+      - name: Fixed test signing key (so each test build installs over the last)
+        run: echo "JARVIS_TEST_KEYSTORE=$GITHUB_WORKSPACE/ultra-native/ci/test-debug.keystore" >> "$GITHUB_ENV"
+
+      - name: local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > ultra-native/local.properties
+
+      - name: Unit tests, then the debug build
+        working-directory: ultra-native
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Check 16 KB alignment
+        run: |
+          APK=ultra-native/app/build/outputs/apk/debug/app-debug.apk
+          READELF="$ANDROID_HOME/ndk/$NATIVE_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          unzip -oq "$APK" 'lib/arm64-v8a/*' -d "$RUNNER_TEMP/apk"
+          bad=0
+          for f in "$RUNNER_TEMP"/apk/lib/arm64-v8a/*.so; do
+            al=$("$READELF" -lW "$f" | awk '/LOAD/ {print $NF}' | sort -u | tr '\n' ' ')
+            echo "$(basename "$f"): $al"
+            [ "$al" = "0x4000 " ] || bad=1
+          done
+          [ $bad -eq 0 ] || { echo "::error::a native lib is not 16 KB-aligned"; exit 1; }
+
+      - name: Check the CPU variants carry their instructions
+        run: ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/check-cpu-variants.sh "$RUNNER_TEMP/apk/lib/arm64-v8a"
+
+      - name: Check it is signed with the fixed test key
+        run: |
+          SIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          "$SIGNER" verify --print-certs ultra-native/app/build/outputs/apk/debug/app-debug.apk | tee "$RUNNER_TEMP/certs.txt"
+          grep -q "CN=Jarvis CI test build" "$RUNNER_TEMP/certs.txt" || { echo "::error::not signed with ci/test-debug.keystore"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: ultra-native/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14

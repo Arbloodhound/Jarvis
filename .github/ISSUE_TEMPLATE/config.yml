@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Download the signed APK
+    url: https://github.com/dafarusd/Ultra-Agent-Release
+    about: Builds, install steps and signature verification live on the download page.

@@ -1,0 +1,317 @@
+# Builds the signed release APK on GitHub's machines, so no local Android setup is needed.
+# Run it: Actions tab -> "Release APK" -> Run workflow (after this file is on main), or push
+# a tag like v2.5.0. The APK is attached to the run as "app-release" (kept 14 days). A run with
+# test_kit ticked (the default for "Run workflow") also publishes both APKs, as plain .apk files,
+# to its own release (marked Latest) v3.0.<run number>-test for Obtainium to update from (newest 5 kept).
+# See DEPLOY_GUIDE.md, "Updates in one tap with Obtainium".
+#
+# Each run, tag pushes included, is versioned 3.0.<run number> (versionCode 17 + run number; 2.6.<run> up to
+# run 34), so
+# updates always count up. A run on any branch publishes if test_kit is ticked.
+#
+# One-time setup (see ultra-native/ondevice-brain/RELEASE_SIGNING.md): repository secrets
+#   KEYSTORE_BASE64   the .jks file, base64-encoded
+#   KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+name: Release APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_kit:
+        description: 'Also build the test build (with the Jarvis Tests app) signed with the real key'
+        type: boolean
+        # On by default: the test kit is what gets published for Obtainium (see the publish job).
+        default: true
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  # The NDK the llama/whisper static libs are built with; also part of their cache keys.
+  NATIVE_NDK: '27.2.12479018'
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    outputs:
+      version_name: ${{ steps.version.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          # Caches ~/.gradle/caches and ~/.gradle/wrapper, keyed on these files.
+          cache: gradle
+          cache-dependency-path: |
+            ultra-native/**/*.gradle*
+            ultra-native/gradle/wrapper/gradle-wrapper.properties
+            ultra-native/gradle/libs.versions.toml
+            ultra-native/gradle.properties
+
+      - name: Version for this run
+        id: version
+        run: |
+          echo "number=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "name=3.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Android SDK packages
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null
+          # r27c for the llama/whisper static libs; 27.0 is what AGP 8.7 builds the JNI libs with.
+          "$SDKM" "platforms;android-35" "build-tools;35.0.0" "ndk;$NATIVE_NDK" "ndk;27.0.12077973" > /dev/null
+
+      - name: CMake 3.28.3 (app/build.gradle.kts pins it; not an SDK package)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/cmake"
+          "$RUNNER_TEMP/cmake/bin/pip" install -q cmake==3.28.3 ninja
+          echo "$RUNNER_TEMP/cmake/bin" >> "$GITHUB_PATH"
+
+      # Native library caches. Exact keys only, no restore-keys: a key names the pinned source
+      # commit, the build script's own hash (which also covers the pin and every compiler flag),
+      # the NDK and the CMake version, so any change to those misses and rebuilds from scratch.
+      - name: Native cache keys
+        id: native
+        run: |
+          D=ultra-native/ondevice-brain
+          llama=$(grep -oE 'LLAMA_SHA:-[0-9a-f]{40}' "$D/build-llama-android.sh" | head -1 | cut -d- -f2)
+          whisper=$(grep -oE 'WHISPER_SHA:-[0-9a-f]{40}' "$D/build-whisper-android.sh" | head -1 | cut -d- -f2)
+          [ -n "$llama" ] && [ -n "$whisper" ] || { echo "::error::pinned llama/whisper commit not found in the build scripts"; exit 1; }
+          echo "llama=$llama" >> "$GITHUB_OUTPUT"
+          echo "whisper=$whisper" >> "$GITHUB_OUTPUT"
+
+      - name: Restore llama.cpp libs
+        id: llama-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/llama-android
+          key: llama-${{ runner.os }}-ndk${{ env.NATIVE_NDK }}-cmake3.28.3-${{ steps.native.outputs.llama }}-${{ hashFiles('ultra-native/ondevice-brain/build-llama-android.sh') }}
+
+      - name: Restore whisper.cpp libs
+        id: whisper-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/whisper-android
+          key: whisper-${{ runner.os }}-ndk${{ env.NATIVE_NDK }}-cmake3.28.3-${{ steps.native.outputs.whisper }}-${{ hashFiles('ultra-native/ondevice-brain/build-whisper-android.sh') }}
+
+      # Only the downloaded archive is cached; fetch-sherpa.sh always runs and re-checks its
+      # sha256 (re-downloading on mismatch) and the 16 KB alignment before copying the library.
+      - name: Restore sherpa-onnx archive
+        id: sherpa-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/sherpa-onnx
+          key: sherpa-${{ hashFiles('ultra-native/ondevice-brain/fetch-sherpa.sh') }}
+
+      - name: Build llama.cpp libs (cache miss)
+        if: steps.llama-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake --version | head -1
+          ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/build-llama-android.sh
+
+      - name: Build whisper.cpp libs (cache miss)
+        if: steps.whisper-cache.outputs.cache-hit != 'true'
+        run: ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/build-whisper-android.sh
+
+      - name: sherpa-onnx voice library
+        run: SHERPA_CACHE="$HOME/.cache/sherpa-onnx" ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/fetch-sherpa.sh
+
+      # CMakeLists.txt only warns when a CPU variant is missing, so check the (restored or built)
+      # outputs are all there before anything is linked against them.
+      - name: Check the native libs are complete
+        run: |
+          for d in "$HOME/llama-android" "$HOME/whisper-android"; do
+            for v in lib lib-dotprod lib-i8mm; do
+              [ -f "$d/$v/libggml-cpu.a" ] || { echo "::error::$d/$v/libggml-cpu.a missing"; exit 1; }
+            done
+          done
+          # mtmd (on-device vision, ultra_vlm.cpp) is linked into every ultra_llm variant.
+          for v in lib lib-dotprod lib-i8mm; do
+            for a in libmtmd.a libvendor-hash.a; do
+              [ -f "$HOME/llama-android/$v/$a" ] || { echo "::error::~/llama-android/$v/$a missing"; exit 1; }
+            done
+          done
+          for f in llama-android/lib/libllama.a llama-android/include/llama.h \
+                   llama-android/include/mtmd.h llama-android/include/mtmd-helper.h \
+                   whisper-android/lib/libwhisper.a whisper-android/include/whisper.h; do
+            [ -f "$HOME/$f" ] || { echo "::error::~/$f missing"; exit 1; }
+          done
+
+      - name: Save llama.cpp libs
+        if: steps.llama-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/llama-android
+          key: ${{ steps.llama-cache.outputs.cache-primary-key }}
+
+      - name: Save whisper.cpp libs
+        if: steps.whisper-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/whisper-android
+          key: ${{ steps.whisper-cache.outputs.cache-primary-key }}
+
+      - name: Save sherpa-onnx archive
+        if: steps.sherpa-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/sherpa-onnx
+          key: ${{ steps.sherpa-cache.outputs.cache-primary-key }}
+
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Secret KEYSTORE_BASE64 is not set. See ultra-native/ondevice-brain/RELEASE_SIGNING.md"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$RUNNER_TEMP/release.jks" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" \
+            > ultra-native/keystore.properties
+          echo "sdk.dir=$ANDROID_HOME" > ultra-native/local.properties
+
+      # One Gradle run: the unit tests once, then the release (and, for test_kit, the test build).
+      - name: Unit tests, then the release build
+        working-directory: ultra-native
+        env:
+          JARVIS_DEBUG_WITH_RELEASE_KEY: ${{ inputs.test_kit && '1' || '' }}
+          CI_BUILD_NUMBER: ${{ steps.version.outputs.number }}
+        run: |
+          TASKS=":app:testDebugUnitTest :app:assembleRelease"
+          if [ "$JARVIS_DEBUG_WITH_RELEASE_KEY" = 1 ]; then TASKS="$TASKS :app:assembleDebug"; fi
+          ./gradlew --no-daemon -PciBuildNumber="$CI_BUILD_NUMBER" $TASKS
+
+      - name: Check signature and 16 KB alignment
+        run: |
+          APK=ultra-native/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -E "DN|SHA-256"
+          READELF="$ANDROID_HOME/ndk/$NATIVE_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          unzip -oq "$APK" 'lib/arm64-v8a/*' -d "$RUNNER_TEMP/apk"
+          bad=0
+          for f in "$RUNNER_TEMP"/apk/lib/arm64-v8a/*.so; do
+            al=$("$READELF" -lW "$f" | awk '/LOAD/ {print $NF}' | sort -u | tr '\n' ' ')
+            echo "$(basename "$f"): $al"
+            [ "$al" = "0x4000 " ] || bad=1
+          done
+          [ $bad -eq 0 ] || { echo "::error::a native lib is not 16 KB-aligned"; exit 1; }
+
+      - name: Check the CPU variants carry their instructions
+        run: ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/check-cpu-variants.sh "$RUNNER_TEMP/apk/lib/arm64-v8a"
+
+      - name: Check the test build is signed with the same key as the release
+        if: inputs.test_kit
+        run: |
+          S="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          A=$("$S" verify --print-certs ultra-native/app/build/outputs/apk/release/app-release.apk | grep 'SHA-256 digest')
+          B=$("$S" verify --print-certs ultra-native/app/build/outputs/apk/debug/app-debug.apk | grep 'SHA-256 digest')
+          echo "$B"
+          [ -n "$A" ] && [ "$A" = "$B" ] || { echo "::error::test build is not signed with the release key"; exit 1; }
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks" ultra-native/keystore.properties
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: ultra-native/app/build/outputs/apk/release/app-release.apk
+          # Only the publish job below reads these, minutes later; 14 days of ~100 MB per run filled the
+          # artifact storage quota (run 38665897524 failed on upload, 2026-10-15).
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.test_kit
+        with:
+          name: app-test-realkey
+          path: ultra-native/app/build/outputs/apk/debug/app-debug.apk
+          # Only the publish job below reads these, minutes later; 14 days of ~100 MB per run filled the
+          # artifact storage quota (run 38665897524 failed on upload, 2026-10-15).
+          retention-days: 1
+
+  # Publishes this run's APKs, unzipped, as its own release (marked Latest) "v3.0.<run>-test" (name = tag),
+  # with jarvis-test.apk and jarvis-release.apk, for Obtainium. Only runs that built the test kit
+  # publish, so every test release carries both files; tag pushes publish nothing (as before).
+  # Keeps the newest 5 test releases. The only job allowed to write to the repository.
+  publish:
+    needs: release
+    if: inputs.test_kit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: write   # only to delete this run's own artifacts once published
+    # One publish at a time, so two runs cannot prune each other's releases mid-way.
+    concurrency:
+      group: publish-test-prereleases
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.release.outputs.version_name }}
+      RUN: ${{ github.run_number }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: apks
+
+      - name: Publish the test build as the Latest release
+        run: |
+          set -euo pipefail
+          TAG="v$VERSION-test"
+          mkdir -p out
+          cp apks/app-release/app-release.apk out/jarvis-release.apk
+          cp apks/app-test-realkey/app-debug.apk out/jarvis-test.apk
+          # Release notes carry the evidence labels (PUSH_CHECKLIST): this build only proves what CI ran.
+          cat > notes.md <<NOTES
+          Build $VERSION (versionCode $((17 + RUN))), from $GITHUB_REF_NAME at ${GITHUB_SHA::7}.
+          jarvis-test.apk has the Jarvis Tests app; jarvis-release.apk is the everyday build. Both are signed with the
+          release key: install as an update, models stay.
+
+          Evidence for this build:
+          - PROVEN: the JVM unit and screen tests passed in this run (they gate the build).
+          - SOURCE ONLY: everything new on the phone until the ★ Real-use check says otherwise.
+          - MEASURED / UNKNOWN: see the release log in HANDOFF.md and DEVLOG.md for what changed and what the phone has shown.
+          NOTES
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            # A re-run of the same run number: replace the files, keep the release.
+            gh release upload "$TAG" out/*.apk --clobber
+            gh release edit "$TAG" --prerelease=false --latest
+          else
+            gh release create "$TAG" out/*.apk \
+              --latest --target "$GITHUB_SHA" --title "$TAG" \
+              --notes-file notes.md
+          fi
+          echo "Published $TAG: $(ls out)"
+
+      - name: Delete this run's artifacts (the release now holds the APKs)
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[].id' | while read -r id; do
+            gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id" || true
+          done
+
+      - name: Keep only the newest 5 test builds
+        run: |
+          set -euo pipefail
+          # Only releases whose tag is exactly v2.6.<number>-test or v3.0.<number>-test (CI test builds); any other
+          # release is never touched. Sorted by run number, so old 2.6 builds age out first.
+          gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+            --jq '.[] | .tag_name' > pre.txt
+          { grep -E '^v(2\.6|3\.0)\.[0-9]+-test$' pre.txt || true; } | sort -t. -k3,3 -n -r | tail -n +6 > old.txt
+          while read -r t; do
+            [ -n "$t" ] || continue
+            echo "Deleting old test release $t"
+            gh release delete "$t" --cleanup-tag --yes
+          done < old.txt
