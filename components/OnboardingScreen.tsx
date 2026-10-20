@@ -21,28 +21,28 @@ interface Step {
 const STEPS: Step[] = [
   {
     icon: 'flash',
-    title: 'Welcome to Agent Ultra',
+    title: 'Welcome to Jarvis',
     desc: 'An autonomous AI agent that lives on your Android device. It can open apps, send messages, control settings, take screenshots, and more — all from a single conversation.',
   },
   {
     icon: 'key',
     title: 'Connect an AI Provider',
-    desc: 'Agent Ultra works with user-configured AI providers. Add one or more providers in Settings → AI Providers after setup.',
+    desc: 'Jarvis works with user-configured AI providers. Add one or more providers in Settings → AI Providers after setup.',
   },
   {
     icon: 'shield-checkmark',
     title: 'Allow Restricted Settings',
-    desc: 'Android blocks accessibility for sideloaded apps. First: Settings → Apps → Agent Ultra → tap ⋮ menu (top right) → "Allow restricted settings" → verify your identity.',
+    desc: 'Android blocks accessibility for sideloaded apps. First: Settings → Apps → Jarvis → tap ⋮ menu (top right) → "Allow restricted settings" → verify your identity.',
   },
   {
     icon: 'accessibility',
     title: 'Enable Accessibility Service',
-    desc: 'Now go to Settings → Accessibility → Installed Services → Agent Ultra and toggle it on. Grant "Full control" when prompted. This lets Ultra interact with other apps on your behalf.',
+    desc: 'Now go to Settings → Accessibility → Installed Services → Jarvis and toggle it on. Grant "Full control" when prompted. This lets Jarvis interact with other apps on your behalf.',
   },
   {
     icon: 'battery-half',
     title: 'Disable Battery Optimization',
-    desc: 'To keep Agent Ultra running reliably, exclude it from battery optimization. This prevents Android from killing the app while it\'s working in the background.',
+    desc: 'To keep Jarvis running reliably, exclude it from battery optimization. This prevents Android from killing the app while it\'s working in the background.',
   },
 ];
 
