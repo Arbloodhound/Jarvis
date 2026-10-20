@@ -4,6 +4,7 @@ import { AuditLog } from "./gate/audit.js";
 import { Gate } from "./gate/gate.js";
 import { Embedder } from "./embeddings.js";
 import { Vision } from "./vision.js";
+import { isLoopbackUrl, Transcriber } from "./voice.js";
 import { Memory } from "./memory.js";
 import { ClaudeProvider } from "./providers/claude.js";
 import { LocalProvider } from "./providers/local.js";
@@ -25,7 +26,8 @@ export class Runtime {
       provider: () => this.provider(),
       embedder: () => this.embedder(),
       vision: () => this.vision(),
-      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud" }),
+      transcriber: () => this.transcriber(),
+      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", ttsEnabled: this.cfg.voice.ttsEnabled }),
       gate: new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd),
       memory: this.memory,
       audit: new AuditLog(p.audit),
@@ -88,6 +90,19 @@ export class Runtime {
     return null;
   }
 
+  /**
+   * The speech-to-text backend, or null when none is configured. The STT
+   * endpoint is network-shaped, so — same loopback rule as the embedder —
+   * offline-only withholds a non-loopback server; a whisper server on this
+   * computer keeps working offline.
+   */
+  transcriber(): Transcriber | null {
+    const v = this.cfg.voice;
+    if (!v.sttBaseUrl) return null;
+    if (this.cfg.offlineOnly && !isLoopbackUrl(v.sttBaseUrl)) return null;
+    return new Transcriber({ baseUrl: v.sttBaseUrl, model: v.sttModel });
+  }
+
   /** The model ids a server has, for the picker. Defaults to the local brain's server. */
   async listModels(baseUrl?: string): Promise<string[]> {
     return LocalProvider.listModels(baseUrl || this.cfg.local.baseUrl);
@@ -122,6 +137,8 @@ export class Runtime {
       embeddings: this.cfg.embeddings.enabled,
       embedderId: this.embedder()?.id ?? null,
       vision: this.vision()?.label ?? null,
+      voiceStt: this.transcriber()?.label ?? null,
+      voiceTts: this.cfg.voice.ttsEnabled,
       screenControl: this.cfg.screenControl.enabled,
     };
   }

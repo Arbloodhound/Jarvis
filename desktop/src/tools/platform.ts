@@ -243,6 +243,71 @@ export async function screenKey(combo: string): Promise<void> {
   await first([["xdotool", ["key", "--clearmodifiers", combo]], ["ydotool", ["key", combo]]], LINUX_HINT);
 }
 
+/** Like run(), but returns the raw stdout bytes (synthesized audio). */
+function runBinary(cmd: string, args: string[], timeoutMs = 120000): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: "buffer" }, (err, stdout, stderr) => {
+      if (err) reject(new Error(`${cmd}: ${stderr?.toString().trim() || err.message}`));
+      else resolve(stdout);
+    });
+  });
+}
+
+const TTS_HINT = "No text-to-speech voice found on this computer (Linux: install speech-dispatcher for spd-say, or espeak-ng; macOS has `say` built in; Windows uses SAPI).";
+
+/**
+ * Speak text with the operating system's own voice. Returns the backend
+ * that actually spoke. Honest-failure discipline, same as the screen
+ * actions: when no backend exists — or the one that exists fails — this
+ * throws; it never reports speech that did not happen.
+ */
+export async function speakText(text: string): Promise<string> {
+  if (currentOs() === "darwin") { await run("say", [text], undefined, 120000); return "say"; }
+  if (currentOs() === "win32") {
+    await powershell(`$v=New-Object -ComObject SAPI.SpVoice; [void]$v.Speak(${psQuote(text)})`, 120000);
+    return "SAPI";
+  }
+  const tries: Array<[string, string[], string]> = [
+    ["spd-say", ["-w", text], "spd-say"],
+    ["espeak-ng", [text], "espeak-ng"],
+    ["espeak", [text], "espeak"],
+    ["flite", ["-t", text], "flite"],
+  ];
+  for (const [cmd, args, label] of tries) {
+    try { await run(cmd, args, undefined, 120000); return label; } catch { /* next backend */ }
+  }
+  throw new Error(TTS_HINT);
+}
+
+/**
+ * Synthesize speech into an audio file instead of playing it (WAV on
+ * Linux/Windows, AIFF/WAV by extension on macOS). Returns the backend
+ * that wrote it. spd-say cannot write a file, so on Linux this needs
+ * espeak/espeak-ng (--stdout) or flite (-o); without one it throws.
+ */
+export async function speakToFile(text: string, file: string): Promise<string> {
+  if (currentOs() === "darwin") { await run("say", ["-o", file, text], undefined, 120000); return "say"; }
+  if (currentOs() === "win32") {
+    const ps = `$v=New-Object -ComObject SAPI.SpVoice; $s=New-Object -ComObject SAPI.SpFileStream; $s.Open(${psQuote(file)},3); $v.AudioOutputStream=$s; [void]$v.Speak(${psQuote(text)}); $s.Close()`;
+    await powershell(ps, 120000);
+    return "SAPI";
+  }
+  for (const cmd of ["espeak-ng", "espeak"]) {
+    try {
+      const wav = await runBinary(cmd, ["--stdout", text]);
+      if (wav.length === 0) throw new Error(`${cmd} produced no audio`);
+      const { writeFile: wf } = await import("node:fs/promises");
+      await wf(file, wav);
+      return cmd;
+    } catch (err) {
+      if (err instanceof Error && /produced no audio/.test(err.message)) throw err;
+      /* next backend */
+    }
+  }
+  try { await run("flite", ["-t", text, "-o", file], undefined, 120000); return "flite"; } catch { /* no backend */ }
+  throw new Error(`Writing speech to a file needs espeak/espeak-ng or flite on Linux (spd-say can only play aloud). ${TTS_HINT}`);
+}
+
 export async function screenClick(x: number, y: number, button: "left" | "right" | "middle"): Promise<void> {
   const b = { left: "1", right: "3", middle: "2" }[button];
   if (currentOs() === "darwin") { await run("osascript", ["-e", `tell application "System Events" to click at {${x}, ${y}}`]); return; }
