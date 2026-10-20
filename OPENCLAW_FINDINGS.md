@@ -1,3 +1,15 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/OPENCLAW_FINDINGS.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
+## Post-merge status correction (2026-10-19) — read first
+
+This file documents research into OpenClaw's code (commit `129049bb`, 2026-10-15, MIT license). That research content is unchanged below and remains valid as a description of OpenClaw. **Every Jarvis implementation-status claim or "Jarvis lifts" framing in the body is superseded by this section**, which states the audited post-merge state. CI has not yet compiled the merged tree; audit verification was grep-level, not compilation.
+
+- **Now exists (was "proposed / owner decides / not yet built" in the body):** the patterns in §3 were substantially adopted into the harness package `com.agent.ultra.harness` in the merged tree: MemoryClaims (SQLite-backed claims with provenance and supersede chains, hybrid search + query-time temporal decay), ApprovalGrants (grants bound to the exact operation — approval tokens are bound to the exact sorted-args key), Scheduler (owner-tagged jobs), SkillStore (lazy skills), NotificationForwardingPolicy (3-gate: allowlist → quiet hours → rate limit), ScreenGuard (snapshot-bound screen actions; stale screens refused; protected apps fail closed), Trash, Forget, Subagents (depth-1 by construction — stricter than OpenClaw's configurable depth), and `connectors/` with CredentialVault (Keystore AES-GCM) and SecretScrubber. OpenClaw-derived code keeps MIT attribution.
+- **DB wiring resolved:** UltraDatabase v9 wires the harness entities (ClaimEntity/GrantEntity/MemoryEmbeddingEntity/BanditArmEntity) with migrations registered — the former pass-2 critical; post-merge 0 known criticals.
+- **Still open:** 2 manifest registrations (`SchedulerReceiver`, `SpotifyRedirectActivity`), 2 broken unit tests, TS `server/` orphaned, ~70 dead-code candidates, CI compile pending. Audit highs include harness grant keying as the weak core and claim promotion storing a model paraphrase as a verbatim quote — both qualify the "adopted" status above.
+- Comparative claims about OpenClaw vs Muse in §2 describe those external codebases, not Jarvis, and are unaffected. Anything about Jarvis not covered here is **not re-verified in the 2026-10-19 audits**.
+
+---
 # OpenClaw: architecture findings for Muse comparison and Jarvis (Android/Kotlin)
 
 - **Repo:** https://github.com/openclaw/openclaw (shallow clone, `--depth 1`)
