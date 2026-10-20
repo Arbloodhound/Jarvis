@@ -1,3 +1,25 @@
+> **Post-merge replacement — 2026-10-19.** Refreshed from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/CHANGELOG.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
+## [2026-10-19] -- Full-branch consolidation, code audits, documentation replacement
+
+### Consolidation
+- **All work consolidated on `main`** (tip c8043e1c): 58 branches swept — 51 already contained, 2 merged during consolidation (`muse/v5-delta-port` → `claude/shopping-integration`, 4cff5d07; `ccr-c9b6f798-uako9v` → `claude/shopping-integration`, adbd9e84; then `claude/shopping-integration` → `main`, ae030b9f), and 4 left unmerged by design (`claude/broken-fixes`, `claude/download-all`, `claude/fast-reasoning` — empty tip commits; `claude/offline-navigation-wip` — superseded WIP snapshot). No branch deleted; no history rewritten.
+
+### Audits
+- **Two code-only audits completed** (grep-level verification, not compilation): pass 2 over the main lineage + harness delta (533/536 files) found **119 defects** (1 critical, 16 high, 41 medium, 61 low); the supplement over the ccr branch (118/118 files) found **87 findings** (0 critical, 12 high, 31 medium, 44 low). Combined: 206 findings across two different snapshots — not a deduplicated count of the merged tree.
+- **Harness DB wiring resolved:** the pass-2 critical is fixed in the merged tree — UltraDatabase is v9 and wires the harness entities (claims, grants, embeddings, bandit arms), DAO accessors and migrations (MIGRATION_7_8, MIGRATION_8_9). Post-merge: **0 known criticals**.
+
+### Still open
+- Two harness components are not registered in AndroidManifest.xml: `SchedulerReceiver` and `SpotifyRedirectActivity`.
+- Two Kotlin unit tests are broken (`HistoryPolicyTest.kt`, `MemoryBriefTest.kt` import a debug-only class).
+- The TypeScript `server/` under `src/` is orphaned (nothing calls it; it crashes at startup in the audited tree).
+- **CI has not yet compiled the merged tree** — Kotlin status is source-only until CI runs.
+
+### Documentation
+- **Documentation replacement:** the repo's Markdown documentation was refreshed from the audited post-merge state; the previous versions are preserved under `archive/2026-10-19/`.
+
+---
+
 # Agent Ultra -- Changelog
 
 All notable changes to this project are documented here, organized by feature version. Dates reflect when work was completed.
