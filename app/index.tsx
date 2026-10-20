@@ -138,7 +138,7 @@ export default function ChatScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const { core: agentCore, vault, isReady, status, setStatus, buildPhase, setBuildPhase, genomePhase, setGenomePhase } = useAgentCore();
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [conversationTitle, setConversationTitle] = useState("Agent Ultra");
+  const [conversationTitle, setConversationTitle] = useState("Jarvis");
   const [conversationStarred, setConversationStarred] = useState(false);
   const [conversations, setConversations] = useState<ConversationMeta[]>([]);
 
@@ -552,7 +552,7 @@ export default function ChatScreen() {
             setTimeout(() => {
               Alert.alert(
                 'Samsung Device Detected',
-                'Samsung phones aggressively kill background apps. For Agent Ultra to work reliably, please disable battery optimization for this app.\n\nSettings → Apps → Agent Ultra → Battery → Unrestricted',
+                'Samsung phones aggressively kill background apps. For Jarvis to work reliably, please disable battery optimization for this app.\n\nSettings → Apps → Jarvis → Battery → Unrestricted',
                 [
                   { text: 'Open Settings', onPress: async () => {
                     try {
@@ -668,7 +668,7 @@ export default function ChatScreen() {
           const costSummary = agentCore.getCostSummary?.() || { totalCost: 0, totalCalls: 0 };
           const now = new Date();
           response = [
-            `━━ Agent Ultra Status ━━`,
+            `━━ Jarvis Status ━━`,
             `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`,
             ``,
             `Accessibility: ${hb.alive ? '✓ Active' : '✗ OFF — enable in Settings'}`,
@@ -1477,7 +1477,7 @@ export default function ChatScreen() {
           </Pressable>
           <Pressable onLongPress={handleRenameConversation} delayLongPress={500} style={{ flex: 1 }}>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              Agent Ultra
+              Jarvis
             </Text>
           </Pressable>
         </View>
@@ -1717,7 +1717,7 @@ export default function ChatScreen() {
               ref={inputRef}
               value={input}
               onChangeText={setInput}
-              placeholder="Ask Agent Ultra..."
+              placeholder="Ask Jarvis..."
               placeholderTextColor="#444"
               style={styles.input}
               multiline
