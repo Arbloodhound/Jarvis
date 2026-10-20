@@ -1,3 +1,19 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/COLD-REVIEW.md`. CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
+The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
+This review's order of work was safety first (the gate hole F1 and the concurrency bug F2), then learn-by-watching (L1) and provenance (L3).
+On the Gate, the audits checked clean in the merged view: Gate is deny-by-default, taint blocks can neither be auto-approved nor operator-overridden, manifest load failure is deny-all, and screen reads/actions fail closed on protected apps.
+Still open on related ground: recipe runs can self-confirm steps past the Gate; Gate secret patterns miss phone-shaped secrets; the ActionGate has a single global waiter; raw-coordinate taps are ungated when no label is within 200px; and the Kotlin `screenshot` tool bypasses the protected-app check.
+On provenance, the harness MemoryClaims design (kind/salience/confidence, provenance, supersede chains) is present, but claim promotion can never supersede and stores a model paraphrase as the verbatim quote — a still-open high.
+The audits do not re-verify this review's device-proven F1/F2/F3/F4/F5 closures, its route-replay proofs, or the P1/P2 competence/negotiation builds: they were code-only and grep-level, with no device testing. Those specific claims are not covered beyond the Gate points above.
+
+---
+
 # Cold review — 2026-08-29
 
 Produced by a reviewer given **no history with this codebase**: it did not know who
