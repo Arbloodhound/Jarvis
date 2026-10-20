@@ -48,8 +48,7 @@ Per the 2026-10-19 audits, the package contains:
 
 - The agent informs and asks; it does not permit or forbid.
 - Products = legitimate-product/company verification and scam screening only. "Plugs" = known non-scammers/trusted sources.
-- Onion exclusion stays a separate shopping-layer function (`excludeOnion`/`isOnionUrl`) — never baked into URL extraction or autonomous browsing. ShoppingCheckout has no purchase path (prepare/display/track only), by design.
-- Tor is opt-in, default OFF. Onion URLs never fall back to clearnet. Tor fail-closed was verified in both audits (three independent guards in TorProxy; only fallback is in-app Tor → Orbot).
+- ShoppingCheckout has no purchase path (prepare/display/track only), by design.
 - Human verification (CAPTCHA etc.): park with the exact link/action, wait for the user. Never solve or bypass.
 - Never type into password fields. Screen actions bound to the screen they were read from; stale screens refused. Screen reads/actions fail closed on protected apps.
 - SMS/email codes and reset links never reach the cloud model (opaque placeholder references only).

@@ -16,8 +16,6 @@ This is a current-state handoff, rewritten after the 2026-10-19 full-branch cons
 
 A native desktop AI agent (Electron + Node/TypeScript), local-first, OpenClaw-style local gateway plus the Jarvis safety gate. Runs on Windows/macOS/Linux with installers. Chat page in a window, plus a `serve` web mode and terminal `chat`/`ask` modes. Two brains: any OpenAI-compatible local server (Ollama default) or Claude cloud. See `desktop/README.md` for the user-facing description.
 
-Tor is not part of desktop. Tor is in the Kotlin app (`jarvis-native/`).
-
 ## Audited state
 
 Two code-only audits were run on 2026-10-19. Audit verification was grep-level (definitions/call sites/imports), not compilation. **CI has not yet compiled the merged tree.** Kotlin is source-only until CI runs; the same caution applies to any "it works" claim about the merged tree as a whole.
@@ -75,5 +73,5 @@ Exact self-test invocation flags for headless Linux are in the pre-merge handoff
 - Every tool call goes through the gate. No bypass path.
 - The agent informs and asks; it does not permit or forbid. Consequential actions stop at confirmation; the user decides. Purchases always need fresh approval.
 - Human verification is the user's — park it, never solve or bypass it.
-- Scope exclusion carried from the previous handoff and the root rules: do not build Tor/dark-web/onion monitoring or automated action-on-hidden-services tooling in desktop. Ordinary embedding/vision/rerank model support is fine.
+- Ordinary embedding / vision / rerank model support is fine.
 - End-of-session bookkeeping (DEVLOG entry, handoff updates) follows the repo's current conventions on `main` — check the root docs on `main` rather than the archived handoff's branch/PR instructions, which no longer apply.
