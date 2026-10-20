@@ -41,9 +41,21 @@ export class Runtime {
     return this.cfg.brain === "cloud" && !this.cfg.offlineOnly;
   }
 
+  /**
+   * The cloud key: config first, then the ANTHROPIC_API_KEY the Anthropic
+   * SDK itself falls back to (config documents apiKey as "read from
+   * ANTHROPIC_API_KEY when empty"). Every cloud-availability decision must
+   * use this rather than cfg.cloud.apiKey alone — an env-only key powers
+   * the cloud brain, so a decision made on the config field alone (vision
+   * did) silently misroutes to a local server and 404s.
+   */
+  private cloudKey(): string | undefined {
+    return this.cfg.cloud.apiKey || process.env.ANTHROPIC_API_KEY || undefined;
+  }
+
   provider(): Provider {
     if (this.cloudOn) {
-      return new ClaudeProvider(this.cfg.cloud.model, this.cfg.cloud.effort, this.cfg.cloud.apiKey || undefined);
+      return new ClaudeProvider(this.cfg.cloud.model, this.cfg.cloud.effort, this.cloudKey());
     }
     return new LocalProvider(this.cfg.local.baseUrl, this.cfg.local.model);
   }
@@ -66,11 +78,11 @@ export class Runtime {
     const v = this.cfg.vision;
     const localUrl = v.baseUrl || this.cfg.local.baseUrl;
     // Prefer a dedicated local VLM so it works offline and on the local brain.
-    if (v.model && (this.cfg.offlineOnly || this.cfg.brain === "local" || !this.cfg.cloud.apiKey)) {
+    if (v.model && (this.cfg.offlineOnly || this.cfg.brain === "local" || !this.cloudKey())) {
       return new Vision({ kind: "local", baseUrl: localUrl, model: v.model });
     }
     if (this.cloudOn) {
-      return new Vision({ kind: "cloud", baseUrl: "", model: this.cfg.cloud.model, apiKey: this.cfg.cloud.apiKey || undefined });
+      return new Vision({ kind: "cloud", baseUrl: "", model: this.cfg.cloud.model, apiKey: this.cloudKey() });
     }
     if (v.model) return new Vision({ kind: "local", baseUrl: localUrl, model: v.model });
     return null;
@@ -104,6 +116,8 @@ export class Runtime {
       answering: this.provider().label,
       busy: this.agent.busy,
       cloudModel: this.cfg.cloud.model,
+      /** Where the cloud key comes from — never the key itself. */
+      cloudKeySource: this.cfg.cloud.apiKey ? "config" : process.env.ANTHROPIC_API_KEY ? "env" : "none",
       localModel: this.cfg.local.model,
       embeddings: this.cfg.embeddings.enabled,
       embedderId: this.embedder()?.id ?? null,
