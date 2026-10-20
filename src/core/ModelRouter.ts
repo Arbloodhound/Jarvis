@@ -701,7 +701,7 @@ export class ModelRouter {
   ): Promise<CompletionResult> {
     if (this.bridge) {
       if (!this.bridge.hasActiveProvider()) throw new Error('No AI provider configured. Open Settings → AI Providers to add one.');
-      const sysPrompt = options.systemPrompt ?? "You are Agent Ultra, an autonomous AI agent on a user's Android phone.";
+      const sysPrompt = options.systemPrompt ?? "You are Jarvis, an autonomous AI agent on a user's Android phone.";
       return this.bridge.completeConversation(
         [{ role: 'system', content: sysPrompt }, { role: 'user', content: prompt }],
         { model: options.model || this.defaultModel, maxTokens: options.maxTokens, temperature: options.temperature, taskId: options.taskId, agentId: options.agentId, preferredProviderId: this.defaultProviderId || undefined }
@@ -735,7 +735,7 @@ export class ModelRouter {
     }
     const systemPrompt =
       options.systemPrompt ||
-      "You are Agent Ultra, an autonomous AI agent on a user's Android phone. You have device access including file system, contacts, SMS, camera, media, and can build Android apps on-device. Be precise, concise, action-oriented. When generating code, provide complete compilable code with no omissions.";
+      "You are Jarvis, an autonomous AI agent on a user's Android phone. You have device access including file system, contacts, SMS, camera, media, and can build Android apps on-device. Be precise, concise, action-oriented. When generating code, provide complete compilable code with no omissions.";
 
     const promptTokens = Math.ceil((prompt.length + systemPrompt.length) / 4);
     DebugLog.modelApiRequest(effectiveModel, taskId, promptTokens, options.maxTokens ?? 4000);
@@ -1061,7 +1061,7 @@ export class ModelRouter {
     DebugLog.systemEvent('ModelRouter', `Vision request: model=${model} imageSize=${imageBase64.length} prompt="${textPrompt.slice(0, 80)}"`);
 
     const messages = [
-      { role: 'system', content: 'You are Agent Ultra, an autonomous AI agent. Analyze the image and respond to the user\'s request precisely and concisely.' },
+      { role: 'system', content: 'You are Jarvis, an autonomous AI agent. Analyze the image and respond to the user\'s request precisely and concisely.' },
       {
         role: 'user',
         content: [
