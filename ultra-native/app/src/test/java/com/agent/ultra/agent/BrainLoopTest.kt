@@ -50,7 +50,7 @@ class BrainLoopTest {
         ChatStore.uiVisible = false
         Brain.lastRequest = ""
         Brain.lastRunSteps = emptyList()
-        com.agent.ultra.ui.UltraPrefs.setOfflineOnly(ctx, false)
+        com.agent.ultra.ui.UltraPrefs.setOfflineOnly(ctx, false); com.agent.ultra.ui.UltraPrefs.setCloudBrain(ctx, true)
         brain = Brain(ctx, LocalModelEngine(ctx))
         brain.onAnswer = { answers += it }
         brain.speakTyped = { false }
@@ -60,7 +60,7 @@ class BrainLoopTest {
     @After fun tearDown() {
         server.close()
         ChatStore.messages.clear()
-        com.agent.ultra.ui.UltraPrefs.setOfflineOnly(ctx, false)
+        com.agent.ultra.ui.UltraPrefs.setOfflineOnly(ctx, false); com.agent.ultra.ui.UltraPrefs.setCloudBrain(ctx, true)
     }
 
     /** Runs [block] off the main thread (the brain's IO and Room calls), idling the main looper —

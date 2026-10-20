@@ -9,7 +9,7 @@ package com.agent.ultra.agent
  *
  *   budget = min(tierBudget, max(floorTokens, floor(tokPerSec × maxSilentSeconds)))
  *
- * Unknown speed (no measured generation yet for this model) → the tier budget, as before.
+ * Unknown speed (no measured generation yet for this model) → [UNKNOWN_TOK_PER_SEC] is assumed.
  *
  * Max silent waits (thinking time before the first visible word):
  * - DEVICE 4 s, LIGHT 4 s: a command or a "hi" that is silent longer than a few seconds
@@ -78,11 +78,12 @@ object WaitBudget {
 
     /**
      * Think budget for [tier] at [tokPerSec] and [depth]: min(ceiling, max(floor, speed x wait)).
-     * Unknown speed (null, NaN, infinite or ≤ 0: the first answer after a load) → the tier's own
-     * budget at every depth, so an unmeasured slow model never gets a multi-minute trace.
+     * Unknown speed (null, NaN, infinite or ≤ 0: the first answer after a load) → the budget at
+     * [UNKNOWN_TOK_PER_SEC], never above the tier's own budget at any depth. It used to be the tier's whole budget: the Pixel's first answer after
+     * loading Qwen3-4B Thinking got 512 tokens at 3.2 tok/s, 200 s of silence (2026-10-17 22:47).
      */
     fun budget(tier: IntentRouter.Tier, tokPerSec: Double?, depth: Depth = Depth.QUICK): Int {
-        if (tokPerSec == null || !tokPerSec.isFinite() || tokPerSec <= 0.0) return tier.thinkBudget
+        if (tokPerSec == null || !tokPerSec.isFinite() || tokPerSec <= 0.0) return minOf(tier.thinkBudget, budget(tier, UNKNOWN_TOK_PER_SEC, depth))
         val ceiling = tokenCeiling(tier, depth)
         val timed = kotlin.math.floor(tokPerSec * maxSilentSeconds(tier, depth))
             .coerceAtMost(ceiling.toDouble()).toInt()
@@ -108,6 +109,10 @@ object WaitBudget {
             else maxOf(floorTokens(IntentRouter.Tier.DEVICE), kotlin.math.floor(tokPerSec * seconds).toInt())
         return minOf(budget, cap)
     }
+
+    /** Speed assumed before a model's first answer: the slow end of what the Pixel logs for the
+     *  on-device models while speech recognition shares the cores (3.2-3.7 tok/s, 2026-10-17). */
+    const val UNKNOWN_TOK_PER_SEC = 3.0
 
     /** Settings value → [Depth]; anything unknown → [Depth.BALANCED] (the default). */
     fun depthOf(name: String?): Depth = Depth.values().firstOrNull { it.name == name } ?: Depth.BALANCED

@@ -15,6 +15,7 @@ class BootReceiver : BroadcastReceiver() {
         val action = intent.action
         if (action != Intent.ACTION_BOOT_COMPLETED && action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         if (!AmbientConfig(context).enabled || AmbientListenService.instance != null) return
+        if (!com.agent.ultra.JarvisPower.isOn(context)) return
         if (action == Intent.ACTION_BOOT_COMPLETED && android.os.Build.VERSION.SDK_INT < 35) {
             AmbientListenService.start(context)
         } else {

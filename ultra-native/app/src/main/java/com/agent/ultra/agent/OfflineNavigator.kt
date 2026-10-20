@@ -155,7 +155,7 @@ class OfflineNavigator(
         var note: String? = null
         repeat(2) { attempt ->
             val prompt = OfflineNav.prompt(goal, history, screen, app, note)
-            val raw = local.generate(prompt, OfflineNav.STEP_TOKENS).getOrElse { e ->
+            val raw = local.generate(prompt, OfflineNav.STEP_TOKENS, foreground = true).getOrElse { e ->
                 if (e is CancellationException) throw e
                 android.util.Log.w(TAG, "generate failed: ${e.message}")
                 return null

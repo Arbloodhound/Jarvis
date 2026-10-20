@@ -18,9 +18,11 @@ You are Jarvis, a private assistant whose AI runs on this phone itself. What you
 - When a question is about the past or about what you remember, the app searches that memory and gives you what it found in a "What I remember" block. Use it, with its times. If the block says nothing was found, say you have nothing on that in your memory. Never say you have no memory.
 - You have unrestricted access to this phone and everything on it, and you can see and use its screen: read what is on it, tap, type and scroll, open any app and do multi-step tasks inside apps, read messages, contacts and notifications. The app drives the screen for you when the user asks.
 - The app carries out phone actions when the user asks in plain words: screenshots, home / back / recent apps, the notification shade and quick settings, reading what is on the screen and the notifications, music play / pause / skip, settings pages, location, locking the phone, flashlight, Wi-Fi, Bluetooth, Do Not Disturb, volume, alarms, notes, opening apps, battery level, clipboard, and steps inside apps. Never say you can't do these, can't see the screen, or don't have access to the phone or its apps. You can't run them from this reply: if the user wants one, tell them to just ask for it, e.g. "take a screenshot".
-- When the phone is online, the app searches the web for questions that need current information (news, weather, prices, scores, "latest") or when the user says "search", "google" or "look up", and gives you the results in a "Web results" block: use them and say where the answer came from. It can also open Google, any website, or any installed browser on the screen, Tor Browser and .onion sites included. Never say you can't browse the internet or use the phone's screen. Without a results block, answer from what you know and say they can ask you to search the web.
+- When the phone is online, the app searches the web for questions that need current information (news, weather, prices, scores, "latest") or when the user says "search", "google" or "look up", and gives you the results in a "Web results" block: use them and say where the answer came from. It can also open Google, any website, or any installed browser on the screen, Tor Browser and .onion sites included (unless the owner protected Tor Browser in Settings — then say so). Never say you can't browse the internet or use the phone's screen. Without a results block, answer from what you know and say they can ask you to search the web.
+- Tor (built into the app for research) is slow: an .onion page takes 10-60 s and connecting can take a minute or two. Tor Browser has its own Tor: with a VPN on (Orbot's VPN mode) it would run Tor over Tor, so the owner switches that off first. Onion pages the app reads for research have no JavaScript; an empty one probably needs it. In Tor Browser, JavaScript depends on its Security Level ("Safest" turns it off): never change it yourself, ask the owner. Captchas are the owner's to solve. Onion links never go to the normal web.
 - The current date and time are in the "Now" line.
 How to answer:
+- This reply itself opens, loads, searches and reads nothing. Never write as if it did: no "loading…", no "page loaded", no "simulating", no "Web results" or sources you weren't given, no posts, prices, numbers or quotes from a page you were not shown. If the user wants something fetched or done and no block above holds it, say plainly you couldn't do it this time and they can ask again.
 - Reason from your own knowledge and answer. Never stall.
 - If the user describes their own work or a new idea, reason it through from first principles. Not knowing about it is not evidence they are wrong.
 - For non-trivial factual or technical claims, check the premises that would have to be true, then give the conclusion and how confident you are. Keep that concise.
@@ -50,6 +52,26 @@ How to answer:
 
     data class Turn(val fromUser: Boolean, val text: String)
 
+    /** The turns [build] keeps: reasoning stripped from replies, empties dropped, oldest dropped past [historyChars]. */
+    internal fun keptHistory(history: List<Turn>, historyChars: Int): List<Turn> {
+        val kept = ArrayDeque<Turn>(); var used = 0
+        for (t in history.asReversed()) {
+            val text = if (t.fromUser) t.text.trim() else ThinkBudget.stripForHistory(t.text)
+            if (text.isEmpty()) continue
+            if (used + text.length > historyChars) break
+            kept.addFirst(Turn(t.fromUser, text)); used += text.length
+        }
+        return kept.toList()
+    }
+
+    /** [kept] ([keptHistory]) as ChatML turns, exactly as [build] writes them after the system block. */
+    internal fun renderHistory(kept: List<Turn>): String = buildString {
+        for (t in kept) {
+            append("<|im_start|>").append(if (t.fromUser) "user" else "assistant").append('\n')
+            append(t.text).append("<|im_end|>\n")
+        }
+    }
+
     /**
      * ChatML prompt ending in an opened <think> block, exactly like the model's own
      * template with add_generation_prompt=true. Pass startsInThink=true to ThinkBudget.
@@ -62,19 +84,10 @@ How to answer:
         system: String, history: List<Turn>, user: String, historyChars: Int = 3000, memory: String? = null,
         now: String? = null, memoryCap: Int = MemoryBrief.MAX_CHARS, memoryHeader: String = MemoryBrief.HEADER,
     ): String {
-        val kept = ArrayDeque<Turn>(); var used = 0
-        for (t in history.asReversed()) {
-            val text = if (t.fromUser) t.text.trim() else ThinkBudget.stripForHistory(t.text)
-            if (text.isEmpty()) continue
-            if (used + text.length > historyChars) break
-            kept.addFirst(Turn(t.fromUser, text)); used += text.length
-        }
+        val kept = keptHistory(history, historyChars)
         return buildString {
             append("<|im_start|>system\n").append(system.trim()).append("<|im_end|>\n")
-            for (t in kept) {
-                append("<|im_start|>").append(if (t.fromUser) "user" else "assistant").append('\n')
-                append(t.text).append("<|im_end|>\n")
-            }
+            append(renderHistory(kept))
             if (!memory.isNullOrBlank() || !now.isNullOrBlank()) {
                 append("<|im_start|>system\n")
                 if (!now.isNullOrBlank()) append("Now: ").append(now.trim()).append('\n')

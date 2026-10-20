@@ -115,6 +115,12 @@ class TestKitActivity : ComponentActivity() {
                         Button(onClick = { start { featureCheck() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
                             Text("5 · Feature check: tests every feature and scores it (~20–40 min, airplane mode ON)")
                         }
+                        Button(onClick = { start { cloudBrainCheck() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
+                            Text("6 · Cloud brain check: what the cloud model sees, can and can't use (asks before 1 API call)")
+                        }
+                        Button(onClick = { start { cloudStandInCheck() } }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
+                            Text("7 · Cloud stand-in diagnostic: the cloud model runs the on-device brain (muted, not cut; tools logged, not run; asks first)")
+                        }
                         // Not gated on busy: results so far can be saved while a long test runs.
                         Button(onClick = { lifecycleScope.launch { runCatching { saveAndShare() } } }, modifier = Modifier.fillMaxWidth()) {
                             Text("4 · Save results to Downloads + share")
@@ -342,7 +348,7 @@ class TestKitActivity : ComponentActivity() {
             // Test questions are not the owner's words: keep them out of memory and notes.
             brain.recordTurns = false
             try { brain.run(q) } finally { ChatStore.thinking.value = false; brain.recordTurns = true }
-            ChatStore.messages.lastOrNull { !it.fromUser }?.text.orEmpty()
+            ChatStore.messages.lastOrNull { !it.fromUser }?.id?.let(ChatStore::textOf).orEmpty()
         }
     }
 
@@ -427,6 +433,218 @@ class TestKitActivity : ComponentActivity() {
         confirmText.value = null
         confirmAnswer?.complete(yes)
         confirmAnswer = null
+    }
+
+    // ---------------------------------------------------------------- 6. cloud brain check
+
+    /**
+     * What the cloud (API) model is actually shown: its system prompt, the tools it is offered
+     * against the real ones, which of those can't work right now (access off), what it never
+     * gets, and the last real request. Then, if you say yes, one request to your provider: the
+     * same system prompt plus [CloudBrainReport.PROBE], and its own list of what it can and can't
+     * do is checked against what it was offered. Sent straight to the provider, not through the
+     * brain, so nothing in the answer is run.
+     */
+    private suspend fun cloudBrainCheck() {
+        val out = ArrayList<String>()
+        suspend fun line(s: String) { out += s; say(s) }
+        say("— Cloud brain check —")
+        val cfg = com.agent.ultra.provider.ProviderConfig.load(this)
+        val offline = com.agent.ultra.agent.NetPolicy.offlineOnly(this)
+        line("Provider: ${CloudBrainReport.host(cfg.baseUrl)} · model ${cfg.model} · key ${if (cfg.isUsable) "set" else "NOT set"}" +
+            if (offline) " · OFFLINE-ONLY is on (the cloud brain is not used)" else "")
+
+        val manifest = withContext(Dispatchers.IO) {
+            val tools = org.json.JSONObject(assets.open("ultra.manifest.json").bufferedReader().use { it.readText() })
+                .getJSONArray("tools")
+            (0 until tools.length()).map { tools.getJSONObject(it).getString("name") }.toSortedSet()
+        }
+        val prompt = withContext(Dispatchers.Main) {
+            ChatStore.chatBrain(applicationContext, LocalModelEngine.shared(this@TestKitActivity), KIT_CONFIG_VERSION)
+                .diagnosticSystemPrompt()
+        }
+        val offered = CloudBrainReport.named(com.agent.ultra.agent.Brain.TOOL_CATALOG, manifest)
+        line("System prompt: ${prompt.length} chars (~${CloudBrainReport.approxTokens(prompt.length)} tokens)")
+        line("Tools: ${manifest.size} real, ${offered.size} offered to the cloud model")
+        (manifest - offered).takeIf { it.isNotEmpty() }?.let { line("  Real but never offered to the cloud: ${it.joinToString()}") }
+        CloudBrainReport.unknownNames(com.agent.ultra.agent.Brain.TOOL_CATALOG, manifest)
+            .takeIf { it.isNotEmpty() }?.let { line("  Named in the catalog but not a real tool: ${it.joinToString()}") }
+
+        fun granted(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(this, p) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        val listeners = android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
+        val access = listOf(
+            CloudBrainReport.Access("Accessibility service", com.agent.ultra.AgentAccessibilityService.isRunning()),
+            CloudBrainReport.Access("Notification access", listeners.contains(packageName)),
+            CloudBrainReport.Access("SMS read", granted(android.Manifest.permission.READ_SMS)),
+            CloudBrainReport.Access("SMS send", granted(android.Manifest.permission.SEND_SMS)),
+            CloudBrainReport.Access("Contacts", granted(android.Manifest.permission.READ_CONTACTS)),
+            CloudBrainReport.Access("Location", granted(android.Manifest.permission.ACCESS_FINE_LOCATION) ||
+                granted(android.Manifest.permission.ACCESS_COARSE_LOCATION)),
+        )
+        line("Access now: " + access.joinToString(" · ") { "${it.name} ${if (it.ok) "on" else "OFF"}" })
+        val dead = CloudBrainReport.deadTools(access, offered)
+        if (dead.isEmpty()) line("Every offered tool has the access it needs.")
+        else {
+            line("Offered but can't work right now (the prompt still tells the model it has full access):")
+            dead.forEach { line("  $it") }
+        }
+        line("The cloud model never gets:")
+        CloudBrainReport.neverSees(com.agent.ultra.agent.Brain.FEEDBACK_DATA_CHARS).forEach { line("  - $it") }
+
+        val last = com.agent.ultra.agent.Brain.lastCloudRequest
+        if (last.isEmpty()) line("Last real request: none since the app started (ask Jarvis something first to see one).")
+        else {
+            line("Last real request (${last.size} messages, ${last.sumOf { it.second.length }} chars):")
+            CloudBrainReport.requestSummary(last).forEach { line("  $it") }
+        }
+
+        val live = when {
+            !cfg.isUsable -> { line("Live check skipped: no API key set (Settings → AI PROVIDER)."); false }
+            !online() -> { line("Live check skipped: offline."); false }
+            else -> askConfirm("Send one request to ${CloudBrainReport.host(cfg.baseUrl)} (${cfg.model})? " +
+                "It carries the system prompt above and asks the model to list what it can and can't do. Uses your API key.")
+                .also { if (!it) line("Live check skipped: you said no.") }
+        }
+        if (live) {
+            val client = com.agent.ultra.provider.OpenAiClient(cfg)
+            val t0 = System.currentTimeMillis()
+            val reply = client.complete(listOf(
+                com.agent.ultra.provider.OpenAiClient.ChatMessage("system", prompt),
+                com.agent.ultra.provider.OpenAiClient.ChatMessage("user", CloudBrainReport.PROBE),
+            ), maxTokens = 1200, temperature = 0.0)
+            val ms = System.currentTimeMillis() - t0
+            reply.onFailure { line("Live check FAILED after $ms ms: ${it.message?.take(300)}") }
+            reply.onSuccess { text ->
+                line("Live check: answered in $ms ms (finish: ${client.lastFinishReason ?: "not given"})")
+                val sc = CloudBrainReport.selfCheck(text, offered, manifest)
+                line("  Tools it listed: ${sc.listed.size} of ${offered.size} offered")
+                if (sc.missed.isNotEmpty()) line("  Offered but it didn't list (it may not know it has them): ${sc.missed.joinToString()}")
+                if (sc.invented.isNotEmpty()) line("  Listed but not real tools (calls would fail): ${sc.invented.joinToString()}")
+                line("  Its answer:")
+                text.take(3000).lines().forEach { line("    $it") }
+            }
+        }
+        record("CLOUD BRAIN CHECK", out + listOf("", "System prompt as sent:", prompt))
+        say("Done. Saved, with the full system prompt. Tap 4 to save the results file and send it.")
+    }
+
+    // ---------------------------------------------------------------- 7. cloud stand-in diagnostic
+
+    /**
+     * The cloud (API) model running the on-device brain's exact system prompt and tools, so it can
+     * see what the local model sees and report it. It is MUTED, never cut: at each point the
+     * on-device brain would be cut (its per-turn token budget), the muted tail is dropped and the
+     * model is told it was muted and why, then it keeps going ([CloudStandIn]). Tool calls are
+     * LOGGED, never executed — a stand-in result is returned so the run continues and nothing on
+     * the phone changes. Asks before the first API call; each turn uses the key.
+     */
+    private suspend fun cloudStandInCheck() {
+        val out = ArrayList<String>()
+        suspend fun line(s: String) { out += s; say(s) }
+        say("— Cloud stand-in diagnostic —")
+        val cfg = com.agent.ultra.provider.ProviderConfig.load(this)
+        line("Provider: ${CloudBrainReport.host(cfg.baseUrl)} · model ${cfg.model} · key ${if (cfg.isUsable) "set" else "NOT set"}")
+        if (!cfg.isUsable) { line("Skipped: no API key set (Settings → AI PROVIDER)."); record("CLOUD STAND-IN DIAGNOSTIC", out); return }
+        if (!online()) { line("Skipped: offline."); record("CLOUD STAND-IN DIAGNOSTIC", out); return }
+
+        val manifest = withContext(Dispatchers.IO) {
+            val tools = org.json.JSONObject(assets.open("ultra.manifest.json").bufferedReader().use { it.readText() })
+                .getJSONArray("tools")
+            (0 until tools.length()).map { tools.getJSONObject(it).getString("name") }.toSortedSet()
+        }
+        val basePrompt = withContext(Dispatchers.Main) {
+            ChatStore.chatBrain(applicationContext, LocalModelEngine.shared(this@TestKitActivity), KIT_CONFIG_VERSION)
+                .diagnosticSystemPrompt()
+        }
+        val offered = CloudBrainReport.named(com.agent.ultra.agent.Brain.TOOL_CATALOG, manifest)
+
+        fun granted(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(this, p) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        val listeners = android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
+        val access = listOf(
+            CloudBrainReport.Access("Accessibility service", com.agent.ultra.AgentAccessibilityService.isRunning()),
+            CloudBrainReport.Access("Notification access", listeners.contains(packageName)),
+            CloudBrainReport.Access("SMS read", granted(android.Manifest.permission.READ_SMS)),
+            CloudBrainReport.Access("SMS send", granted(android.Manifest.permission.SEND_SMS)),
+            CloudBrainReport.Access("Contacts", granted(android.Manifest.permission.READ_CONTACTS)),
+            CloudBrainReport.Access("Location", granted(android.Manifest.permission.ACCESS_FINE_LOCATION) ||
+                granted(android.Manifest.permission.ACCESS_COARSE_LOCATION)),
+        )
+        val dead = CloudBrainReport.deadTools(access, offered).map { it.substringBefore(" —") }.toSet()
+        line("Access now: " + access.joinToString(" · ") { "${it.name} ${if (it.ok) "on" else "OFF"}" })
+        line("Tools: ${offered.size} offered; ${if (dead.isEmpty()) "all have the access they need" else "${dead.size} limited (access off): ${dead.joinToString()}"}")
+        line("Tools are LOGGED, not run; the model is muted (not cut) at the on-device budget each turn.")
+
+        val go = askConfirm("Run the stand-in? Up to ${CloudStandIn.MAX_TURNS} requests to " +
+            "${CloudBrainReport.host(cfg.baseUrl)} (${cfg.model}), each with the brain's full system prompt. " +
+            "Tools are logged, never run. Uses your API key.")
+        if (!go) { line("Skipped: you said no."); record("CLOUD STAND-IN DIAGNOSTIC", out); return }
+
+        val client = com.agent.ultra.provider.OpenAiClient(cfg)
+        val toolDefs = com.agent.ultra.provider.NativeTools.definitions(offered, com.agent.ultra.agent.Brain.TOOL_CATALOG)
+        val messages = mutableListOf(
+            com.agent.ultra.provider.OpenAiClient.ChatMessage("system", basePrompt + "\n\n" + CloudStandIn.PROMPT),
+            com.agent.ultra.provider.OpenAiClient.ChatMessage("user",
+                "Begin the diagnostic. Try the tools you would use for a real task, then write your report."),
+        )
+        val mutes = ArrayList<CloudStandIn.MuteEvent>()
+        val ledger = ArrayList<String>()
+        val t0 = System.currentTimeMillis()
+
+        for (turn in 0 until CloudStandIn.MAX_TURNS) {
+            val budget = CloudStandIn.perTurnBudget(turn)
+            // Headroom over the budget so the reply can run past it and we can see the mute boundary.
+            val result = client.completeStreaming(messages, budget + 1200, 0.2, tools = toolDefs) { }
+            val reply = result.getOrNull()
+            if (reply == null) { line("Turn $turn FAILED: ${result.exceptionOrNull()?.message?.take(200)}"); break }
+
+            val boundary = CloudStandIn.muteBoundary(reply.length, budget)
+            val reason = if (boundary != null) CloudStandIn.Reason.BUDGET
+                else if (client.lastReplyTruncated) CloudStandIn.Reason.LENGTH else null
+            val kept = CloudStandIn.applyMute(reply, boundary)
+            if (reason != null) {
+                val e = CloudStandIn.MuteEvent(turn, reason,
+                    CloudBrainReport.approxTokens(kept.length), CloudBrainReport.approxTokens(reply.length - kept.length))
+                mutes += e
+                line("  [turn $turn] MUTED (${reason}): kept ~${e.keptTokens} tok, dropped ~${e.mutedTokens} tok")
+            }
+
+            val call = parseDiagToolCall(kept)
+            if (call != null) {
+                val (name, params) = call
+                val outcome = CloudStandIn.classify(name, manifest, dead)
+                ledger += "turn $turn · $name · $outcome"
+                line("  [turn $turn] TOOL $name → $outcome ${params.take(120)}")
+                messages += com.agent.ultra.provider.OpenAiClient.ChatMessage("assistant", kept)
+                messages += com.agent.ultra.provider.OpenAiClient.ChatMessage("user",
+                    "[stand-in: $name was not run; it would be $outcome. Continue.]" +
+                        (if (reason != null) " " + CloudStandIn.muteNotice(mutes.last()) else ""))
+            } else {
+                line("  [turn $turn] answer (${kept.length} chars)")
+                kept.take(2000).lines().forEach { line("    $it") }
+                if (reason == null) break // natural finish, no tool call, not muted
+                messages += com.agent.ultra.provider.OpenAiClient.ChatMessage("assistant", kept)
+                messages += com.agent.ultra.provider.OpenAiClient.ChatMessage("user", CloudStandIn.muteNotice(mutes.last()))
+            }
+        }
+
+        val ms = System.currentTimeMillis() - t0
+        line("Done in ${ms / 1000} s. Mutes: ${mutes.size}. Tool calls logged: ${ledger.size}.")
+        if (ledger.isNotEmpty()) { line("Tool-call ledger:"); ledger.forEach { line("  $it") } }
+        record("CLOUD STAND-IN DIAGNOSTIC", out + listOf("", "System prompt as sent:", basePrompt + "\n\n" + CloudStandIn.PROMPT))
+        say("Done. Saved. Tap 4 to save the results file and send it.")
+    }
+
+    /** First JSON object in a reply that is a tool call ({"tool","params"}), or null. Diagnostic-only. */
+    private fun parseDiagToolCall(text: String): Pair<String, String>? {
+        val a = text.indexOf('{'); if (a < 0) return null
+        val b = text.lastIndexOf('}'); if (b <= a) return null
+        return try {
+            val o = org.json.JSONObject(text.substring(a, b + 1))
+            val name = o.optString("tool").trim()
+            if (name.isEmpty()) null else name to (o.opt("params")?.toString() ?: "")
+        } catch (_: Exception) { null }
     }
 
     // ---------------------------------------------------------------- 4. save + share

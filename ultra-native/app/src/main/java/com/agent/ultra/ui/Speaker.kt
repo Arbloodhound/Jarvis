@@ -189,7 +189,7 @@ class Speaker(
         // The memory model gives way while Jarvis talks: synthesis is slower than speech when they share
         // the fast cores (Real-use check, Pixel 2026-10-07: Kokoro 1.4-1.5x real time beside it).
         com.agent.ultra.listen.Librarian.yieldNow()
-        val parts = LocalVoice.chunks(clean)
+        val parts = LocalVoice.chunks(clean, firstMax = FIRST_PART_CHARS)
         Log.i(TAG, "SPEAK OWN (${clean.length} chars, ${parts.size} parts) id=ultra-$g")
         var fallbackFrom = -1
         var written = 0          // parts fully handed to the track
@@ -418,6 +418,9 @@ class Speaker(
         /** "Hey Jarvis" over Jarvis's speech: listen at once, no echo tail. */
         fun clearEchoTail() { lastTalkEndAt = 0L }
         private const val TAG = "UltraSpeak"
+        /** The first piece synthesised: Piper made a 169-char sentence in one go before a word was
+         *  heard (Pixel 2026-10-17 22:47). ~80 chars is a few seconds of speech. */
+        private const val FIRST_PART_CHARS = 80
         private const val WRITE_SLICE = 2048   // samples, ~93 ms at 22 kHz
 
         private fun genOf(utteranceId: String?): Long =

@@ -10,11 +10,11 @@ class WaitBudgetTest {
 
     @Test fun unknownSpeedKeepsTierBudget() {
         for (t in Tier.values()) {
-            assertEquals(t.thinkBudget, WaitBudget.budget(t, null))
-            assertEquals(t.thinkBudget, WaitBudget.budget(t, 0.0))
-            assertEquals(t.thinkBudget, WaitBudget.budget(t, -3.0))
-            assertEquals(t.thinkBudget, WaitBudget.budget(t, Double.NaN))
-            assertEquals(t.thinkBudget, WaitBudget.budget(t, Double.POSITIVE_INFINITY))
+            assertEquals(minOf(t.thinkBudget, WaitBudget.budget(t, WaitBudget.UNKNOWN_TOK_PER_SEC)), WaitBudget.budget(t, null))
+            assertEquals(minOf(t.thinkBudget, WaitBudget.budget(t, WaitBudget.UNKNOWN_TOK_PER_SEC)), WaitBudget.budget(t, 0.0))
+            assertEquals(minOf(t.thinkBudget, WaitBudget.budget(t, WaitBudget.UNKNOWN_TOK_PER_SEC)), WaitBudget.budget(t, -3.0))
+            assertEquals(minOf(t.thinkBudget, WaitBudget.budget(t, WaitBudget.UNKNOWN_TOK_PER_SEC)), WaitBudget.budget(t, Double.NaN))
+            assertEquals(minOf(t.thinkBudget, WaitBudget.budget(t, WaitBudget.UNKNOWN_TOK_PER_SEC)), WaitBudget.budget(t, Double.POSITIVE_INFINITY))
         }
     }
 

@@ -58,7 +58,7 @@ class AmbientBacklogTest {
     }
 
     @Test fun defaultsAreSane() {
-        assertEquals(8, AmbientBacklog.MAX_ITEMS)
+        assertEquals(32, AmbientBacklog.MAX_ITEMS)
         // Holds a few max-length (28 s) utterances.
         assertTrue(AmbientBacklog.MAX_SAMPLES >= 4 * AmbientConfig.MAX_UTTER_MS / 1000 * AmbientConfig.SAMPLE_RATE)
     }
@@ -110,5 +110,20 @@ class AmbientBacklogTest {
         assertEquals(1L, AmbientBacklog.waitMs(true, 100_000L, 0L, 0L, 15_000L))
         // nothing queued and busy: bounded, not forever
         assertEquals(15_000L, AmbientBacklog.waitMs(true, 100_000L, 0L, null, 15_000L))
+    }
+
+    /** (window, short) pairs: what goes now while an answer runs. */
+    @Test fun duringAnAnswerOnlyJarvisSpeechAndAShortStopGoAtOnce() {
+        val q = listOf(false to false, false to true, true to false)
+        val win = { u: Pair<Boolean, Boolean> -> u.first }
+        val short = { u: Pair<Boolean, Boolean> -> u.second }
+        assertEquals(0, AmbientBacklog.next(q, win, short, drain = true, running = true))
+        assertEquals(2, AmbientBacklog.next(q, win, short, drain = false, running = true))
+        val noWindow = q.take(2)
+        assertEquals(1, AmbientBacklog.next(noWindow, win, short, drain = false, running = true))
+        // Brain busy without a run (e.g. loading): a short clip waits too.
+        assertEquals(null, AmbientBacklog.next(noWindow, win, short, drain = false, running = false))
+        assertEquals(null, AmbientBacklog.next(listOf(false to false), win, short, drain = false, running = true))
+        assertEquals(null, AmbientBacklog.next(emptyList(), win, short, drain = true, running = true))
     }
 }

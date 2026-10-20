@@ -51,6 +51,8 @@ fun ChatScreen(
     onOpenMemory: () -> Unit = {},
     onOpenGuide: () -> Unit = {},
     onOpenInsights: () -> Unit = {},
+    onOpenForYou: () -> Unit = {},
+    onModelChanged: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -281,6 +283,8 @@ fun ChatScreen(
                 Text("⚙", style = MaterialTheme.typography.titleLarge)
             }
         }
+        // Unfinished setup: one line, opening the checklist (gone once every required step is done).
+        SetupChecklistBanner(context)
 
         // Model chip + quick actions (drive through the agent's own local-first
         // router — these exercise the same path as typed commands)
@@ -294,17 +298,24 @@ fun ChatScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            var showModelPicker by remember { mutableStateOf(false) }
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.clickable { showModelPicker = true },
             ) {
                 Text(
-                    brain.modelLabel,
+                    "${brain.modelLabel} ▾",
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     maxLines = 1,
                 )
             }
+            if (showModelPicker) ModelPicker(
+                localEngine = localEngine,
+                onChanged = onModelChanged,
+                onDismiss = { showModelPicker = false },
+            )
             TextButton(enabled = !thinking, onClick = {
                 torchOn = !torchOn
                 val cmd = if (torchOn) "turn on the flashlight" else "turn off the flashlight"
@@ -324,6 +335,7 @@ fun ChatScreen(
             TextButton(onClick = onOpenNotes) { Text("📝") }
             TextButton(onClick = onOpenMemory) { Text("🧠") }
             TextButton(onClick = onOpenInsights) { Text("💡") }   // conversation insights
+            TextButton(onClick = onOpenForYou) { Text("✨") }     // For you: feed + ideas
             TextButton(onClick = onOpenGuide) { Text("📖") }   // the complete guide
             // Hands-free session. Reachable here too, so it works before the
             // user has made Ultra their assistant app.
@@ -353,6 +365,20 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = if (msg.fromUser) Alignment.End else Alignment.Start,
                 ) {
+                    // The thinking that led to this answer stays with it (DeepSeek-style): tap to read it all.
+                    ChatStore.thoughts[msg.id]?.let { thought ->
+                        var open by remember(msg.id) { mutableStateOf(false) }
+                        Text(
+                            text = if (open) "Thought  ▾\n$thought" else "Thought  ▸  " + thought.takeLast(80).replace('\n', ' '),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                            maxLines = if (open) Int.MAX_VALUE else 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .clickable { open = !open }
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
                     // Tap: Copy / Edit / Branch under the bubble. Press and hold: select any part of it.
                     Surface(
                         color = if (msg.fromUser) MaterialTheme.colorScheme.primary
@@ -362,7 +388,9 @@ fun ChatScreen(
                     ) {
                         androidx.compose.foundation.text.selection.SelectionContainer {
                             Text(
-                                text = msg.text,
+                                // The model's Markdown drawn (bold, code, bullets…); the owner's words as typed.
+                                text = if (msg.fromUser) androidx.compose.ui.text.AnnotatedString(msg.text)
+                                    else remember(msg.text) { ChatMarkdown.render(msg.text) },
                                 color = if (msg.fromUser) MaterialTheme.colorScheme.onPrimary
                                 else MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -387,12 +415,40 @@ fun ChatScreen(
             }
             status?.let { s ->
                 item(key = "status") {
-                    Text(
-                        text = ChatStatus.label(s.phase, statusNow - s.sinceMs, s.detail),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
-                    )
+                    val preview = if (s.phase == ChatStatus.Phase.THINKING)
+                        s.detail.removePrefix("💭").trim().trimStart('…', ' ') else ""
+                    if (preview.isNotBlank()) {
+                        // Expandable thinking line (like Claude / Gemini): one-line preview, tap for more.
+                        var expanded by remember { mutableStateOf(false) }
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { expanded = !expanded }
+                                .padding(horizontal = 14.dp, vertical = 2.dp),
+                        ) {
+                            Text(
+                                text = ChatStatus.label(s.phase, statusNow - s.sinceMs) + (if (expanded) "  ▾" else "  ▸"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            // Collapsed: the latest words. Expanded: the whole trace, every line
+                            // (owner, 2026-10-18: "all its thoughts, like DeepSeek").
+                            Text(
+                                text = if (expanded) preview else "…" + preview.takeLast(160).replace('\n', ' '),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                maxLines = if (expanded) Int.MAX_VALUE else 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = ChatStatus.label(s.phase, statusNow - s.sinceMs, s.detail),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+                        )
+                    }
                 }
             }
         }
@@ -542,31 +598,51 @@ fun ChatScreen(
                 modifier = Modifier.weight(1f),
                 maxLines = 4,
             )
-            // Voice input — on-device speech recognition fills the box
+            // Voice input — on-device speech recognition fills the box, live as you talk
             var listening by remember { mutableStateOf(false) }
+            // What was in the box before the mic started, so live words don't eat typed text.
+            var preVoice by remember { mutableStateOf("") }
             val speechHelper = remember {
                 VoiceInput(
                     context,
                     onError = { msg ->
                         listening = false
+                        input = preVoice   // put back whatever was typed before the mic
                         android.widget.Toast.makeText(context, "Voice: $msg", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    onState = { st ->
+                        // Something shows the moment the mic is on, before any words are read.
+                        if (st == "listening") input = listOf(preVoice, "🎙 …").filter { it.isNotBlank() }.joinToString(" ")
+                    },
+                    onPartial = { words ->
+                        // Live words appear in the box while you're still talking (like Claude / Gemini).
+                        input = listOf(preVoice, words).filter { it.isNotBlank() }.joinToString(" ")
                     },
                 ) { spoken ->
                     listening = false
                     // Speaking is asking: what was said runs at once, like Send (owner, 2026-10-07: it only
                     // filled the box, so a spoken request did nothing until Send was pressed), and is
                     // answered out loud. Said mid-run, it stops or changes that run (sendNow).
-                    val text = (input + " " + spoken).trim()
-                    if (text.isNotEmpty()) { input = ""; sendNow(text, spoken = true) }
+                    val text = listOf(preVoice, spoken).filter { it.isNotBlank() }.joinToString(" ").trim()
+                    if (text.isNotEmpty()) { input = ""; preVoice = ""; sendNow(text, spoken = true) }
                 }
             }
             DisposableEffect(speechHelper) { onDispose { speechHelper.stop() } }
             val askMic = androidx.activity.compose.rememberLauncherForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-            ) { granted -> if (granted) listening = speechHelper.start() }
+            ) { granted -> if (granted) { preVoice = input; listening = speechHelper.start() } }
+            val startMic = {
+                // Jarvis stops talking when you go to speak (the mic must not hear it), and a run
+                // still answering stays quiet; what you say can then stop or change it.
+                com.agent.ultra.agent.Brain.hushAll()
+                SpeechQueue.stopAll()
+                preVoice = input
+                listening = speechHelper.start()
+            }
             TextButton(onClick = {
                 if (listening) {
-                    speechHelper.stop()
+                    // Stop recording now and use what was heard (not throw it away).
+                    speechHelper.finish()
                     listening = false
                 } else if (androidx.core.content.ContextCompat.checkSelfPermission(
                         context, android.Manifest.permission.RECORD_AUDIO
@@ -574,14 +650,10 @@ fun ChatScreen(
                 ) {
                     askMic.launch(android.Manifest.permission.RECORD_AUDIO)
                 } else {
-                    // Jarvis stops talking when you go to speak (the mic must not hear it), and a run
-                    // still answering stays quiet; what you say can then stop or change it.
-                    com.agent.ultra.agent.Brain.hushAll()
-                    SpeechQueue.stopAll()
-                    listening = speechHelper.start()
+                    startMic()
                 }
             }) {
-                Text(if (listening) "🎙…" else "🎙")
+                Text(if (listening) "■ stop" else "🎙")
             }
             // While anything runs (thinking, answering, driving another app): stop it and any
             // speech. Generation stops at the next token; any open confirmation is denied.

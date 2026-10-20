@@ -27,6 +27,12 @@ public class AgentAccessibilityService extends AccessibilityService {
     private static AgentAccessibilityService instance;
     private static final Object instanceLock = new Object();
     private String currentPackage = "";
+    // Harness screen guard (harness/ScreenGuard.kt, adapted from OpenClaw, MIT): every flat screen
+    // read is a snapshot; uiEpoch moves on each window change, so an action bound to an older
+    // snapshot can be refused (preflightSnapshot). Password fields are never typed into (performText).
+    private final com.agent.ultra.harness.ScreenGuard screenGuard = new com.agent.ultra.harness.ScreenGuard();
+    private volatile long uiEpoch = 0L;
+    private volatile String lastSnapshotId = null;
     private static final Set<String> allowedPackages = Collections.synchronizedSet(new HashSet<String>());
     private static final Set<String> blockedPackages = new java.util.concurrent.ConcurrentSkipListSet<>();
     public interface UiTreeListener {
@@ -359,6 +365,11 @@ public class AgentAccessibilityService extends AccessibilityService {
 
     public static boolean isAllowlistMode() { return allowlistMode; }
 
+    private static volatile long lastOtherAppEventUptime = 0L;
+
+    /** Monotonic ms (System.nanoTime) of the last accessibility event from an app other than Jarvis. */
+    public static long lastOtherAppEventUptime() { return lastOtherAppEventUptime; }
+
     /** The single question every read and every action must ask. */
     public static boolean agentMayUse(String pkg) {
         if (pkg == null) return false;
@@ -562,6 +573,11 @@ public class AgentAccessibilityService extends AccessibilityService {
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
+        // When another app's screen last changed (agent.ScreenSettle): Jarvis's own window
+        // (its chat streaming while the navigator works) doesn't count.
+        if (event.getPackageName() != null && !getPackageName().contentEquals(event.getPackageName())) {
+            lastOtherAppEventUptime = System.nanoTime() / 1_000_000L;
+        }
         long evtNow = System.currentTimeMillis();
         if (evtNow - lastEventPersistedAt >= LAST_EVENT_PERSIST_MS) {
             lastEventPersistedAt = evtNow;
@@ -573,7 +589,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                     .apply();
             } catch (Exception e) {}
         }
-        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) refreshImePackages();
+        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { refreshImePackages(); uiEpoch++; }
         if (event.getPackageName() != null) {
             String evtPkg = event.getPackageName().toString();
             // The keyboard, the status bar and the notification shade all emit
@@ -856,10 +872,46 @@ public class AgentAccessibilityService extends AccessibilityService {
         }
     }
 
+    /** The snapshot id of the last flat screen read (harness ScreenGuard), or null. */
+    public String getScreenSnapshotId() { return lastSnapshotId; }
+
+    /**
+     * Null when an action bound to [snapshotId] may run; otherwise why not (the screen changed or
+     * the foreground app changed since that read) — the caller reads the screen again.
+     */
+    public String preflightSnapshot(String snapshotId) {
+        synchronized (screenGuard) {
+            try {
+                screenGuard.preflight(snapshotId, uiEpoch, currentPackage);
+                return null;
+            } catch (Exception e) {
+                // StaleTarget (a Kotlin exception, so Java can't name it in a catch here).
+                return e.getMessage() != null ? e.getMessage() : "Observe again before acting";
+            }
+        }
+    }
+
+    /**
+     * The worker that reads the screen tree (getScreenContentFlat). Node reads are binder calls and
+     * work from any thread; on the main thread a full tree walk froze Jarvis's own UI for up to
+     * 4 s per read (CROSSEVAL_OPENCLAW §3; OpenClaw reads on a background dispatcher). One thread,
+     * so reads stay in order.
+     */
+    private static Handler readHandler;
+
+    private static synchronized Handler readHandler() {
+        if (readHandler == null) {
+            android.os.HandlerThread t = new android.os.HandlerThread("ultra-a11y-read");
+            t.start();
+            readHandler = new Handler(t.getLooper());
+        }
+        return readHandler;
+    }
+
     public String getScreenContentFlat() {
         AtomicReference<String> result = new AtomicReference<>("[]");
         CountDownLatch latch = new CountDownLatch(1);
-        new Handler(Looper.getMainLooper()).post(() -> {
+        readHandler().post(() -> {
             try {
                 // Find the target app window, not Jarvis's own window
                 // Topmost, not first: an open menu is a window above the page,
@@ -916,6 +968,9 @@ public class AgentAccessibilityService extends AccessibilityService {
                         }
                     }
                     result.set(flat.toString());
+                    synchronized (screenGuard) {
+                        lastSnapshotId = screenGuard.observe(uiEpoch, rootPkg != null ? rootPkg.toString() : "");
+                    }
                 } else {
                     Log.i(TAG, "SCREEN_FLAT: root=null");
                 }
@@ -1764,8 +1819,18 @@ public class AgentAccessibilityService extends AccessibilityService {
         boolean result = false;
         if (target != null) {
             Bundle args = new Bundle();
-            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
-            result = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+            boolean secure = false;
+            try {
+                screenGuard.requireNotPassword(target.getInputType(), target.isPassword(), "");
+            } catch (Exception e) {
+                // SecureContentRefused: the field is a password field.
+                secure = true;
+                Log.i(TAG, "TEXT: refused — password field");
+            }
+            if (!secure) {
+                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                result = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
+            }
             target.recycle();
         }
         if (root != null) root.recycle();

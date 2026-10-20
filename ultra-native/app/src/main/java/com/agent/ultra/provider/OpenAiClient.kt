@@ -53,6 +53,30 @@ class OpenAiClient(
         messages: List<ChatMessage>,
         maxTokens: Int,
         temperature: Double,
+    ): Result<String> = retryWithoutTemperature { completeOnce(messages, maxTokens, temperature) }
+
+    /**
+     * Newer models refuse the field outright (Pixel cloud check, 3.0.73, claude-opus-5-5:
+     * "HTTP 400: `temperature` is deprecated for this model"). On that error the request goes again
+     * without it, and this client never sends it again.
+     */
+    @Volatile var temperatureRejected = false
+        private set
+
+    private suspend fun retryWithoutTemperature(send: suspend () -> Result<String>): Result<String> {
+        val r = send()
+        if (!temperatureRejected && r.exceptionOrNull()?.message?.let { rejectedTemperature(it) } == true) {
+            temperatureRejected = true
+            android.util.Log.i("UltraProvider", "provider rejected temperature; sent without it from now on")
+            return send()
+        }
+        return r
+    }
+
+    private suspend fun completeOnce(
+        messages: List<ChatMessage>,
+        maxTokens: Int,
+        temperature: Double,
     ): Result<String> = withContext(Dispatchers.IO) {
         lastFinishReason = null
         try {
@@ -64,7 +88,7 @@ class OpenAiClient(
                 .put("model", config.model)
                 .put("messages", msgs)
                 .put("max_tokens", maxTokens)
-                .put("temperature", temperature)
+                .also { if (!temperatureRejected) it.put("temperature", temperature) }
                 .put("stream", false)
                 .also { applyVeniceParameters(it) }
 
@@ -108,6 +132,34 @@ class OpenAiClient(
         messages: List<ChatMessage>,
         maxTokens: Int,
         temperature: Double,
+        /**
+         * Native tool definitions (OpenAI "tools"). A native call comes back as the same text a
+         * text-protocol call is — {"tool":"name","params":{...}} — so callers parse one format.
+         * A provider that rejects "tools" gets the request again without them, and never again
+         * from this client ([nativeToolsRejected]).
+         */
+        tools: JSONArray? = null,
+        onToken: (String) -> Unit,
+    ): Result<String> {
+        val useTools = tools != null && !nativeToolsRejected
+        val r = retryWithoutTemperature { streamOnce(messages, maxTokens, temperature, if (useTools) tools else null, onToken) }
+        if (useTools && r.exceptionOrNull()?.message?.let { NativeTools.rejectedTools(it) } == true) {
+            nativeToolsRejected = true
+            android.util.Log.i("UltraProvider", "provider rejected native tools; text protocol from now on")
+            return retryWithoutTemperature { streamOnce(messages, maxTokens, temperature, null, onToken) }
+        }
+        return r
+    }
+
+    /** True once the provider refused a request with "tools" in it. */
+    @Volatile var nativeToolsRejected = false
+        private set
+
+    private suspend fun streamOnce(
+        messages: List<ChatMessage>,
+        maxTokens: Int,
+        temperature: Double,
+        tools: JSONArray?,
         onToken: (String) -> Unit,
     ): Result<String> = withContext(Dispatchers.IO) {
         lastFinishReason = null
@@ -120,9 +172,10 @@ class OpenAiClient(
                 .put("model", config.model)
                 .put("messages", msgs)
                 .put("max_tokens", maxTokens)
-                .put("temperature", temperature)
+                .also { if (!temperatureRejected) it.put("temperature", temperature) }
                 .put("stream", true)
                 .also { applyVeniceParameters(it) }
+            if (tools != null) bodyJson.put("tools", tools).put("tool_choice", "auto")
 
             val req = Request.Builder()
                 .url(config.baseUrl.trimEnd('/') + "/chat/completions")
@@ -138,6 +191,7 @@ class OpenAiClient(
                     return@cancelOnStop Result.failure(Exception("HTTP ${resp.code}: ${body.take(300)}"))
                 }
                 val full = StringBuilder()
+                val calls = NativeTools.CallAccumulator()
                 var finish: String? = null
                 resp.body!!.source().use { source ->
                     while (!source.exhausted()) {
@@ -154,6 +208,7 @@ class OpenAiClient(
                         }
                         val choice = frame.optJSONArray("choices")?.optJSONObject(0) ?: continue
                         finishReasonOf(choice)?.let { finish = it }
+                        choice.optJSONObject("delta")?.optJSONArray("tool_calls")?.let { calls.add(it) }
                         val delta = choice.optJSONObject("delta")?.optString("content", "") ?: ""
                         if (delta.isNotEmpty()) {
                             full.append(delta)
@@ -162,6 +217,8 @@ class OpenAiClient(
                     }
                 }
                 lastFinishReason = finish
+                // A native call wins over any text around it: the loop runs one tool per turn.
+                calls.asTextCall()?.let { return@cancelOnStop Result.success(it) }
                 if (finish == "length") {
                     android.util.Log.w("UltraProvider", "reply cut off at max_tokens=$maxTokens (finish_reason=length)")
                 }
@@ -208,5 +265,10 @@ class OpenAiClient(
     companion object {
         /** Production deadline for one model call (connect to last streamed byte). */
         const val DEFAULT_CALL_TIMEOUT_MS = 180_000L
+
+        /** A 400 that names temperature as deprecated or unsupported. Pure, JVM-tested. */
+        fun rejectedTemperature(error: String): Boolean =
+            error.startsWith("HTTP 400") && error.contains("temperature") &&
+                Regex("deprecated|not supported|unsupported", RegexOption.IGNORE_CASE).containsMatchIn(error)
     }
 }

@@ -19,6 +19,9 @@ data class ToolSpec(
 )
 
 class Manifest(private val specs: Map<String, ToolSpec>) {
+    /** Every declared tool name. */
+    fun names(): Set<String> = specs.keys
+
     fun tool(name: String): ToolSpec? = specs[name]
 
     /** How many tools are declared. The About screen states this number, and

@@ -117,6 +117,12 @@ class AgentController(private val context: Context) {
      * app is settling after a transition (proven on device: root=null bursts
      * after Chrome launched) — retry with backoff before reporting empty.
      */
+    /** The id of the last screen read (harness ScreenGuard snapshot), or null. */
+    fun screenSnapshotId(): String? = service?.screenSnapshotId
+
+    /** Null when an action read from snapshot [id] may run; else why not (window or app changed). */
+    fun snapshotStale(id: String?): String? = if (id == null) null else service?.preflightSnapshot(id)
+
     suspend fun screenFlat(): String = withContext(Dispatchers.IO) {
         val svc = serviceOrWait() ?: return@withContext "[]"
         var result = svc.getScreenContentFlat() ?: "[]"
@@ -216,6 +222,23 @@ class AgentController(private val context: Context) {
 
     // ── Apps ────────────────────────────────────────────────────────────
 
+    /** Light the screen for a task that has to drive an app, when the phone is asleep but NOT locked
+     *  (inside the lock-after-sleep grace). A locked phone stays dark: Android lets no app unlock it,
+     *  and nobody else's hands should be driving it. Held 45 s, then released. Returns whether it woke. */
+    @Suppress("DEPRECATION")
+    fun wakeScreenIfUnlocked(): Boolean = try {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (pm.isInteractive || km.isKeyguardLocked) false else {
+            pm.newWakeLock(
+                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "ultra:screenTask",
+            ).acquire(45_000L)
+            android.util.Log.i("UltraNav", "screen woken for an app task")
+            true
+        }
+    } catch (_: Exception) { false }
+
     fun launchApp(packageName: String): Boolean {
         // Launching goes through an Intent, not the accessibility service, so
         // the app policy has to be asked here too. Otherwise "only apps I
@@ -226,6 +249,7 @@ class AgentController(private val context: Context) {
         }
         val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        wakeScreenIfUnlocked()
         context.startActivity(intent)
         return true
     }
@@ -237,7 +261,18 @@ class AgentController(private val context: Context) {
         val apps = pm.queryIntentActivities(intent, 0)
         // Ranking lives in AppMatch so it can be tested off the phone.
         return AppMatch.find(q, apps.map { AppMatch.App(it.loadLabel(pm).toString(), it.activityInfo.packageName) })
+            ?: if (q.trim() in BROWSER_NAMES) defaultBrowserPackage() else null
     }
+
+    /** What people call "the browser" when no app has that name (no Google app on GrapheneOS). */
+    private val BROWSER_NAMES = setOf("browser", "google", "chrome", "web", "the web", "internet", "the internet", "web browser")
+
+    /** The app that opens https links, or null. */
+    fun defaultBrowserPackage(): String? = try {
+        context.packageManager.resolveActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com")), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+        )?.activityInfo?.packageName?.takeIf { it != "android" }
+    } catch (_: Exception) { null }
 
     fun listLaunchableApps(): List<Pair<String, String>> {
         val pm = context.packageManager
@@ -249,6 +284,7 @@ class AgentController(private val context: Context) {
 
     fun openUrl(url: String): Boolean = try {
         val u = if (url.startsWith("http")) url else "https://$url"
+        wakeScreenIfUnlocked()
         context.startActivity(
             Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
@@ -370,6 +406,42 @@ class AgentController(private val context: Context) {
         @Suppress("DEPRECATION")
         SmsManager.getDefault().sendTextMessage(to, null, message, null, null)
         true
+    } catch (_: Exception) { false }
+
+    /** Place a real phone call to [number]. ACTION_CALL dials immediately (needs the CALL_PHONE
+     *  runtime permission — a SecurityException if it is off). NEW_TASK: started from a non-activity
+     *  context. The gate confirms the call and checks the number is traceable before this runs. */
+    fun placeCall(number: String): Boolean = try {
+        val intent = android.content.Intent(
+            android.content.Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(number)))
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+        true
+    } catch (_: Exception) { false }
+
+    /** Pick up the call that is ringing. Needs ANSWER_PHONE_CALLS; false when nothing rings or it is off. */
+    fun answerCall(): Boolean = try {
+        val tm = context.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !tm.isInCall) false
+        else { @Suppress("DEPRECATION") tm.acceptRingingCall(); true }
+    } catch (_: Exception) { false }
+
+    /** Hang up the call in progress, or decline the ringing one. Needs ANSWER_PHONE_CALLS (Android 9+). */
+    fun endCall(): Boolean = try {
+        val tm = context.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) false
+        else @Suppress("DEPRECATION") tm.endCall()
+    } catch (_: Exception) { false }
+
+    /** Speakerphone on or off for the call in progress. No permission needed. */
+    fun setSpeakerphone(on: Boolean): Boolean = try {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (on) am.availableCommunicationDevices
+                .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                ?.let { am.setCommunicationDevice(it) } ?: false
+            else { am.clearCommunicationDevice(); true }
+        } else { @Suppress("DEPRECATION") run { am.isSpeakerphoneOn = on }; true }
     } catch (_: Exception) { false }
 
     fun readSms(limit: Int): String = try {

@@ -112,9 +112,11 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
     /** Workers the thinker's pinned pool is created with: one per LLM core (up to 6), more than
      *  the [engineThreads] it decodes with, so the speed test can still try 5 and 6 threads. This
      *  is the layout the Pixel speed test measured (6-worker pool, 4 decoding = fastest); idle
-     *  workers just wait. The librarian's pool is its own thread count. */
+     *  workers just wait. The librarian's pool is [ACTION_THREADS]: as the action model it decodes
+     *  with all of them (the thinker waits on its tool call); background memory work uses
+     *  [engineThreads]. */
     private val poolThreads: Int
-        get() = if (role == Role.LIBRARIAN) engineThreads
+        get() = if (role == Role.LIBRARIAN) minOf(ACTION_THREADS, baseThreads())
             else maxOf(engineThreads, CpuTopology.current.llmCpus.size)
 
     /**
@@ -497,9 +499,9 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             val topo = CpuTopology.current
             // The librarian's few workers go on the fastest of the LLM cores (none listed = unpinned).
             val threads = engineThreads
-            val cpus = if (role == Role.LIBRARIAN) topo.fastestFirst.filter { it in topo.llmCpus }.take(threads).sorted()
-                else topo.llmCpus
             val pool = poolThreads
+            val cpus = if (role == Role.LIBRARIAN) topo.fastestFirst.filter { it in topo.llmCpus }.take(pool).sorted()
+                else topo.llmCpus
             android.util.Log.i("UltraLlm", "$role cpus llm=$cpus whisper=${topo.whisperCpus} threads=$threads pool=$pool")
             val ctx = if (plannedCtx > 0) plannedCtx else plannedContext()
             // A resident copy can't give pages back: what a ctx above 4096 adds (KV, mask) must
@@ -645,6 +647,10 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         draft: Boolean? = null,
         /** Benchmark only: draft length (> 0), instead of [DraftModel.DRAFT_MAX]. */
         draftLen: Int = 0,
+        /** A tool call the person is waiting on (the action model): the librarian decodes with its whole
+         *  pool, [ACTION_THREADS], not the background [LIBRARIAN_THREADS] (Pixel log 2026-10-19: the first
+         *  tool call took 61 s on 2 cores). */
+        foreground: Boolean = false,
         onStart: () -> Unit = {},
         onToken: (String) -> Unit = {},
     ): Result<String> = withContext(Dispatchers.IO) { thinkerDemanding {
@@ -677,7 +683,8 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 val t0 = System.currentTimeMillis()
                 val faults0 = PageFaults.read()
                 val nThreads = if (exactThreads && threads > 0) minOf(threads, poolThreads)
-                    else ThermalPolicy.resolveThreads(threads, ThermalGuard.level, engineThreads)
+                    else ThermalPolicy.resolveThreads(threads, ThermalGuard.level,
+                        if (role == Role.LIBRARIAN && foreground) poolThreads else engineThreads)
                 onStart()
                 // Decode speed: time from the first sampled token to the last, so prompt prefill
                 // (which grows with history) doesn't drag the estimate down.
@@ -855,6 +862,9 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
 
         /** The librarian's thread count: a few workers, so it never takes the thinker's cores. */
         const val LIBRARIAN_THREADS = 2
+
+        /** The librarian's pool, all used when it is the action model on a tool call (owner, 2026-10-20). */
+        const val ACTION_THREADS = 4
 
         /** Largest preset offered as the librarian (Settings → MEMORY MODEL). */
         const val LIBRARIAN_MAX_MB = 1_500
@@ -1216,6 +1226,22 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 "https://huggingface.co/bartowski/google_gemma-4-E2B-it-GGUF/resolve/main/google_gemma-4-E2B-it-Q4_K_M.gguf",
                 "gemma4-e2b-q4km.gguf", 3302,
                 "Google's latest small model. Better reasoning than Gemma 3 at similar speed. Needs 6GB+ RAM.",
+            ),
+            // Liquid AI LFM2.5 (2026-10-18, owner: "something faster"). Files and sizes from the Hub
+            // listing (LiquidAI/*-GGUF): 1,593,894,912 B and 4,844,678,368 B. The lfm2 / lfm2moe
+            // architectures are in the pinned llama.cpp (8345f33). Not thinking models: they answer
+            // without a hidden trace. Speed and tool-call quality on the Pixel are unmeasured.
+            ModelChoice(
+                "LFM2.5 2.6B (Q4_0) — fast, answers without thinking (refusals on)",
+                "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/main/LFM2.5-2.6B-Q4_0.gguf",
+                "lfm25-2.6b-q4_0.gguf", 1520,
+                "Liquid AI's on-device model: a hybrid design built to run fast on phone CPUs. No hidden thinking, so the reply starts almost at once.",
+            ),
+            ModelChoice(
+                "LFM2.5 8B-A1B MoE (Q4_0) — fast and bigger",
+                "https://huggingface.co/LiquidAI/LFM2.5-8B-A1B-GGUF/resolve/main/LFM2.5-8B-A1B-Q4_0.gguf",
+                "lfm25-8b-a1b-q4_0.gguf", 4620,
+                "8B of knowledge, but only about 1B works per word, so it runs near 1B-model speed. Needs 8GB+ RAM.",
             ),
             ModelChoice(
                 "Qwen2.5 7B (Q4_K_M)",

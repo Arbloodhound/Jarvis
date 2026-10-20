@@ -39,4 +39,15 @@ class AmbientThrottleTest {
         assertEquals(2 to little.toList(), place(busy = false, cool = false))
         assertEquals(2 to little.toList(), place(busy = false, cool = true, l = IntArray(0)))   // cores unknown
     }
+
+    /** Speech to Jarvis takes the big cores even while an answer runs or the phone is warm. */
+    @Test fun commandAlwaysUsesTheBigCores() {
+        fun cmd(busy: Boolean, cool: Boolean) =
+            AmbientThrottle.placement(d(NORMAL), busy, cool, llm, little, command = true).let { it.first to it.second.toList() }
+        assertEquals(2 to llm.toList(), cmd(busy = true, cool = true))     // an answer is running: 2 threads
+        assertEquals(2 to llm.toList(), cmd(busy = true, cool = false))
+        assertEquals(4 to llm.toList(), cmd(busy = false, cool = true))
+        assertEquals(2 to little.toList(),
+            AmbientThrottle.placement(d(NORMAL), true, true, IntArray(0), little, command = true).let { it.first to it.second.toList() })
+    }
 }

@@ -51,11 +51,14 @@ class ThinkingDepthTest {
         }
     }
 
-    @Test fun unknownSpeedKeepsTheTierBudgetAtEveryDepth() {
+    @Test fun unknownSpeedAssumesASlowPhoneAndStaysWithinTheTierBudget() {
         for (d in Depth.values()) for (t in Tier.values()) {
-            assertEquals(t.thinkBudget, WaitBudget.budget(t, null, d))
-            assertEquals(t.thinkBudget, WaitBudget.budget(t, Double.NaN, d))
+            val expect = minOf(t.thinkBudget, WaitBudget.budget(t, WaitBudget.UNKNOWN_TOK_PER_SEC, d))
+            assertEquals("$t $d", expect, WaitBudget.budget(t, null, d))
+            assertEquals("$t $d", expect, WaitBudget.budget(t, Double.NaN, d))
         }
+        // The Pixel's 200 s silence: a NORMAL request no longer gets the whole 512 unmeasured.
+        assertTrue(WaitBudget.budget(Tier.NORMAL, null, Depth.QUICK) <= 64)
     }
 
     @Test fun deeperNeverThinksLess() {

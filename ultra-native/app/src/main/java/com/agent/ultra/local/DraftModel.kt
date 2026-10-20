@@ -35,10 +35,12 @@ object DraftModel {
 
     private const val MIB = 1_048_576L
 
-    /** Free memory that must remain after the draft is attached: the same planning figure the
-     *  thinker's load keeps free ([LocalModelEngine.THINKER_FREE_AFTER_LOAD_BYTES]), so the
-     *  draft never eats into it (nor into the librarian's room). */
-    const val FREE_AFTER_BYTES = LocalModelEngine.THINKER_FREE_AFTER_LOAD_BYTES
+    /** Free memory that must remain after the draft is attached. It was the thinker's 3 GB
+     *  planning figure ([LocalModelEngine.THINKER_FREE_AFTER_LOAD_BYTES]); on the Pixel that left the
+     *  draft skipped on almost every answer ("roomMB=3659 need 675 + 3072", 2026-10-18) while runs
+     *  with it reached 5-7 tok/s against 1-3 without. 2 GB still leaves room for the memory/action
+     *  model (~1.7 GB at 4096). Runtime-unproven. */
+    const val FREE_AFTER_BYTES = 2_048L * MIB
 
     /** Qwen3-0.6B: 28 layers x 8 KV heads x 128, vocab 151,936 (its config.json). */
     private const val LAYERS = 28

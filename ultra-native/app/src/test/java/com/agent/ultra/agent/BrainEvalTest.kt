@@ -56,7 +56,7 @@ class BrainEvalTest {
                 continue
             }
             BrainHarness().use { h ->
-                com.agent.ultra.ui.UltraPrefs.setOfflineOnly(h.ctx, c.optBoolean("offline_only"))
+                com.agent.ultra.ui.UltraPrefs.setOfflineOnly(h.ctx, c.optBoolean("offline_only")); com.agent.ultra.ui.UltraPrefs.setCloudBrain(h.ctx, true)
                 val clip = h.ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 if (c.has("clipboard")) clip.setPrimaryClip(android.content.ClipData.newPlainText("eval", c.getString("clipboard")))
                 else clip.clearPrimaryClip()

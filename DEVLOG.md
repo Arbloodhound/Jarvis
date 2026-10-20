@@ -3,6 +3,194 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-20 — Jarvis on/off switch; CI build time measured
+- JarvisPower (pref jarvis_power/on, default ON) + Quick Settings tile (JarvisTileService) + Settings row. Off: stops runs,
+  speech, ambient listening, the keep-alive service, unloads both models; app start/boot/resume and the librarian's
+  background work respect it. Accessibility can't be switched by an app. RUNTIME-UNPROVEN.
+- Build time: GitHub runs take 7-9 min (release job ~6 min; unit tests + build ~4 min of it), not the 20-25 min I quoted.
+  The rest of a cycle is my local compile/tests (~2-4 min) and coding.
+
+## 2026-10-20 — DIAG: 15 min, saved to Downloads/Jarvis as it goes, full trace
+- Capture 5 -> 15 min (tap to stop early). Named Jarvis-DIAG_v<version>_<yyyy-MM-dd_HH-mm>.txt, created in Downloads/Jarvis at
+  start and rewritten every minute (survives the app being killed), final copy at the end. No prompt.
+- logcat now reads main, system, crash and events buffers (own process only: Android's rule).
+- Every 8 s (diag/SystemTrace.kt): Jarvis threads busiest since last poll (CPU seconds, grouped by name), every core's clock,
+  thermal status + headroom, battery %/temp/charging, screen, power saver, network (flags a captive portal), app state
+  (brain, models off/idle/busy, speed boost, thermal level, listening model, speaking). RAM breakdown each minute.
+- 1644 JVM tests, 0 failures. RUNTIME-UNPROVEN (MediaStore "wt" rewrite and /sys clock reads on GrapheneOS).
+
+## 2026-10-20 — DIAG button: SEND and RESET; RAM report adds kernel lines
+- Finished DIAG used to stay on SEND with no way to start over. Now two separate buttons: SEND (share) and RESET (back to DIAG).
+- RamReport adds slab, kernel stacks, page tables, vmalloc, shared, locked. Other apps can't be listed one by one (Android).
+- Action model: owner never chose. v3.0.74 shipped "4 cores, not kept loaded" (my pick, should have asked). He decides after
+  the RAM DIAG. 1642 JVM tests, 0 failures.
+
+## 2026-10-20 — owner's answers: ambient "both", action model 4 cores, RAM count
+- Ambient (owner chose "both"): while the brain answers, background speech waits (AmbientBacklog.next): only wake-window
+  speech and short clips (<=1.5 s, a bare "stop") go at once during a run. Held clips are transcribed afterwards with
+  base.en beside small.en (second whisper handle, ~60 MB); commands keep small.en. Hold cap 15 s -> 120 s (unpinned 180 s);
+  backlog 8 items/2 min -> 32 items/5 min. Lost: a longer mid-run correction without "Hey Jarvis" no longer interrupts a run.
+- Action model: the librarian's pool is ACTION_THREADS=4 on the fastest LLM cores; tool calls and offline-nav steps pass
+  foreground=true and decode with 4 (background memory work keeps 2). Owner declined keeping it loaded (RAM).
+- RAM: DIAG now writes a RAM breakdown once a minute (diag/RamReport.kt): phone totals, swap, Jarvis resident split
+  (model files vs own memory, heap parts), "Android + other apps" as the rest, which models are loaded.
+- 1642 JVM tests, 0 failures. All SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
+## 2026-10-20 — owner's v3.0.73 logs read
+- LIKELY: ambient whisper (small.en, cpus [0,1], 10–32 s per 1–4 s clip) running beside the LLM is the main slowdown:
+  1.6 tok/s with it, 6.0 tok/s without (draft loaded, 61–88% accepted). Thermal WARM vs NORMAL confounds it. Owner decides
+  on pausing/shrinking ambient and keeping the action model warm.
+- Fixed: chain stops on a second web lookup (LocalToolCall.repeatsJob, test).
+- Fixed: cloud requests drop `temperature` and retry when the model refuses it (OpenAiClient.temperatureRejected,
+  OpenAiClientTemperatureTest). 1639 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN. Not released yet.
+
+## 2026-10-19 — the five items: setup checklist, draft margin, chain resume, thinking kept, 20 real tasks
+Owner: "Do all five items." Subsystems: G (setup UI), B/local (draft), A (chains, routing), F (tests/diagnostics).
+- Setup checklist banner at the top of the chat (SetupChecklist.kt, SetupStepsTest).
+- DraftModel FREE_AFTER_BYTES 3 GB -> 2 GB: the owner's log showed roomMB=3659, so the draft never loaded. Speed boost
+  stays OFF by default (unchanged).
+- Chain resume: PendingConfirm carries chainDone/chainStep; confirming a local card runs continueLocalChain.
+- Thinking kept with the answer: ChatStore.thoughts (session only, not in Room), ChatStatus.thoughtOf, "Thought ▸" row.
+- RealTasksTest: 20 everyday requests, 20/20 on the right path. It found two bugs, both fixed: "make a note: …" went to
+  chat (isSimpleLocalIntent only knew "note this"), and "open settings and turn on dark mode" was taken by the tool
+  loop and stopped after opening Settings (OfflineNav.opensAppFirst now sends these to the screen driver first).
+- Owner docs: DIAGNOSTICS_AND_FIXES.md (fixes, known bugs, the DIAG steps needed for the speed fix);
+  ultra-native/tools/REAL_TASKS.md (phone checklist for the pass rate).
+- 1636 JVM tests, 0 failures. Routing PROVEN by JVM tests. Everything on the phone is SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+  Speed is blocked on a fresh DIAG capture from the newest build.
+
+## 2026-10-17 (session 01UX5qeo) — the rest of the list
+- Navigator: actions bound to the screen they were read from (ScreenGuard snapshot preflight, the OpenClaw
+  pattern; a window/app change since the read → read again, never act on the stale choice); route steps reuse
+  the previous read (one tree walk per step instead of two).
+- For you feed grounded in live web research (WebResearchRun, clearnet), sources cited per item.
+- Spotify connector (PKCE, owner's client ID, no secret; reads at once, playback changes ask first).
+- Prosody (experimental, Settings → Who's speaking → Pitch, off by default): per-line pitch (autocorrelation
+  F0 on 16 kHz audio) tagged [higher]/[lower] against the speaker's own usual; AmbientMemory v4 adds voices.pitch.
+  Pauses / pace / loudness / overlap / turn gaps already existed (TranscriptCues).
+- Not built: cloud stand-in diagnostic and Tor checks in button 6 (both stopped by the safety filter earlier);
+  Plaid/Stripe (secret keys / a server can't live on the phone); the training dataset (stopped by the safety filter).
+- 1606 JVM tests, 0 failures. RUNTIME-UNPROVEN.
+
+## 2026-10-17 (session 01UX5qeo) — "build it all": wiring what was built, and the OpenClaw lessons
+Owner: "Fuck the testing, just get straight to building all this." No phone testing; JVM suite before every push.
+- Cloud brain: native tool calling (provider "tools"; a native call comes back as the text-protocol JSON so the loop
+  is unchanged; a provider that rejects tools falls back to text for the session). ACCESS NOW line: the prompt names
+  what's switched off (a11y, notification access, SMS, contacts) instead of claiming full access. global_action offered.
+- Screen reads (getScreenContentFlat) on a worker thread, not the main thread (OpenClaw pattern).
+- Chat: streamed pieces batched (40 ms); the model's Markdown drawn (ChatMarkdown).
+- Wired Muse's modules: Forget (tool "forget": plan on the confirm card, delete only after the tap); notification
+  filter (Settings, off by default, Muse's 22-7 / 5 per min); Google connectors (Settings → CONNECTORS, Google's
+  Android authorization API — custom-scheme redirects are retired — tool "connector", registry approval on the
+  confirm card); recipient grants (Settings list); artifacts + trash (tools "artifact", "trash"; owner empties trash);
+  helper agents (tool "delegate": up to 4 parallel research children, verified handoffs); For you (✨ screen: Feed to
+  the owner's prompt, Ideas from notes, Proactivity notifications on the scheduler — auto off by default).
+- Fixed: SubagentOrchestrator handed off a run interrupted while finishing (CI race, run 39018923728).
+- NOT wired (deliberately): MemoryClaims/ClaimVerifier/LlmNliHead write path and SkillStore duplicate the existing
+  memory and Recipes; BanditArmState has no feedback surface beyond Ideas; Spotify/Plaid/Stripe need owner accounts.
+- 1600 JVM tests, 0 failures. Everything RUNTIME-UNPROVEN. Google connectors need an Android OAuth client
+  (package com.agent.ultra + the signing key's SHA-1) in the owner's Google Cloud project.
+
+## 2026-10-17 (session 01UX5qeo) — in-app Tor, Tor Browser VPN check, Tor do/don'ts, two speed fixes
+Owner: "build and push it all". Subsystems: D/net (Tor), A (prompts), D (navigator waits), A (run start).
+- In-app Tor: Guardian Project tor-android 0.4.9.5 (BSD-3, Orbot's Tor library; arm64 libtor 16 KB-aligned;
+  later releases need compileSdk 37; its kotlin-stdlib 2.3 excluded — its classes are Java). net/EmbeddedTor binds
+  TorService (SOCKS 9050 if free, else auto); TorProxy.current() follows the in-app port, else Orbot's 9050;
+  TorConnect.connect starts it and waits for bootstrap 100% (90 s cap). Orbot is used if it already runs.
+  Settings: Connect / Disconnect. tor_connect tool unchanged in rules (needs onion research on; never turns it on).
+- TorBrowserGuard: app_launch / react_navigate naming Tor Browser with a VPN on return a note (Tor over Tor with
+  Orbot VPN) instead of acting; the model passes "vpnOk": true only after the owner says go ahead.
+- Cloud prompt TOR do/don't list (condensed from Tor Project guidance, not fetched): slow loads, no JS on the tool
+  route, Security Level (never change it), no add-ons/resizing, exact 56-char onion addresses, don't open downloads
+  online, no personal logins, new circuit once, bridges are the owner's, captchas are the owner's. Local prompt: one line.
+- Speed (CROSSEVAL_OPENCLAW top 5, #1 and #2): navigator waits after a step / app launch end when the other app's
+  screen has changed and gone quiet (ScreenSettle; cap = the old 0.9 s / 2.5 s); run-start file+DB work
+  (importVerdict, importFromLaptop, lessons, recordTurn, last-run file) moved to Dispatchers.IO.
+- 1593 JVM tests, 0 failures; compileDebugKotlin OK. All RUNTIME-UNPROVEN (in-app Tor bootstrap, settle timings).
+
+## 2026-10-17 (session 01UX5qeo) — cloud brain check (Jarvis Tests button 6)
+Subsystems: F (diagnostics) + a read-only hook in A (Brain). Owner asked for a diagnostic of the API brain: what the
+model sees, what it has access to and what it doesn't.
+- bench/CloudBrainReport.kt (pure, JVM-tested): catalog vs real tools, offered tools whose access is off, what the
+  cloud never gets, request summary, and the self-check that compares the model's own tool list with what it was offered.
+- TestKitActivity (debug only): button 6 reports provider/model/key-set (never the key), system prompt size and full
+  text, tools offered vs real, live access (a11y, notification access, SMS read/send, contacts, location), dead tools,
+  last real cloud request; then, after a Yes, one request (system prompt + PROBE) straight to the provider — nothing in
+  the reply is run.
+- Brain (read-only hooks): TOOL_CATALOG private→internal; diagnosticSystemPrompt(); companion lastCloudRequest set
+  before each cloud call (memory only). No behaviour change.
+- Finding (not changed — owner's call): global_action is a real tool but is never offered to the cloud model. The cloud
+  prompt tells the model it has full phone access even when accessibility etc. are off.
+- 1584 JVM tests, 0 failures; compileDebugKotlin OK. RUNTIME-UNPROVEN. Claude keys should work through the
+  OpenAI-compatible endpoint (base URL https://api.anthropic.com/v1) — not tested here.
+
+## 2026-10-17 (session 01UX5qeo) — owner rejected three non-Muse additions; removed
+- Owner: keep Muse's code as it was (optimize only); "don't keep any" of the additions beyond Muse.
+- Removed: OtpScrubber (on-device sms_read/notification_read + notifications.log + readSms), the raw-tap node binding
+  (performTapBound/nodeBoundsAt) and ScreenBounds/requireScreenBound (ScreenGuard.kt restored to Muse's 53503c3).
+  Files restored are byte-identical to ff9d15d. Tests removed: GuardWiringTest, ScreenBoundsTest, OtpScrubberTest.
+- Cloud model still never gets codes (Brain.resultFeedback SecretScrubber, Muse §6). Email item dropped (not Jarvis).
+- 1578 JVM tests, 0 failures; compileDebugJavaWithJavac OK. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
+## 2026-10-17 (session 01UX5qeo) — handoff update; Muse's decisions locked
+- Owner: "I WANT EVERY DECISION THAT MUSE MADE TO STAY AS IT WAS." Recorded as MUSE_HANDOFF.md §0: everything in
+  HANDOFF_V5_MISSING.md and Muse's six harness base files is locked; conflicts go to the owner, no session decides.
+- Listed (not changed) where shipped code goes beyond Muse: on-device path also code-scrubbed; notifications.log
+  scrubbed; raw taps with no node refused; project email (§6 gmail vs later memory note). Owner to decide.
+- v3.0.41-test published (Release APK run 38999016649, muse/v5-delta-port @ 79a438b). Not tested on the phone.
+- No code changed this session entry.
+
+## 2026-10-17 (session 01BUKaYm) — harness guards wired into device paths (branch v5-guards)
+Subsystems: D (device control), E (security), F (notification log). Scope: wiring only, no refactors.
+- ScreenGuard.requireScreenBound: AgentAccessibilityService.performTap(x,y) now resolves the deepest live node under the
+  point (nodeBoundsAt: app windows the agent may act in, visible nodes) and refuses the tap (returns false, logs A11Y_TAP
+  UNBOUND) when none / outside bounds. performTapBound(x,y,bounds) is the node-derived form (actByIndex fallback).
+  requireNotPassword was ALREADY enforced in performText (confirmed, not changed).
+- OtpScrubber: Tools.kt notification_read / sms_read results are scrubbed; UltraNotificationService scrubs title/text
+  before they are written to notifications.log (EventTrigger still sees raw text; ScreenSecrets/outboundSecret untouched).
+- BanditArmState/BanditFeedback: NOT wired. harness/Ideas.kt and Proactivity.kt have no production callers (only
+  SurfacesTest), so there is no accept/dismiss surface to hook; inventing one would be drift.
+- Tests: GuardWiringTest (6). Full suite 1585 pass, 0 fail; assembleDebug OK. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+- Open: the node lookup makes a raw tap bound to "whatever element is there" (refuses off-screen/blocked-window/no-node
+  taps; cannot detect a guessed coordinate that lands on a real element). Canvas/webview taps with no node are now refused
+  — watch for that on device. performSwipe / tapAtPoint / IME-enter gesture are not bound-checked.
+
+## 2026-10-16 (session 01UX5qeo) — two standing rules enforced (branch muse/v5-delta-port)
+- Snippet prices are never evidence (Muse shopping rule; the real gap found in MUSE_RESEARCH §10.8):
+  WebResearch.priceEvidence uses read pages only; an unread source shows SNIPPET_PRICE_NOTE and its snippet's
+  prices are masked "[price not verified]". 3 tests updated to give prices as page text; 1 new test.
+- Codes and reset/magic links never reach the cloud model: Brain.resultFeedback runs the harness SecretScrubber
+  on every tool result before the cloud loop sees it. SUPERSEDES the 2026-10-09 owner decision "codes in tool
+  results still go to the cloud model" — HANDOFF_V5 §6 (2026-10-15) makes it a standing rule. Cost: the cloud
+  brain can't read a code back to you; the on-device path is unchanged. 1 new test.
+- Snapshot-bound taps: not added to the navigator — it already refuses a tap whose index no longer holds the
+  label it was read with ("moved" → look again); the ScreenGuard epoch check stays available in the service.
+1516 JVM tests, 0 failures. SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
+## 2026-10-15 (session 01UX5qeo) — v5 delta port: harness wire-ins + missing features (branch muse/v5-delta-port)
+Spec: HANDOFF_V5_MISSING.md. Built on the 6 harness files (not rewritten). 1514 JVM tests, 0 failures (46 new).
+compileDebugKotlin + compileDebugJavaWithJavac OK locally; assembleDebug not run here (no native llama/whisper libs in
+this container) — CI must build it. Everything below is SOURCE + JVM-TESTED, RUNTIME-UNPROVEN on the phone.
+- §0 wire-ins (the only existing files touched): UltraDatabase v7→v8 adds memory_claims + approval_grants
+  (MIGRATION_7_8; test proves its tables equal Room's generated ones) + claims()/claimForget()/grants() DAOs;
+  SchedulerRuntime fires the job book with one inexact AlarmManager alarm (manifest receiver; armed from
+  UltraApplication; re-armed on boot) — jobs are added only when a module registers a handler (no idle wake-ups);
+  AgentAccessibilityService: every flat screen read is a ScreenGuard snapshot (uiEpoch bumps on window change),
+  preflightSnapshot(id) available, and performText refuses password fields.
+- Base fixes needed to compile (minimal): MemoryClaims used non-existent kotlin.math.ln2 → ln(2.0); SkillStore used
+  `continue` inside a lambda (Kotlin 2.0) → return@forEach.
+- §1 connectors (harness/connectors): Connector + ConnectorRegistry (status first → NeedsConnect and stop; reads no
+  approval, sends recipient grant or exact-call approval token, writes approve-once, purchases always ask);
+  CredentialVault (Keystore AES-GCM; opaque host-bound handles); AuthedTransport (token swapped in only for bound
+  https hosts); SecretScrubber (codes, reset/magic links → [credential:id], held 10 min); Gmail, Calendar, Drive,
+  Docs over REST (no Google SDK); docs in assets/connectors/. Needs an owner-registered Google OAuth client ID.
+- §2 Trash, §3 Forget (plan → summary → app-minted confirmation → delete → re-search report; claims/notes/files
+  sources), §4 SubagentOrchestrator (spawn/send/interrupt/resume/close/list; children get no spawn; verify before use),
+  §5 Feed, Ideas, Artifacts (versions, share needs consent, delete → trash), Proactivity (send/skip with reasons).
+- Not built / not wired (see report): Google OAuth redirect activity; spotify/plaid/stripe; replacing existing delete
+  call sites with Trash; tool/manifest/Brain wiring of the new modules; navigator snapshot preflight enforcement;
+  LLM runners/generators for subagents, feed and ideas; settings UI for grants/trash.
+
 ## 2026-10-09 (session 01K5Mi, evening) — Tor research (v3.0.37-test)
 Owner asked for Tor research with scam screening, cross-realm product/company verification, discovery crawl and a
 general investigate (case files on people, companies, topics). Built on claude/v4-tor-research (173a0d6), merged at
@@ -4421,3 +4609,191 @@ The phone had the debug-signed build, which a release-signed APK can't replace.
 Uninstalled on Dafarus's go-ahead (app data wiped, Venice key must be re-entered
 in Settings), then installed 2.3.2. The APK pulled back off the phone is
 byte-identical to the build; the app launches, no crash in the crash buffer.
+
+## 2026-10-17 — phone results (v3.0.49, Pixel 10 Pro XL)
+- Cloud brain check ran 3×. Run 1: accessibility off → the report correctly listed 6 screen tools as dead. Runs 2–3: everything on.
+- Live check: 401 "Invalid Anthropic API Key" (key is already trimmed on save in SettingsScreen, so the key itself was rejected), then a 20 s connect timeout to api.anthropic.com (network). Owner action: paste a fresh key from console.anthropic.com. PROVEN from the log; no code fault found.
+- Fixed: the report flagged global_action values and connector ids (app_switcher, google_drive…) as "not a real tool". The exclusion now lives in CloudBrainReport.ARG_VALUES, so the phone report matches the JVM test.
+- Open: ambient whisper-small dropped 37 utterances ("backlog full"). On the A520 cores it ran 11–45× slower than speech; on 4 big cores at 6–7% battery / WARM it was still 1.7–4× slower. Cause is load/throttling in that state; AsrSpeed should fall back to base after 8 slow runs. Not changed (no proof the fallback itself misfired; the log starts mid-run).
+- Phone screenshots (same day): with the cloud failing (bad key), the on-device fallback answered "I'll simulate loading it now" and wrote an invented onion post with fake numbers. Root cause: emitLocal is text-only, and OFFLINE_RULES never said the reply fetches nothing; my Tor line even told it to "say it is still loading". Fixed: an explicit no-fabrication rule (no loading/loaded/simulating, no results, posts, prices or sources it wasn't given) and the Tor line trimmed. SOURCE-FIXED BUT RUNTIME-UNPROVEN (a 4B model can still ignore a rule).
+- The fallback note now says why: "cloud key rejected (check Settings → AI PROVIDER)" / rate-limited / provider error / unreachable, instead of always "unreachable" (Brain.cloudFailure, CloudFallbackTest).
+
+## 2026-10-18 — Cloud stand-in diagnostic (rebuilt clean)
+- Owner's ask (2026-10-17, re-clarified): the cloud model runs the on-device brain's EXACT system prompt + tools, but its token stream is MUTED, never cut, at the points the local brain would be cut (per-turn token budget / interrupt / engine contention), and it's TOLD it was muted so it stays aware and writes a full diagnostic of every tool call (success/failed/limited).
+- Was paused twice earlier: the safety classifier stopped the response when the diagnostic was drafted bundled with onion/Tor checks + abliterated-model content. Those were never part of the diagnostic. Rebuilt with none of that cluster.
+- CloudStandIn.kt (pure, JVM-tested): perTurnBudget mirrors Brain.runLoop (2000/1500/2500), muteBoundary (≈4 chars/token via CloudBrainReport.approxTokens), applyMute, classify (SUCCESS/FAILED/LIMITED from manifest + deadTools access), muteNotice, PROMPT. CloudStandInTest asserts the budget numbers match and that PROMPT/muteNotice carry none of the blocked cluster (tor|onion|abliterat|dark web).
+- TestKitActivity button 7: builds the same prompt (chatBrain().diagnosticSystemPrompt()) + same tool defs (NativeTools.definitions(offered, TOOL_CATALOG)), gates on key+online+confirm. Loop (≤12 turns): stream a turn with budget+headroom; if it ran past the on-device budget (or finish=length) record a MuteEvent, drop the tail, inject muteNotice, continue — never break for the cut. Tool calls are DRY-RUN: logged + classified, a stand-in result fed back, nothing executed. Ends with a mute + tool-call ledger, saved via record() like the other checks.
+- No production behavior change: Brain's real loop untouched; the runner is self-contained in the debug build.
+- Honesty status: SOURCE-FIXED BUT RUNTIME-UNPROVEN until the phone run (needs a working API key).
+
+## 2026-10-18 — Floating live diagnostic (real app)
+- Owner wants a floating button IN the real Jarvis app (not the test app): tap → glows green with a 5-min countdown → captures everything the running app actually does → hands over a file to download + send.
+- diag/LiveDiagnostic.kt: process-wide capture on its own SupervisorJob scope (survives screen switches). Polls `logcat -d -T <since>` every 8 s over ALL 35 Ultra* tags + AndroidRuntime (own-process lines, no READ_LOGS needed), plus a memory/disk snapshot each poll, for 300 s. Writes a header (app/phone/crash-in-window via KitReport.hasCrash) + the capture to cacheDir/exports (FileProvider-shared) AND a copy to Downloads (MediaStore, API 29+). stop() cancels but the finally still writes what was captured. share() opens the ACTION_SEND chooser.
+- ui/DiagnosticFab.kt: draggable floating button over every screen. States: DIAG (idle) → REC + mm:ss with a green pulse while capturing (tap to stop early) → SEND (file ready; tap opens the share sheet). Reads LiveDiagnostic state only.
+- MainActivity: wrapped the `when(screen)` in a Box; FAB aligned bottom-end. No manifest/permission/xml changes (FileProvider authority + cache-path already declared).
+- This captures the REAL app running — it's how we'll root-cause the late speech and Tor-not-connecting instead of guessing. Honesty status: SOURCE-FIXED BUT RUNTIME-UNPROVEN until a phone capture.
+- Next: rework the cloud stand-in (button 7) to execute tools for REAL through the one guarded runLoop (diagnosticMute flag), per owner "make it all actually run" — not dry-run.
+
+## 2026-10-18 — Mic / speech-to-text: live words + a real stop
+- Owner: the hold-to-talk mic doesn't show words as you speak, sometimes misses audio, and has no stop-recording control; wants it like Claude/Gemini.
+- VoiceInput.kt: platform recognizer had EXTRA_PARTIAL_RESULTS=false and an empty onPartialResults, so no live transcript. Now partials are on and forwarded via a new onPartial callback. Added finish() = recognizer.stopListening() (keeps the recognizer alive so it emits the final result) — distinct from stop(), which discards.
+- ChatScreen.kt mic: live words now fill the box as you talk (onPartial, preserving any text typed before the mic via preVoice; restored on error). The mic button is now 🎙 → "■ stop"; tapping while listening calls finish() (stop now, use what was said) instead of discarding.
+- Scope: neutral UX only. Owner confirmed not to build the onion/crypto/stand-in/classifier-evasion items; those are not being worked on.
+- Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN (own-Whisper path has no partials; only the platform recognizer streams live words) — needs a phone check.
+
+## 2026-10-18 — Memory: wired the verified claim store + Muse bank categories
+- Finding: MemoryClaims.writeVerified (two-lens ClaimVerifier + LlmNliHead NLI gate, supersede, decay, embeddings) had NO producer and NO reader — the whole Muse-grade claim memory was built but dormant; live memory was the flat ambient-notes path only.
+- Producer: the librarian now promotes durable new notes to verified claims. LibrarianRun.file() returns the newly-inserted durable drafts (Filed.promoted); LibrarianRun.run() takes a suspend `promote` sink (default no-op) and calls it per promoted draft, cancellation-safe, failures logged (never breaks note filing). Librarian.passes() builds the sink once: MemoryClaims(db.claims()) + LlmNliHead(LocalModelEngine.librarian) + SentenceEmbedder.shared + db.embeddings(), and calls writeVerified(text, kind, speaker=who, emb, modelName=MiniLM). Only the main pass promotes (not reread).
+- Mapper: listen/ClaimKind.kt (pure, tested) — FACT→"fact", PERSON→"world"; PLAN/TODO/OBSERVATION/SUMMARY not promoted. file() stays pure; the side-effecting write lives in the suspend layer.
+- Reader: UltraApplication.wireMemory registers a second recall source "memory" over MemoryClaims.searchScored (active() only, so a superseded claim never surfaces beside its replacement), on the same scoring scale as notes/heard.
+- Categories: MemoryClaimScoring.KINDS extended with Muse's four — experience, opinion, reflection, world (kept alongside fact/preference/…). Available to the claim system now; the librarian currently emits fact/world (the note kinds it has); experience/opinion/reflection are available for chat-driven/future producers.
+- No DB migration (ClaimEntity + MemoryEmbeddingEntity + BanditArmEntity already registered in UltraDatabase).
+- Tests: listen/ClaimKindTest (mapping + the four categories present). Full suite green.
+- Not a parallel path: one producer (librarian), one reader (recall); notes = raw dated log, claims = verified durable layer on top.
+- Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN — NLI label quality on-device and end-to-end supersede unproven until a phone check (speak a fact then a contradicting correction; ask recall).
+- Deliberately not touched: the dormant BanditArmState ranking (next), KV-cache prefix reuse (next batch), cloud onion/crypto/stand-in/evasion (owner-excluded).
+
+## 2026-10-18 — Batch A: bandit ranking wired into For-You ideas
+- The dormant BanditArmState (UCB arms) now drives idea ranking and learns from the owner. Arm = (policy "ideas", domain = idea's primary topic, lane = feasibility band) via new pure harness/IdeaArm.kt.
+- ForYou.rankedIdeas() blends each idea's own score with its arm's learned fast mean (weight 0.5); ForYou.onIdeaActed/Dismissed/Shown call BanditFeedback (reward / penalize / decision). Ideas.kt and BanditArmState.kt unchanged (BanditFeedback was built to need no edits there).
+- ForYouScreen: loads the blended list in a LaunchedEffect(tick) and records a decision per shown idea; "Doing it" rewards, "Not now" penalizes. Cards reorder as the owner engages.
+- No DB migration (bandit_arm_state already registered). Tests: harness/IdeaArmTest (domain/lane + rank-by-fast-mean). Full suite green.
+- Proactivity engagement reward (notification taps) needs tap-tracking — not wired; ideas have the full reward loop. Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN.
+
+## 2026-10-18 — Batch B: expandable thinking line
+- The chat already showed a live reasoning preview in the "Thinking…" status (Brain.thoughtPreview → status.detail). Now it's expandable like Claude/Gemini: ChatScreen renders a THINKING status as a tappable two-line preview (▸/▾) that expands to up to 12 lines; thoughtPreview keeps a 300-char rolling tail (was 110) so there's more to expand into. Non-thinking statuses unchanged.
+- Speech on first sentence: the on-device path already speaks as written (SpeechChunker, speakAsWritten default on). The cloud runLoop multiplexes tool-call turns and the final answer through one stream, so speaking mid-stream there would risk reading tool JSON aloud — deliberately NOT changed; cloud answers still speak once settled. Noted as a follow-up needing a safe "is this the final answer" signal.
+- UI-only + one-line Brain change. Full suite green. Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN (visual, needs a glance on the phone).
+
+## 2026-10-18 — Batch C: KV-cache prefix reuse — ALREADY IMPLEMENTED (verified, no code)
+- PROVEN by reading source: native cpp/ultra_llm.cpp nativeGenerate already reuses the KV of the longest common token prefix with the previous call (keeps engine->cached, seq_rm from the divergence point, full-clear fallback; logs "reused=N of M prompt tokens"). agent/LocalEnvelope.kt already fixes fragment order (core_persona → user_profile → loaded_tool_schemas → covered_history) with the volatile Now/memory block + user turn placed last, so the reusable prefix is maximized. reusableFragments() gives a fragment-level estimate.
+- Conclusion: Batch C's target exists end-to-end; writing more would be speculative/theater. No commit.
+- So "speech/actions act late" is NOT missing prefix reuse. Real candidates (UNPROVEN, need the phone trace): the <think> trace length on the 4B thinking model before the first visible token; cold model load; thermal thread throttling; prefix invalidation when an early block changes. The floating live diagnostic captures UltraLlm ("gen tokens … tokPerSec …", "reused=…"), UltraRoute (thinkTokens/budget) and UltraThermal — one capture will point to the real bottleneck.
+
+## 2026-10-18 — Memory: retire the duplicate note write (finishes the memory-bank plan)
+- The earlier memory batch (0b97712) already did: librarian → writeVerified, recall reads claims alongside notes, and the four Muse categories. The one remaining clause was "retire the duplicate note write" — durable facts were being stored as BOTH a note and a claim.
+- Now: in LibrarianRun.run(), a durable draft (ClaimKind.promotes) is promoted to a verified claim FIRST; only drafts not stored as a claim are passed to file() as notes. So a fact lives as a claim OR a note, never both. The promote sink returns Boolean (stored = Written/Reinforced); a Rejected claim (ungrounded / contradiction) falls back to a note, so nothing is lost. file() reverted to (added, merged); non-durable drafts and obs/summary unchanged.
+- Default promote = { false } keeps run()'s behaviour identical for the JVM suite (durable drafts stay notes when no claim sink is wired), so LibrarianRunTest counts are unchanged; the real sink lives in Librarian.passes().
+- Legacy notes written before this change may briefly co-exist with their claim until they age out; new writes don't duplicate. Full suite green. Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN until the phone check.
+
+## 2026-10-18 — Model picker + proceed guide
+- ui/ModelPicker.kt: tap the chat model chip (now shows "<brain> ▾") → dialog to pick the brain. Cloud rows (when a key is set) quick-switch the cloud model id (claude-opus/sonnet/haiku + whatever's configured) and set offline-only off; on-device rows list each downloaded preset and call LocalModelEngine.selectModel + offline-only on. Switching cloud PROVIDER (base URL+key, e.g. Gemini) stays in Settings — the picker notes this (no fake multi-provider). onModelChanged bumps configVersion so chatBrain rebuilds; switch applies to chat and voice (both gated by NetPolicy.cloudAllowed on offlineOnly). Reuses the one existing setter (selectModel), no parallel selection path.
+- ChatScreen: chip is clickable and opens the picker; new onModelChanged param wired from MainActivity (configVersion++).
+- PROCEED_GUIDE.md at repo root: install APK, fix the Claude key (401), use the picker, grant permissions, run the DIAG capture, owner account items, and full Obtainium setup for the private repo (fine-grained PAT, include-prereleases, jarvis-release.apk filter).
+- Full suite green. Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN until a tap on the phone.
+
+## 2026-10-18 — Phone calls (call_phone tool)
+- New `call_phone` tool so the agent can place a real call. Mirrors the proven `sms_send` path end to end, no new mechanism:
+  - AgentController.placeCall(number): Intent.ACTION_CALL on `tel:` + NEW_TASK; returns Boolean like sendSms. CALL_PHONE was already in AndroidManifest.
+  - Tools.kt dispatch "call_phone" (Communication section): needs `to` (falls back to `number`); contacts-first for a name. Added to DESTRUCTIVE and PERSONAL_TOOLS.
+  - Gate manifest (assets/ultra.manifest.json): call_phone = {effects:[egress], requires:[recipient_traceable(to), spoof_check]}. Same contracts as sms_send minus the message rule. ToolWiringTest proves dispatch⇄manifest parity.
+  - Brain: catalog line under COMMUNICATION ("DIALS IMMEDIATELY") + describeAction confirm-line ("Call X").
+  - Settings: new "Phone" capability to grant CALL_PHONE from the app. CloudBrainReport NEEDS map ("Phone call"→call_phone). Experience comms family includes call_phone.
+- Safety: call_phone is EGRESS (risk 40+), above AUTO_APPROVE_THRESHOLD (15). recipient_traceable is a CONFIRMABLE rule, so "call mom" (number resolved via contacts_read, not literally in the request) surfaces an "About to: Call mom" confirmation card instead of firing silently; a number the user actually spoke can auto-approve. Same gate behaviour as sms_send.
+- Full suite green (ToolWiringTest + CloudBrainReportTest verified). Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN — needs one call on the phone (grant Phone permission, say "call <contact>", confirm the card, hear it dial).
+
+## 2026-10-18 — Call control: answer, hang up, speakerphone
+
+Owner asked for a full calling tool. Dialing already existed (`call_phone`, 50dfa7e). Added the rest, same wiring as `flashlight_toggle`:
+- `call_answer` (TelecomManager.acceptRingingCall), `call_end` (TelecomManager.endCall: hangs up or declines), `call_speaker {on}` (AudioManager communication device on Android 12+).
+- `ANSWER_PHONE_CALLS` in AndroidManifest; Settings → "Phone" capability now grants it along with CALL_PHONE.
+- Gate manifest: all three are `mutate` (nothing leaves the phone), so they need no confirm card.
+- Catalog lines under COMMUNICATION. Cloud brain only. They are not in the offline LocalToolCall subset.
+- JVM: 1620 tests, 0 failures (ToolWiringTest parity holds).
+Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN. Needs one real ringing call on the Pixel after re-granting Phone in Settings.
+Not done: talking to the caller as an AI voice. Android doesn't let a normal app inject audio into a cellular call. That needs a cloud telephony number (e.g. Twilio), which is a separate decision.
+
+## 2026-10-18 — Voice latency fixes from the owner's 2026-10-17 22:40-22:50 DIAG capture
+
+What the logs showed (app 3.0.56):
+- The cloud brain is not in use. OFFLINE-ONLY is on, and the live check failed: the Wi-Fi's captive portal (wifisignon.shaw.ca) intercepts HTTPS. Every answer came from the on-device model.
+- Whisper small.en took about 6-7 s for any short clip on the fast cores, and 28-103 s on the little A520s while an answer was running. 40 utterances were dropped as "backlog full".
+- The first answer after loading Qwen3-4B Thinking got its tier's whole 512-token think budget because the speed was still unknown. At 3.2 tok/s that is 200 s of silence.
+- TTS works: every SPEAK has a SPEAK DONE and there are no errors. But Piper made a 169-char first sentence in one piece before anything was heard. The battery was at 1%.
+
+Fixes:
+- `ultra_whisper.cpp`: `audio_ctx` sized to the clip (50 frames/s + 128, min 512, else the full 1500). The encoder no longer pays for 30 s of padding.
+- `AmbientThrottle.placement(command=)`: speech inside a wake window always gets the fast cores.
+- `WaitBudget`: unknown speed assumes 3 tok/s (`UNKNOWN_TOK_PER_SEC`), capped at the tier budget.
+- `LocalVoice.chunks(firstMax=)` / `Speaker`: the first spoken piece is at most 80 chars.
+
+JVM: 1622 tests, 0 failures. The native change is compiled only in CI.
+Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN. Needs a new DIAG capture. Expected: `whisper ... ms=` well under audioMs on the fast cores.
+Owner-only: turn off Offline-only and use mobile data or sign in to the Shaw Wi-Fi portal. That is what gets near-instant answers from the cloud.
+
+## 2026-10-18 — New model options (owner: "plug and play something faster")
+
+- Added two brain models to the model picker. They are opt-in and the default is unchanged:
+  - LFM2.5 2.6B Q4_0, 1.5 GB
+  - LFM2.5 8B-A1B MoE Q4_0, 4.6 GB, about 1B active per token
+  Both are non-thinking, so there is no silent trace. The lfm2/lfm2moe archs are confirmed present in llama.cpp 8345f33. URLs and sizes were checked on the Hub. Speed, tool calls and KV reuse on these hybrid models are RUNTIME-UNPROVEN. Prompt reuse falls back to a cache clear if seq_rm refuses.
+- Checked and NOT done, because none is plug-and-play:
+  - EmbeddingGemma 2 (google/embeddinggemma-2, 2026-10-06): needs the Gemma SentencePiece tokenizer, not our WordPiece. It is 768-d against our 384-d store, so memory would need re-indexing.
+  - MiniCPM-V 4.7 1B and LFM2.5-VL: need newer mtmd support or a different projector path than VisionModel's Qwen2.5-VL.
+  - Speech: whisper base.en is already the automatic fallback when small is too slow. A different ASR engine (e.g. sherpa-onnx streaming) is a real integration.
+- Release from 9e8ed4d (voice latency fixes) built green.
+
+## 2026-10-18 — Owner asks: local-first picker, LFM default, mic text, full thinking
+
+- Model chip: shows the cloud model only while the cloud is actually allowed. With Offline-only on, it said "claude-opus-5-5" even though answers came from the phone.
+- Model picker: ON-DEVICE is listed first and CLOUD second. The default LFM2.5 2.6B is offered even before it is downloaded; tapping it selects it and starts the download.
+- Default thinker: `LFM_DEFAULT` = LFM2.5 2.6B Q4_0, at the owner's request ("if these are better, use them as default"). Installs whose saved choice is the 4B keep it, and the picker hint points to LFM. If LFM isn't on disk, a downloaded 4B is still used. Whether LFM is better on the Pixel is unmeasured.
+- Mic with Jarvis's own speech recognition (the default):
+  - "■ stop" used to cancel the job and throw the recording away, so nothing reached the chat. `LocalSpeech.finish()` now transcribes what was heard.
+  - Live words: the recording so far is re-read every 1.5 s, last 15 s at most. "🎙 …" shows as soon as the mic opens.
+  - A command segment is now capped at 12 s, down from 28 s. A noisy floor no longer keeps it open.
+  - The 30 s listen cap now transcribes the audio instead of returning nothing.
+- Thinking: the full trace, up to 16k chars, is kept live. Collapsed shows the latest words; expanded shows every line, with no 12-line cap.
+  - Still not done: the thoughts disappear when the answer arrives. Keeping them under the answer, DeepSeek-style, needs a ChatMessage/Room field.
+- JVM: 1623 tests, 0 failures. All on-device behaviour is RUNTIME-UNPROVEN.
+
+- Local brain by default: offline-only defaults ON under a new pref key (offline_only_v2), so every install, the owner's included, starts on the on-device model once. Choosing a cloud model in the picker still switches.
+
+## 2026-10-18 — Screen-off use (owner: "do things while the screen is off")
+
+Already true (unchanged): ambient listening is a microphone foreground service with a partial wake lock, so "Hey Jarvis" is heard with the screen off. A LOCKED phone runs only harmless requests (LockedPolicy: flashlight, volume, music, alarms, time, general questions, adding a note); everything private needs an unlock, by design.
+Added:
+- `AgentController.wakeScreenIfUnlocked()`: when the phone is asleep but NOT locked, light the screen (45 s) before launching an app, opening a URL or starting react_navigate. A locked phone stays dark: Android lets no app unlock it.
+- REQUEST_IGNORE_BATTERY_OPTIMIZATIONS plus a Settings row "Keep working with the screen off", so battery saver doesn't stop listening.
+JVM: 1623 tests, 0 failures. Runtime-unproven. Background activity launches with the screen off may still be blocked by Android 17 on some paths.
+Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private tools.
+
+- Default thinker restored to the abliterated Qwen3-4B Thinking (owner, 2026-10-18: "hit the abliterated back as the default"). The LFM default was reverted; the two LFM2.5 models stay as opt-in picker entries (stock, refusals on). Local-first (offline-only default on) stays.
+
+## 2026-10-19 — Toggles, local brain, grounding
+- Offline-only is a pure privacy switch again: original pref key, default OFF, and only Settings changes it. The model picker no longer flips it (that, plus my earlier offline_only_v2 key, made toggles look like they reset).
+- New separate pref cloud_brain (default false = on-device). Cloud answers only when the picker chose a cloud model AND offline-only is off (NetPolicy.cloudBrainOn).
+- Grounding: when the web search ran and found nothing, the local prompt now says so and forbids invented sellers/prices/links and invented screen actions. Pixel 2026-10-18 showed fabricated results after results=0.
+- Not touched: any other toggle that may reset; no evidence found. JVM 1622 tests, 0 failures. Runtime-unproven.
+- Screen driving (react_navigate) is cloud-only: LocalToolCall has no such tool and ReActNavigator needs the cloud client. On the on-device brain the model narrated actions it never took. Now ScreenAsk detects such a request and answers "needs the cloud model, pick one in the chip; I did not touch the screen". Driving the screen with the on-device model is NOT built (a local ReAct navigator is a real feature). Source-proven cause; runtime-unproven. JVM 1624 tests, 0 failures.
+
+## 2026-10-19 — Correction: on-device screen control ALREADY EXISTS
+- OfflineNavigator (agent/OfflineNavigator.kt + OfflineNav.kt) already drives the screen with the on-device thinking model (perceive/think/act/verify, through ReActNavigator.perceive/act, so ActionGate and ScreenGuard apply). My earlier claim that screen control is cloud-only was WRONG for the screen loop; only ReActNavigator.run/execute (the cloud loop) needs the cloud client.
+- Why "go on Google and search X" did nothing: OfflineNav.task did not match "go on ..." and GrapheneOS has no "Google" app, so findPackage failed. Fixed: WEB_SEARCH pattern -> appHint "browser"; AgentController.findPackage maps browser/google/chrome/web to the default browser (defaultBrowserPackage).
+- My ScreenAsk guard was placed BEFORE the on-device navigator and would have blocked it; moved to AFTER offlineNavTask, and its text now says it could not tell which app to drive.
+- Still true: LocalToolCall has 22 tools; call_phone/sms_send etc. are cloud-only. Local navigator needs a thinking model (local.isThinkingModel) and an installed named app; it is slow on-device. JVM 1625 tests, 0 failures. Runtime-unproven.
+
+## 2026-10-19 — Local model: calls and texts
+- LocalToolCall.TOOLS += call_phone, call_answer, call_end, call_speaker, sms_send (prompt lines, examples, routing keywords in Brain.isSimpleLocalIntent).
+- runLocalCall: a name ("call mom", "text Sam ...") is resolved from the contacts; none -> says so; several -> asks which. The gate still decides: a confirmable block raises the same Confirm/Cancel card (PendingConfirm.local = true; resolvePending runs the tool directly, no cloud loop).
+- Not yet on-device: describe_screen/read_screen_deep/screen_ocr/look_at_screen, open_url/web_search/web_browse/device_info/trash, recipe_*, watch_me*, forget/ambient_recall/shop_*/tor_connect, delegate/connector/artifact/ask_claude. The 1B (non-thinking) prompt in runLocalLoop is unchanged (thinking-model path only). JVM 1627 tests, 0 failures. Runtime-unproven.
+- Also on-device now: screen_ocr, look_at_screen, describe_screen, read_screen_deep, device_info (prompt lines, examples, routing). JVM 1627 tests, 0 failures.
+
+## 2026-10-19 — Action model
+- New setting (Settings, default ON): "Action model". Brain.toolEngine = the memory model (LocalModelEngine.librarian, Qwen3 1.7B) when it is downloaded and a thinking model, else the main model. It picks the tool call (thinkingToolCall, with fallback to the main model if it fails) and drives OfflineNavigator. The main model still thinks and answers. Gate, ScreenGuard, ActionGate, confirm cards, Stop unchanged.
+- RAM: the 3.5 GB free seen in logs is what is left AFTER the 4B loads; the 1.7B (~1 GB) fits. UNPROVEN on the phone: speed, whether the 1.7B picks tools as reliably as the 4B, and load time when it was unloaded (idle).
+- bench/CloudStandIn.kt mentions an "action model" in comments (diagnostic only; the excluded cloud stand-in material): not touched.
+- JVM 1627 tests, 0 failures.
+
+## 2026-10-19 — Local tool chains, links, web, memory, routines
+- Chains: Brain.runLocalLoop (thinking/action-model path) now continues after the first tool when the request is compound (LocalToolCall.compound), up to LocalToolCall.MAX_CHAIN=4, feeding each result back ("Already done: ..."). A confirm card (call/text) or a failure ends the chain; the rest must be asked again. runLocalCall now returns the result text (null = did not run).
+- Routing: with a thinking tool engine, isSimpleLocalIntent(allowChains=true) no longer rejects compounds or links, and routes web/memory/routine words (search the web, look up, google, browse, http/www/.com, trash, forget, recipe/routine, watch me, "what did we say").
+- Tools on-device: open_url, web_search, web_browse, ambient_recall, trash, forget, recipe_run/save/list/delete, watch_me, stop_watching, cancel_watching. The model calls web_search itself; Offline-only still blocks it inside Tools.
+- Deliberately NOT on-device: shop_search, shop_checkout_prep, tor_connect (shopping and onion reach; product scope is inform + confirm, no sourcing), ask_claude/delegate/connector/artifact (cloud by nature).
+- Not built: the main model composing the final reply from tool results (adds a slow extra run); results are shown as the tool returned them. JVM 1629 tests, 0 failures. Runtime-unproven.
+- Setting "Main model writes the reply" (default OFF): after on-device tools run, the main model (local) writes one or two plain sentences from the results (LocalToolCall.replyPrompt, Brain.composeReply); falls back to the raw results. One extra model run, so slower. JVM 1630 tests, 0 failures. Runtime-unproven.
+
+## 2026-10-19 — Fast voice
+- FastCommand (agent/FastCommand.kt): obvious one-shot commands (flashlight/wifi/bluetooth/DND on-off, volume N, battery, screenshot, home/back/recents/notifications/lock, pause/play/skip, hang up, answer, speaker on/off, where am I, call <name or number>) become a tool call with NO model run, hooked at the top of Brain.runLocalLoop; still through the gate and confirm cards; compounds, questions and anything unmatched go to the model.
+- AmbientThrottle.placement: a wake-window command while an answer is running now gets 2 threads (BUSY_COMMAND_THREADS) on the big cores, not 4, to slow the answer less. Needs a DIAG to prove. Voice stutter: pick a lighter Piper voice in the voice settings (no code change).
+- APP_OVERVIEW.md added (plain-language overview for the owner). JVM 1633 tests, 0 failures.

@@ -48,6 +48,13 @@ class UltraNotificationService : NotificationListenerService() {
             // this check every banking alert, message preview and two-factor
             // code lands in a log on disk.
             if (!com.agent.ultra.ui.UltraPrefs.captureNotifications(this)) return
+            // Notification filter (Settings, off by default): quiet hours and a per-app burst limit
+            // decide what Jarvis keeps. The triggers above already saw it (scam shield, codes).
+            if (com.agent.ultra.ui.UltraPrefs.notificationFilter(this) &&
+                !forwardingPolicy().shouldForward(com.agent.ultra.harness.IncomingNotification(sbn.packageName, title, text, sbn.postTime))) {
+                Log.i(TAG, "filtered (quiet hours or burst): ${sbn.packageName}")
+                return
+            }
             val line = buildString {
                 append(sbn.postTime)
                 append(" | ").append(sbn.packageName)
@@ -65,6 +72,20 @@ class UltraNotificationService : NotificationListenerService() {
         } catch (e: Exception) {
             Log.w(TAG, "post capture failed", e)
         }
+    }
+
+    private var policy: com.agent.ultra.harness.NotificationForwardingPolicy? = null
+    private var policyHours: Pair<Int, Int>? = null
+
+    /** One policy per quiet-hours setting (it keeps the per-app burst counts). */
+    private fun forwardingPolicy(): com.agent.ultra.harness.NotificationForwardingPolicy {
+        val hours = com.agent.ultra.ui.UltraPrefs.quietHours(this)
+        if (policy == null || policyHours != hours) {
+            policy = com.agent.ultra.harness.NotificationForwardingPolicy(
+                ownPackage = packageName, quietStartHour = hours.first, quietEndHour = hours.second)
+            policyHours = hours
+        }
+        return policy!!
     }
 
     /** Runs the triggers; returns the scam reasons when the scam shield fired. */

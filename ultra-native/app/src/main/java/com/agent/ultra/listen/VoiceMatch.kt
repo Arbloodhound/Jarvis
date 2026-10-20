@@ -17,6 +17,8 @@ data class Voice(
     val lastSeen: Long,
     val rate: Baseline = Baseline(),
     val loud: Baseline = Baseline(),
+    /** Usual pitch (Hz), from the experimental prosody measure ([CueAudio.pitchHz]). */
+    val pitch: Baseline = Baseline(),
 ) {
     val label: String get() = CueTags.label(owner, name, num)
     override fun equals(other: Any?) = other is Voice && other.id == id

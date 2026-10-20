@@ -158,6 +158,7 @@ class AmbientListenService : Service() {
         } finally {
             gate?.close(); gate = null
             if (whisper != 0L) { WhisperNative.nativeFree(whisper); whisper = 0L }
+            if (baseWhisper != 0L) { WhisperNative.nativeFree(baseWhisper); baseWhisper = 0L }
         }
     }
 
@@ -181,17 +182,25 @@ class AmbientListenService : Service() {
         val backlog = ArrayDeque<Utterance>()
         val maxHold = AmbientBacklog.maxHoldMs(whisperPinned = whisperCpus.isNotEmpty())
         fun idleNow() = AmbientBacklog.mayTranscribe(busy.value, System.currentTimeMillis(), busyChangedAt.get())
-        // Speech to Jarvis (a wake window) is transcribed at once, and, with whisper on its own cores,
-        // everything heard while a run is going: it may be "stop" or a change to the run.
-        fun urgent() = backlog.any { it.windowId != 0L } ||
-            (whisperCpus.isNotEmpty() && com.agent.ultra.agent.Brain.anyRunning)
-        fun ready() = urgent() || AmbientBacklog.shouldDrain(busy.value, System.currentTimeMillis(), busyChangedAt.get(),
-            backlog.firstOrNull()?.endedAt, maxHold)
+        // Speech to Jarvis (a wake window) is transcribed at once, and, while a run is going, a short
+        // utterance (a bare "stop"). The rest waits for the answer ([AmbientBacklog.next]).
+        val shortSamples = (AmbientBacklog.SHORT_MS * AmbientConfig.SAMPLE_RATE / 1000).toInt()
+        fun nextIndex() = AmbientBacklog.next(
+            backlog, { it.windowId != 0L }, { it.pcm.size <= shortSamples },
+            drain = AmbientBacklog.shouldDrain(busy.value, System.currentTimeMillis(), busyChangedAt.get(),
+                backlog.firstOrNull()?.endedAt, maxHold),
+            running = whisperCpus.isNotEmpty() && com.agent.ultra.agent.Brain.anyRunning,
+        )
+        fun ready() = nextIndex() != null
+        // Ended while the brain was busy: transcribed later with the faster model (owner, 2026-10-20).
+        val held = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Utterance, Boolean>())
         var heldWindow = 0L
         var capLogged = false
 
         fun take(u: Utterance) {
             val dropped = AmbientBacklog.admit(backlog, u, { it.pcm.size }, { it.windowId != 0L })
+            dropped.forEach { held.remove(it) }
+            if (!idleNow()) held.add(u)
             if (!ready()) {
                 if (backlog.size == 1) android.util.Log.i("UltraAmbient", "brain busy: holding transcription")
                 // Once per window: its first queued utterance may be a bare "Hey Jarvis." whose
@@ -218,11 +227,12 @@ class AmbientListenService : Service() {
                     if (idleNow()) capLogged = false
                     else if (!capLogged) {
                         capLogged = true
-                        android.util.Log.i("UltraAmbient", "brain busy over ${maxHold / 1000} s: transcribing " +
-                            "${backlog.size} held utterance(s) anyway (whisper cpus=${whisperCpus.toList()})")
+                        android.util.Log.i("UltraAmbient", "brain busy: transcribing now (to Jarvis, a short \"stop\", or held over ${maxHold / 1000} s), " +
+                            "${backlog.size} queued (whisper cpus=${whisperCpus.toList()})")
                     }
-                    val u = backlog.removeFirst()
-                    onUtterance(u.pcm, u.endedAt, u.windowId, u.floorDb)
+                    val u = backlog.removeAt(nextIndex() ?: 0)
+                    val fast = held.remove(u) && u.windowId == 0L
+                    onUtterance(u.pcm, u.endedAt, u.windowId, u.floorDb, fast)
                     continue
                 }
                 if (backlog.isEmpty()) {
@@ -299,6 +309,10 @@ class AmbientListenService : Service() {
     private var asrName = AmbientConfig.ASR_MODEL
     @Volatile private var wantAsr: String? = null
     private val asrSpeed = AsrSpeed()
+
+    /** base.en beside small.en, for speech held while the brain answered (catches up ~3x faster).
+     *  Loaded on first use; transcriber thread only. */
+    private var baseWhisper = 0L
 
     private fun loadAsr(name: String): Long = WhisperNative.nativeInit(
         java.io.File(filesDir, name).absolutePath,
@@ -448,7 +462,7 @@ class AmbientListenService : Service() {
     /** [t] is when the utterance ended and [wid] the wake window open then (0 = none): the
      * command window is judged when the speech ended, not when the queued transcription runs.
      * A window is spent by one command, even if more of its speech is still queued. */
-    private fun onUtterance(pcm: ShortArray, t: Long, wid: Long, floorDb: Float) {
+    private fun onUtterance(pcm: ShortArray, t: Long, wid: Long, floorDb: Float, fast: Boolean = false) {
         // Silence since the previous utterance's speech (every utterance counts, stored or not).
         val db = CueAudio.frameDb(pcm)
         val audioMs = pcm.size * 1000L / AmbientConfig.SAMPLE_RATE
@@ -466,18 +480,23 @@ class AmbientListenService : Service() {
         if (com.agent.ultra.local.LocalModelEngine.librarian(applicationContext).busy.value) Librarian.yieldNow()
         val (threads, cpus) = AmbientThrottle.placement(
             plan, com.agent.ultra.local.LocalModelEngine.shared(applicationContext).busy.value,
-            level == com.agent.ultra.agent.ThermalPolicy.Level.NORMAL, llmCpus, whisperCpus)
+            level == com.agent.ultra.agent.ThermalPolicy.Level.NORMAL, llmCpus, whisperCpus, command = windowOpen)
         switchAsrIfWanted()
+        // Held while the brain answered: base.en catches up faster than small.en; commands keep small.
+        if (fast && asrName == AmbientConfig.ASR_SMALL_MODEL && baseWhisper == 0L) baseWhisper = loadAsr(AmbientConfig.ASR_MODEL)
+        val useBase = fast && asrName == AmbientConfig.ASR_SMALL_MODEL && baseWhisper != 0L
+        val model = if (useBase) AmbientConfig.ASR_MODEL else asrName
         val t0 = System.currentTimeMillis()
         val r = WhisperNative.transcribe(
-            whisper, MicGain.normalize(pcm), threads, WhisperNative.verbatimPrompt(cfg.wakeName), cpus, timing = true,
+            if (useBase) baseWhisper else whisper, MicGain.normalize(pcm), threads,
+            WhisperNative.verbatimPrompt(cfg.wakeName), cpus, timing = true,
         )
         // Whether whisper keeps up with speech: ms > audioMs means slower than real time.
         val took = System.currentTimeMillis() - t0
-        android.util.Log.d("UltraAmbient", "whisper model=$asrName audioMs=$audioMs ms=$took " +
+        android.util.Log.d("UltraAmbient", "whisper model=$model audioMs=$audioMs ms=$took " +
             "threads=$threads cpus=${cpus.toList()}")
         // small timed on the fast cores (brain idle): if it can't keep up with speech, base takes over.
-        if (asrName == AmbientConfig.ASR_SMALL_MODEL && !com.agent.ultra.local.LocalModelEngine.anyBusy.value) {
+        if (!useBase && asrName == AmbientConfig.ASR_SMALL_MODEL && !com.agent.ultra.local.LocalModelEngine.anyBusy.value) {
             asrSpeed.record(audioMs, took)
             if (asrSpeed.tooSlow()) {
                 android.util.Log.w("UltraAmbient", "small speech model slower than speech here: back to base")
@@ -889,7 +908,7 @@ class AmbientListenService : Service() {
         /** From a screen the user opened: listening they left on but that isn't running (Android
          *  15+ won't start it at boot; an update stops it; the mic permission came later). */
         fun resumeIfOff(ctx: Context) {
-            if (AmbientConfig(ctx).enabled && instance == null && start(ctx)) ResumeNotice.clear(ctx)
+            if (AmbientConfig(ctx).enabled && com.agent.ultra.JarvisPower.isOn(ctx) && instance == null && start(ctx)) ResumeNotice.clear(ctx)
         }
 
         /** whisper emits stock phrases on silence/music; drop the common ones. */

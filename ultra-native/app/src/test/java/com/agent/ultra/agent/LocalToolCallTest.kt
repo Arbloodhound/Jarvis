@@ -95,7 +95,7 @@ class LocalToolCallTest {
 
     @Test fun toolsOutsideTheOfferedSetAreNotRun() {
         assertEquals(LocalToolCall.Parsed.Unparsed,
-            LocalToolCall.extract("{\"tool\":\"sms_send\",\"params\":{\"to\":\"555\",\"message\":\"hi\"}}"))
+            LocalToolCall.extract("{\"tool\":\"react_navigate\",\"params\":{\"goal\":\"hi\"}}"))
         assertEquals(LocalToolCall.Parsed.Unparsed,
             LocalToolCall.extract("{\"tool\":\"react_navigate\",\"params\":{\"goal\":\"x\"}}"))
     }
@@ -115,11 +115,59 @@ class LocalToolCallTest {
         assertEquals(LocalToolCall.Parsed.Unparsed,
             LocalToolCall.extract("This isn't wifi_toggle or anything else; no tool applies."))
         assertEquals(LocalToolCall.Parsed.Unparsed,
-            LocalToolCall.extract("{\"tool\":\"sms_send\",\"params\":{\"message\":\"use note_create\"}}"))
+            LocalToolCall.extract("{\"tool\":\"react_navigate\",\"params\":{\"message\":\"use note_create\"}}"))
     }
 
     @Test fun visibleTextDropsTraceAndMarkers() {
         assertEquals("flashlight_toggle", LocalToolCall.visibleText("hm</think>\n flashlight_toggle <|im_end|>"))
         assertEquals("ok", LocalToolCall.visibleText("ok<think>trailing trace"))
+    }
+}
+
+class LocalToolCallCallsTest {
+    @org.junit.Test fun callsAndTextsAreOffered() {
+        for (t in listOf("call_phone", "call_answer", "call_end", "call_speaker", "sms_send"))
+            org.junit.Assert.assertTrue(t, t in LocalToolCall.TOOLS)
+        val c = LocalToolCall.extract("{\"tool\":\"call_phone\",\"params\":{\"to\":\"mom\"}}")
+        org.junit.Assert.assertTrue(c is LocalToolCall.Parsed.Call && c.tool == "call_phone")
+    }
+    @org.junit.Test fun callRequestsRouteToTheToolLoop() {
+        for (r in listOf("call mom", "hang up", "put it on speaker", "text Sam I am running late", "answer the call",
+            "look at my screen", "describe my screen", "read this whole page", "what phone is this"))
+            org.junit.Assert.assertTrue(r, Brain.isSimpleLocalIntent(r))
+    }
+}
+
+class LocalToolCallChainTest {
+    @org.junit.Test fun webMemoryAndRoutineToolsAreOffered() {
+        for (t in listOf("open_url", "web_search", "web_browse", "ambient_recall", "trash", "forget",
+            "recipe_run", "recipe_save", "recipe_list", "recipe_delete", "watch_me", "stop_watching", "cancel_watching"))
+            org.junit.Assert.assertTrue(t, t in LocalToolCall.TOOLS)
+        for (t in listOf("shop_search", "shop_checkout_prep", "tor_connect", "ask_claude", "delegate", "connector", "artifact"))
+            org.junit.Assert.assertFalse(t, t in LocalToolCall.TOOLS)
+    }
+    @org.junit.Test fun chainsAndLinksRouteOnlyWhenAllowed() {
+        val r = "call mom and then text Sam hi"
+        org.junit.Assert.assertFalse(Brain.isSimpleLocalIntent(r))
+        org.junit.Assert.assertTrue(Brain.isSimpleLocalIntent(r, allowChains = true))
+        org.junit.Assert.assertFalse(Brain.isSimpleLocalIntent("open example.com"))
+        org.junit.Assert.assertTrue(Brain.isSimpleLocalIntent("open example.com", allowChains = true))
+        org.junit.Assert.assertTrue(Brain.isSimpleLocalIntent("search the web for ferry times", allowChains = true))
+        org.junit.Assert.assertTrue(LocalToolCall.compound(r))
+        org.junit.Assert.assertFalse(LocalToolCall.compound("call mom"))
+    }
+}
+
+class LocalToolCallReplyTest {
+    @org.junit.Test fun replyPromptCarriesRequestAndResults() {
+        val p = LocalToolCall.replyPrompt("call mom", listOf("call_phone: Calling 5551234", "device_info: Pixel"))
+        org.junit.Assert.assertTrue("call mom" in p && "Calling 5551234" in p && "Do not invent anything" in p)
+    }
+
+    @Test fun aSecondWebLookupEndsTheChain() {
+        assertTrue(LocalToolCall.repeatsJob("web_search", "web_browse"))
+        assertTrue(LocalToolCall.repeatsJob("web_search", "web_search"))
+        assertFalse(LocalToolCall.repeatsJob("web_search", "sms_send"))
+        assertFalse(LocalToolCall.repeatsJob("call_phone", "sms_send"))
     }
 }

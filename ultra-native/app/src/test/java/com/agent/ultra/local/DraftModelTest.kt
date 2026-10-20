@@ -20,12 +20,14 @@ class DraftModelTest {
     /** Pixel 10 Pro XL brain test: ~5.2 GB free with the 4B loaded at 16384. */
     @Test fun pixelRoomTakesTheFullContext() = assertEquals(16384, DraftModel.contextFor(5_200_000_000L, 16384))
 
-    @Test fun shorterRoomShrinksTheDraftContext() = assertEquals(8192, DraftModel.contextFor(4_500_000_000L, 16384))
+    @Test fun shorterRoomShrinksTheDraftContext() = assertEquals(8192, DraftModel.contextFor(3_200_000_000L, 16384))
 
     @Test fun neverAboveTheThinkersContext() = assertEquals(4096, DraftModel.contextFor(9_000_000_000L, 4096))
 
     @Test fun skippedWhenRoomIsShortOrUnknown() {
-        assertEquals(0, DraftModel.contextFor(3_500_000_000L, 16384))
+        assertEquals(0, DraftModel.contextFor(2_500_000_000L, 16384))
+        // The Pixel 2026-10-18: 3659 MB free with the 4B loaded now fits a draft.
+        assertTrue(DraftModel.contextFor(3659L * 1_048_576, 16384) > 0)
         assertEquals(0, DraftModel.contextFor(0L, 16384))
         assertEquals(0, DraftModel.contextFor(-1L, 16384))
         assertEquals(0, DraftModel.contextFor(9_000_000_000L, 0))
@@ -35,7 +37,7 @@ class DraftModelTest {
     @Test fun alwaysLeavesTheThinkersFreeMemory() {
         for (room in 0L..12_000_000_000L step 250_000_000L) for (t in LocalModelEngine.CTX_STEPS) {
             val c = DraftModel.contextFor(room, t)
-            if (c > 0) assertTrue("room=$room ctx=$c", room - DraftModel.needBytes(c) >= LocalModelEngine.THINKER_FREE_AFTER_LOAD_BYTES)
+            if (c > 0) assertTrue("room=$room ctx=$c", room - DraftModel.needBytes(c) >= DraftModel.FREE_AFTER_BYTES)
         }
     }
 

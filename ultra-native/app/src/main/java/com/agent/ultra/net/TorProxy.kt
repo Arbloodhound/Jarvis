@@ -90,8 +90,18 @@ class TorProxy(
         /** Tor Browser's user agent family: the same as many onion visitors, nothing that names Jarvis. */
         private const val UA = "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"
 
-        /** The app's one Tor client (Orbot's default port). */
-        val shared: TorProxy by lazy { TorProxy() }
+        /** The in-app Tor's SOCKS port once it is bootstrapped (EmbeddedTor), else -1. */
+        @Volatile var embeddedPort: Int = -1
+
+        private val byPort = java.util.concurrent.ConcurrentHashMap<Int, TorProxy>()
+
+        /** The Tor client in use now: the in-app Tor when it runs, else Orbot's [PORT]. */
+        fun current(): TorProxy = byPort.getOrPut(embeddedPort.takeIf { it > 0 } ?: PORT) {
+            TorProxy(port = embeddedPort.takeIf { it > 0 } ?: PORT)
+        }
+
+        /** The app's Tor client, resolved on each use ([current]). */
+        val shared: TorProxy get() = current()
 
         fun isOnion(host: String): Boolean = host.lowercase().trimEnd('.').endsWith(".onion")
 

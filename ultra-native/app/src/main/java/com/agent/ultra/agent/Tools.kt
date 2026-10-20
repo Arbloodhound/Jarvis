@@ -210,6 +210,7 @@ class Tools(
                 // ── Apps & navigation ────────────────────────────────
                 "app_launch" -> {
                     val target = params.optString("target")
+                    com.agent.ultra.net.TorBrowserGuard.check(context, target, params.optBoolean("vpnOk"))?.let { return it }
                     val pkg = controller.findPackage(target)
                     when {
                         pkg == null -> "Error: no launchable app matching '$target'"
@@ -228,6 +229,7 @@ class Tools(
                     else "Error: could not open $url"
                 }
                 "react_navigate" -> {
+                    controller.wakeScreenIfUnlocked()   // asleep but unlocked: light it for the task
                     // Already judged this request wrong; do not go round again.
                     navigator?.stoppedOnDisagreement?.let { return it }
 
@@ -236,6 +238,7 @@ class Tools(
                     // to whatever is on screen and drives it with nothing to aim at.
                     if (goal.isBlank()) return "Error: react_navigate needs a 'goal'"
                     val hint = params.optString("appHint")
+                    com.agent.ultra.net.TorBrowserGuard.check(context, "$hint $goal", params.optBoolean("vpnOk"))?.let { return it }
                     val nav = navigator ?: return "Error: navigator not wired"
                     // Takeover screen while the cloud navigator drives the app (Stop in the corner).
                     val svc = com.agent.ultra.AgentAccessibilityService.getInstance()
@@ -292,6 +295,18 @@ class Tools(
                     else webBrowse(task)
                 }
                 "shop_checkout_prep" -> checkoutPrep(params)
+                "forget" -> forget(params.optString("subject"))
+                "connector" -> connector(params)
+                "artifact" -> artifact(params)
+                "trash" -> trash(params)
+                "delegate" -> delegate(params)
+                // Starts Tor (Orbot) for the onion route; never turns onion research on.
+                "tor_connect" -> when {
+                    NetPolicy.offlineOnly(context) -> "Offline-only mode is on, so Tor stays off. Nothing was started."
+                    !com.agent.ultra.ui.UltraPrefs.onionResearch(context) ->
+                        "Onion research via Tor is off in Settings, so Tor stays off — the owner can turn it on there. Nothing was started."
+                    else -> com.agent.ultra.net.TorConnect.describe(com.agent.ultra.net.TorConnect.connect(context))
+                }
 
                 // ── Device control ───────────────────────────────────
                 "flashlight_toggle" -> {
@@ -346,6 +361,30 @@ class Tools(
                 }
                 "sms_read" -> controller.readSms(params.optInt("limit", 10))
                 "contacts_read" -> controller.readContacts(params.optString("name"))
+                "call_phone" -> {
+                    val number = params.optString("to").ifBlank { params.optString("number") }.trim()
+                    when {
+                        number.isBlank() ->
+                            "Error: call_phone needs a 'to' phone number — ask the user or use contacts_read first"
+                        controller.placeCall(number) -> "Calling $number"
+                        // Most likely the Phone permission is off; otherwise the number is unusable.
+                        else -> "Error: call failed — the Phone (CALL_PHONE) permission may be off " +
+                            "(the user grants it in Settings), or '$number' is not a dialable number"
+                    }
+                }
+
+                "call_answer" ->
+                    if (controller.answerCall()) "Answered the call"
+                    else "Error: no call is ringing, or the Phone permission (answer calls) is off"
+                "call_end" ->
+                    if (controller.endCall()) "Call ended"
+                    else "Error: no call to end, or the Phone permission (answer calls) is off"
+                "call_speaker" -> {
+                    val on = ToolArgs.bool(params, "on")
+                    if (on == null) "Error: call_speaker needs \"on\": true or false"
+                    else if (controller.setSpeakerphone(on)) "Speakerphone ${if (on) "on" else "off"}"
+                    else "Error: could not switch the speakerphone"
+                }
 
                 // ── Location / clipboard / media / alarms / notes ────
                 "device_location" -> controller.lastKnownLocation()
@@ -970,12 +1009,162 @@ class Tools(
         }
     }
 
+    /**
+     * "Forget X" (harness Forget, HANDOFF_V5 §3): plan every copy, show the plan on the owner's
+     * confirm card, delete only after their tap, then search again and report. The card's yes is
+     * the only thing that mints the confirmation; the model can't.
+     */
+    private suspend fun forget(subject: String): String {
+        if (subject.isBlank()) return "Error: forget needs a 'subject'"
+        val notes = com.agent.ultra.listen.MemoryNotes.get(context)
+        val f = com.agent.ultra.harness.Forget(listOf(
+            com.agent.ultra.harness.ClaimsForgetSource(com.agent.ultra.data.UltraDatabase.get(context).claimForget()),
+            com.agent.ultra.harness.NotesForgetSource(
+                { q -> withContext(Dispatchers.IO) { notes.list(null, q, 200).map { it.id to it.text } } },
+                { id -> withContext(Dispatchers.IO) { notes.delete(id) } }),
+        ))
+        val plan = f.plan(subject)
+        if (plan.items.isEmpty()) return plan.summary()
+        val ok = ActionGate.approve("forget", subject, "Jarvis", "forget",
+            title = "Forget \u201C${subject.take(60)}\u201D? (${plan.items.size} item${if (plan.items.size == 1) "" else "s"})",
+            body = plan.summary().take(600))
+        if (!ok) return "Nothing was forgotten: the owner didn't confirm.\n" + plan.summary()
+        return f.execute(f.userConfirmed(plan.id)).summary()
+    }
+
+    /**
+     * The connectors (Gmail, Calendar, Drive, Docs — HANDOFF_V5 §1): status first, then the
+     * registry's approval rule; a write or send the grants don't cover goes to the owner's confirm
+     * card, and only their tap mints the token the call needs. Codes in results are scrubbed.
+     */
+    private suspend fun connector(params: JSONObject): String {
+        val reg = com.agent.ultra.harness.connectors.AppConnectors.registry(context)
+        val id = params.optString("connector")
+        val op = params.optString("op")
+        if (id.isBlank() || op.isBlank() || op == "list") return "Connectors:\n" + reg.directory()
+        val args = params.optJSONObject("args")?.let { o -> o.keys().asSequence().associateWith { o.optString(it) } } ?: emptyMap()
+        if (id == com.agent.ultra.harness.connectors.SpotifyConnector.ID) com.agent.ultra.harness.connectors.SpotifyAuth.refresh(context)
+        if (id in com.agent.ultra.harness.connectors.GoogleAccess.CONNECTORS) {
+            com.agent.ultra.harness.connectors.GoogleAccess.refresh(context,
+                com.agent.ultra.harness.connectors.AppConnectors.vault(context),
+                com.agent.ultra.harness.connectors.AppConnectors.google(context))
+        }
+        // account "me": the one signed-in account, so the owner's recipient grants (Settings) apply.
+        var r = reg.call(id, op, args, account = com.agent.ultra.harness.connectors.AppConnectors.ACCOUNT)
+        if (r is com.agent.ultra.harness.connectors.CallResult.NeedsApproval) {
+            val ok = ActionGate.approve("connector", "$id.$op", id, "approval",
+                title = "Allow Jarvis: $id — $op?", body = r.action.take(600))
+            if (!ok) return "Not done: the owner didn't approve.\n${r.action}"
+            r = reg.call(id, op, args, approval = reg.approve(r.key), account = com.agent.ultra.harness.connectors.AppConnectors.ACCOUNT)
+        }
+        return when (r) {
+            is com.agent.ultra.harness.connectors.CallResult.Ok -> r.text
+            is com.agent.ultra.harness.connectors.CallResult.NeedsConnect ->
+                r.why + " The owner connects Google in Settings → CONNECTORS → Connect Google."
+            is com.agent.ultra.harness.connectors.CallResult.Failed -> "Error: ${r.reason}"
+            is com.agent.ultra.harness.connectors.CallResult.NeedsApproval -> "Not done: it still needs the owner's approval."
+        }
+    }
+
+    /** Documents, pages and data the agent makes for the owner (harness Artifacts): versioned, delete → trash. */
+    private suspend fun artifact(params: JSONObject): String = withContext(Dispatchers.IO) {
+        val arts = Workspace.artifacts(context)
+        val slug = params.optString("slug")
+        try {
+            when (params.optString("action")) {
+                "create" -> {
+                    val kind = runCatching { com.agent.ultra.harness.Artifacts.Kind.valueOf(params.optString("kind", "DOCUMENT").uppercase()) }
+                        .getOrDefault(com.agent.ultra.harness.Artifacts.Kind.DOCUMENT)
+                    val a = arts.create(params.optString("name").ifBlank { "Untitled" }, kind, params.optString("content"))
+                    "Created \"${a.name}\" (slug ${a.slug}, version 1)."
+                }
+                "edit" -> arts.edit(slug, params.optString("content")).let { "Saved \"${it.name}\" as version ${it.versions}." }
+                "read" -> arts.content(slug, params.optInt("version").takeIf { it > 0 }) ?: "Error: no artifact '$slug'"
+                "delete" -> "Moved to the trash (id ${arts.delete(slug)}); the owner can restore it."
+                "share" -> {
+                    val a = arts.get(slug) ?: return@withContext "Error: no artifact '$slug'"
+                    val ok = withContext(Dispatchers.Main) {
+                        ActionGate.approve("share", a.name, "Jarvis", "share",
+                            title = "Share \u201C${a.name.take(60)}\u201D?", body = "Opens the share sheet with its current text. Nothing is sent unless you pick where.")
+                    }
+                    if (!ok) "Not shared: the owner didn't confirm."
+                    else {
+                        arts.share(arts.userAskedToShare(slug))
+                        val text = arts.content(slug).orEmpty()
+                        withContext(Dispatchers.Main) {
+                            context.startActivity(android.content.Intent.createChooser(
+                                android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                                    .putExtra(android.content.Intent.EXTRA_SUBJECT, a.name).putExtra(android.content.Intent.EXTRA_TEXT, text),
+                                "Share ${a.name}").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }
+                        "Opened the share sheet for \"${a.name}\"; the owner picks where it goes."
+                    }
+                }
+                else -> arts.list().takeIf { it.isNotEmpty() }?.joinToString("\n") { "- ${it.slug}: ${it.name} (${it.kind.name.lowercase()}, ${it.versions} version${if (it.versions == 1) "" else "s"})" }
+                    ?: "No artifacts yet."
+            }
+        } catch (e: Exception) { "Error: ${e.message ?: e.javaClass.simpleName}" }
+    }
+
+    /** The trash: list and restore. Emptying it is the owner's, in Settings. */
+    private suspend fun trash(params: JSONObject): String = withContext(Dispatchers.IO) {
+        val t = Workspace.trash(context)
+        try {
+            when (params.optString("action")) {
+                "restore" -> "Restored to ${t.restore(params.optString("id")).name}."
+                else -> t.list().takeIf { it.isNotEmpty() }?.joinToString("\n") {
+                    "- ${it.id}: ${java.io.File(it.originalPath).name} (${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it.trashedAtMs))})"
+                } ?: "The trash is empty."
+            }
+        } catch (e: Exception) { "Error: ${e.message ?: e.javaClass.simpleName}" }
+    }
+
+    /**
+     * Research in parallel (harness SubagentOrchestrator, HANDOFF_V5 §4): one child per task, each a
+     * web research run; children can't spawn. Every result comes back as a handoff the parent checks
+     * (found something with a source, or not) before it's used.
+     */
+    private suspend fun delegate(params: JSONObject): String {
+        val tasks = params.optJSONArray("tasks")?.let { a -> (0 until a.length()).map { a.optString(it) } }
+            ?.map { it.trim() }?.filter { it.isNotBlank() }?.distinct()?.take(4).orEmpty()
+        if (tasks.isEmpty()) return "Error: delegate needs 'tasks' (a list of up to 4 research questions)"
+        val handoffs = java.util.concurrent.ConcurrentLinkedQueue<com.agent.ultra.harness.Handoff>()
+        return kotlinx.coroutines.coroutineScope {
+            val done = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val o = com.agent.ultra.harness.SubagentOrchestrator(this, { h ->
+                handoffs += h
+                if (handoffs.size == tasks.size) done.complete(Unit)
+            }, verify = { _, r ->
+                val ok = r.isNotBlank() && !r.startsWith("Error") && Regex("https?://").containsMatchIn(r)
+                ok to if (ok) "has sources" else "no sourced result"
+            })
+            val runner = object : com.agent.ultra.harness.AgentRunner {
+                override suspend fun run(task: String, inbox: kotlinx.coroutines.channels.ReceiveChannel<String>,
+                                         ctx: com.agent.ultra.harness.ChildContext): String {
+                    ctx.report("researching")
+                    return executeNow("web_search", JSONObject().put("query", task))
+                }
+            }
+            tasks.forEach { o.spawn(it, runner) }
+            kotlinx.coroutines.withTimeoutOrNull(120_000) { done.await() }
+            o.list().filter { it.status == com.agent.ultra.harness.ChildStatus.RUNNING }.forEach { o.close(it.id) }
+            tasks.joinToString("\n\n") { t ->
+                val h = handoffs.firstOrNull { it.task == t }
+                "### $t\n" + when {
+                    h == null -> "(no result within 2 minutes — closed)"
+                    h.result == null -> "(failed: ${h.error})"
+                    else -> (if (h.verified) "" else "[unverified: ${h.verifyNote}]\n") + h.result.take(3000)
+                }
+            }
+        }
+    }
+
     companion object {
         /** Tools that mutate the outside world — confirmation gate targets. */
-        val DESTRUCTIVE = setOf("sms_send", "file_delete")
+        val DESTRUCTIVE = setOf("sms_send", "file_delete", "call_phone")
 
         /** Reach personal data directly, bypassing the app-access list. */
-        val PERSONAL_TOOLS = setOf("sms_send", "sms_read", "contacts_read", "device_location")
+        val PERSONAL_TOOLS = setOf("sms_send", "sms_read", "contacts_read", "device_location", "call_phone")
 
         /** Perception budgets. Characters, not node counts — a node count
          * punishes a page for having short labels. */

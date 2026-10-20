@@ -1,5 +1,8 @@
 package com.agent.ultra.agent
 
+import com.agent.ultra.harness.PromptFragment
+import com.agent.ultra.harness.SessionEnvelope
+import com.agent.ultra.harness.ToolNamespaceStore
 import org.json.JSONObject
 
 /**
@@ -27,7 +30,43 @@ object LocalToolCall {
         "media_play", "media_next", "settings_open", "device_location",
         // Everything on the phone (owner, 2026-10-07: "unrestricted access to the phone and everything on it").
         "sms_read", "contacts_read", "system_info",
+        // Calls and texts (owner, 2026-10-19: the local model needs the cloud model's tools). "call mom"
+        // gives a name: Brain resolves it from the contacts and the gate still asks before it dials.
+        "call_phone", "call_answer", "call_end", "call_speaker", "sms_send",
+        // Reading the screen as a picture, and the rest of the phone's details.
+        "screen_ocr", "look_at_screen", "describe_screen", "read_screen_deep", "device_info",
+        // The web, memory, saved routines and learn-by-watching (owner, 2026-10-19). Not here on purpose:
+        // shop_*, tor_connect (shopping and onion reach), ask_claude / delegate / connector / artifact (cloud by nature).
+        "open_url", "web_search", "web_browse", "ambient_recall", "trash", "forget",
+        "recipe_run", "recipe_save", "recipe_list", "recipe_delete", "watch_me", "stop_watching", "cancel_watching",
     )
+
+    /** A request with more than one job ("call mom and then text Sam"): the on-device loop goes on to a
+     *  next tool after the first. Simple requests stop after one call (no extra model run). */
+    fun compound(request: String): Boolean =
+        Regex("\\b(and then|then|after that|afterwards|and also|, and| and )\\b", RegexOption.IGNORE_CASE)
+            .containsMatchIn(IntentRouter.requestPart(request))
+
+    /** The prompt for the main model's final reply, from what the tools returned. Pure, JVM-tested. */
+    fun replyPrompt(request: String, results: List<String>): String {
+        val system = "You are Jarvis, a calm, concise assistant on the user's phone. Tools just ran for the user's " +
+            "request. Say what happened in one or two short, plain sentences, using only the results below. " +
+            "Do not invent anything. If a result says Error, say it did not work and why."
+        val user = "Request: ${IntentRouter.requestPart(request)}\nResults:\n" +
+            results.mapIndexed { i, r -> "${i + 1}. ${r.take(400)}" }.joinToString("\n")
+        return LocalPrompt.build(system, emptyList(), user)
+    }
+
+    /** The web tools: one lookup answers the question. */
+    private val WEB_LOOKUP = setOf("web_search", "web_browse")
+
+    /** A chain's next call that only repeats the job just done: a second web lookup after a web lookup
+     * (Pixel log 2026-10-19: "go on google for me and look up the time" ran web_search, then
+     * web_browse {"task":"search"}). The chain stops there. */
+    fun repeatsJob(prevTool: String, nextTool: String): Boolean = prevTool in WEB_LOOKUP && nextTool in WEB_LOOKUP
+
+    /** At most this many tool calls for one request. */
+    const val MAX_CHAIN = 4
 
     /** What the model says when the message is not a command for one of [TOOLS]. */
     const val NONE = "none"
@@ -45,9 +84,9 @@ object LocalToolCall {
      * positively calls a DEVICE command. Routing is on the command alone when ambient context
      * wraps it.
      */
-    fun offlineRoute(input: String, canDecline: Boolean): Boolean {
+    fun offlineRoute(input: String, canDecline: Boolean, chains: Boolean = false): Boolean {
         val request = IntentRouter.requestPart(input)
-        if (!Brain.isSimpleLocalIntent(request)) return false
+        if (!Brain.isSimpleLocalIntent(request, chains)) return false
         val tier = IntentRouter.route(request).tier
         return if (canDecline) tier != IntentRouter.Tier.DEEP else tier == IntentRouter.Tier.DEVICE
     }
@@ -59,10 +98,13 @@ object LocalToolCall {
      * model that adds a sentence. Not [LocalPrompt.answerReserve] — that is for prose answers. */
     const val ANSWER_RESERVE = 160
 
-    val SYSTEM = """
+    /** Core persona fragment of the tool prompt. */
+    private val PERSONA = """
 You are Jarvis, an Android agent running entirely on this phone, offline. Decide whether the user's message is a command one of these tools carries out, and reply with EXACTLY one JSON object and nothing else.
+""".trim()
 
-TOOLS:
+    /** The always-full tool lines: every tool in [TOOLS], unchanged from the fixed catalog. */
+    private val CORE_TOOLS_TEXT = """
 flashlight_toggle {"on":true|false}
 wifi_toggle {"on":true|false}
 bluetooth_toggle {"on":true|false}
@@ -85,7 +127,33 @@ device_location {}
 sms_read {"limit":5}   (read my texts / messages)
 contacts_read {"name":"..."}   (a contact's number or details)
 system_info {}   (storage, Wi-Fi, Bluetooth, battery, phone details)
+call_phone {"to":"name or number"}   (place a call; a name is looked up in contacts)
+call_answer {}   (pick up the ringing call)
+call_end {}   (hang up, or decline the ringing call)
+call_speaker {"on":true|false}   (speakerphone during a call)
+sms_send {"to":"name or number","message":"..."}   (send a text)
+screen_ocr {}   (read the words in a picture of the screen: games, maps, images)
+look_at_screen {"question":"..."}   (the vision model describes the screen or answers a question about it; slow)
+describe_screen {}   (a description of what is on the screen)
+read_screen_deep {}   (scroll the page and read all of it)
+device_info {}   (model, Android version, hardware)
+open_url {"url":"https://..."}   (open a link in the browser)
+web_search {"query":"..."}   (search the internet; results come back as text)
+web_browse {"task":"..."}   (open-ended browsing for a task)
+ambient_recall {"query":"...","limit":5}   (search what the phone overheard earlier)
+trash {"action":"list|restore","id":"..."}   (the trash: list or restore)
+forget {"subject":"..."}   (forget something from memory; asks first)
+recipe_run {"name":"..."}   (run a saved routine)
+recipe_save {"name":"..."}   (save the previous successful run as a routine)
+recipe_list {}   (list saved routines)
+recipe_delete {"name":"..."}   (delete a saved routine)
+watch_me {}   (start watching me do something to learn it)
+stop_watching {"name":"..."}   (stop watching and save it under a name)
+cancel_watching {}   (stop watching and throw it away)
+""".trim()
 
+    /** After the tool list: the way out and the worked examples. */
+    private val TRAILER = """
 If no tool above does what the message asks (a question, chat, a timer, anything else), reply {"tool":"none","params":{}}.
 
 EXAMPLES:
@@ -105,15 +173,68 @@ lock the phone -> {"tool":"global_action","params":{"action":"lock_screen"}}
 read my last texts -> {"tool":"sms_read","params":{"limit":5}}
 what's Sam's number -> {"tool":"contacts_read","params":{"name":"Sam"}}
 how much storage do I have -> {"tool":"system_info","params":{}}
+call mom -> {"tool":"call_phone","params":{"to":"mom"}}
+answer the call -> {"tool":"call_answer","params":{}}
+hang up -> {"tool":"call_end","params":{}}
+put it on speaker -> {"tool":"call_speaker","params":{"on":true}}
+text Sam I am running late -> {"tool":"sms_send","params":{"to":"Sam","message":"I am running late"}}
+read the words in the picture of my screen -> {"tool":"screen_ocr","params":{}}
+what does my screen look like -> {"tool":"look_at_screen","params":{"question":""}}
+read this whole page -> {"tool":"read_screen_deep","params":{}}
+what phone is this -> {"tool":"device_info","params":{}}
+search the web for ferry times -> {"tool":"web_search","params":{"query":"ferry times"}}
+open example.com -> {"tool":"open_url","params":{"url":"https://example.com"}}
+what did we say about the trip -> {"tool":"ambient_recall","params":{"query":"trip","limit":5}}
+run my morning routine -> {"tool":"recipe_run","params":{"name":"morning"}}
+save that as morning -> {"tool":"recipe_save","params":{"name":"morning"}}
+what routines do I have -> {"tool":"recipe_list","params":{}}
+show my trash -> {"tool":"trash","params":{"action":"list"}}
+forget my old address -> {"tool":"forget","params":{"subject":"my old address"}}
+watch me do this -> {"tool":"watch_me","params":{}}
 set a timer for 5 minutes -> {"tool":"none","params":{}}
 """.trim()
 
+    /** The model asks for a deferred tool namespace's schemas with this (handled in Brain, not a Tools tool). */
+    const val LOAD_NAMESPACE = "load_tool_namespace"
+
+    /**
+     * Deferred namespaces (namespace → full schema block). EMPTY on purpose: every tool in
+     * [TOOLS] stays fully described, exactly as before, so no existing command needs an extra
+     * load turn. Put a block here to make that group a one-line stub until the model loads it.
+     */
+    val DEFERRED_SCHEMAS: Map<String, String> = emptyMap()
+
+    /** A fresh per-session store: [TOOLS] are core (always full); [deferred] start as stubs. */
+    fun newNamespaceStore(deferred: Map<String, String> = DEFERRED_SCHEMAS): ToolNamespaceStore =
+        ToolNamespaceStore(
+            deferred,
+            // Only mention load_tool_namespace when there is something to load.
+            if (deferred.isEmpty()) CORE_TOOLS_TEXT
+            else CORE_TOOLS_TEXT + "\n$LOAD_NAMESPACE {\"namespace\":\"name\"}   (load a deferred tool group listed below)",
+            TOOLS,
+        )
+
+    /** The four-fragment envelope of the tool prompt. Tool schemas (core + loaded + stubs, then
+     * the examples) are one fragment, so a namespace load changes only that one. No profile or
+     * history: a device command stands alone. */
+    fun envelope(store: ToolNamespaceStore): SessionEnvelope = SessionEnvelope(
+        LocalEnvelope.fragments(PERSONA, "", "TOOLS:\n" + store.promptBlock() + "\n\n" + TRAILER, ""),
+        store.activeNamespaces().map { PromptFragment.sha256Hex(it) },
+    )
+
+    /** The system text for [store]'s current state. With no deferred namespaces this equals [SYSTEM]. */
+    fun systemFor(store: ToolNamespaceStore): String = LocalEnvelope.systemText(envelope(store).fragments, "\n\n")
+
+    val SYSTEM: String = systemFor(newNamespaceStore())
+
     /** ChatML prompt in the model's own template, ending in the opened <think> block
      * (pass startsInThink = true). No history: a device command stands on its own, and
-     * every prompt token is prefill time on the phone. */
-    fun prompt(request: String, recalled: String? = null): String {
-        val system = if (recalled.isNullOrBlank()) SYSTEM
-            else "$SYSTEM\n\nA request like this previously worked with: $recalled"
+     * every prompt token is prefill time on the phone. [store] carries the namespaces
+     * loaded so far this session; null means the plain [SYSTEM]. */
+    fun prompt(request: String, recalled: String? = null, store: ToolNamespaceStore? = null): String {
+        val base = if (store == null) SYSTEM else systemFor(store)
+        val system = if (recalled.isNullOrBlank()) base
+            else "$base\n\nA request like this previously worked with: $recalled"
         return LocalPrompt.build(system, emptyList(), IntentRouter.requestPart(request))
     }
 
@@ -122,6 +243,8 @@ set a timer for 5 minutes -> {"tool":"none","params":{}}
         /** The whole reply is one offered tool's name and nothing else; params come from the
          * request. A name mentioned inside prose or JSON is not this. */
         data class BareName(val tool: String) : Parsed()
+        /** The model asked for a deferred tool namespace's schemas; not a device action. */
+        data class LoadNamespace(val namespace: String) : Parsed()
         /** The model said this is not a device command. */
         object Declined : Parsed()
         /** No usable call: prose, broken JSON, or a tool outside [TOOLS]. */
@@ -153,6 +276,9 @@ set a timer for 5 minutes -> {"tool":"none","params":{}}
         val tool = call.first.trim()
         return when {
             tool.equals(NONE, ignoreCase = true) -> Parsed.Declined
+            tool == LOAD_NAMESPACE -> call.second.let { p ->
+                Parsed.LoadNamespace(p.optString("namespace", p.optString("name", "")).trim())
+            }
             tool in TOOLS -> Parsed.Call(tool, call.second)
             else -> Parsed.Unparsed
         }

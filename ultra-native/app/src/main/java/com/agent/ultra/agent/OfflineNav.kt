@@ -118,9 +118,25 @@ object OfflineNav {
             // "turn on X" is a switch, not "in app X": the thing done must be more than a verb.
             if (STEP.containsMatchIn(what) && what.contains(' ') && !NOT_AN_APP.matches(app)) return Task(r, app)
         }
+        // "go on Google and search X", "use the browser to search X": the browser, whichever is installed
+        // (GrapheneOS has no Google app: [AgentController.findPackage] maps these names to the default browser).
+        if (WEB_SEARCH.containsMatchIn(r)) return Task(r, "browser")
         if (UI_VERB.containsMatchIn(r)) return Task(r, "")
         return null
     }
+
+    /** "open X and <step>" or "go on Google and search X": a screen job from its first words, so it goes to
+     * the screen driver before the tool loop. Not the looser "… in X" form: in "text Sam I'm on my way",
+     * "way" is no app. */
+    fun opensAppFirst(request: String): Boolean {
+        val r = request.trim().replace(Regex("\\s+"), " ").let { POLITE.replace(it, "") }.trim()
+        return OPEN_THEN.find(r)?.let { STEP.containsMatchIn(it.groupValues[2].trim()) } == true || WEB_SEARCH.containsMatchIn(r)
+    }
+
+    private val WEB_SEARCH = Regex(
+        "\\b(?:go\\s+(?:on|to|onto)|open|use|in|on)\\s+(?:the\\s+|my\\s+)?(?:google|chrome|(?:web\\s+)?browser|the\\s+web|the\\s+internet)\\b.*?\\bsearch(?:\\s+for)?\\s+\\S",
+        RegexOption.IGNORE_CASE,
+    )
 
     // ── Perceive ────────────────────────────────────────────────────────────────────────────
 

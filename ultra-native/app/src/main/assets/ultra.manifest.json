@@ -125,6 +125,31 @@
       ]
     },
     {
+      "name": "tor_connect",
+      "effects": ["mutate"]
+    },
+    {
+      "name": "forget",
+      "effects": ["mutate"]
+    },
+    {
+      "name": "connector",
+      "effects": ["mutate"]
+    },
+    {
+      "name": "artifact",
+      "effects": ["mutate"]
+    },
+    {
+      "name": "trash",
+      "effects": ["mutate"]
+    },
+    {
+      "name": "delegate",
+      "effects": ["egress"],
+      "requires": [{"kind": "not_tainted", "arg": "tasks"}, {"kind": "spoof_check"}]
+    },
+    {
       "name": "shop_checkout_prep",
       "effects": [
         "mutate"
@@ -238,6 +263,39 @@
         {
           "kind": "not_tainted",
           "arg": "message"
+        },
+        {
+          "kind": "spoof_check"
+        }
+      ]
+    },
+    {
+      "name": "call_answer",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "call_end",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "call_speaker",
+      "effects": [
+        "mutate"
+      ]
+    },
+    {
+      "name": "call_phone",
+      "effects": [
+        "egress"
+      ],
+      "requires": [
+        {
+          "kind": "recipient_traceable",
+          "arg": "to"
         },
         {
           "kind": "spoof_check"

@@ -9,6 +9,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.ui.unit.dp
 import com.agent.ultra.local.LocalModelEngine
 import com.agent.ultra.ui.ChatScreen
 import com.agent.ultra.ui.SettingsScreen
@@ -40,6 +44,7 @@ class MainActivity : ComponentActivity() {
                 androidx.compose.runtime.LaunchedEffect(asked) {
                     asked?.let { screen = it; com.agent.ultra.ui.ChatStore.screenRequest.value = null }
                 }
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
                 when (screen) {
                     "chat" -> ChatScreen(
                         localEngine = engine,
@@ -49,7 +54,10 @@ class MainActivity : ComponentActivity() {
                         onOpenMemory = { screen = "memory" },
                         onOpenGuide = { guideFrom = "chat"; screen = "guide" },
                         onOpenInsights = { screen = "insights" },
+                        onOpenForYou = { screen = "foryou" },
+                        onModelChanged = { configVersion++ },
                     )
+                    "foryou" -> com.agent.ultra.ui.ForYouScreen(onBack = { screen = "chat" })
                     "insights" -> com.agent.ultra.ui.InsightsScreen(onBack = { screen = "chat" })
                     "guide" -> com.agent.ultra.ui.GuideScreen(onBack = { screen = guideFrom })
                     "notes" -> com.agent.ultra.ui.NotesScreen(onBack = { screen = "chat" }, onAsk = { screen = "chat" })
@@ -60,6 +68,14 @@ class MainActivity : ComponentActivity() {
                         onBack = { screen = "chat" },
                         onOpenGuide = { guideFrom = "settings"; screen = "guide" },
                     )
+                }
+                // Floating diagnostic button, over every screen. Off by default; the owner taps it.
+                com.agent.ultra.ui.DiagnosticFab(
+                    modifier = androidx.compose.ui.Modifier
+                        .align(androidx.compose.ui.Alignment.BottomEnd)
+                        .systemBarsPadding()
+                        .padding(16.dp),
+                )
                 }
             }
         }

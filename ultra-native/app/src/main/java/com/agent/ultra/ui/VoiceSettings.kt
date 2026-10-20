@@ -128,6 +128,21 @@ fun VoiceSettings(context: Context) {
         }
         Switch(checked = on, onCheckedChange = { on = it; cfg.speakerTags = it })
     }
+    if (on) {
+        var prosody by remember { mutableStateOf(UltraPrefs.prosody(context)) }
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Pitch (experimental)", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Also measures each line's voice pitch and marks it [higher] or [lower] than that " +
+                        "person's own usual. A measurement, not a reading of mood. Off by default.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+            Switch(checked = prosody, onCheckedChange = { prosody = it; UltraPrefs.setProsody(context, it) })
+        }
+    }
 
     // The speech model: small hears quiet and distant speech better than base.
     var accurate by remember { mutableStateOf(cfg.accurateSpeech) }

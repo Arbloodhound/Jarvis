@@ -62,14 +62,79 @@ object UltraPrefs {
     }
 
     private const val K_OFFLINE_ONLY = "offline_only"
+    private const val K_CLOUD_BRAIN = "cloud_brain"
 
-    /** Offline only: no cloud brain, no web search (model downloads still work). Off by default.
-     * Read through agent.NetPolicy. */
+    /** Offline only: no cloud brain, no web search (model downloads still work). Off by default,
+     * and only the Settings switch changes it (the model picker used to flip it, which looked like
+     * a toggle resetting itself: owner, 2026-10-19). Read through agent.NetPolicy. */
     fun offlineOnly(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_OFFLINE_ONLY, false)
 
+    /** Which brain answers: the on-device model (default) or the cloud model chosen in the chat's
+     * model picker. Separate from [offlineOnly], which is a privacy switch on top of it. */
+    fun cloudBrain(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_CLOUD_BRAIN, false)
+
+    /** The small memory model picks tools and drives screens, the main model thinks and answers
+     *  (owner, 2026-10-19: "a model that does all the actions"). On by default; falls back to the
+     *  main model when the small one is not downloaded. */
+    fun actionModel(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("action_model", true)
+
+    /** After on-device tools run, the MAIN model writes the final reply from their results (one more
+     *  model run, so slower). Off by default: results are then shown as the tools returned them. */
+    fun mainReply(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("main_reply", false)
+
+    fun setMainReply(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("main_reply", on).apply()
+    }
+
+    fun setActionModel(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("action_model", on).apply()
+    }
+
+    fun setCloudBrain(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_CLOUD_BRAIN, on).apply()
+    }
+
     fun setOfflineOnly(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_OFFLINE_ONLY, on).apply()
+    }
+
+    private const val K_PROSODY = "prosody_experimental"
+
+    /** Experimental prosody: pitch measured per heard line and tagged [higher]/[lower] against the
+     * speaker's own usual (only with speaker tags on). Measurements, never verdicts. Off by default. */
+    fun prosody(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_PROSODY, false)
+
+    fun setProsody(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_PROSODY, on).apply()
+    }
+
+    private const val K_NOTIF_FILTER = "notif_filter"
+    private const val K_QUIET_START = "notif_quiet_start"
+    private const val K_QUIET_END = "notif_quiet_end"
+
+    /** Notification filter (harness NotificationForwardingPolicy, Muse/OpenClaw): quiet hours and a
+     * per-app burst limit in front of what Jarvis keeps of notifications. Off by default. The scam
+     * shield and code copying still see every notification. */
+    fun notificationFilter(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_NOTIF_FILTER, false)
+
+    fun setNotificationFilter(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_NOTIF_FILTER, on).apply()
+    }
+
+    /** Quiet hours (local time, 0-23); Muse's defaults 22 → 7. */
+    fun quietHours(context: Context): Pair<Int, Int> = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).let {
+        it.getInt(K_QUIET_START, 22) to it.getInt(K_QUIET_END, 7)
+    }
+
+    fun setQuietHours(context: Context, start: Int, end: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(K_QUIET_START, start.coerceIn(0, 23)).putInt(K_QUIET_END, end.coerceIn(0, 23)).apply()
     }
 
     private const val K_ONION = "onion_research"

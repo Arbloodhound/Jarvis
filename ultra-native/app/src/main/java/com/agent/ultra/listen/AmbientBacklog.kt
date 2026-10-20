@@ -16,9 +16,27 @@ package com.agent.ultra.listen
  * queued utterance is wake-window speech does the oldest of those go.
  */
 object AmbientBacklog {
-    const val MAX_ITEMS = 8
-    /** 2 minutes of 16 kHz audio (~3.8 MB of shorts). */
-    const val MAX_SAMPLES = 120 * AmbientConfig.SAMPLE_RATE
+    /** Speech now waits out a whole answer (owner, 2026-10-20), so the queue holds more:
+     * 32 utterances, 5 minutes of 16 kHz audio (~9.6 MB of shorts). Was 8 and 2 minutes. */
+    const val MAX_ITEMS = 32
+    const val MAX_SAMPLES = 300 * AmbientConfig.SAMPLE_RATE
+
+    /** An utterance this short may be "stop" or "wait": still transcribed at once while a run is going. */
+    const val SHORT_MS = 1_500L
+
+    /**
+     * Which queued utterance to transcribe now (its index), or null to keep waiting. [drain]: the
+     * brain has settled or the hold cap is reached, so the oldest goes. Otherwise only speech to
+     * Jarvis (a wake window) goes at once, and, while a run is going ([running]), a short one: a
+     * bare "stop". Everything else waits for the answer to finish (Pixel log 2026-10-19: whisper
+     * transcribing beside the brain gave 1.6 tok/s against 6 tok/s without it).
+     */
+    fun <T> next(queue: List<T>, inWindow: (T) -> Boolean, isShort: (T) -> Boolean, drain: Boolean, running: Boolean): Int? = when {
+        queue.isEmpty() -> null
+        drain -> 0
+        else -> queue.indexOfFirst(inWindow).takeIf { it >= 0 }
+            ?: if (running) queue.indexOfFirst(isShort).takeIf { it >= 0 } else null
+    }
 
     /**
      * Appends [item] to [queue] and drops until it fits [maxItems] and [maxSamples]; returns what
@@ -59,12 +77,14 @@ object AmbientBacklog {
      * backlog filled and dropped speech ("backlog full: dropped" all through the Pixel's log) and
      * nothing was stored ("last heard=never"). Past the cap the backlog drains anyway: whisper's
      * threads are on their own cores, so it competes only for memory bandwidth.
+     * That bandwidth turned out to matter (1.6 vs 6 tok/s, Pixel log 2026-10-19): the cap is now
+     * 2 minutes, long enough for an answer, still bounded for a brain stuck busy.
      */
-    const val MAX_HOLD_MS = 15_000L
+    const val MAX_HOLD_MS = 120_000L
 
     /** The cap when the cores could not be read and whisper is unpinned (it then shares the
      *  LLM's cores, the case the hold was written for): longer, but still bounded. */
-    const val MAX_HOLD_UNPINNED_MS = 60_000L
+    const val MAX_HOLD_UNPINNED_MS = 180_000L
 
     fun maxHoldMs(whisperPinned: Boolean): Long = if (whisperPinned) MAX_HOLD_MS else MAX_HOLD_UNPINNED_MS
 

@@ -110,6 +110,9 @@ object LibrarianRun {
         patterns: Boolean = true,
         readings: Boolean = true,
         minAgeMs: Long = MIN_AGE_MS,
+        /** Try to store a durable draft as a verified claim; true when stored (so it is NOT also
+         *  written as a flat note). Default no-op → everything stays a note (unchanged behaviour). */
+        promote: suspend (NoteDraft) -> Boolean = { false },
     ): Result {
         val fetched = source.unprocessed(MAX_ROWS + 1)   // one extra: is there more after this batch?
         val rows = fetched.take(MAX_ROWS)
@@ -186,7 +189,18 @@ object LibrarianRun {
             }
             observations += drafts.count { it.obs != null }
             withReading += drafts.count { it.obs?.reading != null }
-            val (a, m) = file(drafts, chunk, store, zone, now())
+            // A durable draft (fact / person) goes to the verified claim store, not a flat note; if
+            // the claim is rejected it falls back to a note, so nothing is lost. Everything else is a
+            // note as before.
+            val toFile = ArrayList<NoteDraft>(drafts.size)
+            for (d in drafts) {
+                val stored = if (ClaimKind.promotes(d.kind)) {
+                    currentCoroutineContext().ensureActive()
+                    try { promote(d) } catch (e: CancellationException) { throw e } catch (e: Exception) { log("promote failed: ${e.message}"); false }
+                } else false
+                if (!stored) toFile += d
+            }
+            val (a, m) = file(toFile, chunk, store, zone, now())
             added += a; merged += m
             source.markProcessed(last, lastTs); done++
         }
@@ -194,7 +208,9 @@ object LibrarianRun {
         return Result(done, added, merged, rejected, skipped, stop, more, observations, withReading)
     }
 
-    /** Files [drafts] from [chunk]: new notes inserted, duplicates merged. Returns (added, merged). */
+    /** Files [drafts] from [chunk]: new notes inserted, duplicates merged. Returns (added, merged).
+     *  Durable drafts already stored as verified claims are filtered out before this (see [run]), so
+     *  a fact lives as a claim OR a note, never both. */
     fun file(drafts: List<NoteDraft>, chunk: List<HeardLine>, store: NoteStore, zone: ZoneId, now: Long): Pair<Int, Int> {
         var added = 0; var merged = 0
         val ids = chunk.map { it.id }
@@ -322,6 +338,7 @@ object Librarian {
      *  (no model, not charging, screen on) costs no engine lookup. */
     fun allowed(ctx: Context): Boolean {
         if (System.currentTimeMillis() < holdUntil) return false
+        if (!com.agent.ultra.JarvisPower.isOn(ctx)) return false
         if (model == null || modelReady?.invoke() == false || !AmbientConfig(ctx).organiseMemory) return false
         val pm = ctx.getSystemService(PowerManager::class.java)
         if (pm?.isInteractive != false) return false
@@ -420,8 +437,29 @@ object Librarian {
         LibrarianPrompt.ownerName = com.agent.ultra.ui.UltraPrefs.ownerName(ctx)
         val log: (String) -> Unit = { android.util.Log.w(TAG, it) }
         val start = System.currentTimeMillis()
+        // Promote durable new notes (facts, people) to verified claims — the two-lens verifier + NLI
+        // gate runs inside writeVerified, so a contradiction supersedes instead of piling up. Built
+        // once per pass; a failure here never breaks note filing (the caller catches it).
+        val db = com.agent.ultra.data.UltraDatabase.get(ctx)
+        val claims = com.agent.ultra.harness.MemoryClaims(db.claims())
+        val embDao = db.embeddings()
+        val embedder = SentenceEmbedder.shared(ctx)
+        val nli = com.agent.ultra.harness.LlmNliHead(com.agent.ultra.local.LocalModelEngine.librarian(ctx))
+        val promote: suspend (NoteDraft) -> Boolean = promote@{ d ->
+            val kind = ClaimKind.of(d.kind) ?: return@promote false
+            val emb = embedder?.let { runCatching { it.embed(d.text) }.getOrNull() } ?: FloatArray(0)
+            val outcome = claims.writeVerified(
+                text = d.text, kind = kind, speaker = d.who ?: "Me", sourceMessage = d.text,
+                nli = nli, embeddings = embDao, embedding = emb, modelName = SentenceEmbedder.MODEL,
+                quote = d.text,
+            )
+            // Stored as a claim (new or reinforced) → don't also keep it as a note. A rejected claim
+            // (ungrounded / contradiction the gate wouldn't take) falls back to a note.
+            outcome is com.agent.ultra.harness.MemoryClaims.WriteOutcome.Written ||
+                outcome is com.agent.ultra.harness.MemoryClaims.WriteOutcome.Reinforced
+        }
         val main = LibrarianRun.run(source, store, m, zone, now = System::currentTimeMillis, keepGoing = keepGoing,
-            failures = failures, log = log, patterns = patterns, readings = readings, minAgeMs = minAgeMs)
+            failures = failures, log = log, patterns = patterns, readings = readings, minAgeMs = minAgeMs, promote = promote)
         val links = if (keepGoing()) LibrarianLinks.run(store, m, zone, since = start, now = System::currentTimeMillis,
             keepGoing = keepGoing, log = log) else LibrarianLinks.Result(0, 0, 0)
         val reread = if (!main.more && main.chunks == 0 && keepGoing()) {

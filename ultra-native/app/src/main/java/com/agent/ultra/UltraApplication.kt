@@ -16,10 +16,14 @@ class UltraApplication : Application() {
         // before the agent has a chance to read anything.
         try { com.agent.ultra.ui.ProtectedApps.seedIfUnset(this) } catch (_: Exception) {}
         wireMemory()
+        // Harness scheduler: arm the next tick for the jobs already scheduled (harness/SchedulerRuntime.kt).
+        try { com.agent.ultra.harness.SchedulerRuntime.start(this) } catch (_: Exception) {}
+        try { com.agent.ultra.agent.ForYou.registerJobs(this) } catch (_: Exception) {}
         // Foreground service keeps the process alive when backgrounded —
         // on this device class (3.5GB Samsung) backgrounded processes lose
         // their accessibility binding and get reclaimed.
-        try {
+        // Not while the owner has Jarvis switched off (JarvisPower).
+        if (JarvisPower.isOn(this)) try {
             ContextCompat.startForegroundService(
                 this, Intent(this, AgentBackgroundService::class.java)
             )
@@ -40,6 +44,13 @@ class UltraApplication : Application() {
         com.agent.ultra.listen.MemoryRecall.extraSources +=
             com.agent.ultra.listen.MemoryRecall.textSource("notes") { q, n ->
                 com.agent.ultra.listen.MemoryNotes.get(ctx).search(q, n).map { it.ts to it.text }
+            }
+        // Verified durable memory (the claim store: facts/people promoted through the verify + NLI
+        // gate). active() only, so a superseded claim never resurfaces next to its replacement.
+        com.agent.ultra.listen.MemoryRecall.extraSources +=
+            com.agent.ultra.listen.MemoryRecall.textSource("memory") { q, n ->
+                com.agent.ultra.harness.MemoryClaims(com.agent.ultra.data.UltraDatabase.get(ctx).claims())
+                    .searchScored(q).take(n).map { (c, _) -> c.reinforcedAt to c.text }
             }
         com.agent.ultra.agent.MemoryBrief.provider = { q, now ->
             val r = com.agent.ultra.listen.MemoryRecall

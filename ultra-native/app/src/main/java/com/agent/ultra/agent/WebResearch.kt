@@ -350,13 +350,20 @@ object WebResearch {
 
     data class PriceSeen(val price: Price, val n: Int, val domain: String, val year: Int?)
 
+    /** Said instead of a price when only the search snippet shows one. */
+    const val SNIPPET_PRICE_NOTE = "price: not verified — only the search snippet shows one and the page wasn't read; don't quote it"
+
+
     /**
-     * Every price the sources show, sorted mechanically — by currency, then amount, lowest first —
-     * each with its source [n], site and the newest year the source mentions. Pure, JVM-tested.
+     * Every price the sources' READ pages show, sorted mechanically — by currency, then amount,
+     * lowest first — each with its source [n], site and the newest year the source mentions.
+     * A price from a search snippet is never evidence (search results are stale and often a
+     * different item; Muse's shopping rule, MUSE_RESEARCH §10.7): a source whose page wasn't read
+     * gives no price here. Pure, JVM-tested.
      */
     fun priceEvidence(sources: List<Triple<Int, Hit, String?>>, now: Int, max: Int = 8): List<PriceSeen> =
         sources.flatMap { (n, h, page) ->
-            prices(page ?: h.snippet, 3).map { PriceSeen(it, n, h.domain, yearOf(h.title, h.snippet, h.url, now)) }
+            (if (page == null) emptyList() else prices(page, 3)).map { PriceSeen(it, n, h.domain, yearOf(h.title, h.snippet, h.url, now)) }
         }.distinctBy { Triple(it.n, it.price.currency, it.price.amount) }
             .sortedWith(compareBy({ it.price.currency }, { it.price.amount })).take(max)
 
@@ -435,10 +442,16 @@ object WebResearch {
                 append('\n').append(h.url).append('\n')
                 val page = pages[h.url]
                 val text = page ?: h.snippet
-                if (kind == Kind.PRODUCT) prices(page ?: h.snippet).takeIf { it.isNotEmpty() }?.let { ps ->
-                    append("prices seen: ").append(ps.joinToString(", ") { it.text }).append('\n')
+                if (kind == Kind.PRODUCT) {
+                    if (page != null) prices(page).takeIf { it.isNotEmpty() }?.let { ps ->
+                        append("prices seen: ").append(ps.joinToString(", ") { it.text }).append('\n')
+                    } else if (prices(h.snippet).isNotEmpty()) append(SNIPPET_PRICE_NOTE).append('\n')
                 }
-                if (text.isNotBlank()) append(text.take(if (page != null) 600 else 220)).append('\n')
+                if (text.isNotBlank()) {
+                    if (page == null) append("search snippet (page not read): ")
+                        .append(PRICE.replace(text, "[price not verified]").take(220)).append('\n')
+                    else append(text.take(600)).append('\n')
+                }
             }
         }
         // rules = false: the caller adds its own (the product check's table and question), so none here to contradict them.

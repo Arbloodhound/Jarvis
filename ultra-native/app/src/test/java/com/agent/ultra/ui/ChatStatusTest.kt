@@ -24,4 +24,11 @@ class ChatStatusTest {
 
     @Test fun negativeElapsedShowsNoSeconds() =
         assertEquals("Thinking…", ChatStatus.label(Phase.THINKING, -5_000))
+
+    @Test fun thoughtOfKeepsOnlyTheThinkingTrace() {
+        assertEquals("check the alarm list", ChatStatus.thoughtOf(ChatStatus.Status(ChatStatus.Phase.THINKING, 0, "💭 …check the alarm list")))
+        assertEquals(null, ChatStatus.thoughtOf(ChatStatus.Status(ChatStatus.Phase.THINKING, 0, "searching the web")))
+        assertEquals(null, ChatStatus.thoughtOf(ChatStatus.Status(ChatStatus.Phase.THINKING, 0, "💭 …")))
+        assertEquals(null, ChatStatus.thoughtOf(ChatStatus.Status(ChatStatus.Phase.LOADING, 0, "💭 x")))
+    }
 }

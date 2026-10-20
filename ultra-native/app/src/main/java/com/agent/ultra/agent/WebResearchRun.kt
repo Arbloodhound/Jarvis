@@ -45,9 +45,10 @@ class OnionAccess(
         /** From the owner's settings; [OFF] when the setting is off or offline only is on. */
         fun of(ctx: android.content.Context): OnionAccess {
             if (!com.agent.ultra.ui.UltraPrefs.onionResearch(ctx) || NetPolicy.offlineOnly(ctx)) return OFF
-            val tor = TorProxy.shared
+            // Resolved per use: the in-app Tor may start (or stop) after this was made.
             return OnionAccess(true, com.agent.ultra.ui.UltraPrefs.deepResearch(ctx),
-                OnionSafety.knownGood(com.agent.ultra.ui.UltraPrefs.onionKnownGood(ctx)), { tor.isAvailable() }, tor::get)
+                OnionSafety.knownGood(com.agent.ultra.ui.UltraPrefs.onionKnownGood(ctx)),
+                { TorProxy.current().isAvailable() }, { u -> TorProxy.current().get(u) })
         }
     }
 }

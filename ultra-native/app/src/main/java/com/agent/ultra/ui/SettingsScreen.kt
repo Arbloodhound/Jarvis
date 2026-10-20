@@ -111,6 +111,23 @@ fun SettingsScreen(
             OutlinedButton(onClick = onOpenGuide) { Text("📖 Guide") }
         }
 
+        // Jarvis on/off (also a Quick Settings tile): off stops listening, background work and frees the models.
+        run {
+            var on by remember { mutableStateOf(com.agent.ultra.JarvisPower.isOn(context)) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Jarvis ${if (on) "on" else "off"}", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (on) "Off stops background listening and background work, and frees the models' memory. " +
+                            "Also in Quick Settings (pull down twice, edit, add \"Jarvis\")."
+                        else "Nothing runs in the background. Opening the app and asking still works.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(checked = on, onCheckedChange = { com.agent.ultra.JarvisPower.set(context, it); on = it })
+            }
+        }
+
         // ── Downloads ─────────────────────────────────────────────────
         // First: until these are on the phone, the features below that need them can't work.
         SectionTitle("DOWNLOADS")
@@ -191,6 +208,44 @@ fun SettingsScreen(
         }
 
         run {
+            var mainReply by remember { mutableStateOf(UltraPrefs.mainReply(context)) }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Main model writes the reply", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "After on-device tools run, the main model says what happened in plain words. " +
+                            "Slower: one more model run. Off: you see the tool's own result.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = mainReply, onCheckedChange = { on ->
+                    mainReply = on
+                    UltraPrefs.setMainReply(context, on)
+                })
+            }
+        }
+
+        run {
+            var actionModel by remember { mutableStateOf(UltraPrefs.actionModel(context)) }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Action model", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "The small memory model picks tools and drives the screen, so actions are quicker. " +
+                            "The main model still thinks and answers. Off, or if the small model isn't downloaded: the main model does it all.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = actionModel, onCheckedChange = { on ->
+                    actionModel = on
+                    UltraPrefs.setActionModel(context, on)
+                })
+            }
+        }
+
+        run {
             var onion by remember { mutableStateOf(UltraPrefs.onionResearch(context)) }
             var deep by remember { mutableStateOf(UltraPrefs.deepResearch(context)) }
             var own by remember { mutableStateOf(UltraPrefs.onionKnownGood(context)) }
@@ -199,13 +254,49 @@ fun SettingsScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Onion research via Tor", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "Read .onion pages in research through Orbot (127.0.0.1:${com.agent.ultra.net.TorProxy.PORT}), " +
+                        "Read .onion pages in research through Tor (built into the app; Orbot is used if it already runs), " +
                             "with phishing and scam checks. Off: onion links are skipped. Offline only wins.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                 }
                 Switch(checked = onion, onCheckedChange = { on -> onion = on; UltraPrefs.setOnionResearch(context, on) })
+            }
+            // Manual Tor start (the in-app Tor). The owner's own tap, so it works with onion research
+            // off too; the tor_connect tool only works with it on.
+            run {
+                val scope = rememberCoroutineScope()
+                var torLine by remember { mutableStateOf<String?>(null) }
+                var torBusy by remember { mutableStateOf(false) }
+                var torOn by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) {
+                    val via = com.agent.ultra.net.TorConnect.connectedVia()
+                    torOn = via != null
+                    torLine = if (via != null) "Tor is connected ($via)." else "Tor isn't running."
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(enabled = !torBusy, onClick = {
+                        torBusy = true
+                        torLine = "Connecting to Tor… (up to a minute or two)"
+                        scope.launch {
+                            val o = com.agent.ultra.net.TorConnect.connect(context)
+                            torLine = com.agent.ultra.net.TorConnect.describe(o)
+                            torOn = o.state == com.agent.ultra.net.TorConnect.State.ON
+                            torBusy = false
+                        }
+                    }) { Text("Connect to Tor") }
+                    if (torOn && com.agent.ultra.net.EmbeddedTor.started) {
+                        TextButton(enabled = !torBusy, onClick = {
+                            com.agent.ultra.net.EmbeddedTor.stop(context)
+                            torOn = false
+                            torLine = "In-app Tor stopped."
+                        }) { Text("Disconnect") }
+                    }
+                }
+                torLine?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                }
             }
             if (onion) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -702,6 +793,30 @@ fun SettingsScreen(
             }
         }
 
+        SectionTitle("CONNECTORS")
+        ConnectorsSettings(context)
+
+        SectionTitle("FILES JARVIS MADE")
+        run {
+            var trashLine by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(Unit) {
+                trashLine = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val n = com.agent.ultra.agent.Workspace.trash(context).list().size
+                    val a = com.agent.ultra.agent.Workspace.artifacts(context).list().size
+                    "$a artifact${if (a == 1) "" else "s"} · $n in the trash (Jarvis can restore but never empty it)"
+                }
+            }
+            trashLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) }
+            OutlinedButton(onClick = {
+                scope.launch {
+                    val n = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        com.agent.ultra.harness.TrashAdmin.empty(com.agent.ultra.agent.Workspace.trash(context))
+                    }
+                    trashLine = "Emptied the trash ($n item${if (n == 1) "" else "s"} deleted for good)."
+                }
+            }) { Text("Empty trash") }
+        }
+
         // ── Recipes ───────────────────────────────────────────────────
         SectionTitle("ROUTINES")
         val recipeDao = remember { com.agent.ultra.data.UltraDatabase.get(context).recipes() }
@@ -903,6 +1018,34 @@ fun SettingsScreen(
                 capture = it
                 UltraPrefs.setCaptureNotifications(context, it)
             })
+        }
+        if (capture) run {
+            var filterOn by remember { mutableStateOf(UltraPrefs.notificationFilter(context)) }
+            val (qs, qe) = remember { UltraPrefs.quietHours(context) }
+            var start by remember { mutableStateOf(qs.toString()) }
+            var end by remember { mutableStateOf(qe.toString()) }
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Notification filter", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Off by default. When on, the log skips notifications during quiet hours and " +
+                            "more than 5 a minute from one app. Scam warnings still fire.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = filterOn, onCheckedChange = { filterOn = it; UltraPrefs.setNotificationFilter(context, it) })
+            }
+            if (filterOn) Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                fun save() {
+                    val a = start.toIntOrNull(); val b = end.toIntOrNull()
+                    if (a != null && b != null) UltraPrefs.setQuietHours(context, a, b)
+                }
+                OutlinedTextField(value = start, onValueChange = { start = it.filter(Char::isDigit).take(2); save() },
+                    label = { Text("Quiet from (hour)") }, modifier = Modifier.weight(1f), singleLine = true)
+                OutlinedTextField(value = end, onValueChange = { end = it.filter(Char::isDigit).take(2); save() },
+                    label = { Text("until (hour)") }, modifier = Modifier.weight(1f), singleLine = true)
+            }
         }
         OutlinedButton(onClick = {
             scope.launch {
@@ -1219,6 +1362,8 @@ private val CAPABILITIES = listOf(
         listOf(android.Manifest.permission.CAMERA)),
     Capability("Texts", "Reading and sending SMS.",
         listOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.SEND_SMS)),
+    Capability("Phone", "Placing, answering and hanging up calls when you ask it to.",
+        listOf(android.Manifest.permission.CALL_PHONE, android.Manifest.permission.ANSWER_PHONE_CALLS)),
     Capability("Contacts", "Looking someone up by name.",
         listOf(android.Manifest.permission.READ_CONTACTS)),
     Capability("Calendar", "Reading and adding events.",
@@ -1293,6 +1438,31 @@ private fun PermissionPanel(context: android.content.Context) {
             } else {
                 Text("✓", color = MaterialTheme.colorScheme.primary)
             }
+        }
+    }
+
+    // With the screen off Android's battery saver can stop the listening service. Exempting the app
+    // keeps "Hey Jarvis" working in a pocket (owner, 2026-10-18: "do things with the screen off").
+    run {
+        val pm = context.getSystemService(android.os.PowerManager::class.java)
+        val exempt = remember(tick) { pm?.isIgnoringBatteryOptimizations(context.packageName) == true }
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Keep working with the screen off", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (exempt) "Allowed. Android won't put Jarvis to sleep with the screen off."
+                    else "Not allowed. Android may stop listening once the screen is off.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+            if (!exempt) TextButton(onClick = {
+                try {
+                    context.startActivity(android.content.Intent(
+                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        android.net.Uri.parse("package:" + context.packageName)))
+                } catch (_: Exception) {}
+            }) { Text("Allow") } else Text("✓", color = MaterialTheme.colorScheme.primary)
         }
     }
 
