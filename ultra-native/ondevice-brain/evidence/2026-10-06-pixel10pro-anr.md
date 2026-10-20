@@ -1,3 +1,7 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/evidence/2026-10-06-pixel10pro-anr.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
+**Status as of 2026-10-19:** This file is raw evidence — two "App isn't responding" reports from a Pixel 10 Pro on 2026-10-06, extracted as described below. It predates the 2026-10-19 full-branch consolidation (all work now on `main`) and is preserved unchanged as the record of that build (versionCode 17 / 2.6.0). The 2026-10-19 audits did not re-verify on-device runtime behavior — they were static reading only — so nothing in them confirms or clears the model-load pattern these stacks show; the relevant packages (`agent/`, `local/`) carry the audit verdict "works with defects".
+
 # Jarvis ANR reports (raw extracts)
 
 Two "App isn't responding" reports from the Pixel 10 Pro, 2026-10-06. Copied from the phone's error reports without changes, except:
