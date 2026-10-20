@@ -1,3 +1,20 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/JARVIS_BUILD_REPORT.md`. CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
+The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
+This report (2026-10-08, branch `claude/new-session-t3cy17`, v2.6.34-test) describes the Kotlin phone app, its models, phone measurements, hardware limits, and safety design.
+The merged tree still centres on `ultra-native/` (the shipping Kotlin app, with the harness package `com.agent.ultra.harness` inside it), plus the `desktop/` TS app and the `src/` TS app.
+Per-subsystem audit verdicts: `net/` Tor and `data/` UltraDatabase work as designed (defects at the margins only for Tor); `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, and `bench/`/tools work with defects.
+Checked clean and consistent with the safety design described here: Tor fail-closed (three guards, no clearnet fallback), Gate deny-by-default, and purchases never grant-coverable at either layer.
+Still open and relevant to the build described here: GGUF downloads verified by size only with no integrity check before native load; the cloud API key in plaintext SharedPreferences; and voiceprint speaker tags defaulting ON against their own doc comment.
+The audits do not re-verify this report's phone measurements, model speeds, or hardware-acceleration claims: they were code-only and grep-level, with no device testing. Those numbers are not covered.
+
+---
+
 # Jarvis — what we built, how, and what the phone taught us
 
 For: the model that designed the "MVP Personal Agent" (README_1 / README_2, the 12-layer system diagram, the
