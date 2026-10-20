@@ -311,7 +311,7 @@ export default function ConversationList({
               <View style={styles.drawerLogo}>
                 <MaterialCommunityIcons name="robot" size={18} color={ACCENT} />
               </View>
-              <Text style={styles.drawerBrand}>Agent Ultra</Text>
+              <Text style={styles.drawerBrand}>Jarvis</Text>
             </View>
             <Pressable onPress={() => { UltraDevLog.push('CHAIN', { component: 'ConversationList', action: 'close', trigger: {}, state: { convCount: conversations.length }, data: {}, outcome: 'drawer_closed' }); onClose(); }} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={DIM} />
