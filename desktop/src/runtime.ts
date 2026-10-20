@@ -2,6 +2,7 @@ import { Agent } from "./agent/loop.js";
 import { type Config, type Paths, saveConfig } from "./config.js";
 import { AuditLog } from "./gate/audit.js";
 import { Gate } from "./gate/gate.js";
+import { createLocalModelChecker } from "./gate/nli.js";
 import { Embedder } from "./embeddings.js";
 import { Vision } from "./vision.js";
 import { Memory } from "./memory.js";
@@ -33,6 +34,12 @@ export class Runtime {
       workspace: p.workspace,
       cwd,
       maxTurns: cfg.maxTurns,
+      nli: {
+        enabled: cfg.nli.enabled,
+        // The model-backed layer runs on the configured LOCAL provider only,
+        // and only when explicitly turned on; deterministic-only otherwise.
+        modelCheck: cfg.nli.modelCheck ? createLocalModelChecker({ baseUrl: cfg.local.baseUrl, model: cfg.local.model }) : null,
+      },
     });
   }
 
@@ -123,6 +130,8 @@ export class Runtime {
       embedderId: this.embedder()?.id ?? null,
       vision: this.vision()?.label ?? null,
       screenControl: this.cfg.screenControl.enabled,
+      nli: this.cfg.nli.enabled,
+      nliModelCheck: this.cfg.nli.enabled && this.cfg.nli.modelCheck,
     };
   }
 }

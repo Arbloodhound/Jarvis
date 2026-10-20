@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { platform } from "node:os";
 import type { AuditLog } from "../gate/audit.js";
 import { Episode, Gate, type Rule } from "../gate/gate.js";
+import { checkClaimWithModel, extractCheckableClaims, type ModelChecker, type NliVerdict } from "../gate/nli.js";
 import { redactSecrets } from "../gate/secrets.js";
 import type { Memory } from "../memory.js";
 import type { Provider, ToolCall, ToolResult, Turn } from "../providers/types.js";
@@ -46,6 +47,12 @@ export interface AgentDeps {
   workspace: string;
   cwd: string;
   maxTurns: number;
+  /**
+   * The NLI gate on final answers. Absent means the default: enabled, with
+   * the deterministic checker only. `enabled: false` turns the loop wiring
+   * off entirely. `modelCheck` is the optional model-backed escalator.
+   */
+  nli?: { enabled: boolean; modelCheck?: ModelChecker | null };
 }
 
 export interface RunHooks {
@@ -161,6 +168,8 @@ export class Agent {
     const embedder = this.deps.embedder();
     this.turns.push({ role: "user", text: await requestContext(request, this.deps.memory, embedder) });
     const cloud = provider.kind === "cloud";
+    /** Tool-result texts from THIS run: the evidence the NLI gate checks the final answer against. */
+    const evidence: string[] = [];
 
     let answer = "";
     for (let turn = 0; turn < this.deps.maxTurns; turn++) {
@@ -194,16 +203,96 @@ export class Agent {
       }
 
       const results = await this.execute(runId, res.toolCalls, ep, hooks, signal, cloud);
+      for (const r of results) if (!r.isError) evidence.push(r.content);
       this.turns.push({ role: "tool", results });
       if (signal.aborted) throw new Error("stopped");
       if (turn === this.deps.maxTurns - 1) {
         hooks.emit({ type: "warning", runId, text: `Stopped after ${this.deps.maxTurns} steps without a final answer.` });
       }
     }
+    answer = await this.gateAnswer(runId, answer, evidence, provider, system, hooks, signal);
     hooks.emit({ type: "done", runId, text: answer });
     // Embed any new facts in the background so the next recall is semantic; failures are ignored.
     if (embedder) void this.deps.memory.ensureEmbedded(embedder).catch(() => {});
     return answer;
+  }
+
+  /**
+   * The NLI gate on the final answer. Only answers from a run that produced
+   * tool results are gated, and only their checkable claims (sentences
+   * containing numbers — see extractCheckableClaims) are checked, against
+   * this run's tool-result texts. Each checked claim is audit-logged.
+   *
+   * On FAIL the claim is not deleted and the answer is not silently passed:
+   * the model gets exactly one re-check turn, told the contradiction and
+   * shown the evidence, and asked to correct. If the corrected answer still
+   * fails, it is delivered with the disagreement surfaced to the owner.
+   */
+  private async gateAnswer(
+    runId: string,
+    answer: string,
+    evidence: string[],
+    provider: Provider,
+    system: string,
+    hooks: RunHooks,
+    signal: AbortSignal,
+  ): Promise<string> {
+    if (this.deps.nli && !this.deps.nli.enabled) return answer;
+    if (!answer || !evidence.length) return answer;
+    const modelCheck = this.deps.nli?.modelCheck ?? null;
+
+    const checkAll = async (text: string, round: "initial" | "recheck"): Promise<Array<{ claim: string; verdict: NliVerdict }>> => {
+      const failures: Array<{ claim: string; verdict: NliVerdict }> = [];
+      for (const claim of extractCheckableClaims(text)) {
+        const verdict = await checkClaimWithModel(claim, evidence, modelCheck);
+        this.deps.audit.write({ runId, tool: "nli_gate", gate: verdict.passed ? "nli_pass" : "nli_fail", round, claim: claim.slice(0, 500), reason: verdict.reason, source: verdict.source });
+        if (!verdict.passed) failures.push({ claim, verdict });
+      }
+      return failures;
+    };
+
+    let failures = await checkAll(answer, "initial");
+    if (!failures.length) return answer;
+    hooks.emit({ type: "warning", runId, text: `NLI gate: ${failures.length} claim(s) in the answer contradict this run's tool results; asking the model to re-check.` });
+
+    // One re-check loop: the model is told the contradiction and asked to correct.
+    const correction = [
+      "[NLI gate re-check] Your previous answer contains claim(s) that contradict the tool results from this run:",
+      ...failures.map((f) => `- "${f.claim}" — ${f.verdict.reason}`),
+      "",
+      "Tool results:",
+      ...evidence.map((ev, i) => `${i + 1}. ${ev.slice(0, 2000)}`),
+      "",
+      "Write a corrected final answer that matches the tool results. Do not repeat the contradicted claim(s).",
+    ].join("\n");
+    this.turns.push({ role: "user", text: correction });
+    let candidate = answer;
+    try {
+      const res = await provider.turn({
+        system,
+        turns: this.turns,
+        tools: [],
+        signal,
+        onText: (delta) => hooks.emit({ type: "text", runId, delta }),
+        onThinking: (delta) => hooks.emit({ type: "thinking", runId, delta }),
+      });
+      this.turns.push({ role: "assistant", text: res.text, toolCalls: [], raw: res.raw, brain: provider.kind });
+      if (res.text) candidate = res.text;
+    } catch {
+      // A failed re-check is not a pass: fall through and surface the original disagreement.
+      this.turns.push({ role: "assistant", text: answer, toolCalls: [], brain: provider.kind });
+    }
+    if (candidate !== answer) {
+      failures = await checkAll(candidate, "recheck");
+      if (!failures.length) return candidate;
+    }
+
+    // Still failing: deliver the answer WITH the disagreement surfaced — never silently passed, never silently dropped.
+    const note = failures.map((f) => `- "${f.claim}" — ${f.verdict.reason}`).join("\n");
+    const surfaced = `${candidate}\n\n⚠ NLI gate disagreement — the following claim(s) could not be verified against this run's tool results and may be wrong:\n${note}`;
+    hooks.emit({ type: "warning", runId, text: `NLI gate: disagreement remains after re-check; delivering the answer with it surfaced.` });
+    this.deps.audit.write({ runId, tool: "nli_gate", gate: "nli_disagreement_surfaced", failures: failures.map((f) => ({ claim: f.claim.slice(0, 500), reason: f.verdict.reason })) });
+    return surfaced;
   }
 
   /** Run a model turn's tool calls through the gate. Results come back in call order. */

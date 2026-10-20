@@ -43,6 +43,16 @@ export interface Config {
   };
   /** Synthetic keyboard/mouse. Off by default; experimental; every action still needs a card. */
   screenControl: { enabled: boolean };
+  nli: {
+    /** The NLI gate on final answers (deterministic contradiction check against this run's tool results). */
+    enabled: boolean;
+    /**
+     * Also escalate deterministic passes to the configured local model for a
+     * strict entailment check. One-directional: the model can only turn a
+     * pass into a fail, never rescue a deterministic fail.
+     */
+    modelCheck: boolean;
+  };
   port: number;
   writableRoots: string[];
   /**
@@ -87,6 +97,7 @@ export function defaults(p: Paths): Config {
     embeddings: { enabled: false, baseUrl: "", model: "embeddinggemma-2", dims: 256 },
     vision: { baseUrl: "", model: "qwen3-vl" },
     screenControl: { enabled: false },
+    nli: { enabled: true, modelCheck: false },
     port: 7337,
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
@@ -123,6 +134,7 @@ export function loadConfig(p: Paths = paths()): Config {
     embeddings: { ...base.embeddings, ...(raw.embeddings ?? {}) },
     vision: { ...base.vision, ...(raw.vision ?? {}) },
     screenControl: { ...base.screenControl, ...(raw.screenControl ?? {}) },
+    nli: { ...base.nli, ...(raw.nli ?? {}) },
   };
 }
 
