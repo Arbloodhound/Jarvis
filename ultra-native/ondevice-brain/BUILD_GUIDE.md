@@ -1,14 +1,19 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/BUILD_GUIDE.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
 # MINT-TRINITY — Build & Deploy Follow-Along
 
 Ordered, do-this-then-that. Each step says what success looks like before moving on.
 Target: Pixel 10 Pro (GrapheneOS), Jarvis fork, abliterated Qwen3-30B-A3B-Thinking MoE,
 always-listening ambient layer. Assistant-only environment (search + screen control).
 
+## Status as of 2026-10-19
+
+This guide's procedures are preserved from the pre-consolidation bundle and were **not re-run against the merged tree** in the 2026-10-19 audits, which were static, grep-level reading; CI has not yet compiled the merged tree. All work is now consolidated on `main` in Arbloodhound/Jarvis. Two audit findings bear on following it: GGUF downloads are verified by size only, with no integrity check before native load; and two Kotlin unit-test files are broken in the merged tree (`HistoryPolicyTest.kt`, `MemoryBriefTest.kt` import a debug-only class) — the app build phases below do not depend on them, but a full unit-test run will hit them. On-device claims in this guide (model fit, memory headroom, speeds, ambient-listening behaviour) are the bundle's own figures and were not re-verified in the 2026-10-19 audits.
+
 ====================================================================
 PHASE 0 — Get the code into YOUR GitHub (/arbloodhound)
 ====================================================================
-I cannot push for you (no GitHub tool in this chat — connecting it in org settings
-authorizes OTHER systems, not this sandbox). These commands do it from your machine:
+These commands do it from your machine. (This phase records how the bundle was originally imported into the fork; the repo's work has since been consolidated onto `main` — see the status section above.)
 
     # 1. Fork the base on github.com: dafarusd/Ultra-Agent  (keeps AGPL-3.0; you publish source)
     #    OR create an empty repo under your org: github.com/arbloodhound/mint-trinity
@@ -112,6 +117,8 @@ SUCCESS: on-device answers reflect your domains; offline; uncensored; ~1.6GB RAM
 
 ====================================================================
 PHASE 7 — Still to build (not in the bundle yet; next sessions)
+
+(Checklist states below are as documented pre-consolidation; they were not re-verified in the 2026-10-19 audits.)
 ====================================================================
 [x] openWakeWord acoustic gate — WIRED + VERIFIED (WakeGate.kt, patch 0002).
 [x] thinking-budget cap + intent routing — wired into engine + offline Brain (patches 0003, 0007)
@@ -123,6 +130,7 @@ PHASE 7 — Still to build (not in the bundle yet; next sessions)
 ====================================================================
 WHAT'S DONE vs OPTIMAL (honest status)
 ====================================================================
+(Pre-consolidation status, carried over as written; not re-verified in the 2026-10-19 audits. The merged-tree audit verdicts for the packages involved — `agent/`, `gate/`, `listen/`, `local/` — are "works with defects"; the post-merge status section at the top of this guide governs.)
 DONE & solid: ambient capture+filter+memory+recall, wake (text-match), offline-first grounding,
   novelty rule, premise-verification loop, provenance tags, model wiring + fit math, 2b training notebook.
 NOT YET OPTIMAL: no thinking cap yet;
