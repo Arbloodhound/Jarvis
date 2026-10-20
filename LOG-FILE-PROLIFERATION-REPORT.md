@@ -1,3 +1,19 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/LOG-FILE-PROLIFERATION-REPORT.md`. CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
+The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
+This report concerns the React Native logging system: timestamped files proliferating in `agent-ultra-logs/`, the three log directories, and a documented fix (fixed filenames plus cleanup) that was not yet implemented when it was written.
+In the merged tree that lineage survives as the `src/` TS app (Expo/RN lineage; live path AgentCore / BrainExecutor / TaskExecutor); the shipping app is the `ultra-native/` Kotlin app, alongside a `desktop/` TS app.
+The audits do not speak to the log-file proliferation issue specifically: the timestamped-filename root cause, the three-directory split, and whether the documented fix was ever applied are not confirmed resolved, confirmed still open, or otherwise re-verified — that topic is not covered.
+Still open generally in the merged tree: the TS `server/` is orphaned, ~70 dead-code candidates were flagged (candidates only), and the Kotlin unit tests are broken in 2 files (see FACTS for detail).
+No claim in the body below should be read as re-checked against the merged tree.
+
+---
+
 # Agent Ultra — Log File Proliferation Report
 
 **Date:** 2026-03-15  
