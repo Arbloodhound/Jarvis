@@ -1,8 +1,10 @@
+<!-- Post-merge replacement — 2026-10-19. In-app copy of GUIDE.md, refreshed from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/app/src/main/assets/guide.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree. -->
+
 # Jarvis — the complete guide
 
-Jarvis is your own AI assistant that lives on this phone. It thinks with an AI model that runs on the phone itself, listens for "Hey Jarvis", remembers what is said around you (if you let it), turns that into tidy notes, and can work the phone for you: switches, apps, screens, music, alarms and more. This guide explains everything it does, every setting, and exactly how the machinery works underneath, with the real model names and numbers. Read it top to bottom once, then use "How do I…?" as a cookbook.
+Jarvis is your own AI assistant that lives on this phone. It thinks with an AI model that runs on the phone itself, listens for "Hey Jarvis", remembers what is said around you (if you let it), turns that into tidy notes, and can work the phone for you: switches, apps, screens, music, alarms and more. Underneath sits a harness layer — claims memory, approvals, a scheduler, skills, trash and forget, subagents, a feed, ideas, artifacts, proactivity and connectors — covered in "The harness layer" below and in section 11e. This guide explains everything it does, every setting, and exactly how the machinery works underneath, with the real model names and numbers. Read it top to bottom once, then use "How do I…?" as a cookbook.
 
-> Tip: everything in this guide comes from how the app is actually built. Where something has been built but not yet proven on a real phone, the guide says so.
+> Tip: this guide was refreshed on 2026-10-19 from the audited state of the code after all branches were consolidated onto `main`. Where something has been built but not yet proven on a real phone, the guide says so. Two cautions apply throughout: the 2026-10-19 audits were code-only (they read the source; they did not compile it), and CI has not yet compiled the merged tree — so "exists" below means "present in the audited source". Detail that the audits did not cover is marked "not re-verified in the 2026-10-19 audits".
 
 ## 1. What Jarvis is
 
@@ -32,6 +34,21 @@ Around the two brains sit several small, specialised models, all running on the 
 - **Voiceprints**: a speaker-recognition model called **TitaNet small** (about 40 MB) that lets Jarvis tell voices apart and label who said what.
 - **Jarvis's voice**: a text-to-speech model — by default **Ryan**, a clear American male voice that keeps up with speech; **Kokoro** ("George", British male) is the most natural but slower than speech on some phones — or any of a dozen other voices, or the phone's own voice.
 - **Speed boost**: a tiny 0.6-billion-parameter "draft" model (about 0.4 GB) that helps the thinker write faster.
+
+### The harness layer
+
+Underneath the assistant sits a harness layer (the package `com.agent.ultra.harness` inside the phone app). It is present in the merged code — this is a change from older descriptions of Jarvis as only the two brains plus helpers:
+
+- **Claims memory** — memory stored as claims, each with a kind, a salience and a confidence score, where it came from (provenance), and chains showing when a newer claim replaces an older one. Search mixes meaning and words and weighs how old a claim is at the moment you ask.
+- **Approvals** — standing grants with levels, bound to the exact command they were given for. Purchases are never covered by a grant, anywhere. Jarvis cannot see the approval card and cannot revoke grants; you manage grants in settings.
+- **Scheduler** — scheduled work, with its runtime and receiver. One open item: the scheduler receiver is not yet registered in the app manifest, so scheduled wake-ups are not fully wired (see section 14).
+- **Skills** — a skill store that loads skills lazily, only when needed.
+- **Trash and Forget** — deleted things go to a trash that only you can empty, in settings; the agent has no way to purge it. Forget removes memory on request.
+- **Subagents** — Jarvis can spawn helper agents, one level deep by construction; helpers cannot spawn their own helpers.
+- **Feed, Ideas and Artifacts** — a feed, an ideas store, and saved artifacts (files and outputs) all exist in the harness.
+- **Proactivity** — Jarvis can surface things on its own initiative, within the approval rules above.
+- **Connectors** — Gmail and Google Calendar / Docs / Drive, plus Spotify, with credentials held in the phone's Keystore vault (AES-GCM); Jarvis only ever sees opaque handles, never the credentials themselves. One open item: the Spotify redirect activity is not yet registered in the app manifest.
+- **Checking and screening** — a claim verifier whose checks fail closed (if a check cannot run, the claim is not treated as verified), an on-device NLI (natural-language inference) head, a notification-forwarding policy with three gates, a screen guard for protected apps, and a secret scrubber; one-time codes and reset links are handled as opaque placeholders that expire after about 10 minutes and never reach a cloud model.
 
 ### What it is not
 
@@ -368,7 +385,7 @@ Time words are understood precisely: "this morning" means 5am to noon today, "af
 - Settings → VOICE → **Erase notes** deletes only the notes.
 - Settings → PEOPLE → **Forget** next to a voice, or **Forget all voices**, removes voiceprints only (lines keep their text but lose the label).
 - On the Notes screen, the ✕ next to a note deletes that one note.
-- The Memory screen has no per-line delete; it's all-or-nothing through the erase button.
+- The erase buttons above are still the broad tools. The harness layer adds claims-level Forget and a Trash (see sections 1 and 11e): forgotten claims are removed through the harness, and trashed items are emptied only by you, in settings — the agent cannot purge the trash. Whether every Memory-screen line exposes its own delete control in the current build was not re-verified in the 2026-10-19 audits.
 
 ## 7. Notes
 
@@ -990,7 +1007,30 @@ Jarvis's pattern notes and Insights use ideas from these works. They describe te
 - If reading the picture says the screen could not be captured, turn Jarvis's accessibility service **off and on once** in Android Settings → Accessibility (Android only grants the screenshot permission when the service starts).
 - A code or card number read from a picture is guarded like one read as text: Jarvis won't send it anywhere.
 
+## 11e. The harness layer in detail
+
+The harness (package `com.agent.ultra.harness` in the phone app) is the layer that gives Jarvis its longer-term abilities. All of the following exist in the merged code as audited on 2026-10-19; the merged tree has not yet been compiled by CI, and two manifest registrations are still open (below).
+
+- **Claims memory (MemoryClaims).** Memory is stored as claims: each claim has a kind, a salience (how much it matters), a confidence, its provenance (where it came from), and a place in a supersede chain when a newer claim replaces an older one. Search is hybrid (meaning plus words) with query-time temporal decay — older claims weigh less when you ask, unless they are still the best match. The database behind this (UltraDatabase, version 9) wires the claim, grant, embedding and bandit tables and their migrations; that wiring was the one critical defect in the first 2026-10-19 audit and is resolved in the merged tree. One defect the audits did flag: claim promotion can never supersede, and stores a model paraphrase as the claim's verbatim quote — treat promoted quotes with care.
+- **Approvals (ApprovalGrants).** Grants have levels and are bound to the exact command (an approval token is keyed to the exact sorted arguments). Purchases are never grant-coverable at either layer. Jarvis informs and asks; it does not permit or forbid — consequential actions (send, post, purchase, delete) stop at confirmation and you decide. Jarvis cannot see the approval card and cannot revoke grants; you manage grants in settings.
+- **Scheduler.** A scheduler with its runtime and receiver handles timed work. Still open: `SchedulerReceiver` is not registered in AndroidManifest.xml, so this wiring is incomplete in the merged tree.
+- **Skills (SkillStore).** Skills are stored and loaded lazily — only the skill a task needs is loaded.
+- **Notifications (NotificationForwardingPolicy).** Notification forwarding passes three gates before anything is forwarded.
+- **Screen guard (ScreenGuard).** Screen reads and actions fail closed on protected apps; screen memory stores structure only — no screen text or values.
+- **Trash.** Deleted items go to a trash with no agent-facing empty or purge; emptying the trash is yours alone, in settings. This is structural and reflection-tested.
+- **Forget.** Forget removes claims and memory on request; the database exposes a dedicated forget path for claims.
+- **Subagents.** Helper agents can be spawned, depth-1 by construction: a subagent cannot spawn further subagents.
+- **Feed.** A feed exists in the harness, ranked with a bandit (the "ForYou" bandit) whose state is stored in the database.
+- **Ideas.** An ideas store exists in the harness.
+- **Artifacts.** Saved artifacts (outputs and files) exist in the harness.
+- **Proactivity.** Proactive surfacing exists in the harness, inside the same approval rules: anything consequential still stops at confirmation.
+- **Claim checking (ClaimVerifier, NLI head).** A claim verifier checks claims through lenses that fail closed, assisted by an on-device NLI head.
+- **Connectors and credentials.** Connectors exist for Gmail, Google Calendar, Google Docs, Google Drive and Spotify. Credentials live in the platform vault (Keystore, AES-GCM) and Jarvis sees opaque handles only; a secret scrubber keeps secrets out of what reaches models, and SMS / email codes and reset links are opaque placeholder references with a 10-minute expiry — they never reach a cloud model. Still open: `SpotifyRedirectActivity` is not registered in AndroidManifest.xml.
+- **Tor.** Not part of the harness package, but audited alongside it: Tor is opt-in and off by default, fails closed (verified in both audits, with three independent guards and no clearnet fallback anywhere), and onion addresses never fall back to clearnet. Shopping excludes onion results through a separate shopping-layer function, and shopping checkout has no purchase path — it prepares, displays and tracks only.
+
 ## 12. How it all works (deep dive)
+
+> Note (2026-10-19): the measurements and model detail in this section predate the consolidation and were not re-verified in the 2026-10-19 audits, except where a statement matches the audited harness facts in sections 1, 11e, 13 and 14.
 
 This section is for the curious. It walks through the machinery with the real numbers.
 
@@ -1212,24 +1252,35 @@ Two independent checks stand between Jarvis and anything hard to undo.
 - **Gate audit log**: every safety decision, with no content — safe to share.
 - **"Watch me"** demonstrations record only which apps and controls you used, never what you typed.
 
+### The harness approval rules (audited 2026-10-19)
+
+- **Grants are exact.** An approval token is bound to the exact sorted arguments of the action it approved; a different action needs its own approval. Purchases always need fresh approval — no lasting grant covers a purchase, at either layer.
+- **Jarvis cannot see the card, and cannot revoke grants.** You manage grants in settings.
+- **The Gate is deny-by-default.** Tainted content (material from untrusted sources) can neither be auto-approved nor overridden by the operator, and if the Gate's manifest fails to load, everything is denied. The audits also flagged margin defects here — for example, the Gate's secret patterns can miss phone-shaped secrets such as bare one-time codes or card numbers — so the confirmation habit still matters.
+- **Codes stay opaque.** SMS and email codes and reset links never reach a cloud model; Jarvis works with opaque placeholder references that expire after about 10 minutes.
+- **Credentials stay in the vault.** Connector credentials live in the phone's Keystore vault (AES-GCM); Jarvis sees opaque handles only, and a secret scrubber runs over what leaves the device.
+- **Trash is yours.** The agent has no empty or purge for the trash; only you empty it, in settings.
+- **Tor fails closed.** Tor is opt-in and off by default; there is no clearnet fallback, and onion addresses never fall back to clearnet.
+
 ## 14. What Jarvis can't do (yet)
 
-Honest limits, straight from how it's built today.
+Honest limits, straight from how it's built today. Updated 2026-10-19 from the code audits: earlier claims that features were absent have been corrected where the harness now provides them; anything the audits did not cover is marked "not re-verified in the 2026-10-19 audits".
 
 ### Not yet proven on a real phone
 
+- **The merged tree has not been compiled by CI.** Everything described from the 2026-10-19 audits is source-verified only. Two harness components — the scheduler receiver and the Spotify redirect activity — exist in code but are not registered in the app manifest, so those paths are not fully wired. Two Kotlin unit tests are currently broken (they import a debug-only class), and the TypeScript `server/` in the `src/` tree is orphaned (nothing calls it).
 - Much of what's described here has been built and tested in code but not yet confirmed on the owner's phone: talking over Jarvis with "Hey Jarvis", the accurate speech model's speed, the new voices and voice settings, speaking sentence by sentence, the stop/change handling, notes from re-reading old memories, the speed boost's real gain, and how good the notes and readings are in practice. The Feature check exists to measure exactly these.
 
 ### Things it doesn't do
 
 - **No timers.** There's no timer tool; alarms only. (The on-device screen navigator may manage "start the timer in the clock app", but that's driving the screen, not a built-in action.)
-- **No phone calls, no email, no calendar actions.** The Calendar permission is listed, but there's no calendar tool.
+- **Email and calendar: connectors now exist.** The harness ships connectors for Gmail and for Google Calendar / Docs / Drive (see sections 1 and 11e), so the older "no email, no calendar tool" statement no longer holds at the code level. They are present in the audited source; CI has not yet compiled the merged tree, and their day-to-day behaviour on a real phone was not re-verified in the 2026-10-19 audits. **Phone calls:** the audits do not cover a phone-call tool; treat calls as not provided (not re-verified in the 2026-10-19 audits).
 - **Sending texts** needs an online provider; on-device, Jarvis can read texts and look up contacts but not send.
 - **Wi-Fi and Bluetooth** can't be flipped directly on modern Android; Jarvis opens the panel for you.
 - **Notifications** are read from Jarvis's own log, so only with "Keep a notification log" on, and only what arrived since.
 - **Routines, "watch me", whole-page reading and any-app navigation** need an online provider. Running a saved routine works either way.
 - **Taking a photo** needs the online provider's screen navigation (or just open the camera yourself).
-- **The Memory screen** has no per-line delete; erasing is all-or-nothing.
+- **Memory deletion is no longer only all-or-nothing.** The harness provides claims-level Forget and a Trash (emptied only by you, in settings). The broad erase buttons in section 6 still exist; per-line controls on the Memory screen itself were not re-verified in the 2026-10-19 audits.
 
 ### Things it does imperfectly
 
