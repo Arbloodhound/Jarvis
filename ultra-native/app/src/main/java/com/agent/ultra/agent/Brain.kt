@@ -1287,6 +1287,7 @@ JSON:"""
                     "{\"tool\":\"none\",\"params\":{}}. Otherwise reply with only the NEXT tool.]", null,
             ) ?: break
             if (next.first == last.first && next.second.toString() == last.second.toString()) break
+            if (LocalToolCall.repeatsJob(last.first, next.first)) break
             last = next
             result = runLocalCall(userInput, episode, next, speak = !compose, collect = collected,
                 chainDone = done.toString(), chainStep = step + 1)

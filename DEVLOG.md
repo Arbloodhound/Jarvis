@@ -3,6 +3,12 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-20 — owner's v3.0.73 logs read
+- LIKELY: ambient whisper (small.en, cpus [0,1], 10–32 s per 1–4 s clip) running beside the LLM is the main slowdown:
+  1.6 tok/s with it, 6.0 tok/s without (draft loaded, 61–88% accepted). Thermal WARM vs NORMAL confounds it. Owner decides
+  on pausing/shrinking ambient and keeping the action model warm.
+- Fixed: chain stops on a second web lookup (LocalToolCall.repeatsJob, test). 1637 JVM tests, 0 failures. Not released yet.
+
 ## 2026-10-19 — the five items: setup checklist, draft margin, chain resume, thinking kept, 20 real tasks
 Owner: "Do all five items." Subsystems: G (setup UI), B/local (draft), A (chains, routing), F (tests/diagnostics).
 - Setup checklist banner at the top of the chat (SetupChecklist.kt, SetupStepsTest).

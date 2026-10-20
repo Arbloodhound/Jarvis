@@ -163,4 +163,11 @@ class LocalToolCallReplyTest {
         val p = LocalToolCall.replyPrompt("call mom", listOf("call_phone: Calling 5551234", "device_info: Pixel"))
         org.junit.Assert.assertTrue("call mom" in p && "Calling 5551234" in p && "Do not invent anything" in p)
     }
+
+    @Test fun aSecondWebLookupEndsTheChain() {
+        assertTrue(LocalToolCall.repeatsJob("web_search", "web_browse"))
+        assertTrue(LocalToolCall.repeatsJob("web_search", "web_search"))
+        assertFalse(LocalToolCall.repeatsJob("web_search", "sms_send"))
+        assertFalse(LocalToolCall.repeatsJob("call_phone", "sms_send"))
+    }
 }

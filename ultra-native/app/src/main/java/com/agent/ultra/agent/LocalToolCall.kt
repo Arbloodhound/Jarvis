@@ -57,6 +57,14 @@ object LocalToolCall {
         return LocalPrompt.build(system, emptyList(), user)
     }
 
+    /** The web tools: one lookup answers the question. */
+    private val WEB_LOOKUP = setOf("web_search", "web_browse")
+
+    /** A chain's next call that only repeats the job just done: a second web lookup after a web lookup
+     * (Pixel log 2026-10-19: "go on google for me and look up the time" ran web_search, then
+     * web_browse {"task":"search"}). The chain stops there. */
+    fun repeatsJob(prevTool: String, nextTool: String): Boolean = prevTool in WEB_LOOKUP && nextTool in WEB_LOOKUP
+
     /** At most this many tool calls for one request. */
     const val MAX_CHAIN = 4
 

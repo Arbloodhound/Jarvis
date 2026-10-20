@@ -30,3 +30,18 @@
 6. Optional but useful: Settings → turn **Speed boost** on, then repeat steps 3–5. Send both files so I can compare.
 
 From those two files I can see load time, time to the first word, words per second, which cores ran it, and whether the speed boost loaded. Then I can fix the actual cause.
+
+## What the v3.0.73 logs showed (2026-10-19 captures)
+| Measured | With background listening running (16:24) | With it quiet (00:56) |
+|---|---|---|
+| Brain speed | 1.5–1.8 words/sec, 3 cores (phone WARM) | 5.6–6.0 words/sec, 4 cores |
+| Speed boost | loaded, 70–78% of guesses kept | loaded, 61–88% kept |
+| Background transcriber | 10–32 s to transcribe 1–4 s of speech; 14 clips dropped | not running |
+
+- **Likely main cause of slow answers: background listening running at the same time.** Its transcriber (small.en, on the 2 small cores) runs almost nonstop and competes for memory bandwidth and heat. This is likely, not proven: the phone was also WARM in the slow capture.
+- Speed boost now loads (the 2 GB change worked) and helps: up to 88% of its guesses were kept.
+- The first answer after a while took 93 s with nothing written. The model had been pushed out of memory and was read back from storage (600,911 page reads).
+- The action model's first tool call took 61 s: a cold load plus reading a 1,350-word prompt on 2 cores. Its second call took 11.5 s.
+- Fixed: "go on google for me and look up the time" did a web search and then a pointless second web lookup. A chain now stops instead of looking the same thing up twice.
+
+**Waiting on you:** (1) background listening while answering: pause it, use a smaller transcriber, both, or leave it; (2) keep the action model loaded and give it 4 cores (about 1 GB of RAM).
