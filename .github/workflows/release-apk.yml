@@ -9,7 +9,7 @@
 # run 34), so
 # updates always count up. A run on any branch publishes if test_kit is ticked.
 #
-# One-time setup (see ultra-native/ondevice-brain/RELEASE_SIGNING.md): repository secrets
+# One-time setup (see jarvis-native/ondevice-brain/RELEASE_SIGNING.md): repository secrets
 #   KEYSTORE_BASE64   the .jks file, base64-encoded
 #   KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
 name: Release APK
@@ -48,10 +48,10 @@ jobs:
           # Caches ~/.gradle/caches and ~/.gradle/wrapper, keyed on these files.
           cache: gradle
           cache-dependency-path: |
-            ultra-native/**/*.gradle*
-            ultra-native/gradle/wrapper/gradle-wrapper.properties
-            ultra-native/gradle/libs.versions.toml
-            ultra-native/gradle.properties
+            jarvis-native/**/*.gradle*
+            jarvis-native/gradle/wrapper/gradle-wrapper.properties
+            jarvis-native/gradle/libs.versions.toml
+            jarvis-native/gradle.properties
 
       - name: Version for this run
         id: version
@@ -78,7 +78,7 @@ jobs:
       - name: Native cache keys
         id: native
         run: |
-          D=ultra-native/ondevice-brain
+          D=jarvis-native/ondevice-brain
           llama=$(grep -oE 'LLAMA_SHA:-[0-9a-f]{40}' "$D/build-llama-android.sh" | head -1 | cut -d- -f2)
           whisper=$(grep -oE 'WHISPER_SHA:-[0-9a-f]{40}' "$D/build-whisper-android.sh" | head -1 | cut -d- -f2)
           [ -n "$llama" ] && [ -n "$whisper" ] || { echo "::error::pinned llama/whisper commit not found in the build scripts"; exit 1; }
@@ -90,14 +90,14 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/llama-android
-          key: llama-${{ runner.os }}-ndk${{ env.NATIVE_NDK }}-cmake3.28.3-${{ steps.native.outputs.llama }}-${{ hashFiles('ultra-native/ondevice-brain/build-llama-android.sh') }}
+          key: llama-${{ runner.os }}-ndk${{ env.NATIVE_NDK }}-cmake3.28.3-${{ steps.native.outputs.llama }}-${{ hashFiles('jarvis-native/ondevice-brain/build-llama-android.sh') }}
 
       - name: Restore whisper.cpp libs
         id: whisper-cache
         uses: actions/cache/restore@v4
         with:
           path: ~/whisper-android
-          key: whisper-${{ runner.os }}-ndk${{ env.NATIVE_NDK }}-cmake3.28.3-${{ steps.native.outputs.whisper }}-${{ hashFiles('ultra-native/ondevice-brain/build-whisper-android.sh') }}
+          key: whisper-${{ runner.os }}-ndk${{ env.NATIVE_NDK }}-cmake3.28.3-${{ steps.native.outputs.whisper }}-${{ hashFiles('jarvis-native/ondevice-brain/build-whisper-android.sh') }}
 
       # Only the downloaded archive is cached; fetch-sherpa.sh always runs and re-checks its
       # sha256 (re-downloading on mismatch) and the 16 KB alignment before copying the library.
@@ -106,20 +106,20 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/sherpa-onnx
-          key: sherpa-${{ hashFiles('ultra-native/ondevice-brain/fetch-sherpa.sh') }}
+          key: sherpa-${{ hashFiles('jarvis-native/ondevice-brain/fetch-sherpa.sh') }}
 
       - name: Build llama.cpp libs (cache miss)
         if: steps.llama-cache.outputs.cache-hit != 'true'
         run: |
           cmake --version | head -1
-          ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/build-llama-android.sh
+          ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash jarvis-native/ondevice-brain/build-llama-android.sh
 
       - name: Build whisper.cpp libs (cache miss)
         if: steps.whisper-cache.outputs.cache-hit != 'true'
-        run: ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/build-whisper-android.sh
+        run: ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash jarvis-native/ondevice-brain/build-whisper-android.sh
 
       - name: sherpa-onnx voice library
-        run: SHERPA_CACHE="$HOME/.cache/sherpa-onnx" ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/fetch-sherpa.sh
+        run: SHERPA_CACHE="$HOME/.cache/sherpa-onnx" ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash jarvis-native/ondevice-brain/fetch-sherpa.sh
 
       # CMakeLists.txt only warns when a CPU variant is missing, so check the (restored or built)
       # outputs are all there before anything is linked against them.
@@ -130,7 +130,7 @@ jobs:
               [ -f "$d/$v/libggml-cpu.a" ] || { echo "::error::$d/$v/libggml-cpu.a missing"; exit 1; }
             done
           done
-          # mtmd (on-device vision, ultra_vlm.cpp) is linked into every ultra_llm variant.
+          # mtmd (on-device vision, jarvis_vlm.cpp) is linked into every jarvis_llm variant.
           for v in lib lib-dotprod lib-i8mm; do
             for a in libmtmd.a libvendor-hash.a; do
               [ -f "$HOME/llama-android/$v/$a" ] || { echo "::error::~/llama-android/$v/$a missing"; exit 1; }
@@ -171,18 +171,18 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::Secret KEYSTORE_BASE64 is not set. See ultra-native/ondevice-brain/RELEASE_SIGNING.md"
+            echo "::error::Secret KEYSTORE_BASE64 is not set. See jarvis-native/ondevice-brain/RELEASE_SIGNING.md"
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
             "$RUNNER_TEMP/release.jks" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" \
-            > ultra-native/keystore.properties
-          echo "sdk.dir=$ANDROID_HOME" > ultra-native/local.properties
+            > jarvis-native/keystore.properties
+          echo "sdk.dir=$ANDROID_HOME" > jarvis-native/local.properties
 
       # One Gradle run: the unit tests once, then the release (and, for test_kit, the test build).
       - name: Unit tests, then the release build
-        working-directory: ultra-native
+        working-directory: jarvis-native
         env:
           JARVIS_DEBUG_WITH_RELEASE_KEY: ${{ inputs.test_kit && '1' || '' }}
           CI_BUILD_NUMBER: ${{ steps.version.outputs.number }}
@@ -193,7 +193,7 @@ jobs:
 
       - name: Check signature and 16 KB alignment
         run: |
-          APK=ultra-native/app/build/outputs/apk/release/app-release.apk
+          APK=jarvis-native/app/build/outputs/apk/release/app-release.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -E "DN|SHA-256"
           READELF="$ANDROID_HOME/ndk/$NATIVE_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
           unzip -oq "$APK" 'lib/arm64-v8a/*' -d "$RUNNER_TEMP/apk"
@@ -206,25 +206,25 @@ jobs:
           [ $bad -eq 0 ] || { echo "::error::a native lib is not 16 KB-aligned"; exit 1; }
 
       - name: Check the CPU variants carry their instructions
-        run: ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash ultra-native/ondevice-brain/check-cpu-variants.sh "$RUNNER_TEMP/apk/lib/arm64-v8a"
+        run: ANDROID_NDK="$ANDROID_HOME/ndk/$NATIVE_NDK" bash jarvis-native/ondevice-brain/check-cpu-variants.sh "$RUNNER_TEMP/apk/lib/arm64-v8a"
 
       - name: Check the test build is signed with the same key as the release
         if: inputs.test_kit
         run: |
           S="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-          A=$("$S" verify --print-certs ultra-native/app/build/outputs/apk/release/app-release.apk | grep 'SHA-256 digest')
-          B=$("$S" verify --print-certs ultra-native/app/build/outputs/apk/debug/app-debug.apk | grep 'SHA-256 digest')
+          A=$("$S" verify --print-certs jarvis-native/app/build/outputs/apk/release/app-release.apk | grep 'SHA-256 digest')
+          B=$("$S" verify --print-certs jarvis-native/app/build/outputs/apk/debug/app-debug.apk | grep 'SHA-256 digest')
           echo "$B"
           [ -n "$A" ] && [ "$A" = "$B" ] || { echo "::error::test build is not signed with the release key"; exit 1; }
 
       - name: Remove the key from the runner
         if: always()
-        run: rm -f "$RUNNER_TEMP/release.jks" ultra-native/keystore.properties
+        run: rm -f "$RUNNER_TEMP/release.jks" jarvis-native/keystore.properties
 
       - uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: ultra-native/app/build/outputs/apk/release/app-release.apk
+          path: jarvis-native/app/build/outputs/apk/release/app-release.apk
           # Only the publish job below reads these, minutes later; 14 days of ~100 MB per run filled the
           # artifact storage quota (run 38665897524 failed on upload, 2026-10-15).
           retention-days: 1
@@ -233,7 +233,7 @@ jobs:
         if: inputs.test_kit
         with:
           name: app-test-realkey
-          path: ultra-native/app/build/outputs/apk/debug/app-debug.apk
+          path: jarvis-native/app/build/outputs/apk/debug/app-debug.apk
           # Only the publish job below reads these, minutes later; 14 days of ~100 MB per run filled the
           # artifact storage quota (run 38665897524 failed on upload, 2026-10-15).
           retention-days: 1
