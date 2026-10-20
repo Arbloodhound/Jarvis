@@ -36,21 +36,18 @@ fun ScreenVisionSettings(ctx: Context) {
     val present = remember(tick) { VisionModel.present(ctx) }
     val have = remember(tick) { VisionModel.downloadedBytes(ctx) }
     val gb = { b: Long -> String.format(java.util.Locale.ROOT, "%.1f GB", b / 1_073_741_824.0) }
-    val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
 
-    Text(
+    JarvisHint(
         "Reading the screen as a picture, for what apps don't expose as text: games, maps, images, " +
             "pages drawn on a canvas. The text reader (Google ML Kit) is built in and works offline. " +
             "The vision model looks at the whole picture and can describe it or answer a question " +
             "about it (\"what's in this photo\", \"which button is the blue one\"). It runs on this " +
             "phone; nothing is uploaded and no screenshot is saved. Banking and password screens come " +
             "out black, by Android's design.",
-        style = MaterialTheme.typography.bodySmall, color = dim,
     )
-    Text(
+    JarvisHint(
         "If screen reading says the screen could not be captured: turn Jarvis's accessibility " +
             "service off and on once (Android only grants the new screenshot permission on restart).",
-        style = MaterialTheme.typography.bodySmall, color = dim,
     )
     Text("Text reader: built in ✓", style = MaterialTheme.typography.bodyMedium)
     Text("Vision model: Qwen2.5-VL 3B (${gb(VisionModel.TOTAL_BYTES)})", style = MaterialTheme.typography.bodyMedium)
