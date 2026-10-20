@@ -1,3 +1,15 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/CROSSEVAL_OPENCLAW.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
+## Post-merge status correction (2026-10-19) — read first
+
+This file is a read-only performance/architecture comparison of Jarvis vs the OpenClaw Android app. The code observations and measurements below remain the historical record of that evaluation. **Implementation-status claims and the "Top 5 changes" recommendations are superseded by this section** where the merged code has moved on. CI has not yet compiled the merged tree; the 2026-10-19 audits were grep-level code audits, not device performance tests, so the latency findings below are **not re-verified in the 2026-10-19 audits**.
+
+- **Consolidation:** all work is now on `main` (tip `c8043e1c`). The post-merge tree is `ultra-native/` (Kotlin, including the harness package `com.agent.ultra.harness`), `desktop/` (TS), and `src/` (TS).
+- **Adopted since this evaluation:** snapshot-bound screen actions with stale-screen refusal and protected-app fail-closed behaviour (ScreenGuard in the harness), a 3-gate notification filter (NotificationForwardingPolicy), lazy skills (SkillStore), and SQLite claim memory with hybrid search + temporal decay (MemoryClaims) — the directions recommended in items 5, and parts of 3, below now exist in the harness. Their on-device performance effect has not been measured in the audits.
+- **Audit verdicts relevant here:** `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/` and harness internal logic are "works with defects"; `net/` Tor is "works as designed". Pass 2: 119 defects; supplement: 87 findings; post-merge 0 known criticals (the harness DB-wiring critical is resolved: UltraDatabase v9).
+- **Still open:** 2 manifest registrations, 2 broken unit tests, TS `server/` orphaned, ~70 dead-code candidates, CI compile pending. The threading/streaming recommendations (items 1, 2 and 4) are not confirmed as done or not done by the 2026-10-19 audits — treat them as not re-verified in the 2026-10-19 audits.
+
+---
 # Jarvis vs OpenClaw Android: why Jarvis feels slower
 
 Read-only. Nothing built, run, installed, or networked. Git tree of /workspace/Jarvis is unchanged.
