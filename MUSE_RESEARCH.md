@@ -1,3 +1,16 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/MUSE_RESEARCH.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
+## Post-merge status correction (2026-10-19) — read first
+
+This file documents reverse-engineering research into Muse (and, in §11, OpenClaw). That research content is unchanged below and remains the record of what was found. **Every Jarvis implementation-status claim in the body is superseded by this section**, which states the audited post-merge state. CI has not yet compiled the merged tree; audit verification was grep-level, not compilation.
+
+- **Now exists (was "missing / partial / proposed" in the body):** the harness package `com.agent.ultra.harness` contains MemoryClaims (provenance, supersede chains, hybrid search + temporal decay), ApprovalGrants (grant levels + command binding), Scheduler + SchedulerRuntime/SchedulerReceiver, SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, the NLI head, bandit (ForYou), and typed `connectors/` (Gmail, Google Calendar/Docs/Drive, Spotify) with CredentialVault (Keystore AES-GCM) and SecretScrubber. The §5 / §6.2 / §7.3 / §8.3 / §10.8 "build next / lifts" lists are therefore historical proposals, not open build requests, wherever the harness now implements them.
+- **DB wiring resolved:** UltraDatabase v9 with the harness entities and migrations registered (was the pass-2 critical; post-merge 0 known criticals).
+- **Verified clean:** purchases are never grant-coverable at either layer and always need fresh approval; codes/reset links never reach the cloud model (opaque placeholders, ~10-minute expiry); Trash has no agent-facing empty/purge; the agent cannot see the approval card or revoke grants.
+- **Still open:** 2 manifest registrations (`SchedulerReceiver`, `SpotifyRedirectActivity`), 2 broken unit tests, TS `server/` orphaned, ~70 dead-code candidates, CI compile pending. One audit high is directly relevant to §2's "surrogate credentials" row: a cloud API key was found in plaintext SharedPreferences in the audited tree — not re-verified beyond the audits.
+- Anything in the body not covered above and not covered by the 2026-10-19 audits is **not re-verified in the 2026-10-19 audits**.
+
+---
 # MUSE RESEARCH 2 — what's new since "What makes Muse Muse", how it maps to Jarvis, and how to test
 
 Builds on the owner's `what-makes-muse-muse.md` (2026-10-08). Compiled 2026-10-15 from web search results only:
