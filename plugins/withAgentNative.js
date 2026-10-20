@@ -1132,7 +1132,7 @@ public class ApkSignerV1 {
 
         StringBuilder manifest = new StringBuilder();
         manifest.append("Manifest-Version: 1.0\\r\\n");
-        manifest.append("Created-By: Agent Ultra\\r\\n\\r\\n");
+        manifest.append("Created-By: Jarvis\\r\\n\\r\\n");
 
         Map<String, String> entryDigests = new LinkedHashMap<>();
         for (Map.Entry<String, byte[]> entry : entries.entrySet()) {
@@ -1154,7 +1154,7 @@ public class ApkSignerV1 {
         StringBuilder sigFile = new StringBuilder();
         sigFile.append("Signature-Version: 1.0\\r\\n");
         sigFile.append("SHA-256-Digest-Manifest: ").append(manifestDigest).append("\\r\\n");
-        sigFile.append("Created-By: Agent Ultra\\r\\n\\r\\n");
+        sigFile.append("Created-By: Jarvis\\r\\n\\r\\n");
 
         for (Map.Entry<String, String> entry : entryDigests.entrySet()) {
             String section = "Name: " + entry.getKey() + "\\r\\n" +
@@ -3073,7 +3073,7 @@ public class AgentBackgroundService extends Service {
         super.onCreate();
         createNotificationChannel();
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Agent Ultra")
+            .setContentTitle("Jarvis")
             .setContentText("Running in background")
             .setSmallIcon(android.R.drawable.ic_menu_manage)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -3122,7 +3122,7 @@ public class AgentBackgroundService extends Service {
             PendingIntent pi = PendingIntent.getActivity(this, 0,
                 getPackageManager().getLaunchIntentForPackage(getPackageName()),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            Notification n = b.setContentTitle("Agent Ultra")
+            Notification n = b.setContentTitle("Jarvis")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setContentIntent(pi)
@@ -3139,10 +3139,10 @@ public class AgentBackgroundService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
-                "Agent Ultra Background",
+                "Jarvis Background",
                 NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Keeps Agent Ultra running in the background");
+            channel.setDescription("Keeps Jarvis running in the background");
             channel.setShowBadge(false);
             channel.setSound(null, null);
             NotificationManager manager = getSystemService(NotificationManager.class);
@@ -3198,7 +3198,7 @@ const ACCESSIBILITY_SERVICE_CONFIG = `<?xml version="1.0" encoding="utf-8"?>
     android:settingsActivity="com.agent.ultra.MainActivity"
     android:accessibilityFlags="flagDefault|flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows" />`;
 
-const STRINGS_XML_ADDITION = `    <string name="accessibility_service_description">Agent Ultra uses accessibility to interact with other apps on your behalf. Enable only if you want Ultra to control apps for you.</string>`;
+const STRINGS_XML_ADDITION = `    <string name="accessibility_service_description">Jarvis uses accessibility to interact with other apps on your behalf. Enable only if you want Jarvis to control apps for you.</string>`;
 
 function withAgentNative(config) {
   config = withDangerousMod(config, [
