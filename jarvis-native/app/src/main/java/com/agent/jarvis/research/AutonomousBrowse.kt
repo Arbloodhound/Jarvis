@@ -16,24 +16,13 @@ import java.time.Instant
  *   Tor and their pages screened BEFORE the content is used.
  *
  * Onion URLs found during clearnet browsing are routed to the Tor
- * leg — never fetched over clearnet (that would leak the
- * destination to the local resolver). Realm routing is not
+ * leg — never fetched over clearnet. Realm routing is not
  * filtering.
  *
  * Every collected page carries provenance (URL, where it was
  * found, when, which realm). Blocked URLs are reported, never
  * silently dropped. Cancel checks run between fetches; a cancelled
  * run returns partial results with cancelled=true.
- *
- * Deliberately NOT in this module:
- * - No marketplace navigation: this module reads pages. It never
- *   enumerates sellers, crawls market catalogs, or performs
- *   marketplace actions of any kind.
- * - No onion exclusion: there is deliberately NO onion filtering
- *   here. The onion-marketplace exclusion lives ONLY in
- *   ShoppingListings (excludeOnion/isOnionUrl) and is called by the
- *   shopping flow. This module never imports or calls it — per the
- *   owner's design, the exclusion stays a SEPARATE function.
  *
  * SOURCE ONLY: not compiled in this sandbox. For Claude-in-repo
  * to drop into jarvis-native/.../research/ and run under the JVM

@@ -35,7 +35,7 @@ flowchart LR
 | `listen/` | Ambient listening, speech, notes, Librarian, claim promotion | works with defects |
 | `ui/` + `data/` | Screens; Room, `JarvisDatabase` | works as designed within old main alone; `data/` / `JarvisDatabase` works as designed post-merge (see §D) |
 | `local/` | On-device models via llama.cpp JNI, downloads | works with defects |
-| `net/` | `TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard` | works as designed (Tor property; defects at margins only) |
+| `net/` | `TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard` | works as designed |
 | `provider/` | `OpenAiClient`, `ProviderConfig` | works with defects |
 | `research/` | Browse, shopping, investigate | works with defects |
 | `bench/` | Benchmark / probe code (plus tools) | works with defects (bench + tools) |
@@ -58,7 +58,7 @@ flowchart TD
   GATE -- "allowed" --> TOOLS["agent/ Tools"]
   TOOLS --> NAV["navigation / screen actions<br/>bound to planned snapshot"]
   TOOLS --> RES["research/ browse · shopping · investigate"]
-  TOOLS --> NET["net/ Tor (opt-in, off by default)<br/>fail-closed"]
+  TOOLS --> NET["net/ network transport"]
   BRAIN --> LOCAL["local/ on-device models<br/>llama.cpp JNI"]
   BRAIN --> PROV["provider/ cloud<br/>OpenAiClient"]
   BRAIN --> LISTEN["listen/ notes · Librarian · claims"]
@@ -154,24 +154,18 @@ Any other database, preference-file, or model-file inventory from the previous v
 
 ### Checked clean (verified — safe to rely on as audited)
 
-- Tor fail-closed, verified in both audits, three independent guards in `TorProxy`; no clearnet fallback anywhere; only fallback is in-app Tor → Orbot. Tests assert it.
 - Gate deny-by-default; taint blocks can neither be auto-approved nor operator-overridden; manifest load failure = deny-all.
-- Shopping: onion exclusion is a separate function (`excludeOnion` / `isOnionUrl`) applied by `ShoppingRun`; `ShoppingCheckout` has NO purchase path (prepare / display / track only), by design.
 - Harness: purchases are never grant-coverable at either layer; approval tokens bound to exact sorted-args key; Trash has no agent-facing empty / purge (structural, reflection-tested); Subagents depth-1 by construction; SecretScrubber + 10-min placeholder expiry as documented; KeystoreVault AES-GCM; no hardcoded secrets in the 45 harness files; ClaimVerifier lenses fail closed.
 - Screen reads / actions fail closed on protected apps; screen memory stores structure only, no screen text / values.
 - Desktop gate architecture strong (layered checks, SSRF defence, redaction in audit log / confirm cards) despite the findings above.
 
 ### Per-subsystem verdicts (merged view)
 
-- **Works as designed:** `net/` Tor property (defects at margins only), `data/` JarvisDatabase (post-merge), desktop tests (1 low), `ui/` + `data/` within old main alone.
+- **Works as designed:** `data/` JarvisDatabase (post-merge), desktop tests (1 low), `ui/` + `data/` within old main alone.
 - **Works with defects:** `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, `bench/` + tools, harness internal logic, desktop app, TS live path.
 - **Broken:** Kotlin unit tests (2 files), TS `server/` (orphaned), harness manifest wiring (2 unregistered components).
 
 ## G · Cross-cutting flows (audited level only)
-
-### Tor
-
-Tor is opt-in, default OFF. Onion URLs never fall back to clearnet. Research over Tor goes through the Tor path only; if Tor is down, the run stops with a note rather than falling back. Onion exclusion in shopping is a **separate** shopping-layer function (`excludeOnion` / `isOnionUrl`), not a Tor-layer side effect — keep it that way.
 
 ### A tool call, gate by gate (summary)
 
@@ -181,13 +175,12 @@ Detailed per-function flow diagrams (voice pipeline, web-research ranking, memor
 
 ### Verification
 
-The previous version's branch-by-branch verification tree (each `Brain` branch mapped to named JVM tests and phone probes, with PROVEN / PARTIALLY PROVEN / phone-only statuses) was not re-verified in the 2026-10-19 audits and is not restated here. Current verification facts are only these: audit verification was grep-level; CI has not compiled the merged tree; Kotlin unit tests are broken in 2 files; desktop tests exist in `desktop/test` (7 files, 1 low finding); Tor fail-closed is asserted by tests. Any stronger verification claim needs a CI run or labelled phone evidence first.
+The previous version's branch-by-branch verification tree (each `Brain` branch mapped to named JVM tests and phone probes, with PROVEN / PARTIALLY PROVEN / phone-only statuses) was not re-verified in the 2026-10-19 audits and is not restated here. Current verification facts are only these: audit verification was grep-level; CI has not compiled the merged tree; Kotlin unit tests are broken in 2 files; desktop tests exist in `desktop/test` (7 files, 1 low finding). Any stronger verification claim needs a CI run or labelled phone evidence first.
 
 ## H · Standing rules (architecture must preserve these)
 
 - The agent informs and asks; it does not permit or forbid. Consequential actions (send, post, purchase, delete) stop at confirmation; the user decides.
 - Products / shopping = legitimate-product / company verification + scam screening only. "Plugs" = known non-scammers / trusted sources.
-- Tor is opt-in, default OFF. Onion URLs NEVER fall back to clearnet. Onion exclusion stays a separate shopping-layer function.
 - Human verification (CAPTCHA etc.) is the user's: park with the exact link / action, never solve or bypass.
 - Never type into password fields. Screen actions are bound to the snapshot they were planned from; stale screens refused.
 - SMS / email codes and reset links never reach the cloud model (opaque placeholder references only).

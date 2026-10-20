@@ -6,8 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The shopping brief assembly: one row per seller-offer, the onion carve-out applied, reputation
- * ranked, no buy language. Pure — no network.
+ * The shopping brief assembly: one row per seller-offer, onion rows excluded, reputation
+ * ranked. Pure — no network.
  */
 class ShoppingRunTest {
 

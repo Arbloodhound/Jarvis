@@ -140,8 +140,8 @@ object JarvisPrefs {
     private const val K_ONION = "onion_research"
 
     /** Onion research via Tor: .onion links in research are read through Orbot's SOCKS proxy
-     * (net.TorProxy), with phishing/scam screening (agent.OnionSafety). Off by default; off means
-     * onion links are skipped with one line. Offline only wins over it. */
+     * (net.TorProxy), with phishing/scam screening (agent.OnionSafety); when off, onion links are
+     * skipped with one line, and offline-only wins over it. */
     fun onionResearch(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_ONION, false)
 
@@ -151,9 +151,7 @@ object JarvisPrefs {
 
     private const val K_DEEP = "deep_research_tor"
 
-    /** Deep research over Tor: the bounded onion discovery crawl (research.Discovery), run only
-     * when the owner says "deep research …" or "investigate …", and only with onion research on.
-     * Off by default. */
+    /** Deep research over Tor: the bounded onion discovery crawl (research.Discovery). */
     fun deepResearch(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_DEEP, false)
 

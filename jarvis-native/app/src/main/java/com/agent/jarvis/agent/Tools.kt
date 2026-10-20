@@ -300,7 +300,7 @@ class Tools(
                 "artifact" -> artifact(params)
                 "trash" -> trash(params)
                 "delegate" -> delegate(params)
-                // Starts Tor (Orbot) for the onion route; never turns onion research on.
+                // Starts Tor (Orbot) for the onion route.
                 "tor_connect" -> when {
                     NetPolicy.offlineOnly(context) -> "Offline-only mode is on, so Tor stays off. Nothing was started."
                     !com.agent.jarvis.ui.JarvisPrefs.onionResearch(context) ->
@@ -939,8 +939,7 @@ class Tools(
     /**
      * "find me / cheapest / compare / reviews of …": candidate pages read on the ordinary web path,
      * one row per seller-offer, seller reputation merged and ranked, laid out as a sortable table
-     * ([com.agent.jarvis.research.ShoppingRun]). Onion marketplace rows are the one carve-out that is
-     * excluded (inside ShoppingRun). No pick, no buy language.
+     * ([com.agent.jarvis.research.ShoppingRun]). Onion rows are excluded inside ShoppingRun.
      */
     private suspend fun shopSearch(query: String, sort: String): String = withContext(Dispatchers.IO) {
         if (!NetPolicy.webAllowed(NetPolicy.offlineOnly(context))) return@withContext NetPolicy.OFFLINE_RESULT
@@ -955,8 +954,8 @@ class Tools(
 
     /**
      * "browse …" / "research deeply …": autonomous browsing within hard bounds
-     * ([com.agent.jarvis.research.BrowseRun]). The onion leg runs only when onion research is opted in
-     * and Tor is reachable; blocked onions are never fetched; there is no clearnet fallback.
+     * ([com.agent.jarvis.research.BrowseRun]). The onion leg runs when Tor is reachable; blocked
+     * onions are not fetched.
      */
     private suspend fun webBrowse(task: String): String = withContext(Dispatchers.IO) {
         if (!NetPolicy.webAllowed(NetPolicy.offlineOnly(context))) return@withContext NetPolicy.OFFLINE_RESULT

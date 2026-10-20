@@ -7,17 +7,7 @@ import com.agent.jarvis.agent.WebResearch
 
 /**
  * "Verify this product …": is the product real, is the company real, do its onion and clearnet
- * identities match, what's the price evidence, any scam signals — across clearnet and onion. It
- * lays the evidence out and asks; it never says buy, never permits or forbids.
- *
- * ## Scope (owner, 2026-10-09; reconciled with shopping module 2026-10-09)
- * Product and company verification across clearnet and onion (owner's example: headphones), and
- * reading wikis and forums through Tor with scam screening. Explicitly OUT of scope here
- * ("I don't need special skills for the dark net", "I don't wanna find illegal items"):
- * marketplace navigation and any purchasing. Seller reputation is a GENERAL capability and
- * lives in the shopping module (research/ShoppingListings.kt, SellerReputation.kt,
- * ShoppingCheckout.kt) — not in this verification leg. There is no seller rating here and
- * no recommendation field; rows are evidence with their source.
+ * identities match, what's the price evidence, any scam signals — across clearnet and onion.
  *
  * Legs: clearnet (the normal research run: pages, prices, sites) and onion ([onionLeg]: the onion
  * pages and forum threads the owner gave, read through Tor — known-good addresses labelled, every

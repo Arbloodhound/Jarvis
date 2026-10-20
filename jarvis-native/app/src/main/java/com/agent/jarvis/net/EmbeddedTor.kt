@@ -13,8 +13,7 @@ import org.torproject.jni.TorService
  * 9050 when that is free, else one tor picks — [socksPort] says which. Nothing outside the app can
  * use it, and only [TorProxy] sends traffic through it (.onion only).
  *
- * Started only by the owner's "Connect to Tor" tap or the tor_connect tool (which checks the opt-in
- * setting first); never at app start.
+ * Started by the owner's "Connect to Tor" tap or the tor_connect tool; never at app start.
  */
 object EmbeddedTor {
     @Volatile private var service: TorService? = null

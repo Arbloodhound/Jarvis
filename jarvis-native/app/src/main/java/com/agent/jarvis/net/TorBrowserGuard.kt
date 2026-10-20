@@ -6,10 +6,9 @@ import android.net.NetworkCapabilities
 
 /**
  * Before the agent drives Tor Browser on screen: Tor Browser carries its own Tor. With a VPN on —
- * Orbot's VPN mode above all — its traffic would go Tor over Tor (slower, and the Tor Project
- * advises against it). The agent informs and asks: the call returns [VPN_NOTE] instead of acting,
- * and goes ahead once the owner says so ("vpnOk": true). Jarvis's own Tor (EmbeddedTor) is a
- * local proxy for its research only and never touches Tor Browser.
+ * Orbot's VPN mode above all — its traffic would go Tor over Tor. The call returns [VPN_NOTE]
+ * instead of acting, and goes ahead once the owner says so ("vpnOk": true). Jarvis's own Tor
+ * (EmbeddedTor) is a local proxy for its research only and never touches Tor Browser.
  */
 object TorBrowserGuard {
     private val NAMES = Regex("\\btor\\s*browser|\\btorbrowser|org\\.torproject\\.torbrowser", RegexOption.IGNORE_CASE)

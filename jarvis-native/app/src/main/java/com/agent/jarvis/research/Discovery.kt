@@ -7,16 +7,7 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Deep research over Tor: a bounded crawl for onion links, and reading the forum threads the owner
- * points at. Runs only when the owner asks for it ("deep research …" / "investigate …") with both
- * Settings switches on — "Onion research via Tor" and "Deep research over Tor", off by default.
- * Never on its own.
- *
- * ## Scope (owner, 2026-10-09)
- * Reading hidden wikis and forums through Tor with scam-vs-legit screening, and checking products
- * and companies across clearnet and onion. Explicitly OUT of scope ("I don't need special skills for
- * the dark net", "I don't wanna find illegal items"): marketplace navigation, vendor or seller
- * reputation or vetting, and any purchasing.
+ * A bounded crawl for onion links, and reading the forum threads it is pointed at.
  *
  * ## The crawl ([crawl])
  * Breadth first from the known-good set, the owner's own list and any start pages the owner gave,
@@ -25,7 +16,7 @@ import java.io.File
  * LIKELY_PHISH goes to the red-flag log and its links are never followed. TRUSTED and
  * screened-clean pages found by the crawl (not the start pages) go into the link pool, each traced
  * to the page it was found on. The only fetcher is the one passed in — the Tor proxy; when a fetch
- * fails and the proxy no longer answers, the crawl stops with a note. There is no clearnet fallback.
+ * fails and the proxy no longer answers, the crawl stops with a note.
  *
  * ## Threads ([readThreads])
  * The forum treatment ([Forums.thread]): posts with author and date, explicit next-page links only;

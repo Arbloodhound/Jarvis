@@ -15,10 +15,9 @@ import com.agent.jarvis.agent.WebResearch
  * Multi-seller marketplace pages yield ONE ROW PER SELLER-OFFER.
  * No per-site plugins, no product names, no category lists.
  *
- * The ONE policy carve-out is [excludeOnion] below — a SEPARATE
- * function, per the owner's design ("it stays general but has
- * that exclusion"). Extraction never calls it and never branches
- * on realm; the caller applies it explicitly.
+ * [excludeOnion] below is a SEPARATE function; extraction never
+ * calls it and never branches on realm — the caller applies it
+ * explicitly.
  *
  * SOURCE ONLY: not compiled in this sandbox. For Claude-in-repo
  * to drop into jarvis-native/.../research/ and run under the JVM
@@ -116,10 +115,7 @@ object ShoppingListings {
     }
 
     // ------------------------------------------------- onion exclusion
-    // SEPARATE policy function, per the owner's design: extraction
-    // above stays general and URL-agnostic. The onion exclusion
-    // lives HERE and ONLY here, applied explicitly by the caller —
-    // never silently inside extraction.
+    // Applied explicitly by the caller, never inside extraction.
 
     /** True if the URL's hostname ends with .onion (hostname parsing, not naive endswith). */
     fun isOnionUrl(url: String): Boolean {

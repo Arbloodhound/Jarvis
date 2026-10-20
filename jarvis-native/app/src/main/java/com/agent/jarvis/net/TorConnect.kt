@@ -10,8 +10,6 @@ import kotlinx.coroutines.withContext
  * route). Tor is built into the app ([EmbeddedTor]); when Orbot already runs on 9050 that is used
  * instead, so two tors don't run side by side. Connected means bootstrapped (in-app) or the proxy
  * port answering (Orbot).
- *
- * This never turns on onion research: the tool checks that setting first (opt-in, off by default).
  */
 object TorConnect {
     const val ORBOT = "org.torproject.android"

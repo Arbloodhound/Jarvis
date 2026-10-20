@@ -7,13 +7,6 @@ import java.net.URI
  * Forum threads and wiki indexes the owner points at, read generically: posts (author, date,
  * text), explicit next-page links only, and the onion links a wiki index lists, each screened.
  *
- * ## Scope (owner, 2026-10-09)
- * Reading hidden wikis and forums through Tor with scam-vs-legit screening, and product/company
- * verification across clearnet and onion. Explicitly OUT of scope ("I don't need special skills for
- * the dark net", "I don't wanna find illegal items"): marketplace navigation, vendor or seller
- * reputation or vetting, and any purchasing. Nothing here knows about markets or vendors; it reads
- * posts and links.
- *
  * Heuristics with known limits: a thread is the most common repeated container whose class says
  * post / message / comment / entry / reply; JavaScript-rendered and login-walled boards extract
  * poorly or not at all. Nothing is ever invented: an empty page gives no posts. Pure, JVM-tested,

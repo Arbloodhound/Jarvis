@@ -13,18 +13,13 @@ import java.io.File
  * "Investigate …": a case file on a person, a company or a topic, built from public sources over
  * the research path, each finding and contact carrying where it came from.
  *
- * ## Scope (owner, 2026-10-09)
- * Research over clearnet and (opt-in) Tor, scam-vs-legit screening, product and company
- * verification. Explicitly OUT of scope ("I don't need special skills for the dark net", "I don't
- * wanna find illegal items"): marketplace navigation, vendor or seller reputation or vetting, and
- * any purchasing. Also not here: people-search / data-broker sites and breached or leaked data
- * ([Contacts.BROKERS] are skipped everywhere in this file).
+ * Research across clearnet and Tor: scam-vs-legit screening, and product and company
+ * verification. ([Contacts.BROKERS] are skipped everywhere in this file.)
  *
  * ## Legs, in order
  * 1. clearnet — the normal research run; each source becomes a finding (url, snippet, fetch time).
  * 2. articles — the pages that run read; contact strings on them, each with provenance.
- * 3. tor — the deep-research pass ([Discovery]), only when the owner opted in (both Tor switches
- *    on and Tor running); skipped with the reason otherwise.
+ * 3. tor — the deep-research pass ([Discovery]); skipped with the reason when unavailable.
  * 4. osint — operator queries (filetype:, inurl:, site: on the domains found in legs 1–2) and
  *    pivots on the contacts found, each hit a finding with its url and snippet.
  *

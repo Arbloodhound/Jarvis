@@ -15,15 +15,8 @@ import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
 /**
- * Reading .onion pages through Tor's SOCKS proxy (Orbot), for research only — Settings →
- * "Onion research via Tor", off by default.
- *
- * ## Scope (owner, 2026-10-09)
- * Reading hidden wikis and forums with scam-vs-legit screening, and checking products and
- * companies across clearnet and onion. Explicitly OUT of scope ("I don't need special skills for
- * the dark net", "I don't wanna find illegal items"): marketplace navigation, vendor or seller
- * reputation or vetting, and any purchasing. This class only fetches .onion URLs it is handed; it
- * never discovers new ones and never carries clearnet traffic.
+ * Reading `.onion` pages through the Tor SOCKS proxy (Orbot). This class only fetches `.onion`
+ * URLs it is handed.
  *
  * ## No local lookup of the onion name
  * The proxy is a SOCKS proxy, so OkHttp hands the destination to the socket as an UNRESOLVED
@@ -109,8 +102,7 @@ class TorProxy(
 }
 
 /**
- * A [Dns] that refuses every .onion name: an onion address looked up by the phone's resolver
- * leaks where it's going and never resolves anyway. Everything else goes to [delegate].
+ * A [Dns] that refuses every .onion name; everything else goes to [delegate].
  */
 class OnionBlockingDns(private val delegate: Dns = Dns.SYSTEM) : Dns {
     override fun lookup(hostname: String): List<InetAddress> {

@@ -13,10 +13,7 @@ import kotlin.coroutines.coroutineContext
 /**
  * The real transports for [AutonomousBrowse]: DuckDuckGo search and clearnet fetch from
  * [WebResearchRun], the onion leg from [OnionAccess] (the Tor proxy) with [OnionSafety] doing the
- * classify-before-fetch and the screening. The hard constraints are [AutonomousBrowse]'s own and
- * stay there — no exclusion logic, no marketplace navigation, onion leg only when Tor is opted in
- * AND reachable, classify before fetch, blocked never fetched, Tor-down is a clean deny with no
- * clearnet fallback. This file only hands it the transports; it adds no onion filtering of its own.
+ * classify-before-fetch and the screening. This file only hands it the transports.
  *
  * [render] is pure (JVM-tested); [run] is the thin wiring.
  */

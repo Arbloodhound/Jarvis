@@ -2,17 +2,7 @@ package com.agent.jarvis.agent
 
 /**
  * Is this .onion address the real service or a phishing clone, and does this onion page show scam
- * signals? Defensive screening for research over Tor (Settings → "Onion research via Tor").
- *
- * ## Scope (owner, 2026-10-09)
- * In scope: reading hidden wikis and forums through Tor with scam-vs-legit screening, and checking
- * products and companies across clearnet and onion (is it real, do the onion and clearnet
- * identities match, price evidence, scam signals). Jarvis shows its work and then asks; it never
- * says "buy this".
- *
- * Explicitly OUT of scope, in the owner's words "I don't need special skills for the dark net" and
- * "I don't wanna find illegal items": no marketplace navigation, no vendor or seller reputation or
- * vetting, no purchasing, and no crawler that discovers new onions on its own.
+ * signals? Defensive screening of `.onion` pages.
  *
  * ## What the checks rest on
  * - A v3 address is 56 base32 characters encoding the service's ed25519 public key, a 2-byte
