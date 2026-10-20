@@ -1,9 +1,19 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/tools/BRAINBENCH.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
 # brainbench results
 
 `tools/brainbench.py` sends Ultra's real cloud system prompt (read from Brain.kt at run
 time) and one everyday request to a model, and grades the first reply the way Brain
 parses it. 40 tasks, 3 repeats, temperature 0.2, Venice, 2026-09-19. It measures the
 first decision only — not whether the tool then works on a phone.
+
+**Status as of 2026-10-19:** the results below are the 2026-09-19 runs, preserved as the
+historical record. They were not re-run or re-verified in the 2026-10-19 audits, which
+were static, grep-level reading of the merged tree (all work now on `main`); CI has not
+yet compiled the merged tree. The Brain code these runs exercised (`agent/`) carries the
+merged-tree audit verdict "works with defects", and the prompt has a life of its own in
+the current tree — so read the scores as what those models did with that prompt on that
+date, not as a current measurement.
 
 ## b1 — the prompt as shipped in 2.3.2 (10 models)
 
