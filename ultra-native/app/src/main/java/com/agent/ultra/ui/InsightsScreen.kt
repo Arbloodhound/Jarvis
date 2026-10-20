@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
@@ -17,7 +16,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,7 +23,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -57,10 +54,7 @@ fun InsightsScreen(onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize().systemBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("←", style = MaterialTheme.typography.titleLarge) }
-                Text("Insights", style = MaterialTheme.typography.titleLarge)
-            }
+            JarvisHeader(title = "Insights", onBack = onBack)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (p in ConversationInsights.Period.values()) FilterChip(selected = period == p,
                     onClick = { period = p }, label = { Text(p.label.replaceFirstChar { it.uppercase() }) })
@@ -115,9 +109,7 @@ fun InsightsScreen(onBack: () -> Unit) {
 
 @Composable
 private fun Card(content: @Composable () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp)) { content() }
-    }
+    JarvisCard { content() }
 }
 
 /** Android's share sheet for [text]. */
