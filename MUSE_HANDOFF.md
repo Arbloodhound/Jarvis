@@ -1,65 +1,57 @@
-# MUSE HANDOFF — 2026-10-17 (from Claude Code session 01UX5qeo)
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/MUSE_HANDOFF.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
-Read this first, then HANDOFF_V5_MISSING.md (§6 standing rules), CLAUDE.md and the top of DEVLOG.md.
-Checked against GitHub on 2026-10-17.
+# MUSE HANDOFF — current state (2026-10-19 post-merge)
 
-## 0. LOCKED — Muse's code stays as Muse made it (owner, 2026-10-17)
-The owner: "I WANT EVERY DECISION THAT MUSE MADE TO STAY AS IT WAS" and "make sure Muse's code stays mostly the
-same unless need to optimize — we rebuilt the app on top of OpenClaw."
-- Muse's work = everything in `HANDOFF_V5_MISSING.md` and the six harness base files (`MemoryClaims`,
-  `ApprovalGrants`, `Scheduler`, `SkillStore`, `NotificationForwardingPolicy`, `ScreenGuard`). The app is built on
-  OpenClaw (MIT); keep attribution.
-- Keep Muse's code and decisions as they are. Change them only to optimize (same behaviour, faster/leaner), never to
-  add rules Muse didn't make. Anything that would change behaviour → ask the owner first.
-- 2026-10-17: the owner rejected three additions another session made beyond Muse; all removed (commit after
-  `8eb2ecd`): code-hiding on the on-device path and in `notifications.log` (OtpScrubber), and refusing raw taps with
-  nothing listed under them (ScreenBounds/requireScreenBound; `ScreenGuard.kt` back to Muse's version). The cloud
-  model still never gets codes (Muse's rule, `Brain.resultFeedback`).
-- Still in Muse's files from other sessions (additive, kept): `MemoryClaims.writeVerified` (+ minimal compile fixes
-  in `MemoryClaims`/`SkillStore`).
+Read this first, then `HANDOFF_V5_MISSING.md` (now a current status doc, not a build request), `CLAUDE.md`, and `MERGE_LOG_2026-10-19.md`.
+
+## 0. Layering (locked 2026-10-15)
+
+- **L1** = the Muse reverse-engineering — the v5 harness is this layer; nothing in it gets replaced, everything adapts to it.
+- **L2** = OpenClaw concrete code adopted into the L1 contracts where superior (SQLite memory, credential proxy, lazy skills, owner-tagged jobs, screen guard, notification filter, command-tied approvals). OpenClaw is MIT-licensed; borrowing requires preserving its copyright/license notice.
+- **L3** = project code only where L1+L2 are missing, plus unique features (voice, Tor, products, shopping, investigate, router, NLI gate).
+
+The six harness base files named in the previous version (`MemoryClaims`, `ApprovalGrants`, `Scheduler`, `SkillStore`, `NotificationForwardingPolicy`, `ScreenGuard`) are part of the harness package described below. Decisions about changing their behaviour remain the owner's; this doc does not re-litigate them.
 
 ## 1. State right now
-- **Latest release: `v3.0.41-test`** — https://github.com/Arbloodhound/Jarvis/releases/tag/v3.0.41-test
-  - Release APK run 38999016649 (success) from `muse/v5-delta-port` @ `79a438b`.
-- **Branch:** `muse/v5-delta-port`. Draft PR #13 → base `claude/shopping-integration`. PR #12
-  (`claude/shopping-integration`) still open too. Both wait on the owner.
-- Full JVM suite after the removal: 1578 tests, 0 failures (was 1610; the 32 removed tests covered the removed code).
-  v3.0.41-test still contains the removed code — the next release won't.
 
-## 2. What's on the branch (newest first)
-- (next commit) Removed the three additions the owner rejected (§0).
-- `79a438b` readSms: codes scrubbed before the 160-char cut (so a code at the cut can't slip past).
-- `fddb02c` ScreenGuard tap binding + OtpScrubber wired into device paths (see §0 items 1–3).
-- `c28f861` On-device prompt in a fixed fragment order (log line `UltraPrompt reusable fragments=N/4`);
-  deferred tool namespaces built but **off** — every on-device tool still loads as before.
-- `8c798f3` On-device `LlmNliHead` + `MemoryClaims.writeVerified` (check a memory before saving).
-  **Idle:** nothing in the app saves memories this way yet.
-- `02001d6` ClaimVerifier, KV prefix, deferred tools, BanditArmState (suggestion scoring — **not connected**:
-  Ideas/Proactivity cards aren't shown anywhere yet), OpenClaw primitives. DB v9.
-- `ff9d15d` (Oct 16) Snippet prices never evidence; cloud model never gets codes/reset links.
-- `05b04ee` (Oct 15) v5 delta port: §0 wire-ins + connectors, trash, forget, subagents, feed/ideas/artifacts/
-  proactivity.
+- **All work is on `main`** (tip `c8043e1c`). The former work branch `muse/v5-delta-port` and `ccr-c9b6f798-uako9v` were merged into `claude/shopping-integration`, which was merged into `main` on 2026-10-19. See `MERGE_LOG_2026-10-19.md` for the full 58-branch sweep.
+- **CI has not compiled the merged tree.** Kotlin is source-only until CI runs. Audit verification was grep-level, not compilation.
+- Release numbers, test counts, and PR states from the previous version are **not re-verified in the 2026-10-19 audits** and are preserved only in the archive copy.
 
-## 3. Evidence (honesty statuses)
-- PROVEN: JVM tests + release build pass in CI; v3.0.41-test published.
-- SOURCE-FIXED BUT RUNTIME-UNPROVEN: everything since v3.0.40 on the phone. **Nothing in v3.0.41 has been tested on
-  the phone.** No Real-use results file since v2.6.28.
+## 2. What the harness package now contains
 
-## 4. Not built / not wired
-- v5 modules are not wired into the app (tool manifest, Tools.kt, Brain prompt, settings UI for grants and trash,
-  Trash replacing existing delete sites). Waiting on the owner's go-ahead — it touches core files.
-- Google OAuth redirect activity (needs an owner-registered client ID); Spotify/Plaid/Stripe connectors.
-- LLM runners/generators for subagents, feed and ideas.
-- Notification filter (allowlist → quiet hours → rate limit): waiting on the owner's yes/no and quiet hours.
+`com.agent.ultra.harness` in the merged tree contains: MemoryClaims (kind/salience/confidence, provenance, supersede chains, hybrid search + query-time temporal decay), ApprovalGrants (grant levels + command binding), Scheduler + SchedulerRuntime/SchedulerReceiver, SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, NLI head, bandit (ForYou), and `connectors/` (Gmail, Google Calendar/Docs/Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber).
 
-## 5. Owner to do
-- Install the next release → Jarvis Tests → **★ Real-use check** → send the results file.
-- Review/merge PR #13 and PR #12.
-- Obtainium (repo is private): fine-grained PAT, owner **Arbloodhound**, only repo **Jarvis**, **Contents:
-  Read-only**; Add App `https://github.com/Arbloodhound/Jarvis`, prereleases on, filter `jarvis-test\.apk`.
+Earlier framings of these as "proposed", "awaiting approval", or "not yet built" are superseded: the code exists in the merged tree per the audits. What remains open is wiring and verification, listed in §4 — not construction.
 
-## 6. Working rules
-- Plain short answers; one release per batch; never change a default the owner chose without asking.
-- Release: GitHub MCP `actions_run_trigger` → `run_workflow`, owner `arbloodhound`, repo `jarvis`, workflow
-  `release-apk.yml`, ref = the working branch, inputs `{"test_kit":"true"}`; publishes `v3.0.<run>-test`.
+## 3. Resolved
+
+- **Harness DB wiring (was the pass-2 critical):** UltraDatabase is v9; entities include ClaimEntity/GrantEntity/MemoryEmbeddingEntity/BanditArmEntity; DAO accessors `claims()`/`claimForget()`/`grants()`/`embeddings()`/`banditArms()`; MIGRATION_7_8 + MIGRATION_8_9 defined and registered. Field-verified by the supplement audit.
+- Audits: pass 2 found 119 defects (1 critical / 16 high / 41 medium / 61 low); supplement found 87 findings (0 critical / 12 high / 31 medium / 44 low). Post-merge: **0 known criticals**.
+
+## 4. Still open
+
+- 2 manifest registrations: `SchedulerReceiver` and `SpotifyRedirectActivity` exist but are not registered in `AndroidManifest.xml`.
+- 2 broken unit tests: `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import the debug-only `com.agent.ultra.bench.TestKitActivity`.
+- TS `server/` orphaned (nothing calls it; crashes at startup in the audited tree).
+- ~70 dead-code candidates (zero call sites; candidates only).
+- CI compile of the merged tree pending.
+- Harness grant keying is the weak core per the audits (grant invariants) — see `AUDIT_REPORT.md` / `AUDIT_SUPPLEMENT.md` for the full high-severity list.
+
+Items the previous version listed as "not built / not wired" that are **not covered by the 2026-10-19 audits** (for example specific OAuth client registration steps and runner/generator details) are marked **not re-verified in the 2026-10-19 audits**; do not treat them as current status without a fresh check.
+
+## 5. Checked clean (safe to state as verified)
+
+- Tor fail-closed (both audits, three guards in TorProxy, no clearnet fallback).
+- Gate deny-by-default; taint blocks can neither be auto-approved nor operator-overridden.
+- Purchases are never grant-coverable at either layer; Trash has no agent-facing empty/purge (structural, reflection-tested); Subagents depth-1 by construction; SecretScrubber + 10-minute placeholder expiry as documented; KeystoreVault AES-GCM; no hardcoded secrets in the 45 harness files; ClaimVerifier lenses fail closed.
+- Screen reads/actions fail closed on protected apps; screen memory stores structure only.
+
+## 6. Standing rules
+
+- The agent informs and asks; it does not permit or forbid. Consequential actions stop at confirmation; the user decides.
+- Purchases always need fresh approval. No lasting grant covers a purchase, anywhere.
+- SMS/email codes and reset links never reach the cloud model (opaque placeholders only).
+- Never type into password fields. Screen actions bound to their snapshot; stale screens refused.
+- Human verification is the user's: park, never solve or bypass.
 - MIT attribution stays in OpenClaw-derived files.
