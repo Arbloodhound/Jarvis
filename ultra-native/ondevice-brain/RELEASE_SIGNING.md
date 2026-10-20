@@ -1,7 +1,11 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/RELEASE_SIGNING.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
 # Release signing — the cheap way (GitHub builds it for you)
 
 You don't need a release build to TEST. The debug APK installs on any phone. A release build is
 for the copy you hand over, and for updates later.
+
+> **Status as of 2026-10-19:** this procedure is preserved from before the full-branch consolidation (all work now on `main`). It was not re-verified in the 2026-10-19 audits — the Status section at the end still governs: the workflow had not run on GitHub yet, and CI has not yet compiled the merged tree, so the first GitHub release run on `main` remains the proof.
 
 ## What the key is, and the one rule
 
@@ -72,3 +76,5 @@ handful of releases costs nothing.
 The workflow file is written and its YAML parses. Every step was run by hand on Linux with a
 throwaway key: the release build, R8 keeping every JNI name, the signature and the 16 KB
 alignment. It has NOT run on GitHub yet; the first run is the proof.
+
+*2026-10-19 note: still not re-verified. The 2026-10-19 audits were static reading of the merged tree and CI has not compiled it; nothing above about the workflow's behaviour on GitHub changes until a release run completes on `main`.*
