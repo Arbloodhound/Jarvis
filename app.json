@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Agent Ultra",
+    "name": "Jarvis",
     "slug": "agent-ultra",
     "version": "1.3.1",
     "orientation": "portrait",
@@ -78,27 +78,27 @@
       [
         "expo-contacts",
         {
-          "contactsPermission": "Allow Agent Ultra to access your contacts"
+          "contactsPermission": "Allow Jarvis to access your contacts"
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Agent Ultra to access the camera"
+          "cameraPermission": "Allow Jarvis to access the camera"
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow Agent Ultra to access your photos",
-          "savePhotosPermission": "Allow Agent Ultra to save photos"
+          "photosPermission": "Allow Jarvis to access your photos",
+          "savePhotosPermission": "Allow Jarvis to save photos"
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Agent Ultra to access your location",
-          "locationWhenInUsePermission": "Allow Agent Ultra to access your location"
+          "locationAlwaysAndWhenInUsePermission": "Allow Jarvis to access your location",
+          "locationWhenInUsePermission": "Allow Jarvis to access your location"
         }
       ],
       "./plugins/withAgentNative",
