@@ -307,7 +307,7 @@ public class SafetyGate {
         new Handler(Looper.getMainLooper()).post(() -> {
             new AlertDialog.Builder(context)
                 .setTitle("Action Approval Required")
-                .setMessage("Ultra wants to: " + actionType + "\\n\\n" + description)
+                .setMessage("Jarvis wants to: " + actionType + "\\n\\n" + description)
                 .setPositiveButton("Allow", (d, w) -> {
                     approvalCache.put(cacheKey, true);
                     logDecision(actionType, description, true, "USER_APPROVED");
