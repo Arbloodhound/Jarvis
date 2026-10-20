@@ -3,6 +3,15 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-20 — DIAG: 15 min, saved to Downloads/Jarvis as it goes, full trace
+- Capture 5 -> 15 min (tap to stop early). Named Jarvis-DIAG_v<version>_<yyyy-MM-dd_HH-mm>.txt, created in Downloads/Jarvis at
+  start and rewritten every minute (survives the app being killed), final copy at the end. No prompt.
+- logcat now reads main, system, crash and events buffers (own process only: Android's rule).
+- Every 8 s (diag/SystemTrace.kt): Jarvis threads busiest since last poll (CPU seconds, grouped by name), every core's clock,
+  thermal status + headroom, battery %/temp/charging, screen, power saver, network (flags a captive portal), app state
+  (brain, models off/idle/busy, speed boost, thermal level, listening model, speaking). RAM breakdown each minute.
+- 1644 JVM tests, 0 failures. RUNTIME-UNPROVEN (MediaStore "wt" rewrite and /sys clock reads on GrapheneOS).
+
 ## 2026-10-20 — DIAG button: SEND and RESET; RAM report adds kernel lines
 - Finished DIAG used to stay on SEND with no way to start over. Now two separate buttons: SEND (share) and RESET (back to DIAG).
 - RamReport adds slab, kernel stacks, page tables, vmalloc, shared, locked. Other apps can't be listed one by one (Android).

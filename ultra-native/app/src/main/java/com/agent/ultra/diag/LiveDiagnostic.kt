@@ -33,7 +33,7 @@ import java.util.Locale
  * floating button only reads [state].
  */
 object LiveDiagnostic {
-    const val DURATION_SEC = 300          // 5 minutes
+    const val DURATION_SEC = 900          // 15 minutes (owner, 2026-10-20: longer than 5); tap to stop early
     private const val POLL_MS = 8_000L     // drain logcat + snapshot memory this often
 
     /** Every log tag the app writes (collected from the source), so nothing it does is missed. */
@@ -69,6 +69,12 @@ object LiveDiagnostic {
             val log = StringBuilder()
             var sinceMs = started
             var lastRam = 0L
+            var lastSave = started
+            var threads = SystemTrace.readThreads()
+            val name = fileName(app, started)
+            // Saved to Downloads/Jarvis from the start and again every minute, so a capture the
+            // phone kills halfway is still there (owner: saved automatically, without asking).
+            val saved = withContext(Dispatchers.IO) { createInDownloads(app, name) }
             try {
                 while (isActive && System.currentTimeMillis() - started < DURATION_SEC * 1000L) {
                     delay(POLL_MS)
@@ -77,15 +83,23 @@ object LiveDiagnostic {
                     drainLogcat(sinceMs).takeIf { it.isNotBlank() }?.let { log.append(it).append('\n') }
                     sinceMs = now
                     log.append(memorySnapshot(app, now)).append('\n')
+                    val (lines, next) = SystemTrace.snapshot(app, threads)
+                    threads = next
+                    lines.forEach { log.append(it).append('\n') }
                     // Where the RAM goes, once a minute (owner, 2026-10-20).
                     if (now - lastRam >= 60_000L) { lastRam = now; RamReport.snapshot(app).forEach { log.append(it).append('\n') } }
+                    if (now - lastSave >= 60_000L) {
+                        lastSave = now
+                        val text = header(app, started, log.toString(), partial = true) + log
+                        withContext(Dispatchers.IO) { saved?.let { writeDownloads(app, it, text) } }
+                    }
                 }
                 RamReport.snapshot(app).forEach { log.append(it).append('\n') }
                 // Catch the tail between the last poll and the stop.
                 drainLogcat(sinceMs).takeIf { it.isNotBlank() }?.let { log.append(it).append('\n') }
             } finally {
                 remainingSec.intValue = 0
-                val file = withContext(Dispatchers.IO) { writeReport(app, started, log.toString()) }
+                val file = withContext(Dispatchers.IO) { writeReport(app, started, log.toString(), name, saved) }
                 lastFile.value = file
                 running.value = false
             }
@@ -97,7 +111,9 @@ object LiveDiagnostic {
     /** This app's own log lines since [sinceMs], every tag. */
     private fun drainLogcat(sinceMs: Long): String = try {
         val since = String.format(Locale.ROOT, "%d.%03d", sinceMs / 1000, sinceMs % 1000)
-        val cmd = listOf("logcat", "-d", "-v", "threadtime", "-T", since)
+        // Every buffer an app may read for itself: its log lines, system messages about it, crashes,
+        // and events (activity lifecycle, GC, low memory). Android shows an app its own lines only.
+        val cmd = listOf("logcat", "-d", "-b", "main,system,crash,events", "-v", "threadtime", "-T", since)
         val p = ProcessBuilder(cmd).redirectErrorStream(true).start()
         p.inputStream.bufferedReader().useLines { lines ->
             lines.filterNot { it.startsWith("--------- beginning of") }.joinToString("\n")
@@ -117,21 +133,31 @@ object LiveDiagnostic {
         return "MEM $t · heap ${usedHeapMb}/${maxHeapMb} MB · free RAM ${freeRamMb} MB${if (low) " (LOW)" else ""} · free disk ${freeDiskMb} MB"
     }
 
-    private fun writeReport(ctx: Context, startedMs: Long, log: String): File? {
-        val header = buildString {
-            val ver = try {
-                val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
-                "${pi.versionName} (${if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode else @Suppress("DEPRECATION") pi.versionCode.toLong()})"
-            } catch (_: Exception) { "?" }
-            appendLine("Jarvis live diagnostic ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date(startedMs))}")
-            appendLine("App: $ver · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
-            appendLine("Window: ${DURATION_SEC}s · tags: ${TAGS.size}")
-            appendLine("Crash in window: ${if (com.agent.ultra.bench.KitReport.hasCrash(log.lines())) "YES" else "no"}")
-            appendLine("=".repeat(60))
-        }
-        val text = header + log
-        val name = "Jarvis-live-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(Date(startedMs))}.txt"
-        saveToDownloads(ctx, name, text)   // a copy kept on the phone (API 29+)
+    /** "Jarvis-DIAG_v3.0.75_2026-10-20_14-32.txt": the app version and when it started. */
+    private fun fileName(ctx: Context, startedMs: Long): String =
+        "Jarvis-DIAG_v${versionName(ctx)}_${SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.ROOT).format(Date(startedMs))}.txt"
+
+    private fun versionName(ctx: Context): String = try {
+        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "?"
+    } catch (_: Exception) { "?" }
+
+    private fun header(ctx: Context, startedMs: Long, log: String, partial: Boolean): String = buildString {
+        val ver = try {
+            val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+            "${pi.versionName} (${if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode else @Suppress("DEPRECATION") pi.versionCode.toLong()})"
+        } catch (_: Exception) { "?" }
+        appendLine("Jarvis live diagnostic ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date(startedMs))}" +
+            if (partial) " (still recording — saved so far)" else "")
+        appendLine("App: $ver · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}")
+        appendLine("Window: up to ${DURATION_SEC / 60} min · polled every ${POLL_MS / 1000} s · logcat main, system, crash, events")
+        appendLine("Crash in window: ${if (com.agent.ultra.bench.KitReport.hasCrash(log.lines())) "YES" else "no"}")
+        appendLine("Lines: MEM = memory · CPU threads = Jarvis threads busy since the last poll · CPU clocks · PHONE · APP · RAM = where RAM goes (each minute)")
+        appendLine("=".repeat(60))
+    }
+
+    private fun writeReport(ctx: Context, startedMs: Long, log: String, name: String, saved: android.net.Uri?): File? {
+        val text = header(ctx, startedMs, log, partial = false) + log
+        saved?.let { writeDownloads(ctx, it, text) }   // the copy in Downloads/Jarvis, final
         // cacheDir/exports is the FileProvider-shared path (res/xml/file_paths.xml) used by the share sheet.
         return try {
             val dir = File(ctx.cacheDir, "exports").also { it.mkdirs() }
@@ -139,17 +165,23 @@ object LiveDiagnostic {
         } catch (_: Exception) { null }
     }
 
-    /** Keep a copy in Downloads so it stays on the phone; no storage permission on API 29+. */
-    private fun saveToDownloads(ctx: Context, name: String, text: String) {
-        if (Build.VERSION.SDK_INT < 29) return
-        try {
+    /** A new file in Downloads/Jarvis (no storage permission on API 29+), or null. */
+    private fun createInDownloads(ctx: Context, name: String): android.net.Uri? {
+        if (Build.VERSION.SDK_INT < 29) return null
+        return try {
             val values = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
                 put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
+                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Jarvis")
             }
-            val uri = ctx.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return
-            ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
-        } catch (_: Exception) { /* share-sheet copy still works */ }
+            ctx.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+        } catch (_: Exception) { null }
+    }
+
+    /** Replace the Downloads copy's contents ("wt" truncates). */
+    private fun writeDownloads(ctx: Context, uri: android.net.Uri, text: String) {
+        try { ctx.contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray()) } }
+        catch (_: Exception) { /* the share-sheet copy still works */ }
     }
 
     /** Open the Android share sheet for a finished report (send it on, or save it elsewhere). */
