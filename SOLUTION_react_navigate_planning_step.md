@@ -1,3 +1,20 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/SOLUTION_react_navigate_planning_step.md`. CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
+The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
+This document proposes a planning-step overhaul for `react_navigate`: a `planSteps()` method and plan-aware prompts in `src/core/ReActLoop.ts`, with no change to BrainExecutor.
+In the merged tree the `src/` TS app's live path is AgentCore / BrainExecutor / TaskExecutor, and its verdict is 'works with defects'; its `server/` is orphaned.
+The audits do not state whether `planSteps()` or the plan-tracking edits proposed here were implemented, landed, or work as designed — that specific proposal is not covered and is not re-verified.
+Still open on the surrounding TS live path: it bypasses its own SafetyChecker / PermissionBroker — a high finding that bears directly on any navigation/planning work in that path.
+Checked clean on the adjacent Kotlin side: screen reads/actions fail closed on protected apps, and screen actions are bound to the snapshot they were planned from, with stale screens refused.
+No claim in the body below should be read as re-checked against the merged tree.
+
+---
+
 # SOLUTION: react_navigate Planning Step Overhaul
 
 ## Intent Header
