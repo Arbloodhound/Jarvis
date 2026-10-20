@@ -48,6 +48,32 @@ class AppMatchTest {
     @Test fun aRealNameStillWinsOverAHint() =
         assertEquals("com.android.chrome", AppMatch.find("chrome", apps))
 
+    // GrapheneOS: no Google app, no Chrome; Vanadium is the default browser and Tor Browser is
+    // installed. "go on google and search for pizza" opened Tor Browser (phone DIAG, 2026-10-20).
+    private val graphene = listOf(
+        App("Vanadium", "app.vanadium.browser"),
+        App("Tor Browser", "org.torproject.torbrowser"),
+        App("Settings", "com.android.settings"),
+    )
+
+    @Test fun browserWordGoesToTheDefaultBrowserNotTor() {
+        assertEquals("app.vanadium.browser", AppMatch.find("browser", graphene, "app.vanadium.browser"))
+        assertEquals("app.vanadium.browser", AppMatch.find("google", graphene, "app.vanadium.browser"))
+        assertEquals("app.vanadium.browser", AppMatch.find("web browser", graphene, "app.vanadium.browser"))
+    }
+    @Test fun browserWordNeverFallsToTorWithoutADefault() {
+        assertNull(AppMatch.find("browser", graphene))
+        assertNull(AppMatch.find("the internet", graphene))
+    }
+    @Test fun torBrowserStillOpensWhenNamed() {
+        assertEquals("org.torproject.torbrowser", AppMatch.find("tor browser", graphene, "app.vanadium.browser"))
+        assertEquals("org.torproject.torbrowser", AppMatch.find("tor", graphene, "app.vanadium.browser"))
+    }
+    @Test fun anAppCalledExactlyThatStillWins() =
+        assertEquals("com.google.android.googlequicksearchbox", AppMatch.find("google", apps, "com.android.chrome"))
+    @Test fun browserHintStillFindsChromeWithoutADefault() =
+        assertEquals("com.android.chrome", AppMatch.find("browser", apps))
+
     // Both are labelled "Calendar"; only the package tells them apart (AndroidWorld, 2026-09-20).
     @Test fun twoAppsWithOneLabelAreToldApartByThePackage() {
         val apps = listOf(AppMatch.App("Calendar", "com.google.android.calendar"),

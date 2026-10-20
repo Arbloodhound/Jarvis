@@ -606,6 +606,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 currentPackage = evtPkg;
                 if (!currentPackage.equals(prevPkg)) {
                     Log.i(TAG, "PKG_CHANGE: " + prevPkg + " -> " + currentPackage);
+                    foregroundHistory.onForeground(currentPackage, android.os.SystemClock.uptimeMillis());
                 }
             }
         }
@@ -871,6 +872,13 @@ public class AgentAccessibilityService extends AccessibilityService {
             return "error";
         }
     }
+
+    /** Which app was in front before Jarvis (agent.ForegroundHistory). */
+    private final com.agent.jarvis.agent.ForegroundHistory foregroundHistory =
+            new com.agent.jarvis.agent.ForegroundHistory("com.agent.jarvis", 1500);
+
+    /** The last app other than Jarvis that held the front, or null. */
+    public String getPreviousApp() { return foregroundHistory.getLastOther(); }
 
     /** The snapshot id of the last flat screen read (harness ScreenGuard), or null. */
     public String getScreenSnapshotId() { return lastSnapshotId; }

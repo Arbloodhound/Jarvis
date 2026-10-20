@@ -1163,6 +1163,7 @@ flashlight_toggle {"on":true|false}
 wifi_toggle {"on":true|false}
 bluetooth_toggle {"on":true|false}
 do_not_disturb {"on":true|false}
+dark_mode {"on":true|false}
 volume_set {"percent":0-100}
 alarm_set {"hour":0-23,"minute":0-59,"label":"..."}
 note_create {"text":"..."}
@@ -1374,8 +1375,12 @@ JSON:"""
         android.util.Log.i("JarvisBrain", "RUN COMPLETE (local, tool=${call.first}, ok=${!failed})")
         // On-device runs feed task memory and the recipe buffer too —
         // otherwise "save that as X" after a local command has nothing
-        // to save.
-        recordMemory(userInput, listOf(Triple(call.first, call.second, !failed)), !failed)
+        // to save. Not one step of a request of several jobs: that step is not the task, and saved
+        // as it, it became the hint for the next try ("open settings and turn on dark mode" ->
+        // settings_open, recorded as a success five times while dark mode never came on; phone
+        // DIAG 2026-10-20).
+        if (chainStep <= 1 && !LocalToolCall.compound(userInput))
+            recordMemory(userInput, listOf(Triple(call.first, call.second, !failed)), !failed)
         return if (failed) null else result
     }
 
@@ -1848,7 +1853,7 @@ JSON:"""
         when {
             // Fail closed: no clear on/off, or no volume 0-100, in the request is no call at all —
             // never a guessed "on" or 50%.
-            found.endsWith("_toggle") || found == "do_not_disturb" ->
+            found.endsWith("_toggle") || found == "do_not_disturb" || found == "dark_mode" ->
                 params.put("on", bareOnOff(u) ?: return null)
             found == "volume_set" ->
                 params.put("percent", bareVolume(u) ?: return null)
@@ -2282,6 +2287,7 @@ them and never what they typed. Say so if they ask.
 DEVICE CONTROL (instant, ~99% reliable). Always say which way — {} means ON:
   wifi_toggle {on: true|false}, bluetooth_toggle {on: true|false},
   do_not_disturb {on: true|false}, flashlight_toggle {on: true|false}
+  dark_mode {on: true|false} (the dark theme; never settings_open for it)
   volume_set {percent: 0-100}
   media_play, media_next
 

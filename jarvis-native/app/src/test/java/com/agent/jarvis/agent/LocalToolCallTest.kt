@@ -170,4 +170,14 @@ class LocalToolCallReplyTest {
         assertFalse(LocalToolCall.repeatsJob("web_search", "sms_send"))
         assertFalse(LocalToolCall.repeatsJob("call_phone", "sms_send"))
     }
+
+    // "open settings and turn on dark mode": Display, then Sound, then Sound (phone DIAG 2026-10-20).
+    @Test fun aSecondOpenerEndsTheChain() {
+        assertTrue(LocalToolCall.repeatsJob("settings_open", "settings_open"))
+        assertTrue(LocalToolCall.repeatsJob("app_launch", "app_launch"))
+        assertFalse(LocalToolCall.repeatsJob("settings_open", "dark_mode"))
+        assertFalse(LocalToolCall.repeatsJob("app_launch", "sms_send"))
+    }
+
+    @Test fun darkModeIsOfferedOnDevice() = assertTrue("dark_mode" in LocalToolCall.TOOLS)
 }
