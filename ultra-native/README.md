@@ -1,106 +1,138 @@
-# Agent Ultra
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/README.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
-**An Android agent that runs its own brain on the phone.**
+# Agent Ultra (Jarvis) — ultra-native
 
-Not a chat app with a cloud API behind it. A local LLM — Qwen2.5 7B, Llama 3.1 8B,
-Gemma, Phi, your choice — loaded into memory on the handset, driving real tools:
-the accessibility service, the camera flash, the clipboard, the browser, other
-apps' user interfaces. With the network off, it still works.
+The native Kotlin Android app: an agent that runs on the phone, with its own
+on-device model path and a cloud-provider path, driving real tools under a
+deterministic policy gate. This is the shipping app in the post-merge tree,
+alongside the `desktop/` TypeScript app and the older `src/` TypeScript app
+(whose `server/` directory is orphaned — see *Status* below).
 
-<p align="center">
-  <a href="https://x.com/Dafarusd"><strong>Built by @Dafarusd</strong></a>
-</p>
+## What it does
 
----
+- **Runs a brain loop on the phone.** `agent/` holds the Brain (a 12-turn
+  loop), the tool set, and navigation. The model proposes; the program
+  decides what may execute.
+- **Works on-device or via a provider.** `local/` loads on-device models
+  through llama.cpp JNI, with model downloads managed in-app. `provider/`
+  holds the cloud client (`OpenAiClient`, `ProviderConfig`).
+- **Drives other apps through the screen.** Screen reads and actions go
+  through the accessibility layer and fail closed on protected apps. Screen
+  actions are bound to the snapshot they were planned from; stale screens
+  are refused. Screen memory stores structure only — no screen text or
+  values.
+- **Speaks and listens.** `listen/` covers ambient listening, speech, notes,
+  the Librarian, and claim promotion into memory.
+- **Remembers, with provenance.** The harness package (below) stores memory
+  as claims with kind, salience, confidence, provenance, and supersede
+  chains, searched with hybrid retrieval and query-time temporal decay.
+- **Researches, shops, and investigates.** `research/` covers browsing,
+  shopping (legitimate-product and company verification and scam screening
+  only), and investigation.
+- **Tor, opt-in.** `net/` (`TorProxy`, `EmbeddedTor`, `TorConnect`,
+  `TorBrowserGuard`) routes through Tor only when enabled — Tor is off by
+  default. Tor is fail-closed, verified in both 2026-10-19 audits by three
+  independent guards in `TorProxy`: there is no clearnet fallback anywhere;
+  the only fallback is in-app Tor → Orbot. Onion URLs never fall back to
+  clearnet, and onion exclusion in shopping is a separate shopping-layer
+  function.
 
-## What it actually does
+## The gate
 
-- **Runs on-device.** Pick a model that fits your phone and it downloads on
-  demand. Nothing is bundled — the APK is 15 MB. Airplane mode, Wi-Fi off, no
-  SIM: it still answers and still operates the phone.
-- **Drives any app you allow.** It reads the screen through Android's
-  accessibility tree and acts on it — taps, typing, scrolling, navigation.
-- **Reads a page properly.** Not the first forty labels. It scrolls the whole
-  thing and returns *structured items*, so a price belongs to its own product
-  rather than to whichever line happened to be nearby.
-- **Speaks and listens.** Hold the side button, talk, put the phone down, hear
-  the answer. Transcription is on-device.
-- **Remembers what worked.** A task that succeeds is recorded with its
-  arguments; ask the same thing in different words later and it recalls the
-  approach. Name a run and it becomes a routine you can replay.
+`gate/` is a deterministic enforcement layer: Gate, Manifest, contracts, and
+taint tracking, deny-by-default. A tool that is not declared in the manifest
+cannot run; if the manifest fails to load, everything is denied. Taint
+blocks can neither be auto-approved nor operator-overridden. The model is
+never trusted; the program is.
 
-## What it will not do
+Consequential actions — send, post, purchase, delete — stop at a
+confirmation card and the user decides. The agent informs and asks; it does
+not permit or forbid. Some standing rules, as audited:
 
-This is the part worth reading.
+- Purchases always need fresh approval. No lasting grant covers a purchase,
+  at either layer.
+- Approval tokens are bound to the exact sorted-arguments key of the action
+  they approve.
+- The agent cannot see the approval card and cannot revoke grants; the user
+  manages grants in Settings.
+- The agent never types into password fields.
+- SMS/email one-time codes and reset links never reach the cloud model —
+  opaque placeholder references only, with a 10-minute expiry.
+- Credentials live in the platform vault (Keystore, AES-GCM); the agent
+  sees opaque handles only.
+- Human verification (CAPTCHA and similar) is the user's: the agent parks
+  with the exact link/action and never solves or bypasses it.
+- Trash is emptied by the user in Settings, never by the agent; there is no
+  agent-facing empty/purge.
 
-- **It only enters apps you tick.** Allowlist by default, and it fails closed.
-  Whatever the agent reads is sent to the cloud model to decide the next step,
-  so "don't look" matters as much as "don't act".
-- **Messages, contacts and location are off by default**, behind their own
-  switch, because they read Android's databases rather than the screen — the
-  app list does not cover them.
-- **A tap that commits something stops and asks.** Pay, buy, order, confirm,
-  send, transfer, delete, subscribe. Both indexed and raw-coordinate taps, so
-  the check cannot be sidestepped by choosing coordinates. An unanswered prompt
-  is a refusal, never an approval.
-- **It cannot pass your fingerprint or PIN.** Anything behind one ends with the
-  phone in your hand.
-- **Notification logging is off by default** and never records a protected app.
+## The harness package
 
-## The three projects behind it
+`com.agent.ultra.harness`, inside this app, carries the Muse-style harness
+layer: MemoryClaims, ApprovalGrants (grant levels plus command binding),
+Scheduler with its runtime/receiver, SkillStore (lazy skills),
+NotificationForwardingPolicy (three gates), ScreenGuard, Trash, Forget,
+Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity,
+ClaimVerifier (its lenses fail closed), an NLI head, a bandit (ForYou), and
+connectors for Gmail, Google Calendar, Google Docs, Google Drive, and
+Spotify, backed by the CredentialVault and SecretScrubber. Post-merge, the
+harness database wiring is complete: `UltraDatabase` is v9 and its entities
+and DAO accessors cover claims, grants, embeddings, and bandit arms, with
+migrations 7→8 and 8→9 registered.
 
-**gatellml — the policy gate.** A deterministic enforcement layer, ported to
-Kotlin and running on the handset. Every tool call is checked against a
-deny-by-default manifest before it executes: a tool that is not declared cannot
-run at all. Arguments carry their origins, so an action whose target never
-appeared in your request is blocked and handed back to you to confirm. The model
-is never trusted; the program is. Research and measurements:
-[github.com/dafarusd/gate](https://github.com/dafarusd/gate)
+## Status as of 2026-10-19
 
-**gate — the resolve channel.** The research named an untested gap: a gate with
-no interactive channel can only refuse. That gap is closed here. A block that a
-human could legitimately cure pauses the run, shows the exact target, and waits.
-Your tap mints it trusted for that episode and the work continues. Taint, spoofing
-and undeclared tools are never confirmable, by design.
+The 2026-10-19 consolidation merged all branches into `main`. Two code
+audits (different snapshots, grep-level verification — definitions, call
+sites, imports — not compilation) produced 206 findings in total; that is
+not a deduplicated count for the merged tree. The one critical finding from
+the first audit (harness database wiring) is resolved in the merged tree,
+so post-merge there are **0 known criticals**.
 
-**Mind Meld — the split that made the small models usable.** A 1B model on a
-phone will not emit clean JSON, and no amount of prompting fixes that. Mind Meld
-established the division: **the model owns intent, the engine owns structure.**
-Ask for the flashlight and the model supplies only the intent; a deterministic
-parser builds the call. That one idea is why a phone-sized model can drive real
-tools instead of merely talking about them — and it is used again for routine
-names, after a 70B model read "run my morning briefing" as a question about
-which model it was.
+Per-subsystem verdicts (merged view):
 
-## Install
+- **Works as designed:** `net/` Tor property (defects at the margins only),
+  `data/` UltraDatabase (post-merge).
+- **Works with defects:** `agent/`, `gate/`, `listen/`, `local/`,
+  `provider/`, `research/`, `bench/` and tools, and the harness's internal
+  logic.
+- **Broken:** two Kotlin unit-test files (`HistoryPolicyTest.kt`,
+  `MemoryBriefTest.kt` import a debug-only class the unit-test source set
+  cannot resolve); the harness manifest wiring — `SchedulerReceiver` and
+  `SpotifyRedirectActivity` exist but are not registered in
+  `AndroidManifest.xml`.
 
-Download the APK from the latest release, allow the install, and open it.
+Notable open defects include: recipe runs can self-confirm steps past the
+Gate; Gate secret patterns miss phone-shaped secrets (bare one-time codes
+and card numbers never taint); the cloud API key is stored in plaintext
+SharedPreferences; GGUF downloads are verified by size only, with no
+integrity check before native load; the Kotlin `screenshot` tool bypasses
+the protected-app check; raw-coordinate taps are ungated when no label is
+within 200px; and the harness grant keying is the weak core of the grant
+invariants. About 70 dead-code candidates (zero call sites) were flagged —
+candidates only; reflection, JNI, and framework callbacks can make some
+live.
 
-1. **Settings → WHERE THE AGENT MAY GO** — tick the apps it may enter. Nothing
-   is reachable until you do.
-2. **Settings → AI PROVIDER** — any OpenAI-compatible endpoint.
-3. **Settings → ON-DEVICE MODEL** — the list is scored against *your* phone's
-   memory: fits comfortably, tight, or too big.
-4. Enable the accessibility service when prompted.
+**CI has not yet compiled the merged tree.** Everything above is
+source-level audit status; the Kotlin is source-only until CI runs. Build
+and install procedures in this repo's guides predate the consolidation and
+were not re-verified by the audits, which were static reading only —
+on-device and runtime behaviour was not re-tested.
 
-Requires Android 8.0 or newer, arm64.
+## Layout
 
-## Honest limits
-
-- In-app navigation handles direct tasks well and still struggles with long
-  multi-step flows inside unfamiliar apps.
-- Structured extraction reads *ordered* fields. It knows which lines belong to
-  one item; it does not label which is the title and which is the rating.
-- Some apps detect accessibility services and refuse to run. That is their
-  choice and it is not worked around.
-- Speed on-device depends on the model you pick. A 7B is a far better offline
-  brain and a far worse quick answer than a 1B, so the fast path is reserved for
-  small models and the large ones handle offline and explicit requests.
-
-## Source
-
-The source is private. The build is free to download and use.
-
----
-
-**[@Dafarusd on X](https://x.com/Dafarusd)** · Copyright (c) 2026 Dafarus
+| Path | Contents |
+|---|---|
+| `app/src/main/java/com/agent/ultra/agent/` | Brain loop, tools, navigation |
+| `app/src/main/java/com/agent/ultra/gate/` | Gate, manifest, contracts, taint |
+| `app/src/main/java/com/agent/ultra/listen/` | Ambient listening, speech, notes, Librarian, claim promotion |
+| `app/src/main/java/com/agent/ultra/local/` | On-device models (llama.cpp JNI), downloads |
+| `app/src/main/java/com/agent/ultra/net/` | Tor proxy / embedded Tor / browser guard |
+| `app/src/main/java/com/agent/ultra/provider/` | Cloud provider client and config |
+| `app/src/main/java/com/agent/ultra/research/` | Browse, shopping, investigate |
+| `app/src/main/java/com/agent/ultra/ui/`, `data/` | UI; Room (`UltraDatabase`) |
+| `app/src/main/java/com/agent/ultra/harness/` | The harness package described above |
+| `app/src/main/java/com/agent/ultra/bench/`, `src/debug/` | Benchmarks; debug bench |
+| `app/src/test/` | Unit tests (two files broken — see Status) |
+| `ondevice-brain/` | On-device brain bundle: training notebook, build and test guides, signing |
+| `tools/` | Host harness, benchmarks, AndroidWorld |
+| `ci/` | The shared test debug keystore (see `ci/README.md`) |
