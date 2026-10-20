@@ -338,6 +338,7 @@ object Librarian {
      *  (no model, not charging, screen on) costs no engine lookup. */
     fun allowed(ctx: Context): Boolean {
         if (System.currentTimeMillis() < holdUntil) return false
+        if (!com.agent.ultra.JarvisPower.isOn(ctx)) return false
         if (model == null || modelReady?.invoke() == false || !AmbientConfig(ctx).organiseMemory) return false
         val pm = ctx.getSystemService(PowerManager::class.java)
         if (pm?.isInteractive != false) return false

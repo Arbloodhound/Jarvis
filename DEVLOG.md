@@ -3,6 +3,13 @@
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
 
+## 2026-10-20 — Jarvis on/off switch; CI build time measured
+- JarvisPower (pref jarvis_power/on, default ON) + Quick Settings tile (JarvisTileService) + Settings row. Off: stops runs,
+  speech, ambient listening, the keep-alive service, unloads both models; app start/boot/resume and the librarian's
+  background work respect it. Accessibility can't be switched by an app. RUNTIME-UNPROVEN.
+- Build time: GitHub runs take 7-9 min (release job ~6 min; unit tests + build ~4 min of it), not the 20-25 min I quoted.
+  The rest of a cycle is my local compile/tests (~2-4 min) and coding.
+
 ## 2026-10-20 — DIAG: 15 min, saved to Downloads/Jarvis as it goes, full trace
 - Capture 5 -> 15 min (tap to stop early). Named Jarvis-DIAG_v<version>_<yyyy-MM-dd_HH-mm>.txt, created in Downloads/Jarvis at
   start and rewritten every minute (survives the app being killed), final copy at the end. No prompt.

@@ -22,7 +22,8 @@ class UltraApplication : Application() {
         // Foreground service keeps the process alive when backgrounded —
         // on this device class (3.5GB Samsung) backgrounded processes lose
         // their accessibility binding and get reclaimed.
-        try {
+        // Not while the owner has Jarvis switched off (JarvisPower).
+        if (JarvisPower.isOn(this)) try {
             ContextCompat.startForegroundService(
                 this, Intent(this, AgentBackgroundService::class.java)
             )

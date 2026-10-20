@@ -908,7 +908,7 @@ class AmbientListenService : Service() {
         /** From a screen the user opened: listening they left on but that isn't running (Android
          *  15+ won't start it at boot; an update stops it; the mic permission came later). */
         fun resumeIfOff(ctx: Context) {
-            if (AmbientConfig(ctx).enabled && instance == null && start(ctx)) ResumeNotice.clear(ctx)
+            if (AmbientConfig(ctx).enabled && com.agent.ultra.JarvisPower.isOn(ctx) && instance == null && start(ctx)) ResumeNotice.clear(ctx)
         }
 
         /** whisper emits stock phrases on silence/music; drop the common ones. */

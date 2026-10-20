@@ -128,6 +128,18 @@
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false"/>
 
+        <!-- Quick Settings tile: Jarvis on/off (JarvisPower). -->
+        <service
+            android:name=".JarvisTileService"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="Jarvis"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE"/>
+            </intent-filter>
+        </service>
+
         <service
             android:name=".UltraNotificationService"
             android:exported="true"

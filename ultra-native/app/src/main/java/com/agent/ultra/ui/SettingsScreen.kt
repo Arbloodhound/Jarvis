@@ -111,6 +111,23 @@ fun SettingsScreen(
             OutlinedButton(onClick = onOpenGuide) { Text("📖 Guide") }
         }
 
+        // Jarvis on/off (also a Quick Settings tile): off stops listening, background work and frees the models.
+        run {
+            var on by remember { mutableStateOf(com.agent.ultra.JarvisPower.isOn(context)) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Jarvis ${if (on) "on" else "off"}", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (on) "Off stops background listening and background work, and frees the models' memory. " +
+                            "Also in Quick Settings (pull down twice, edit, add \"Jarvis\")."
+                        else "Nothing runs in the background. Opening the app and asking still works.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(checked = on, onCheckedChange = { com.agent.ultra.JarvisPower.set(context, it); on = it })
+            }
+        }
+
         // ── Downloads ─────────────────────────────────────────────────
         // First: until these are on the phone, the features below that need them can't work.
         SectionTitle("DOWNLOADS")
