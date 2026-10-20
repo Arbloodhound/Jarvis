@@ -1,3 +1,14 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/CLAUDE_CODE_BRIEF.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+- This brief was written on 2026-10-05 against an upstream base snapshot, before the 2026-10-19 full-branch consolidation. All work is now on `main`; the brief's assumptions about the base tree, patch application, and a byte-identical resulting tree describe that snapshot, not the merged tree.
+- The build and test results marked PROVEN in the body (compile, 482 unit tests, `assembleDebug`, native-lib alignment) were proven for that snapshot only. They were **not re-verified in the 2026-10-19 audits**, which were static, grep-level reading; CI has not yet compiled the merged tree, and two Kotlin unit-test files (`HistoryPolicyTest.kt`, `MemoryBriefTest.kt`) are currently broken in it because they import a debug-only class.
+- The subsystems the brief touches — `local/`, `listen/`, and the Brain's offline path in `agent/` — carry the merged-tree audit verdict "works with defects". The one critical audit finding (harness database wiring) is resolved in the merged tree; post-merge there are 0 known criticals.
+- The brief's own runtime table said it plainly at the time — "a build passing is not behavioral proof" — and that still holds: no on-device runtime behaviour in the body was re-tested by the 2026-10-19 audits.
+
+---
+
 # INTENT HEADER (read before applying — per CLAUDE.md "the bridge")
 
 **Source:** Chat Claude, 2026-10-05. Supersedes any earlier copy of this brief.
