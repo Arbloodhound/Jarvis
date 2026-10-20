@@ -1,3 +1,22 @@
+> **Post-merge replacement — 2026-10-19.** Refreshed from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/DEVLOG.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
+## 2026-10-19 — consolidation and documentation replacement
+- All work consolidated on `main` (tip c8043e1c): 58 branches swept — 51 already contained;
+  merges 4cff5d07 (`muse/v5-delta-port` → shopping-integration), adbd9e84 (`ccr-c9b6f798-uako9v`
+  → shopping-integration), ae030b9f (shopping-integration → `main`). 4 branches remain unmerged
+  by design (3 empty tip commits; `claude/offline-navigation-wip` a superseded WIP snapshot).
+- Two code-only audits completed: pass 2 found 119 defects (1 critical, 16 high, 41 medium,
+  61 low); the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low).
+- The pass-2 critical — harness DB wiring — is resolved in the merged tree (UltraDatabase v9
+  wires the harness entities, DAO accessors and migrations). Post-merge: 0 known criticals.
+- Still open: `SchedulerReceiver` and `SpotifyRedirectActivity` not registered in
+  AndroidManifest.xml; 2 Kotlin unit tests broken (debug-only import); the TypeScript
+  `server/` under `src/` is orphaned; CI has not yet compiled the merged tree.
+- Documentation replacement: repo Markdown refreshed from the audited post-merge state;
+  previous versions preserved under `archive/2026-10-19/`.
+- Note: entries dated before 2026-10-19 below are the historical record as written at the
+  time; their branch references predate the 2026-10-19 consolidation.
+
 # DEVLOG.md — Agent Ultra Development Log
 
 This file is updated by Claude Code at the end of every work session.
