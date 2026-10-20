@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fetch sherpa-onnx's prebuilt arm64 JNI library (Jarvis's own text-to-speech voice) into
-# ultra-native/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so (gitignored).
+# jarvis-native/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so (gitignored).
 #
 # The "static-link-onnxruntime" build: ONNX Runtime is linked inside libsherpa-onnx-jni.so with
 # its symbols hidden, so the APK still ships exactly one libonnxruntime.so (the 1.30 one from the

@@ -46,7 +46,7 @@ class TwoModelsTest {
 
     /** The thinker keeps the prefs file existing installs already have. */
     @Test fun thinkerKeepsItsPrefsFile() {
-        assertEquals("ultra_local_model", Role.THINKER.prefsName)
+        assertEquals("jarvis_local_model", Role.THINKER.prefsName)
         assertFalse(Role.THINKER.prefsName == Role.LIBRARIAN.prefsName)
     }
 

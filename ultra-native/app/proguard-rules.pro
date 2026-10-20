@@ -3,11 +3,11 @@
 # it were renamed, with the reason stated — nothing is kept "just in case".
 
 # ── JNI: bound by symbol name, not by registration ───────────────────────
-# ultra_llm.cpp exports Java_com_agent_jarvis_local_LlmNative_nativeLoad and
+# jarvis_llm.cpp exports Java_com_agent_jarvis_local_LlmNative_nativeLoad and
 # friends. Rename the class or the methods and the lookup fails at runtime,
 # the moment the on-device model is first used.
 -keep class com.agent.jarvis.local.LlmNative { *; }
-# ultra_vlm.cpp (same .so) exports Java_com_agent_jarvis_local_VisionNative_nativeVlmLoad,
+# jarvis_vlm.cpp (same .so) exports Java_com_agent_jarvis_local_VisionNative_nativeVlmLoad,
 # _nativeVlmDescribe and _nativeVlmFree: same by-name binding, same failure if renamed.
 -keep class com.agent.jarvis.local.VisionNative { *; }
 

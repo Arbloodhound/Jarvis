@@ -11,7 +11,7 @@ import javax.xml.parsers.DocumentBuilderFactory
  * Every database and SharedPreferences file the main sources name is excluded from both Android
  * cloud backup and device-to-device transfer by res/xml/data_extraction_rules.xml. allowBackup=
  * "false" does not stop device-to-device transfer on Android 12+, and before this check only
- * ultra.db and ultra_provider.xml were excluded (heard speech in ambient.db, memory_notes.db and
+ * jarvis.db and jarvis_provider.xml were excluded (heard speech in ambient.db, memory_notes.db and
  * every prefs file but one were not). A whole-domain exclude (path=".") covers every name in it.
  */
 class DataExtractionRulesTest {
@@ -26,8 +26,8 @@ class DataExtractionRulesTest {
     private val databases = found(Regex("\"([A-Za-z0-9_.-]+\\.db)\""))
     private val prefs = found(Regex("getSharedPreferences\\(\\s*\"([^\"]+)\"")) +
         found(Regex("PREFS\\s*=\\s*\"([^\"]+)\"")) +
-        // LocalModelEngine.Role entries: THINKER("ultra_local_model"), ...
-        found(Regex("^\\s*[A-Z_]+\\(\"(ultra_[a-z_]+)\"\\)", RegexOption.MULTILINE))
+        // LocalModelEngine.Role entries: THINKER("jarvis_local_model"), ...
+        found(Regex("^\\s*[A-Z_]+\\(\"(jarvis_[a-z_]+)\"\\)", RegexOption.MULTILINE))
 
     /** domain -> exclude paths, for one section of the rules file. */
     private fun excludes(section: String): Map<String, Set<String>> {
@@ -47,10 +47,10 @@ class DataExtractionRulesTest {
 
     @Test fun theSourceScanFindsTheKnownFiles() {
         // Guards the regexes: if they stop matching, the coverage test below would pass vacuously.
-        assertTrue(databases.toString(), databases.containsAll(listOf("ultra.db", "ambient.db", "memory_notes.db")))
+        assertTrue(databases.toString(), databases.containsAll(listOf("jarvis.db", "ambient.db", "memory_notes.db")))
         assertTrue(prefs.toString(), prefs.containsAll(listOf(
-            "ultra_provider", "ultra_settings", "ambient", "ultra_a11y", "ultra_protected_apps",
-            "ultra_local_model", "ultra_local_model_librarian")))
+            "jarvis_provider", "jarvis_settings", "ambient", "jarvis_a11y", "jarvis_protected_apps",
+            "jarvis_local_model", "jarvis_local_model_librarian")))
     }
 
     @Test fun everyDatabaseAndPrefsFileIsExcludedFromCloudBackupAndDeviceTransfer() {

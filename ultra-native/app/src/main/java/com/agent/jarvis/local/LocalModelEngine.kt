@@ -24,8 +24,8 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
     /** Which job an engine does; [prefsName] is its own prefs file. THINKER's is the name every
      *  install already has, so a phone that chose a model keeps it. */
     enum class Role(val prefsName: String) {
-        THINKER("ultra_local_model"),
-        LIBRARIAN("ultra_local_model_librarian"),
+        THINKER("jarvis_local_model"),
+        LIBRARIAN("jarvis_local_model_librarian"),
     }
 
     /** What a load does about the other engine of the pair ([loadDecision]). */
@@ -643,7 +643,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
          *  policy. The Pixel speed sweep asked for 4/5/6 and every run got 2 (policy said HOT). */
         exactThreads: Boolean = false,
         /** Speed boost's draft model: null = the setting; true/false = the debug speed test's
-         *  with/without runs. Same output either way (ultra_llm.cpp generateSpeculative). */
+         *  with/without runs. Same output either way (jarvis_llm.cpp generateSpeculative). */
         draft: Boolean? = null,
         /** Benchmark only: draft length (> 0), instead of [DraftModel.DRAFT_MAX]. */
         draftLen: Int = 0,
@@ -846,7 +846,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         /** Model files being downloaded by either engine: both may pick the same file. */
         private val downloadsInFlight: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
-        /** The thinker: the main on-device model (prefs "ultra_local_model", as before). */
+        /** The thinker: the main on-device model (prefs "jarvis_local_model", as before). */
         fun shared(context: Context): LocalModelEngine =
             sharedInstance ?: synchronized(this) {
                 sharedInstance ?: LocalModelEngine(context.applicationContext)
@@ -929,7 +929,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         const val ANDROID_RESERVE_BYTES = 4_608L * MIB
         /** The rest of this app (UI, Whisper, Java heap) plus error in the estimates below. */
         const val APP_MARGIN_BYTES = 512L * MIB
-        /** = cparams.n_ubatch in ultra_llm.cpp (pinned there); the compute buffer is sized for it. */
+        /** = cparams.n_ubatch in jarvis_llm.cpp (pinned there); the compute buffer is sized for it. */
         const val N_UBATCH = 512
         /** Compute-buffer activations besides logits and mask at N_UBATCH tokens: an estimate. */
         const val ACTIVATIONS_BYTES = 128L * MIB
@@ -1303,7 +1303,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
          * KV cache + compute buffer at CTX_SIZE, on top of the weights. A per-size-class
          * figure, not per-model arithmetic — deliberately rounded up.
          *
-         * KV is q8_0 (ultra_llm.cpp nativeLoad), about 1.06 bytes per element:
+         * KV is q8_0 (jarvis_llm.cpp nativeLoad), about 1.06 bytes per element:
          * layers x kv_heads x head_dim x 2 (K,V) x 4096 cells. Qwen3-30B-A3B
          * (48 x 4 x 128) is ~204 MiB; dense 7B-14B ~120-410 MiB; 1B-3B Gemma / Llama /
          * Qwen2.5 ~55-77 MiB, Qwen3 1.7B ~240 MiB. llama.cpp zeroes the KV buffer at

@@ -1,4 +1,4 @@
-// whisper.cpp JNI bridge. Built as its own .so, SEPARATE from ultra_llm, with
+// whisper.cpp JNI bridge. Built as its own .so, SEPARATE from jarvis_llm, with
 // ggml symbols kept local (see CMakeLists) so llama's ggml and whisper's ggml
 // never bind to each other at load time.
 #include <jni.h>

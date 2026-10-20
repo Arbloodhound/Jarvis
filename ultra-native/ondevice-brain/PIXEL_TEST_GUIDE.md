@@ -1,4 +1,4 @@
-> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/PIXEL_TEST_GUIDE.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/jarvis-native/ondevice-brain/PIXEL_TEST_GUIDE.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
 # Test run on the Pixel 10 Pro (replaces the G15 run)
 
@@ -38,7 +38,7 @@ debug build). The release build comes after, for handover.
 
 - [ ] Settings → Ambient listening → ON once (downloads the wake models the check times), then
       bring Jarvis back to the front.
-- [ ] On the laptop, from the repo: `bash ultra-native/tools/accel-probe.sh > accel.txt`
+- [ ] On the laptop, from the repo: `bash jarvis-native/tools/accel-probe.sh > accel.txt`
 - [ ] Send me `accel.txt`. The last lines say `TPU via NNAPI: available / not available /
       unknown (why)` and whether OpenCL (GPU) is there. This is the one answer only the phone
       can give.
@@ -111,11 +111,11 @@ adb logcat -s UltraLlm UltraRoute UltraAmbient UltraAccel UltraThermal AndroidRu
 ```
 
 - CPU build: `adb logcat -d -s UltraLlm | grep "cpu variant"` → the Tensor G5 should get
-  `ultra_llm_i8mm`.
+  `jarvis_llm_i8mm`.
 - Wake models: `adb logcat -d -s UltraAmbient | grep -E "wake model|wake gate on"` → which of
   CPU / XNNPACK / NNAPI each model kept.
 - Prompt reuse: `adb logcat -d -s UltraLlm | grep reused=` → above 0 from the second question on.
-- Speed sweep (MoE downloaded): `bash ultra-native/tools/bench.sh` → tokens/sec per thread count.
+- Speed sweep (MoE downloaded): `bash jarvis-native/tools/bench.sh` → tokens/sec per thread count.
 - Thermal: `adb shell cmd thermalservice override-status 3` → the next offline answer starts with
   "I'm running hot…" and is short. `adb shell cmd thermalservice reset` puts it back.
 

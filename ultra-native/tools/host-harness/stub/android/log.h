@@ -1,4 +1,4 @@
-// Host stand-in for Android's <android/log.h>, so ultra_llm.cpp builds as a host JNI
+// Host stand-in for Android's <android/log.h>, so jarvis_llm.cpp builds as a host JNI
 // library for the harness. Lines go to stderr as "[<tag>] <message>"; run.sh counts the
 // [UltraLlm] ones.
 #pragma once

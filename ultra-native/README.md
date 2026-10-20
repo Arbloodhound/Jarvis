@@ -1,6 +1,6 @@
-> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/README.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/jarvis-native/README.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
-# Agent Ultra (Jarvis) — ultra-native
+# Agent Ultra (Jarvis) — jarvis-native
 
 The native Kotlin Android app: an agent that runs on the phone, with its own
 on-device model path and a cloud-provider path, driving real tools under a

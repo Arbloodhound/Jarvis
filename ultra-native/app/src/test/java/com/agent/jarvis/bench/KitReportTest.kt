@@ -12,7 +12,7 @@ class KitReportTest {
     @Test fun parsesGenLine() = assertEquals(KitReport.Gen(180, 9000, 20.0, 3, 900), KitReport.parseGen(line))
     @Test fun parsesCommaDecimal() = assertEquals(5.3, KitReport.parseGen("gen tokens=10 ms=1886 tokPerSec=5,3 majfaults=0 availMB=1")!!.tokPerSec, 1e-9)
     @Test fun missingFieldsAreMinusOne() = assertEquals(-1L, KitReport.parseGen("gen tokens=1 ms=2 tokPerSec=0.5")!!.availMb)
-    @Test fun otherLinesIgnored() = assertNull(KitReport.parseGen("I/JarvisLlm: cpu variant ultra_llm_i8mm"))
+    @Test fun otherLinesIgnored() = assertNull(KitReport.parseGen("I/JarvisLlm: cpu variant jarvis_llm_i8mm"))
     @Test fun mainGenIsLongest() = assertEquals(180, KitReport.mainGen(listOf("gen tokens=12 ms=1 tokPerSec=1.0", line))!!.tokens)
     @Test fun mainGenNoneIsNull() = assertNull(KitReport.mainGen(listOf("nothing")))
 

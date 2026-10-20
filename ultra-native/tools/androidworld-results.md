@@ -1,4 +1,4 @@
-> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/ultra-native/tools/androidworld-results.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/jarvis-native/tools/androidworld-results.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
 ## Status as of 2026-10-19
 
@@ -39,7 +39,7 @@ that is not question-answering (the adapter can't return an answer yet) and is n
   model that didn't need it. Only clean runs are played now. That change has not been re-measured.
 - In the benchmark the harness answers Ultra's action gate as the person who gave the task would —
   "Do it" only when the button is the verb the task used, or the app's own confirm box is about it.
-  Every answer is recorded in the episode (`ultra_gate_answers`). The gate itself is unchanged.
+  Every answer is recorded in the episode (`jarvis_gate_answers`). The gate itself is unchanged.
 - Clock-task scores from 2026-09-19 were judged by a reader that returned a blank screen. They are not
   evidence of anything; see "The judge can be blind" in `androidworld.md`.
 - The emulator has no on-device model (x86_64 build); both brains here are cloud models behind a laptop proxy.

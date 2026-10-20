@@ -18,5 +18,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "ultra-native"
+rootProject.name = "jarvis-native"
 include(":app")

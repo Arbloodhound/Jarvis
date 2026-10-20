@@ -214,7 +214,7 @@ val checkSherpaLib by tasks.registering {
     val bench = project.hasProperty("bench")
     doLast {
         if (!bench && !sherpaJni.exists()) throw GradleException(
-            "Missing $sherpaJni (Jarvis's own voice). Run: bash ultra-native/ondevice-brain/fetch-sherpa.sh"
+            "Missing $sherpaJni (Jarvis's own voice). Run: bash jarvis-native/ondevice-brain/fetch-sherpa.sh"
         )
     }
 }

@@ -1,4 +1,4 @@
-<!-- Post-merge replacement — 2026-10-19. Refreshed from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/app/src/main/assets/connectors/google_docs.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree. -->
+<!-- Post-merge replacement — 2026-10-19. Refreshed from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/jarvis-native/app/src/main/assets/connectors/google_docs.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree. -->
 # Google Docs connector (`google_docs`)
 
 Wraps Google's REST API directly (no Google SDK, no Play services).

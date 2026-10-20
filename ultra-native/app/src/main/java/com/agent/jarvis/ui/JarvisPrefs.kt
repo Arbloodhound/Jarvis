@@ -4,7 +4,7 @@ import android.content.Context
 
 /** App-level preferences that are not provider credentials. */
 object JarvisPrefs {
-    private const val PREFS = "ultra_settings"
+    private const val PREFS = "jarvis_settings"
 
     private const val K_OWNER_NAME = "owner_name"
     private const val K_INSTRUCTIONS = "custom_instructions"

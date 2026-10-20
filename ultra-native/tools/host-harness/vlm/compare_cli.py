@@ -1,4 +1,4 @@
-"""Compare llama-mtmd-cli's raw stdout bytes with ultra_vlm.cpp's answer (UTF-8 of the Java string).
+"""Compare llama-mtmd-cli's raw stdout bytes with jarvis_vlm.cpp's answer (UTF-8 of the Java string).
 The cli prints raw token bytes; the shim converts the whole answer with its own UTF-8 -> UTF-16
 rule (invalid byte -> U+FFFD, incomplete final character dropped). Apply the same rule to the cli
 bytes, then compare. Usage: compare_cli.py <cli stdout> <shim out>"""

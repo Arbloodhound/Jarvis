@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Token-for-token check of ultra_vlm.cpp against llama.cpp's own llama-mtmd-cli (8345f33) on the
+# Token-for-token check of jarvis_vlm.cpp against llama.cpp's own llama-mtmd-cli (8345f33) on the
 # tiny Qwen2.5-VL pair: same image, same chat-templated prompt (the marker is put in the prompt
 # so both build "<|im_start|>user\n<__media__>Describe this screen.<|im_end|>\n<|im_start|>assistant\n"),
 # same sampler chain (top_k 40 -> top_p 0.9 -> temp 0.2 -> dist seed 42; the cli's other samplers
 # at their no-op values). Identical output = same image tokens, same n_past/M-RoPE positions for
-# the generated tokens, same KV handling. Usage: compare_cli.sh <path/to/ultra_vlm.cpp> [max]
+# the generated tokens, same KV handling. Usage: compare_cli.sh <path/to/jarvis_vlm.cpp> [max]
 set -euo pipefail
-SRC="${1:?path to ultra_vlm.cpp}"; MAX="${2:-32}"
+SRC="${1:?path to jarvis_vlm.cpp}"; MAX="${2:-32}"
 H=/tmp/jarvis-harness; V=$H/vlm; L=/tmp/llama.cpp; B=$L/build-host-mtmd
 OUT="$(mktemp -d /tmp/jarvis-vlm-cmp.XXXX)"
 JH="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
 [ -f "$V/img300x600.png" ] || python3 "$V/make_png.py" "$V/img300x600.png"
 g++ -std=c++17 -O1 -g -fPIC -shared -w \
   -I"$H/stub" -I"$L/include" -I"$L/ggml/include" -I"$L/tools/mtmd" -I"$JH/include" -I"$JH/include/linux" \
-  "$SRC" -o "$OUT/libultra_vlm.so" \
+  "$SRC" -o "$OUT/libjarvis_vlm.so" \
   -Wl,--start-group $(find "$B" -name 'libmtmd.a') $(find "$B" -name 'libllama.a') $(find "$B" -name 'libggml*.a') $(find "$B" -name "libvendor*.a") -Wl,--end-group \
   -lpthread -ldl -lm
 mkdir -p "$OUT/classes"

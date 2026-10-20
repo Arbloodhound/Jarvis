@@ -1,6 +1,6 @@
 package com.agent.jarvis.local
 
-/** JNI declarations for the llama.cpp shim (libultra_llm.so). */
+/** JNI declarations for the llama.cpp shim (libjarvis_llm.so). */
 object LlmNative {
 
     /** The build that loaded (see [CpuVariant]), or null. Logged so speed reports say which.
@@ -9,7 +9,7 @@ object LlmNative {
         private set
 
     /**
-     * False when libultra_llm.so isn't in this build — the x86_64 emulator build (-Pbench)
+     * False when libjarvis_llm.so isn't in this build — the x86_64 emulator build (-Pbench)
      * has no llama.cpp. Every caller goes through [LocalModelEngine.ensureLoaded], which
      * checks this, so an agent without an on-device model degrades to the cloud brain
      * instead of throwing UnsatisfiedLinkError on first touch.
@@ -39,7 +39,7 @@ object LlmNative {
     }
 
     /** Returned by a [TokenCallback] to stop generating (U+FFFF, a noncharacter no model text
-     *  is injected as; ultra_llm.cpp kStop matches its UTF-8). */
+     *  is injected as; jarvis_llm.cpp kStop matches its UTF-8). */
     const val STOP = "\uFFFF"
 
     /**

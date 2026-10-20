@@ -57,11 +57,11 @@ class CpuVariantTest {
     /** whisper shares the tier decision; its names come from the same suffixes. */
     @Test fun whisperGetsTheSameTiers() {
         assertEquals(
-            listOf("ultra_whisper_i8mm", "ultra_whisper_dotprod", "ultra_whisper"),
-            CpuVariant.candidates(cpuinfo(v9, v9, v9), "ultra_whisper"),
+            listOf("jarvis_whisper_i8mm", "jarvis_whisper_dotprod", "jarvis_whisper"),
+            CpuVariant.candidates(cpuinfo(v9, v9, v9), "jarvis_whisper"),
         )
-        assertEquals(listOf("ultra_whisper"), CpuVariant.candidates(cpuinfo(v9, a53), "ultra_whisper"))
-        assertEquals(listOf("ultra_whisper"), CpuVariant.candidates("", "ultra_whisper"))
+        assertEquals(listOf("jarvis_whisper"), CpuVariant.candidates(cpuinfo(v9, a53), "jarvis_whisper"))
+        assertEquals(listOf("jarvis_whisper"), CpuVariant.candidates("", "jarvis_whisper"))
     }
 
     /** The one-argument form is the llama base, so LlmNative's names are unchanged. */

@@ -10,7 +10,7 @@ import com.agent.jarvis.listen.VoiceCatalog
  * before, except the voice itself (Kokoro "George" instead of Piper "Norman").
  */
 object VoicePrefs {
-    private const val PREFS = "ultra_settings"
+    private const val PREFS = "jarvis_settings"
     private fun p(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     // ── Voice ────────────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ import com.agent.jarvis.agent.EventTrigger;
 
 public class AgentBackgroundService extends Service {
     private static final String TAG = "AgentBgSvc";
-    private static final String CHANNEL_ID = "agent_ultra_bg";
+    private static final String CHANNEL_ID = "agent_jarvis_bg";
     private static final int NOTIFICATION_ID = 7001;
 
     @Override

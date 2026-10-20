@@ -96,7 +96,7 @@ public final class Harness {
     }
 
     public static void main(String[] a) throws Exception {
-        System.loadLibrary(System.getProperty("lib", "ultra_llm"));
+        System.loadLibrary(System.getProperty("lib", "jarvis_llm"));
         System.out.println("pin cpus=" + Arrays.toString(CPUS) + " caller before load=" + callerAffinity());
         int fails = 0;
         Thread sampler = new Thread(() -> { while (sampling) { sampleAffinity(); try { Thread.sleep(2); } catch (InterruptedException e) { return; } } });

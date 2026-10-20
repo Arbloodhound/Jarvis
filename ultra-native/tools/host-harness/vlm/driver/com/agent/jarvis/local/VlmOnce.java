@@ -10,7 +10,7 @@ import java.nio.file.*;
  */
 public final class VlmOnce {
     public static void main(String[] a) throws Exception {
-        System.loadLibrary(System.getProperty("lib", "ultra_vlm"));
+        System.loadLibrary(System.getProperty("lib", "jarvis_vlm"));
         VisionNative v = VisionNative.INSTANCE;
         long h = v.nativeVlmLoad(System.getProperty("model"), System.getProperty("mmproj"), 4, 4096, new int[0]);
         if (h == 0) { System.out.println("load failed"); System.exit(1); }

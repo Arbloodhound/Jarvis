@@ -1,6 +1,6 @@
 // Vendored unmodified from sherpa-onnx v1.13.8 (Apache License 2.0):
 //   https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/kotlin-api/Tts.kt
-// It must stay in step with libsherpa-onnx-jni.so (ultra-native/ondevice-brain/fetch-sherpa.sh pins
+// It must stay in step with libsherpa-onnx-jni.so (jarvis-native/ondevice-brain/fetch-sherpa.sh pins
 // the same tag): the library binds Java_com_k2fsa_sherpa_onnx_OfflineTts_* by name and reads every
 // config class below field by field (GetFieldID), so no field may be removed or renamed.
 // Licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0

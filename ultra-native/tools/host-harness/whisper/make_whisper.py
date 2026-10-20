@@ -1,4 +1,4 @@
-"""Tiny random-weight whisper ggml model for exercising ultra_whisper.cpp on the host.
+"""Tiny random-weight whisper ggml model for exercising jarvis_whisper.cpp on the host.
 Takes whisper.cpp's own models/for-tests-ggml-tiny.en.bin (real hparams, mel filters and the
 English vocab, no tensors), shrinks the hparams (state 64, 2 heads, 1 encoder + 1 decoder layer,
 f32) and appends every tensor whisper_model_load (60c0be6) creates, with random values, in the

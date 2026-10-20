@@ -190,7 +190,7 @@ class Speaker(
         // the fast cores (Real-use check, Pixel 2026-10-07: Kokoro 1.4-1.5x real time beside it).
         com.agent.jarvis.listen.Librarian.yieldNow()
         val parts = LocalVoice.chunks(clean, firstMax = FIRST_PART_CHARS)
-        Log.i(TAG, "SPEAK OWN (${clean.length} chars, ${parts.size} parts) id=ultra-$g")
+        Log.i(TAG, "SPEAK OWN (${clean.length} chars, ${parts.size} parts) id=jarvis-$g")
         var fallbackFrom = -1
         var written = 0          // parts fully handed to the track
         var t: AudioTrack? = null
@@ -243,7 +243,7 @@ class Speaker(
             Log.w(TAG, "own voice failed at part $fallbackFrom; platform engine says the rest")
             platformSpeak(parts.drop(fallbackFrom).joinToString(" "), g)
         } else {
-            Log.i(TAG, "SPEAK DONE id=ultra-$g")
+            Log.i(TAG, "SPEAK DONE id=jarvis-$g")
             finish(g)
         }
     }
@@ -321,9 +321,9 @@ class Speaker(
                     if (tts == null && !creating) { creating = true; create = true }
                 }
                 else -> {
-                    Log.i(TAG, "SPEAK QUEUE (${clean.length} chars) id=ultra-$g")
+                    Log.i(TAG, "SPEAK QUEUE (${clean.length} chars) id=jarvis-$g")
                     tts?.let { applyVoice(it) }
-                    val r = tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "ultra-$g")
+                    val r = tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "jarvis-$g")
                     if (r != TextToSpeech.SUCCESS) unavailable = true
                 }
             }
@@ -424,7 +424,7 @@ class Speaker(
         private const val WRITE_SLICE = 2048   // samples, ~93 ms at 22 kHz
 
         private fun genOf(utteranceId: String?): Long =
-            utteranceId?.removePrefix("ultra-")?.toLongOrNull() ?: -1L
+            utteranceId?.removePrefix("jarvis-")?.toLongOrNull() ?: -1L
 
         /** Strip what reads badly aloud: emoji, code fences, raw JSON, markdown. */
         fun forSpeech(raw: String): String = raw

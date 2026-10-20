@@ -5,7 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The native reply format written by cpp/ultra_whisper.cpp: "<p>\t<text>", NUL, timing lines. */
+/** The native reply format written by cpp/jarvis_whisper.cpp: "<p>\t<text>", NUL, timing lines. */
 class WhisperParseTest {
     private fun bytesThroughUtf8(s: String) = String(s.toByteArray(Charsets.UTF_8), Charsets.UTF_8)
 

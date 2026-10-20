@@ -103,7 +103,7 @@ class ThermalPolicyTest {
     /** The sticky-thread bug: native keeps the last count when handed 0. */
     @Test fun defaultCallAfterHotGetsNormalCountBack() {
         var nativeThreads = 4                                      // set at load
-        fun nativeGenerate(t: Int) { if (t > 0) nativeThreads = t } // ultra_llm.cpp: if (threads > 0) llama_set_n_threads
+        fun nativeGenerate(t: Int) { if (t > 0) nativeThreads = t } // jarvis_llm.cpp: if (threads > 0) llama_set_n_threads
         val base = 4
         // a reply while HOT
         nativeGenerate(ThermalPolicy.resolveThreads(0, Level.HOT, base))

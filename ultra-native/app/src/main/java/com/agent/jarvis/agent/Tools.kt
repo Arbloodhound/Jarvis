@@ -731,14 +731,14 @@ class Tools(
      * environment — proven in the M5 suite). */
     /**
      * Ask Claude on the owner's laptop, through the USB cable (laptop: vault/runtime/bridge/
-     * ultra_bridge.py; `adb reverse tcp:8787 tcp:8787`). Claude there reads files and notes,
+     * jarvis_bridge.py; `adb reverse tcp:8787 tcp:8787`). Claude there reads files and notes,
      * read-only, with the laptop's Northstar memory. The token is a file adb put in this app's
      * external dir; without it, or without the cable, this says so plainly.
      */
     private suspend fun askClaude(question: String): String = withContext(Dispatchers.IO) {
         if (question.isBlank()) return@withContext "Error: ask_claude needs a 'question'"
         val token = try {
-            java.io.File(context.getExternalFilesDir(null), "ultra_bridge_token").readText().trim()
+            java.io.File(context.getExternalFilesDir(null), "jarvis_bridge_token").readText().trim()
         } catch (_: Exception) { "" }
         if (token.isBlank()) return@withContext "Error: the laptop bridge is not set up on this phone (no token)."
         try {

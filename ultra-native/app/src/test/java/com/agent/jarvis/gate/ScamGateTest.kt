@@ -16,8 +16,8 @@ import org.junit.Test
 class ScamGateTest {
 
     private val manifest: Manifest = Manifest.fromJson(JSONObject(
-        javaClass.classLoader!!.getResource("ultra.manifest.json")?.readText()
-            ?: java.io.File("src/main/assets/ultra.manifest.json").readText()))
+        javaClass.classLoader!!.getResource("jarvis.manifest.json")?.readText()
+            ?: java.io.File("src/main/assets/jarvis.manifest.json").readText()))
 
     @Before fun flag() {
         ScamWatch.clear()

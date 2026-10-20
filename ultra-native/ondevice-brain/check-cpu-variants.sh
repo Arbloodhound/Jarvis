@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Proves each libultra_llm and libultra_whisper variant contains the CPU instructions it is
+# Proves each libjarvis_llm and libjarvis_whisper variant contains the CPU instructions it is
 # named for, and each armv8-a fallback contains none of them (a variant that silently lost its
 # -march would still link and run, just slowly). Usage: check-cpu-variants.sh <dir with the .so files>
 # Needs ANDROID_NDK (for llvm-objdump).
 set -euo pipefail
-DIR="${1:?dir with libultra_llm*.so and libultra_whisper*.so}"
+DIR="${1:?dir with libjarvis_llm*.so and libjarvis_whisper*.so}"
 : "${ANDROID_NDK:?set ANDROID_NDK}"
 OBJDUMP="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump"
 
@@ -21,14 +21,14 @@ expect() {  # <lib> <mnemonic> <present|absent>
   if [ "$3" = absent ] && [ "$n" -ne 0 ]; then bad=1; fi
 }
 
-for base in libultra_llm libultra_whisper; do
+for base in libjarvis_llm libjarvis_whisper; do
   for lib in "$base.so" "${base}_dotprod.so" "${base}_i8mm.so"; do
     [ -f "$DIR/$lib" ] || { echo "missing $DIR/$lib"; bad=1; }
   done
 done
 [ $bad -eq 0 ] || exit 1
 
-for base in libultra_llm libultra_whisper; do
+for base in libjarvis_llm libjarvis_whisper; do
   expect "$base.so"           sdot  absent
   expect "$base.so"           smmla absent
   expect "${base}_dotprod.so" sdot  present

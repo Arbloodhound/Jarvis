@@ -21,7 +21,7 @@ import com.agent.jarvis.agent.WebResearch
  * on realm; the caller applies it explicitly.
  *
  * SOURCE ONLY: not compiled in this sandbox. For Claude-in-repo
- * to drop into ultra-native/.../research/ and run under the JVM
+ * to drop into jarvis-native/.../research/ and run under the JVM
  * suite. Pure logic — no Android deps.
  */
 object ShoppingListings {

@@ -3,7 +3,7 @@ package com.agent.jarvis.listen
 import com.agent.jarvis.local.CpuVariant
 
 /**
- * whisper.cpp through JNI (libultra_whisper.so). Built separately from the
+ * whisper.cpp through JNI (libjarvis_whisper.so). Built separately from the
  * llama library with its ggml symbols hidden, so the two ggml copies never
  * collide at runtime. One context, one caller at a time.
  */
@@ -16,9 +16,9 @@ object WhisperNative {
 
     val available: Boolean = load()
 
-    /** Best CPU variant first (ultra_whisper_i8mm, _dotprod), falling back to armv8-a ultra_whisper. */
+    /** Best CPU variant first (jarvis_whisper_i8mm, _dotprod), falling back to armv8-a jarvis_whisper. */
     private fun load(): Boolean {
-        for (name in CpuVariant.read("ultra_whisper")) {
+        for (name in CpuVariant.read("jarvis_whisper")) {
             try {
                 System.loadLibrary(name)
                 variant = name

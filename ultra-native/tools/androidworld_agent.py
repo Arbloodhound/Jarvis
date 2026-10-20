@@ -19,7 +19,7 @@ Three things this adapter has to get right, each learned the hard way on 2026-09
     live screen (ClockStopWatchRunning wants the stopwatch running AND Clock in front), and Ultra
     ends every run in its own chat showing its answer.
 
-Used by bench_ultra.py (a copy of android_world's run.py that knows this agent).
+Used by bench_jarvis.py (a copy of android_world's run.py that knows this agent).
 """
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ HINT = "Ask Jarvis"
 class UltraAgent(base_agent.EnvironmentInteractingAgent):
   """One interaction per task: type the goal into Ultra, wait for its run to finish."""
 
-  def __init__(self, env, name: str = "ultra", serial: str | None = None, timeout_s: int = 600):
+  def __init__(self, env, name: str = "jarvis", serial: str | None = None, timeout_s: int = 600):
     super().__init__(env, name)
     self._serial = serial or os.environ.get("ANDROID_SERIAL") or "emulator-5554"
     self._timeout = timeout_s
@@ -60,7 +60,7 @@ class UltraAgent(base_agent.EnvironmentInteractingAgent):
     takes back what it wrongly kept. The score itself is untouched: the verdict is sent after it
     is computed, and nothing here can change it.
     """
-    if getattr(suite_utils, "_ultra_verdict_hook", False):
+    if getattr(suite_utils, "_jarvis_verdict_hook", False):
       return
     inner = suite_utils._run_task
     agent = self
@@ -139,17 +139,17 @@ class UltraAgent(base_agent.EnvironmentInteractingAgent):
 
       task.is_successful = judged
       result = inner(task, run_episode, env, demo_mode)
-      result["ultra_judge_saw"] = saw
+      result["jarvis_judge_saw"] = saw
       try:
         passed = float(result.get("is_successful") or 0.0) > 0.5
         agent.send_verdict(passed, str(result.get("goal") or ""))
-        result["ultra_task_params"] = {k: str(v)[:200] for k, v in (task.params or {}).items()}
+        result["jarvis_task_params"] = {k: str(v)[:200] for k, v in (task.params or {}).items()}
       except Exception as e:  # noqa: BLE001 — a verdict that can't be sent must never cost a score
-        print(f"ultra: verdict not sent: {e}")
+        print(f"jarvis: verdict not sent: {e}")
       return result
 
     suite_utils._run_task = run_task
-    suite_utils._ultra_verdict_hook = True
+    suite_utils._jarvis_verdict_hook = True
 
   def send_verdict(self, passed: bool, goal: str) -> None:
     if os.environ.get("ULTRA_NO_VERDICT"):   # the control arm: Ultra judges itself, as before
@@ -177,7 +177,7 @@ class UltraAgent(base_agent.EnvironmentInteractingAgent):
                            f"chown {uid}:{uid} /data/data/{PKG}/files/verdict.json && "
                            f"chmod 660 /data/data/{PKG}/files/verdict.json")
       self._adb("shell", "rm", "-f", "/data/local/tmp/verdict.json")
-      print(f"ultra: verdict sent — {'pass' if passed else 'FAIL'}")
+      print(f"jarvis: verdict sent — {'pass' if passed else 'FAIL'}")
     finally:
       os.unlink(tmp)
 
@@ -189,8 +189,8 @@ class UltraAgent(base_agent.EnvironmentInteractingAgent):
   def _screen(self) -> str:
     """uiautomator, not the benchmark's reader: with Ultra's service on, the harness's tree
     comes back empty, while uiautomator keeps working (2026-09-19)."""
-    self._adb("shell", "uiautomator", "dump", "/sdcard/_ultra_ui.xml", timeout=90)
-    return self._adb("shell", "cat", "/sdcard/_ultra_ui.xml", timeout=60)
+    self._adb("shell", "uiautomator", "dump", "/sdcard/_jarvis_ui.xml", timeout=90)
+    return self._adb("shell", "cat", "/sdcard/_jarvis_ui.xml", timeout=60)
 
   def _bounds(self, pattern: str, screen: str = ""):
     m = re.search(pattern + r'[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', screen or self._screen())
@@ -366,8 +366,8 @@ class UltraAgent(base_agent.EnvironmentInteractingAgent):
     typed = self._type_goal(goal)
     if not typed:
       return base_agent.AgentInteractionResult(
-          done=True, data={"ultra_reached": False, "ultra_a11y": bound,
-                           "ultra_reason": getattr(self, "reason", "")})
+          done=True, data={"jarvis_reached": False, "jarvis_a11y": bound,
+                           "jarvis_reason": getattr(self, "reason", "")})
     t0 = time.time()
     log = ""
     answered = 0
@@ -419,24 +419,24 @@ class UltraAgent(base_agent.EnvironmentInteractingAgent):
           pressed = True
         if pressed or self._tap_text("Do it" if ok else "Don't", tries=4):
           confirmed.append(f"{'confirmed' if ok else 'declined'}: {label}")
-          print(f"ultra: gate asked about \"{label}\" — {'confirmed (the task asks for it)' if ok else 'declined'}")
+          print(f"jarvis: gate asked about \"{label}\" — {'confirmed (the task asks for it)' if ok else 'declined'}")
     lines = [re.sub(r"^[0-9-]+ [0-9:.]+ +\d+ +\d+ [A-Z] ", "", x) for x in log.splitlines()]
     self.last_trace = lines
     time.sleep(2)
     handed_back = self._hand_screen_back(lines)
     return base_agent.AgentInteractionResult(done=True, data={
-        "ultra_reached": True,
-        "ultra_a11y": bound,
-        "ultra_handed_back": handed_back,
-        "ultra_secs": round(time.time() - t0, 1),
-        "ultra_complete": DONE in log,
-        "ultra_calls": [l.split("TOOL CALL: ", 1)[1] for l in lines if "TOOL CALL: " in l],
-        "ultra_fails": [l.split("TOOL RESULT (fail): ", 1)[1][:200] for l in lines if "TOOL RESULT (fail)" in l],
-        "ultra_blocks": [l.split("BLOCK ", 1)[1][:200] for l in lines if "UltraGate: BLOCK" in l],
-        "ultra_gate_answers": confirmed,
-        "ultra_lessons_served": [l.split("LESSONS SERVED: ", 1)[1] for l in lines if "LESSONS SERVED" in l],
-        "ultra_learned": [l.split("LEARNED ", 1)[1][:200] for l in lines if "LEARNED " in l],
-        "ultra_trace": [l[:220] for l in lines if "OBSERVE" not in l][-60:],
+        "jarvis_reached": True,
+        "jarvis_a11y": bound,
+        "jarvis_handed_back": handed_back,
+        "jarvis_secs": round(time.time() - t0, 1),
+        "jarvis_complete": DONE in log,
+        "jarvis_calls": [l.split("TOOL CALL: ", 1)[1] for l in lines if "TOOL CALL: " in l],
+        "jarvis_fails": [l.split("TOOL RESULT (fail): ", 1)[1][:200] for l in lines if "TOOL RESULT (fail)" in l],
+        "jarvis_blocks": [l.split("BLOCK ", 1)[1][:200] for l in lines if "UltraGate: BLOCK" in l],
+        "jarvis_gate_answers": confirmed,
+        "jarvis_lessons_served": [l.split("LESSONS SERVED: ", 1)[1] for l in lines if "LESSONS SERVED" in l],
+        "jarvis_learned": [l.split("LEARNED ", 1)[1][:200] for l in lines if "LEARNED " in l],
+        "jarvis_trace": [l[:220] for l in lines if "OBSERVE" not in l][-60:],
         # Every step with the whole screen line: what a passing run is turned into a route from.
-        "ultra_trace_full": [l[:1800] for l in lines if "OBSERVE" not in l],
+        "jarvis_trace_full": [l[:1800] for l in lines if "OBSERVE" not in l],
     })

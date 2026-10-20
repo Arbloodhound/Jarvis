@@ -112,7 +112,7 @@ class JarvisNotificationService : NotificationListenerService() {
                 EventTrigger.Action.Type.CLIPBOARD_COPY -> {
                     try {
                         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        cm.setPrimaryClip(ClipData.newPlainText("ultra", a.data))
+                        cm.setPrimaryClip(ClipData.newPlainText("jarvis", a.data))
                         android.os.Handler(mainLooper).post {
                             Toast.makeText(this, a.label, Toast.LENGTH_SHORT).show()
                         }
@@ -173,7 +173,7 @@ class JarvisNotificationService : NotificationListenerService() {
 
     companion object {
         private const val TAG = "JarvisNotif"
-        private const val SCAM_CHANNEL = "ultra_scam_warnings"
+        private const val SCAM_CHANNEL = "jarvis_scam_warnings"
         // 7001 is AgentBackgroundService's foreground notification and 7101
         // AmbientListenService's; 7000 + (ms % 1000) replaced them.
         private const val SCAM_ID_BASE = 20000

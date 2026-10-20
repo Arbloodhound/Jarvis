@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds llama.cpp static libs for arm64 -> ~/llama-android/{lib,lib-dotprod,lib-i8mm,include}
-# (what app/src/main/cpp/CMakeLists.txt links as ultra_llm, ultra_llm_dotprod, ultra_llm_i8mm).
+# (what app/src/main/cpp/CMakeLists.txt links as jarvis_llm, jarvis_llm_dotprod, jarvis_llm_i8mm).
 # Verified Oct 2026: NDK r27c, llama.cpp 8345f33; the full APK links against this output.
 #
 # Three CPU variants, because a cross-compile turns GGML_NATIVE off and, with no target set,
@@ -12,7 +12,7 @@
 #   lib-i8mm     armv8.2-a+dotprod+i8mm+fp16    Armv8.6+/v9 cores, e.g. Tensor G5 (X4/A725/A520)
 # Only libggml-cpu.a differs between them; the rest is copied per variant for a simple link.
 #
-# Each variant also gets libmtmd.a (tools/mtmd, the multimodal / vision library ultra_vlm.cpp
+# Each variant also gets libmtmd.a (tools/mtmd, the multimodal / vision library jarvis_vlm.cpp
 # links) and libvendor-hash.a, the one static lib mtmd links besides llama/ggml. Its other
 # vendor deps (miniaudio, stb, sheredom) are header-only INTERFACE targets at this pin, and
 # Threads is bionic's libc on Android. LLAMA_BUILD_MTMD builds mtmd alone, without the rest of

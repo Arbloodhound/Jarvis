@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host harness for ultra_whisper.cpp. Usage: run_whisper.sh <path/to/ultra_whisper.cpp>
+# Host harness for jarvis_whisper.cpp. Usage: run_whisper.sh <path/to/jarvis_whisper.cpp>
 # Builds the shim as a host JNI .so against /tmp/whisper.cpp/build-host (whisper.cpp 60c0be6,
 # static, PIC, no OpenMP, as build-whisper-android.sh), with whisper_exports.map and
 # --exclude-libs,ALL as CMakeLists.txt links it, then runs WhisperHarness with whisper.cpp's
@@ -8,17 +8,17 @@
 #   -DBUILD_SHARED_LIBS=OFF -DGGML_OPENMP=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
 #   -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF && cmake --build ... -j --target whisper
 set -euo pipefail
-SRC="${1:?path to ultra_whisper.cpp}"; CPP="$(dirname "$(readlink -f "$SRC")")"
+SRC="${1:?path to jarvis_whisper.cpp}"; CPP="$(dirname "$(readlink -f "$SRC")")"
 H=/tmp/jarvis-harness; WH=$H/whisper; W=/tmp/whisper.cpp; B=$W/build-host
 OUT="$(mktemp -d /tmp/jarvis-whisper-run.XXXX)"
 JH="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
 SANFLAGS=""; [ "${SAN:-}" = asan ] && SANFLAGS="-fsanitize=address -fno-omit-frame-pointer"
 g++ -std=c++17 -O1 -g -fPIC -shared -w $SANFLAGS \
   -I"$W/include" -I"$W/ggml/include" -I"$JH/include" -I"$JH/include/linux" \
-  "$SRC" -o "$OUT/libultra_whisper.so" \
+  "$SRC" -o "$OUT/libjarvis_whisper.so" \
   -Wl,--start-group $(find "$B" -name 'libwhisper.a') $(find "$B" -name 'libggml*.a') -Wl,--end-group \
   -Wl,--exclude-libs,ALL -Wl,--version-script="$CPP/whisper_exports.map" -lpthread -ldl -lm
-echo "exported dynamic symbols: $(nm -D --defined-only "$OUT/libultra_whisper.so" | awk '{print $3}' | tr '\n' ' ')"
+echo "exported dynamic symbols: $(nm -D --defined-only "$OUT/libjarvis_whisper.so" | awk '{print $3}' | tr '\n' ' ')"
 mkdir -p "$OUT/classes"
 javac -d "$OUT/classes" $(find "$WH/driver" -name '*.java')
 if [ "${SAN:-}" = asan ]; then

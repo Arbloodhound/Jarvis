@@ -1,4 +1,4 @@
-"""Tiny random-weight Qwen2.5-VL pair for exercising ultra_vlm.cpp on the host.
+"""Tiny random-weight Qwen2.5-VL pair for exercising jarvis_vlm.cpp on the host.
   text:   arch qwen2vl (M-RoPE, rope.dimension_sections), gpt2 byte-level BPE vocab with the
           Qwen special tokens (<|im_start|>, <|im_end|>, <|vision_start|>, <|vision_end|>, ...)
   mmproj: clip, projector_type qwen2.5vl_merger, the tensor names/shapes clip.cpp (8345f33)

@@ -150,7 +150,7 @@ abstract class JarvisDatabase : RoomDatabase() {
 
         fun get(context: Context): JarvisDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
-                context.applicationContext, JarvisDatabase::class.java, "ultra.db"
+                context.applicationContext, JarvisDatabase::class.java, "jarvis.db"
             ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
             // Only the pre-migration dev schema (v1) may be wiped. A future version
             // bump without its migration now fails loudly instead of silently

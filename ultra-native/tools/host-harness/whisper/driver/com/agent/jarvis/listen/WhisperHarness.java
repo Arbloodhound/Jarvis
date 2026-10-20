@@ -6,7 +6,7 @@ import java.nio.file.*;
 import java.util.*;
 
 /**
- * Drives ultra_whisper.cpp through the WhisperNative mirror. The model is whisper.cpp's own
+ * Drives jarvis_whisper.cpp through the WhisperNative mirror. The model is whisper.cpp's own
  * for-tests-ggml-tiny.en.bin (tiny hparams + vocab, NO tensors: whisper_model_load accepts it
  * "assuming empty model for testing", so the weights are whatever the allocator left), so the
  * text is meaningless; the proof is the JNI path: init, whisper_full, the reply's byte format
@@ -68,7 +68,7 @@ public final class WhisperHarness {
     }
 
     public static void main(String[] a) throws Exception {
-        System.loadLibrary(System.getProperty("lib", "ultra_whisper"));
+        System.loadLibrary(System.getProperty("lib", "jarvis_whisper"));
         String model = System.getProperty("model"), vad = System.getProperty("vad"), wav = System.getProperty("wav");
         W.nativeFree(0L);
         check(true, "nativeFree(0) returned");

@@ -3,10 +3,10 @@
 // The shims' stated contract: invalid bytes become U+FFFD, an incomplete final character is
 // dropped (vlm) / kept pending (llm), and the result goes to NewString, so it must be valid UTF-16.
 #ifdef SHIM_VLM
-#include "ultra_vlm.cpp"
+#include "jarvis_vlm.cpp"
 static std::u16string conv(const std::string &s) { return utf8ToUtf16(s); }
 #else
-#include "ultra_llm.cpp"
+#include "jarvis_llm.cpp"
 static std::u16string conv(const std::string &s) { gUtf8Pending.clear(); return takeCompleteUtf16(s); }
 #endif
 #include <cstdio>

@@ -201,7 +201,7 @@ object GateAuditLog {
      * Returns the file, ready for a share intent.
      */
     fun exportFile(context: Context): File {
-        val export = File(context.cacheDir, "ultra_gate_audit_export.jsonl")
+        val export = File(context.cacheDir, "jarvis_gate_audit_export.jsonl")
         val header = JSONObject().apply {
             put("type", "device")
             put("ts", System.currentTimeMillis())

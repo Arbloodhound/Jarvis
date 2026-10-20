@@ -50,4 +50,4 @@ open my files and show me my downloads
 open the gallery and tell me how many albums I have
 open settings and tell me the phone's model number
 what apps do I have that start with the letter c
-ask claude what the agent ultra devlog says is still not proven
+ask claude what the agent jarvis devlog says is still not proven

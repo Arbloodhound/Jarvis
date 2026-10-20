@@ -1,5 +1,5 @@
-// Pins the CALLING thread to a CPU list for one scope, then unpins it. Shared by ultra_llm
-// and ultra_whisper. The JNI callers are pooled Kotlin dispatcher threads, so a pin must
+// Pins the CALLING thread to a CPU list for one scope, then unpins it. Shared by jarvis_llm
+// and jarvis_whisper. The JNI callers are pooled Kotlin dispatcher threads, so a pin must
 // never outlive the call that set it.
 //
 // "Unpinned" = every CPU, not the mask read at entry. Android confines app threads with

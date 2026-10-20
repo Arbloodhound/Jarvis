@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Host harness for ultra_vlm.cpp. Usage: run_vlm.sh <path/to/ultra_vlm.cpp> [extra java -D...]
+# Host harness for jarvis_vlm.cpp. Usage: run_vlm.sh <path/to/jarvis_vlm.cpp> [extra java -D...]
 # Builds the shim as a host JNI library against /tmp/llama.cpp/build-host-mtmd (llama.cpp
 # 8345f33 with libmtmd, x86_64), then runs VlmHarness through the VisionNative mirror with the
 # tiny random Qwen2.5-VL pair from make_vlm.py.
 #   SAN=asan    build the shim with -fsanitize=address (llama/mtmd static libs uninstrumented)
 #   VALGRIND=1  run the JVM under valgrind memcheck (slow)
 set -euo pipefail
-SRC="${1:?path to ultra_vlm.cpp}"; shift || true
+SRC="${1:?path to jarvis_vlm.cpp}"; shift || true
 H=/tmp/jarvis-harness; V=$H/vlm; L=/tmp/llama.cpp; B=$L/build-host-mtmd
 OUT="$(mktemp -d /tmp/jarvis-vlm-run.XXXX)"
 JH="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
@@ -14,7 +14,7 @@ JH="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
 SANFLAGS=""; [ "${SAN:-}" = asan ] && SANFLAGS="-fsanitize=address -fno-omit-frame-pointer"
 g++ -std=c++17 -O1 -g -fPIC -shared -w $SANFLAGS \
   -I"$H/stub" -I"$L/include" -I"$L/ggml/include" -I"$L/tools/mtmd" -I"$JH/include" -I"$JH/include/linux" \
-  "$SRC" -o "$OUT/libultra_vlm.so" \
+  "$SRC" -o "$OUT/libjarvis_vlm.so" \
   -Wl,--start-group $(find "$B" -name 'libmtmd.a') $(find "$B" -name 'libllama.a') $(find "$B" -name 'libggml*.a') $(find "$B" -name "libvendor*.a") -Wl,--end-group \
   -lpthread -ldl -lm
 mkdir -p "$OUT/classes"

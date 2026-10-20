@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build whisper.cpp static libs for arm64 into ~/whisper-android/{lib,lib-dotprod,lib-i8mm,include},
-# the path ultra-native/app/src/main/cpp/CMakeLists.txt reads for ultra_whisper,
-# ultra_whisper_dotprod and ultra_whisper_i8mm. Mirrors build-llama-android.sh. Run on Linux/macOS with NDK.
+# the path jarvis-native/app/src/main/cpp/CMakeLists.txt reads for jarvis_whisper,
+# jarvis_whisper_dotprod and jarvis_whisper_i8mm. Mirrors build-llama-android.sh. Run on Linux/macOS with NDK.
 # WHISPER_ANDROID_HOME overrides the output dir (CMakeLists.txt honours it too); TMPDIR moves the source.
 #
 # Three CPU variants, for the same reason as llama: a cross-compile turns GGML_NATIVE off and,

@@ -54,7 +54,7 @@ object DraftModel {
     const val KV_BYTES_PER_TOKEN = LAYERS.toLong() * KV_HEADS * HEAD_DIM * 2 * 34 / 32
 
     /**
-     * Bytes the draft takes at [ctx]: weights + q8_0 KV + compute buffer (ultra_llm.cpp
+     * Bytes the draft takes at [ctx]: weights + q8_0 KV + compute buffer (jarvis_llm.cpp
      * nativeAttachDraft reserves ONE output row of logits, n_outputs_max = 1, plus the
      * flash-attention mask at n_ubatch 512, counted twice as in
      * [LocalModelEngine.memoryNeedBytes], plus activations). 16384: 1,481,671,872 B; 8192:

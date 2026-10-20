@@ -1,17 +1,17 @@
 package com.agent.jarvis.local
 
 /**
- * Which build of a native library this phone's CPU can run, best first: libultra_llm
- * (ondevice-brain/build-llama-android.sh) and libultra_whisper (build-whisper-android.sh) are
+ * Which build of a native library this phone's CPU can run, best first: libjarvis_llm
+ * (ondevice-brain/build-llama-android.sh) and libjarvis_whisper (build-whisper-android.sh) are
  * each built as the same three variants, named <base>, <base>_dotprod and <base>_i8mm. A newer
  * one on a CPU without its instructions dies with SIGILL, so a feature counts only if EVERY
  * core reports it (big.LITTLE threads move).
  * Pure parsing, JVM-tested; [read] is the only part that touches the device.
  */
 object CpuVariant {
-    const val I8MM = "ultra_llm_i8mm"        // armv8.2-a+dotprod+i8mm+fp16
-    const val DOTPROD = "ultra_llm_dotprod"  // armv8.2-a+dotprod+fp16
-    const val BASE = "ultra_llm"             // armv8-a, any arm64
+    const val I8MM = "jarvis_llm_i8mm"        // armv8.2-a+dotprod+i8mm+fp16
+    const val DOTPROD = "jarvis_llm_dotprod"  // armv8.2-a+dotprod+fp16
+    const val BASE = "jarvis_llm"             // armv8-a, any arm64
 
     /** Features every core in /proc/cpuinfo reports; empty when none are listed. */
     fun commonFeatures(cpuinfo: String): Set<String> =
@@ -32,10 +32,10 @@ object CpuVariant {
         }
     }
 
-    /** Library names to try in order for [base] (e.g. "ultra_whisper"); [base] is always last. */
+    /** Library names to try in order for [base] (e.g. "jarvis_whisper"); [base] is always last. */
     fun candidates(cpuinfo: String, base: String): List<String> = suffixes(cpuinfo).map { base + it }
 
-    /** libultra_llm names to try in order; [BASE] is always last. */
+    /** libjarvis_llm names to try in order; [BASE] is always last. */
     fun candidates(cpuinfo: String): List<String> = candidates(cpuinfo, BASE)
 
     fun read(base: String = BASE): List<String> = try {

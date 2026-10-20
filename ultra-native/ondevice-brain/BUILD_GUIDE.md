@@ -1,4 +1,4 @@
-> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/BUILD_GUIDE.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/jarvis-native/ondevice-brain/BUILD_GUIDE.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
 # MINT-TRINITY — Build & Deploy Follow-Along
 
@@ -25,7 +25,7 @@ These commands do it from your machine. (This phase records how the bundle was o
     git am /path/to/0001-ambient-listen.patch      # applies all 4 commits
     git push -u origin mint-trinity
 
-SUCCESS: your repo shows the `listen/` package, cpp/ultra_whisper.cpp, and the model presets.
+SUCCESS: your repo shows the `listen/` package, cpp/jarvis_whisper.cpp, and the model presets.
 If `git am` complains, use: git apply --reject 0001-ambient-listen.patch  then resolve .rej files.
 
 ====================================================================
@@ -50,7 +50,7 @@ PHASE 2 — Native libraries (BOTH required or the app won't link)
     # The app ships one shim per variant and loads the best the phone supports (logcat: "cpu variant=").
 2b. whisper.cpp (new, for ambient listening) -> ~/whisper-android/{lib,lib-dotprod,lib-i8mm,include}
     ./build-whisper-android.sh        # from this bundle; the same three CPU variants as llama
-    # The app ships one ultra_whisper shim per variant and loads the best (logcat: "whisper cpu variant=").
+    # The app ships one jarvis_whisper shim per variant and loads the best (logcat: "whisper cpu variant=").
 
 SUCCESS: all lib dirs contain libllama.a / libwhisper.a and matching libggml*.a, and
     ~/whisper-android/include has ggml-cpu.h + ggml-backend.h (verified build: NDK r27c, Oct 2026).
@@ -58,7 +58,7 @@ SUCCESS: all lib dirs contain libllama.a / libwhisper.a and matching libggml*.a,
 ====================================================================
 PHASE 3 — First build, stock small model (prove the app runs)
 ====================================================================
-    cd ultra-native && ./gradlew assembleDebug
+    cd jarvis-native && ./gradlew assembleDebug
     adb install -r app/build/outputs/apk/debug/app-debug.apk
 On phone: open app, Settings -> download "Gemma 3 1B" (default), enable Accessibility service.
 
@@ -101,7 +101,7 @@ PHASE 6 — YOUR specialized + abliterated model (path 2b)
 ====================================================================
 On Colab with an 80GB-class GPU (>=64GB VRAM; a 40GB A100 will OOM), open Qwen3_30B_A3B_LoRA_Colab.ipynb:
   1. Put train.jsonl (chat format; mix your 6 domains: psych/psychoanalysis, sociolinguistics,
-     chemistry, coding, pharmacology, opsec) in Google Drive at MyDrive/ultra-train/train.jsonl
+     chemistry, coding, pharmacology, opsec) in Google Drive at MyDrive/jarvis-train/train.jsonl
      (survives a runtime reset), or upload it to /content. Examples without a system turn get the app's
      own offline system prompt added automatically.
   2. Optional: Colab key icon -> secret HF_TOKEN = a WRITE token from huggingface.co/settings/tokens.

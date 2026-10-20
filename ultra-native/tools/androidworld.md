@@ -1,4 +1,4 @@
-> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/tools/androidworld.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/jarvis-native/tools/androidworld.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
 # AndroidWorld: Ultra on a public benchmark
 
@@ -28,13 +28,13 @@ cd ~/androidworld && python3 -m venv .venv && .venv/bin/pip install -r requireme
 ~/Android/emulator/emulator -avd AndroidWorldAvd -no-snapshot -grpc 8554 -no-audio -gpu swiftshader_indirect &
 cd ~/vault/runtime/bridge && ULTRA_BRAIN=venice:llama-3.3-70b python3 brain_proxy.py &   # the brain, laptop-side
 adb -s emulator-5554 reverse tcp:8799 tcp:8799
-cd ~/projects/Audit-Discuss-Build/ultra-native && ./gradlew assembleDebug -Pbench
+cd ~/projects/Audit-Discuss-Build/jarvis-native && ./gradlew assembleDebug -Pbench
 adb -s emulator-5554 install -r -g app/build/outputs/apk/debug/app-debug.apk
-cd ~/androidworld && ANDROID_SERIAL=emulator-5554 .venv/bin/python bench_ultra.py \
-  --agent_name=ultra --tasks=ClockStopWatchRunning,SimpleSmsSend --n_task_combinations=1
+cd ~/androidworld && ANDROID_SERIAL=emulator-5554 .venv/bin/python bench_jarvis.py \
+  --agent_name=jarvis --tasks=ClockStopWatchRunning,SimpleSmsSend --n_task_combinations=1
 ```
 
-`bench_ultra.py` is android_world's own `run.py` with our agent added; the agent itself is
+`bench_jarvis.py` is android_world's own `run.py` with our agent added; the agent itself is
 `tools/androidworld_agent.py`.
 
 ## Things that cost hours, so they are written down
@@ -50,7 +50,7 @@ cd ~/androidworld && ANDROID_SERIAL=emulator-5554 .venv/bin/python bench_ultra.p
   off between tasks was tried: every task then failed. Ultra's stays on, the harness retries, and
   the adapter drives Ultra over adb + uiautomator, which keeps working.
 - **Ultra's app policy** defaults to allow-list with nothing allowed. In the emulator write
-  `/data/data/com.agent.jarvis/shared_prefs/ultra_protected_apps.xml` with `allowlist_mode=false`
+  `/data/data/com.agent.jarvis/shared_prefs/jarvis_protected_apps.xml` with `allowlist_mode=false`
   (adb root; a file pushed to /sdcard/Android/data is not readable by the app).
 - **The benchmark reads the live screen**, so the adapter brings the task's app back to the front
   when Ultra's chat ended up there — and only then: reordering an app that is already in front
@@ -59,9 +59,9 @@ cd ~/androidworld && ANDROID_SERIAL=emulator-5554 .venv/bin/python bench_ultra.p
 - **The judge can be blind.** AndroidWorld's checks that read the screen (the Clock tasks) go
   through its accessibility forwarder, and on this emulator that reader returned 0 elements while
   the right app was in front — a timer showing `00h 16m 35s` scored 0. The adapter now records what
-  the judge saw with every episode (`ultra_judge_saw`) and, when the forwarder gives nothing, has
+  the judge saw with every episode (`jarvis_judge_saw`) and, when the forwarder gives nothing, has
   the judge read through AndroidWorld's own second method (`A11yMethod.UIAUTOMATOR`). Read
-  `ultra_judge_saw` before believing a fail. Screen-reading scores from before 2026-09-20 03:10
+  `jarvis_judge_saw` before believing a fail. Screen-reading scores from before 2026-09-20 03:10
   can't be trusted as fails.
 - **The forwarder crashes on start now and then** (a null context in its own constructor thread).
   Android's "keeps stopping" dialog then covers Ultra's chat: a task is lost as "input not found",
@@ -87,7 +87,7 @@ off (the control arm). The score is computed before the verdict is sent; nothing
 task, so the adapter answers: "Do it" only when the button IS the verb the goal uses ("Delete" for
 "delete the note" — not "Delete lines"), "Don't" otherwise. It presses the overlay's button at the
 position Ultra logs (`OVERLAY shown: do_it=x,y`), and every answer is kept in the episode
-(`ultra_gate_answers`). Ultra's gate is not changed by any of this.
+(`jarvis_gate_answers`). Ultra's gate is not changed by any of this.
 
 Passing runs become routes on the laptop: `northstar bench routes [--push]`.
 

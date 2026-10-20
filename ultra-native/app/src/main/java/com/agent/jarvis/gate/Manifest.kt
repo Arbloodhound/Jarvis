@@ -40,7 +40,7 @@ class Manifest(private val specs: Map<String, ToolSpec>) {
          * only want the count get 0, which reads as broken, which it is.
          */
         fun fromAssets(context: android.content.Context): Manifest = try {
-            context.assets.open("ultra.manifest.json").bufferedReader().use { r ->
+            context.assets.open("jarvis.manifest.json").bufferedReader().use { r ->
                 fromJson(JSONObject(r.readText()))
             }
         } catch (e: Exception) {

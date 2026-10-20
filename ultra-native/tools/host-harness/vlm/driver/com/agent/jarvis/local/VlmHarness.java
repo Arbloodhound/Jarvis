@@ -3,7 +3,7 @@ package com.agent.jarvis.local;
 import java.util.*;
 
 /**
- * Drives ultra_vlm.cpp through the VisionNative mirror with the tiny random Qwen2.5-VL pair.
+ * Drives jarvis_vlm.cpp through the VisionNative mirror with the tiny random Qwen2.5-VL pair.
  * Checks (exit code = number of failures):
  *  - nativeVlmFree(0) is a no-op (VisionNative.available relies on it)
  *  - bad mmproj path -> 0; mmproj that is not a projector (the text GGUF) -> 0
@@ -65,7 +65,7 @@ public final class VlmHarness {
     }
 
     public static void main(String[] a) {
-        System.loadLibrary(System.getProperty("lib", "ultra_vlm"));
+        System.loadLibrary(System.getProperty("lib", "jarvis_vlm"));
         int iters = Integer.getInteger("iters", 1);
 
         V.nativeVlmFree(0L);

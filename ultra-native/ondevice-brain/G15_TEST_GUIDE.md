@@ -1,4 +1,4 @@
-> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/G15_TEST_GUIDE.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/jarvis-native/ondevice-brain/G15_TEST_GUIDE.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
 # Test run on the Moto G15 (before the Pixel)
 
@@ -110,17 +110,17 @@ adb logcat -s UltraLlm UltraRoute UltraAmbient UltraThermal AndroidRuntime > log
 
 Extra checks if you have adb:
 - CPU build: `adb logcat -d -s UltraLlm | grep "cpu variant"` → shows which engine build loaded.
-  The G15's cores (Cortex-A75 + A55) should get `ultra_llm_dotprod`; tell me what it says.
+  The G15's cores (Cortex-A75 + A55) should get `jarvis_llm_dotprod`; tell me what it says.
 - Wake-word models' placement: `adb logcat -d -s UltraAmbient | grep -E "wake model|wake gate on"` → for
   each model, timing on the CPU, the fast CPU path (XNNPACK) and the accelerator (NNAPI), and which one it kept. Send me these lines.
 - Prompt reuse: `adb logcat -d -s UltraLlm | grep reused=` → after the second question in a chat,
   `reused=` should be well above 0.
 - **Accelerator check (run once, takes a minute):** with the app open and ambient listening turned on
-  at least once (so the wake models are downloaded), run `bash ultra-native/tools/accel-probe.sh`.
+  at least once (so the wake models are downloaded), run `bash jarvis-native/tools/accel-probe.sh`.
   The last lines say `TPU via NNAPI: available / not available / unknown (why)` and whether OpenCL
   (GPU) is there. Send me the whole output. Same command on the Pixel at deployment.
 - Speed benchmark (needs the repo cloned on the laptop and the Qwen3 1.7B model downloaded in the
-  app): `bash ultra-native/tools/bench.sh` → prints the CPU layout the app sees and tokens/sec per
+  app): `bash jarvis-native/tools/bench.sh` → prints the CPU layout the app sees and tokens/sec per
   thread count. Send me the whole output.
 - Thermal: `adb shell cmd thermalservice override-status 3` → the next offline answer to a
   question (not a phone command) starts with "I'm running hot…" and is short. `adb shell cmd thermalservice reset` puts it back.

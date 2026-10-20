@@ -1,9 +1,9 @@
 #!/bin/bash
 # Agent Ultra proof suite (M5). Sends each task into the app, waits for the
 # brain's RUN COMPLETE marker, and captures logcat + screenshot evidence.
-# Usage: suite.sh  — results in /tmp/opencode/ultra/suite/
+# Usage: suite.sh  — results in /tmp/opencode/jarvis/suite/
 set -uo pipefail
-OUT=/tmp/opencode/ultra/suite
+OUT=/tmp/opencode/jarvis/suite
 mkdir -p "$OUT"
 APP=com.agent.jarvis
 
@@ -32,7 +32,7 @@ send_task() {
   echo "[$name] evidence captured"
 }
 
-cd /home/dafarus/projects/Audit-Discuss-Build/ultra-native
+cd /home/dafarus/projects/Audit-Discuss-Build/jarvis-native
 bash "$(dirname "$0")/install.sh" app/build/outputs/apk/debug/app-debug.apk > /dev/null 2>&1
 sleep 3
 

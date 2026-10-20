@@ -1,8 +1,8 @@
 package com.agent.jarvis.local
 
 /**
- * The vision-language model's JNI entry points, in the same libultra_llm*.so as [LlmNative]
- * (ultra_vlm.cpp, llama.cpp's mtmd). [available] is false on a build without them.
+ * The vision-language model's JNI entry points, in the same libjarvis_llm*.so as [LlmNative]
+ * (jarvis_vlm.cpp, llama.cpp's mtmd). [available] is false on a build without them.
  */
 object VisionNative {
     /** The natives are present: the library [LlmNative] loaded has them. */

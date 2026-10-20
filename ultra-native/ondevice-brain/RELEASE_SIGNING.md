@@ -1,4 +1,4 @@
-> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/RELEASE_SIGNING.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/jarvis-native/ondevice-brain/RELEASE_SIGNING.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
 # Release signing — the cheap way (GitHub builds it for you)
 
@@ -28,16 +28,16 @@ You need Java's `keytool`. It comes with any JDK: install "Temurin 17" from adop
 don't have one.
 
 ```
-keytool -genkeypair -v -keystore ultra-release.jks -alias ultra -keyalg RSA -keysize 4096 -validity 10000
+keytool -genkeypair -v -keystore jarvis-release.jks -alias jarvis -keyalg RSA -keysize 4096 -validity 10000
 ```
 
 It asks for a password and a name. The name can be anything. Write down the password; the alias is
-`ultra`. Back up `ultra-release.jks` now.
+`jarvis`. Back up `jarvis-release.jks` now.
 
 ## 2. Turn the key into text for GitHub
 
-- Mac / Linux: `base64 -i ultra-release.jks | tr -d '\n' > key.txt`
-- Windows (PowerShell): `[Convert]::ToBase64String([IO.File]::ReadAllBytes("ultra-release.jks")) | Set-Content key.txt`
+- Mac / Linux: `base64 -i jarvis-release.jks | tr -d '\n' > key.txt`
+- Windows (PowerShell): `[Convert]::ToBase64String([IO.File]::ReadAllBytes("jarvis-release.jks")) | Set-Content key.txt`
 
 ## 3. Add 4 secrets to the GitHub repo (once)
 
@@ -47,7 +47,7 @@ GitHub → the Jarvis repo → Settings → Secrets and variables → Actions �
 |---|---|
 | `KEYSTORE_BASE64` | everything in `key.txt` |
 | `KEYSTORE_PASSWORD` | the keystore password |
-| `KEY_ALIAS` | `ultra` |
+| `KEY_ALIAS` | `jarvis` |
 | `KEY_PASSWORD` | the key password (the same one, unless you set two) |
 
 Then delete `key.txt`. GitHub stores the secrets encrypted, and the build never prints them.

@@ -260,7 +260,7 @@ object Experience {
     fun toJsonl(l: Lesson): String = JSONObject()
         .put("uid", l.uid).put("kind", "lesson")
         .put("when", JSONArray().put(l.whenText.take(200)))
-        .put("text", l.text).put("source", "ultra-phone:${l.source}")
+        .put("text", l.text).put("source", "jarvis-phone:${l.source}")
         .put("served", l.served).put("ok", l.ok).put("fail", l.fail)
         .toString()
 
@@ -308,6 +308,6 @@ object Experience {
     private fun uid(prefix: String, basis: String): String {
         val h = MessageDigest.getInstance("SHA-256").digest(basis.toByteArray())
             .take(6).joinToString("") { "%02x".format(it) }
-        return "ultra-$prefix-$h"
+        return "jarvis-$prefix-$h"
     }
 }

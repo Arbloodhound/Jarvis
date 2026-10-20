@@ -14,7 +14,7 @@ import java.io.File
 @Config(sdk = [34])
 class CloudBrainReportTest {
     private val manifest: Set<String> by lazy {
-        val tools = JSONObject(File("src/main/assets/ultra.manifest.json").readText()).getJSONArray("tools")
+        val tools = JSONObject(File("src/main/assets/jarvis.manifest.json").readText()).getJSONArray("tools")
         (0 until tools.length()).map { tools.getJSONObject(it).getString("name") }.toSortedSet()
     }
 

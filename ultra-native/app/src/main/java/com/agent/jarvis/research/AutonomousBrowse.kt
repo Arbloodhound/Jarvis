@@ -36,7 +36,7 @@ import java.time.Instant
  *   owner's design, the exclusion stays a SEPARATE function.
  *
  * SOURCE ONLY: not compiled in this sandbox. For Claude-in-repo
- * to drop into ultra-native/.../research/ and run under the JVM
+ * to drop into jarvis-native/.../research/ and run under the JVM
  * suite. Pure logic — no Android deps.
  */
 object AutonomousBrowse {

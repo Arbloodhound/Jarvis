@@ -142,7 +142,7 @@ TASKS = [
     # the laptop bridge: his work goes to Claude on the laptop; everyday things don't
     ("laptop-work", "what did I work on in sentinel last week", {"tool": "ask_claude", "ok": lambda p: has(p, "question", "sentinel")}),
     ("laptop-notes", "ask claude what my keephaven launch plan says", {"tool": "ask_claude", "ok": lambda p: has(p, "question", "keephaven")}),
-    ("laptop-code", "is there a bug in the agent ultra gate code that the devlog says is still open?", {"tool": "ask_claude"}),
+    ("laptop-code", "is there a bug in the agent jarvis gate code that the devlog says is still open?", {"tool": "ask_claude"}),
     ("not-laptop", "what's the weather in Denver right now", {"tool": "web_search", "forbid": ["ask_claude"]}),
     # plain answers — no tool needed
     ("math", "what's 17 times 23", {"text": True}),

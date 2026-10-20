@@ -800,7 +800,7 @@ class AmbientListenService : Service() {
 
     private fun acquireWake() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ultra:ambient").apply {
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "jarvis:ambient").apply {
             setReferenceCounted(false); acquire()
         }
     }

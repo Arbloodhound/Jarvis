@@ -8,7 +8,7 @@ import java.io.File
  * Provider settings for the OpenAI-compatible brain endpoint.
  *
  * Source of truth: SharedPreferences. Dev seed: if no key is stored, we read
- * /sdcard/Android/data/com.agent.jarvis/files/ultra_provider.json once at first
+ * /sdcard/Android/data/com.agent.jarvis/files/jarvis_provider.json once at first
  * need — that path is adb-pushable, which keeps key entry automatable with no
  * UI taps. The file is never required at runtime afterwards, and is deleted
  * once imported. It is only read when no key was ever stored (a key the user
@@ -24,7 +24,7 @@ data class ProviderConfig(
     val isUsable: Boolean get() = apiKey.isNotBlank()
 
     companion object {
-        private const val PREFS = "ultra_provider"
+        private const val PREFS = "jarvis_provider"
         private const val K_BASE = "base_url"
         private const val K_KEY = "api_key"
         private const val K_MODEL = "model"
@@ -63,7 +63,7 @@ data class ProviderConfig(
             if (android.os.Build.VERSION.SDK_INT < 29 && !debuggable) return null
             return try {
                 val dir = context.getExternalFilesDir(null) ?: return null
-                val f = File(dir, "ultra_provider.json")
+                val f = File(dir, "jarvis_provider.json")
                 if (!f.exists()) return null
                 val j = JSONObject(f.readText())
                 val key = j.optString("apiKey", "")
@@ -74,7 +74,7 @@ data class ProviderConfig(
                     model = j.optString("model", DEFAULT_MODEL),
                 )
                 // Imported: a plaintext key does not stay on shared storage.
-                if (!f.delete()) android.util.Log.w("JarvisProvider", "could not delete ultra_provider.json after import")
+                if (!f.delete()) android.util.Log.w("JarvisProvider", "could not delete jarvis_provider.json after import")
                 cfg
             } catch (_: Exception) {
                 null

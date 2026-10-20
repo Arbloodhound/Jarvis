@@ -56,9 +56,9 @@ class ExperienceTest {
     }
 
     @Test fun recallFindsTheRightLessonAndSkipsBenched() {
-        val calc = Experience.Lesson("ultra-self-1", "open the calculator app_launch no launchable app", "calc lesson", "self", 0)
-        val wifi = Experience.Lesson("ultra-self-2", "turn wifi off wifi_toggle", "wifi lesson", "self", 0)
-        assertEquals(listOf("ultra-self-1"), Experience.recall("open calculator please", listOf(calc, wifi)).map { it.uid })
+        val calc = Experience.Lesson("jarvis-self-1", "open the calculator app_launch no launchable app", "calc lesson", "self", 0)
+        val wifi = Experience.Lesson("jarvis-self-2", "turn wifi off wifi_toggle", "wifi lesson", "self", 0)
+        assertEquals(listOf("jarvis-self-1"), Experience.recall("open calculator please", listOf(calc, wifi)).map { it.uid })
         assertTrue(Experience.recall("what's the weather", listOf(calc, wifi)).isEmpty())
         val benched = calc.copy(served = 3, ok = 0, fail = 3)
         assertTrue(Experience.recall("open calculator", listOf(benched)).isEmpty())
@@ -72,13 +72,13 @@ class ExperienceTest {
     }
 
     @Test fun jsonlRoundTripsInNorthstarsFormat() {
-        val l = Experience.Lesson("ultra-self-abc", "open calculator", "calc lesson", "self", 0)
+        val l = Experience.Lesson("jarvis-self-abc", "open calculator", "calc lesson", "self", 0)
         val line = Experience.toJsonl(l)
         val o = JSONObject(line)
         assertEquals("lesson", o.getString("kind"))
         assertEquals("open calculator", o.getJSONArray("when").getString(0))
         val back = Experience.fromJsonl(line)!!
-        assertEquals("ultra-self-abc", back.uid)
+        assertEquals("jarvis-self-abc", back.uid)
         assertEquals("northstar", back.source)
         assertNull(Experience.fromJsonl("""{"uid":"Bad UID!","when":["x"],"text":"y"}"""))
         assertNull(Experience.fromJsonl("not json"))
@@ -97,7 +97,7 @@ class ExperienceTest {
             step("react_navigate", nav, false, "Error: navigation incomplete after 15 steps"),
         ), finished = false)
         assertEquals(1, got.size)
-        assertTrue(got[0].uid, got[0].uid.startsWith("ultra-deadend-"))
+        assertTrue(got[0].uid, got[0].uid.startsWith("jarvis-deadend-"))
         assertTrue(got[0].text.contains("failed twice") && got[0].text.contains("settings_open"))
     }
 

@@ -15,7 +15,7 @@ import org.json.JSONObject
  * under a hard character cap, and the answer is one short line with no reasoning trace.
  *
  * Prompt layout is fixed rules first, then the goal, then the append-only step history, then the
- * screen: the engine keeps the longest common token prefix between calls (ultra_llm.cpp), so each
+ * screen: the engine keeps the longest common token prefix between calls (jarvis_llm.cpp), so each
  * step re-reads only the screen and the newest history line.
  */
 object OfflineNav {

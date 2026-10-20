@@ -1,4 +1,4 @@
-> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/CLAUDE_CODE_BRIEF.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/jarvis-native/ondevice-brain/CLAUDE_CODE_BRIEF.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
 ## Status as of 2026-10-19
 
@@ -15,7 +15,7 @@
 **Goal lock:** make the on-device Qwen3-30B-A3B Thinking MoE usable as the offline brain:
 ambient listening plus acoustic wake word, a capped thinking trace, thermal throttling, and
 correct per-call KV state.
-**Subsystems in scope (crossing stated):** B (model / engine: `local/`, `cpp/ultra_llm.cpp`) →
+**Subsystems in scope (crossing stated):** B (model / engine: `local/`, `cpp/jarvis_llm.cpp`) →
 A (Brain offline path only: `Brain.emitLocal`) → D (ambient listening: `listen/`) → H (build:
 CMake, Gradle dependency). Dependency order is B → A → D, with H applied alongside.
 **Out of scope:** the cloud brain path, tool-loop prompts, UI, the Even G2, prosody. Do not
@@ -28,8 +28,8 @@ the base of the arbloodhound fork):
 - `./gradlew :app:compileDebugKotlin`: **PROVEN** (JDK 17, SDK 35, AGP 8.7.3).
 - `./gradlew :app:testDebugUnitTest`: **PROVEN**, 482 tests, 0 failures (the repo's own suite
   plus 35 new tests). `assembleDebug`: **PROVEN**, and every native lib in the APK is 16 KB-aligned.
-- `ultra_llm.cpp` compiles with `-Wall` against current llama.cpp: **PROVEN**.
-- `libultra_whisper.so` builds against current whisper.cpp with NDK r27c, exports only its 3
+- `jarvis_llm.cpp` compiles with `-Wall` against current llama.cpp: **PROVEN**.
+- `libjarvis_whisper.so` builds against current whisper.cpp with NDK r27c, exports only its 3
   JNI symbols, and has 16 KB LOAD alignment: **PROVEN**.
 - WakeGate's tensor contract matches upstream openWakeWord (0.998 / 0.000 on
   positive/negative clips): **PROVEN** in a Python mirror. The Kotlin port is
@@ -48,7 +48,7 @@ Read `DEVLOG.md`. Goal, scope and proof locks are as stated in the header.
 ## Step 1 — apply
 
 ```bash
-git checkout -b ultra-ondevice-brain
+git checkout -b jarvis-ondevice-brain
 git am 0001-ambient-listen.patch            # 5 commits
 git am 0002-*.patch 0003-*.patch 0004-*.patch 0005-*.patch 0006-*.patch 0007-*.patch 0008-*.patch 0009-*.patch
 ```
@@ -64,7 +64,7 @@ commit them as one "docs/training" commit.
 ./build-whisper-android.sh        # fixed: now ships ggml-cpu.h etc., which whisper.h needs
 # Gradle pins CMake 3.28.3 (CXX1300 otherwise); not an SDK package: put it on PATH (apt / pip cmake==3.28.3)
 # Gradle uses its default NDK 27.0.12077973 for JNI libs; static libs used r27c; both linked
-cd ultra-native
+cd jarvis-native
 ./gradlew :app:testDebugUnitTest  # expect 482 passed, 0 failed
 ./gradlew :app:assembleDebug
 ```
@@ -108,6 +108,6 @@ Report each row with an honesty status. A build passing is not behavioral proof.
 
 1. Add a `DEVLOG.md` entry: what was applied, what was proven at which status, and what is open
    (runtime rows, training run, G2).
-2. Commit, then `git push -u origin ultra-ondevice-brain`. Open a PR into the fork's main branch
+2. Commit, then `git push -u origin jarvis-ondevice-brain`. Open a PR into the fork's main branch
    and do not merge.
 3. State the overall status honestly.

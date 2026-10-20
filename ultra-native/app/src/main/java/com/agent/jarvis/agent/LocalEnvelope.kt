@@ -11,7 +11,7 @@ import com.agent.jarvis.harness.reusablePrefixLen
  * user_profile, loaded_tool_schemas, covered_history — so everything that changes often
  * (loading a tool namespace, new history) sits after everything that rarely does. The native
  * engine keeps the KV of the longest common TOKEN prefix between consecutive prompts
- * (cpp/ultra_llm.cpp nativeGenerate); a stable fragment order is what makes that prefix long.
+ * (cpp/jarvis_llm.cpp nativeGenerate); a stable fragment order is what makes that prefix long.
  *
  * covered_history is the ChatML turn text that follows the system block; it is a fragment of
  * the prompt prefix even though it is not inside the system message. The late "Now / memory"

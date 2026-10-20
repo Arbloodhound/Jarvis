@@ -84,7 +84,7 @@ import json,os,sys
 json.dump({'baseUrl':'https://api.venice.ai/api/v1','apiKey':os.environ['VENICE_API_KEY'],
            'model':'llama-3.3-70b'}, open(sys.argv[1],'w'))" "$TMP"
   timeout 30 $ADB shell mkdir -p "$DIR" >/dev/null 2>&1
-  timeout 30 $ADB push "$TMP" "$DIR/ultra_provider.json" >/dev/null 2>&1
+  timeout 30 $ADB push "$TMP" "$DIR/jarvis_provider.json" >/dev/null 2>&1
   shred -u "$TMP" 2>/dev/null || rm -f "$TMP"
   echo "  seeded from VENICE_API_KEY"
 else
@@ -100,7 +100,7 @@ if sys.argv[3]: cfg['personalData'] = (sys.argv[3] == 'on')
 json.dump(cfg, open(sys.argv[2],'w'))" \
   "$ALLOW" "$TMP" "$PERSONAL"
 [ -n "$PERSONAL" ] && echo "  personal data: $PERSONAL"
-timeout 30 $ADB push "$TMP" "$DIR/ultra_setup.json" >/dev/null 2>&1
+timeout 30 $ADB push "$TMP" "$DIR/jarvis_setup.json" >/dev/null 2>&1
 rm -f "$TMP"
 # Launching the app applies and deletes it. Toggling the accessibility binding
 # to force a service reconnect was tried first and is unreliable — Android
@@ -108,7 +108,7 @@ rm -f "$TMP"
 # the one being fixed.
 timeout 30 $ADB shell am start -n $PKG/.MainActivity >/dev/null 2>&1
 sleep 4
-if timeout 20 $ADB shell ls "$DIR/ultra_setup.json" >/dev/null 2>&1; then
+if timeout 20 $ADB shell ls "$DIR/jarvis_setup.json" >/dev/null 2>&1; then
   echo "  WARNING: setup file not consumed — is the app installed and launchable?"
 else
   echo "  applied"
@@ -126,4 +126,4 @@ timeout 30 $ADB logcat -d 2>/dev/null \
   | sed 's/^.*: //' | tail -25
 
 # Leave nothing sensitive behind.
-timeout 20 $ADB shell rm -f "$DIR/ultra_provider.json" >/dev/null 2>&1
+timeout 20 $ADB shell rm -f "$DIR/jarvis_provider.json" >/dev/null 2>&1

@@ -232,7 +232,7 @@ class AgentController(private val context: Context) {
         if (pm.isInteractive || km.isKeyguardLocked) false else {
             pm.newWakeLock(
                 android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                "ultra:screenTask",
+                "jarvis:screenTask",
             ).acquire(45_000L)
             android.util.Log.i("JarvisNav", "screen woken for an app task")
             true
@@ -543,7 +543,7 @@ class AgentController(private val context: Context) {
 
     fun clipboardWrite(text: String): Boolean = try {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        cm.setPrimaryClip(android.content.ClipData.newPlainText("ultra", text))
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("jarvis", text))
         true
     } catch (_: Exception) { false }
 

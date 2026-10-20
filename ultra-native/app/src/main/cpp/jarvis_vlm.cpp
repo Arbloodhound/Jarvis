@@ -1,5 +1,5 @@
 // On-device vision: a vision-language model (text GGUF + its mmproj GGUF) through llama.cpp's
-// libmtmd. Compiled into the same libultra_llm*.so as ultra_llm.cpp, so both share the one
+// libmtmd. Compiled into the same libjarvis_llm*.so as jarvis_llm.cpp, so both share the one
 // llama/ggml; Kotlin binds it as com.agent.jarvis.local.VisionNative (an `object`, hence the
 // jobject `thiz` in every signature). One describe at a time per handle: Kotlin serialises.
 //
@@ -61,7 +61,7 @@ void mtmdLog(ggml_log_level level, const char *text, void *) {
 }
 
 // Text crosses JNI as UTF-16, never through the *StringUTF* calls (Modified UTF-8 has no
-// 4-byte sequences); same conversion as ultra_llm.cpp, which keeps its helpers file-local.
+// 4-byte sequences); same conversion as jarvis_llm.cpp, which keeps its helpers file-local.
 void appendUtf16(std::u16string &out, uint32_t cp) {
     if (cp >= 0x10000) {
         cp -= 0x10000;
@@ -74,7 +74,7 @@ void appendUtf16(std::u16string &out, uint32_t cp) {
 
 // The whole answer as UTF-16. Invalid bytes become U+FFFD; a character cut off at the end
 // (maxTokens reached mid-character: a byte-level BPE splits characters across tokens) is
-// dropped, as ultra_llm.cpp leaves such a tail pending and never delivers it.
+// dropped, as jarvis_llm.cpp leaves such a tail pending and never delivers it.
 std::u16string utf8ToUtf16(const std::string &s) {
     const size_t n = s.size();
     std::u16string out;
@@ -295,7 +295,7 @@ Java_com_agent_jarvis_local_VisionNative_nativeVlmDescribe(
     }
     const int64_t t1 = ggml_time_us();
 
-    // Same sampler as ultra_llm.cpp's generate (top_k first, then top_p, temperature, draw).
+    // Same sampler as jarvis_llm.cpp's generate (top_k first, then top_p, temperature, draw).
     llama_sampler *chain = llama_sampler_chain_init(llama_sampler_chain_default_params());
     llama_sampler_chain_add(chain, llama_sampler_init_top_k(40));
     llama_sampler_chain_add(chain, llama_sampler_init_top_p(0.9f, 1));

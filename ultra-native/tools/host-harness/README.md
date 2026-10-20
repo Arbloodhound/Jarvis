@@ -1,4 +1,4 @@
-> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/tools/host-harness/README.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/jarvis-native/tools/host-harness/README.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
 # Host harness — running the native shims off the phone
 
@@ -10,9 +10,9 @@ encode, positions, memory, errors, UTF-8), never answer quality.
 
 | Shim | Script | Engine build it expects | What it proved (2026-10-07) |
 |---|---|---|---|
-| `ultra_llm.cpp` | `run.sh` (after `setup.sh`) | llama.cpp 8345f33 in `$LLAMA_SRC/build-host` | prompt-cache reuse, threads, inject, CPU pinning restored |
-| `ultra_vlm.cpp` | `vlm/run_vlm.sh`, `vlm/compare_cli.sh` | same, configured with `-DLLAMA_BUILD_MTMD=ON` in `/tmp/llama.cpp/build-host-mtmd` | output token-for-token identical to `llama-mtmd-cli`; ASan clean; no leak over 995 describes |
-| `ultra_whisper.cpp` | `whisper/run_whisper.sh` | whisper.cpp (pinned) host build | text, word timing and VAD segment paths; ASan clean |
+| `jarvis_llm.cpp` | `run.sh` (after `setup.sh`) | llama.cpp 8345f33 in `$LLAMA_SRC/build-host` | prompt-cache reuse, threads, inject, CPU pinning restored |
+| `jarvis_vlm.cpp` | `vlm/run_vlm.sh`, `vlm/compare_cli.sh` | same, configured with `-DLLAMA_BUILD_MTMD=ON` in `/tmp/llama.cpp/build-host-mtmd` | output token-for-token identical to `llama-mtmd-cli`; ASan clean; no leak over 995 describes |
+| `jarvis_whisper.cpp` | `whisper/run_whisper.sh` | whisper.cpp (pinned) host build | text, word timing and VAD segment paths; ASan clean |
 | UTF-8 → UTF-16 in both LLM shims | `vlm/run_utf8.sh` | none | 12/12 cases, invalid bytes become U+FFFD |
 
 The `vlm/` and `whisper/` scripts read and write under `/tmp/jarvis-harness/{vlm,whisper}`:

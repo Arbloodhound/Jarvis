@@ -14,7 +14,7 @@ import java.io.File
 class ResearchToolsGateTest {
 
     private val manifest: Manifest =
-        Manifest.fromJson(JSONObject(File("src/main/assets/ultra.manifest.json").readText()))
+        Manifest.fromJson(JSONObject(File("src/main/assets/jarvis.manifest.json").readText()))
 
     private fun check(request: String, tool: String, args: String): Gate.Verdict =
         Gate(manifest).enforceCall(Gate.Episode(request), tool, JSONObject(args))

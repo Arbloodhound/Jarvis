@@ -455,7 +455,7 @@ class TestKitActivity : ComponentActivity() {
             if (offline) " · OFFLINE-ONLY is on (the cloud brain is not used)" else "")
 
         val manifest = withContext(Dispatchers.IO) {
-            val tools = org.json.JSONObject(assets.open("ultra.manifest.json").bufferedReader().use { it.readText() })
+            val tools = org.json.JSONObject(assets.open("jarvis.manifest.json").bufferedReader().use { it.readText() })
                 .getJSONArray("tools")
             (0 until tools.length()).map { tools.getJSONObject(it).getString("name") }.toSortedSet()
         }
@@ -549,7 +549,7 @@ class TestKitActivity : ComponentActivity() {
         if (!online()) { line("Skipped: offline."); record("CLOUD STAND-IN DIAGNOSTIC", out); return }
 
         val manifest = withContext(Dispatchers.IO) {
-            val tools = org.json.JSONObject(assets.open("ultra.manifest.json").bufferedReader().use { it.readText() })
+            val tools = org.json.JSONObject(assets.open("jarvis.manifest.json").bufferedReader().use { it.readText() })
                 .getJSONArray("tools")
             (0 until tools.length()).map { tools.getJSONObject(it).getString("name") }.toSortedSet()
         }

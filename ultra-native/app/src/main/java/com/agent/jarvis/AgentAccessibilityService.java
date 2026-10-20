@@ -348,7 +348,7 @@ public class AgentAccessibilityService extends AccessibilityService {
     public static void allowPackage(String pkg) { allowedPackages.add(pkg); }
     public static void revokePackage(String pkg) { allowedPackages.remove(pkg); }
     public static boolean isPackageAllowed(String pkg) { return allowedPackages.contains(pkg); }
-    public static final String BLOCK_PREFS = "ultra_protected_apps";
+    public static final String BLOCK_PREFS = "jarvis_protected_apps";
     public static final String BLOCK_KEY = "blocked";
     public static final String ALLOW_KEY = "allowed";
     public static final String MODE_KEY = "allowlist_mode";
@@ -429,7 +429,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         try {
             java.io.File dir = ctx.getExternalFilesDir(null);
             if (dir == null) return;
-            java.io.File f = new java.io.File(dir, "ultra_setup.json");
+            java.io.File f = new java.io.File(dir, "jarvis_setup.json");
             if (!f.exists()) return;
 
             StringBuilder sb = new StringBuilder();
@@ -459,7 +459,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 // refused for the wrong reason and the flow guard is never
                 // reached, which is exactly what happened for a whole
                 // afternoon.
-                ctx.getSharedPreferences("ultra_settings", Context.MODE_PRIVATE)
+                ctx.getSharedPreferences("jarvis_settings", Context.MODE_PRIVATE)
                     .edit().putBoolean("allow_personal_data", j.getBoolean("personalData")).apply();
                 Log.w(TAG, "SETUP FILE: personal data set to " + j.getBoolean("personalData"));
             }
@@ -524,7 +524,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         setServiceInfo(info);
         Log.i(TAG, "Accessibility service connected, capabilities=" + info.getCapabilities());
         try {
-            getSharedPreferences("ultra_a11y", MODE_PRIVATE)
+            getSharedPreferences("jarvis_a11y", MODE_PRIVATE)
                 .edit()
                 .putString("state", "connected")
                 .putLong("connected_at", System.currentTimeMillis())
@@ -536,7 +536,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         // Once per process: each reconnect used to wrap the previous wrapper, chaining
         // every old service instance into the handler.
         if (!crashHandlerInstalled.compareAndSet(false, true)) return;
-        final java.io.File crashFile = new java.io.File(getApplicationContext().getFilesDir(), "ultra_crash.log");
+        final java.io.File crashFile = new java.io.File(getApplicationContext().getFilesDir(), "jarvis_crash.log");
         final Thread.UncaughtExceptionHandler prevHandler = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             @Override
@@ -582,7 +582,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         if (evtNow - lastEventPersistedAt >= LAST_EVENT_PERSIST_MS) {
             lastEventPersistedAt = evtNow;
             try {
-                getSharedPreferences("ultra_a11y", MODE_PRIVATE)
+                getSharedPreferences("jarvis_a11y", MODE_PRIVATE)
                     .edit()
                     .putLong("last_event", evtNow)
                     .putString("last_event_pkg", event.getPackageName() != null ? event.getPackageName().toString() : "")
@@ -733,7 +733,7 @@ public class AgentAccessibilityService extends AccessibilityService {
     public void onInterrupt() {
         Log.w(TAG, "Interrupted");
         try {
-            getSharedPreferences("ultra_a11y", MODE_PRIVATE)
+            getSharedPreferences("jarvis_a11y", MODE_PRIVATE)
                 .edit()
                 .putString("state", "interrupted")
                 .putLong("interrupted_at", System.currentTimeMillis())
@@ -746,7 +746,7 @@ public class AgentAccessibilityService extends AccessibilityService {
     public void onDestroy() {
         synchronized (instanceLock) { instance = null; }
         try {
-            getSharedPreferences("ultra_a11y", MODE_PRIVATE)
+            getSharedPreferences("jarvis_a11y", MODE_PRIVATE)
                 .edit()
                 .putString("state", "destroyed")
                 .putLong("destroyed_at", System.currentTimeMillis())
@@ -901,7 +901,7 @@ public class AgentAccessibilityService extends AccessibilityService {
 
     private static synchronized Handler readHandler() {
         if (readHandler == null) {
-            android.os.HandlerThread t = new android.os.HandlerThread("ultra-a11y-read");
+            android.os.HandlerThread t = new android.os.HandlerThread("jarvis-a11y-read");
             t.start();
             readHandler = new Handler(t.getLooper());
         }
@@ -1480,7 +1480,7 @@ public class AgentAccessibilityService extends AccessibilityService {
      */
     private final java.util.concurrent.ScheduledExecutorService journeySampler =
             java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "ultra-journey");
+                Thread t = new Thread(r, "jarvis-journey");
                 t.setDaemon(true);
                 return t;
             });

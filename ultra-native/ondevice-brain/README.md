@@ -1,4 +1,4 @@
-> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/README.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/jarvis-native/ondevice-brain/README.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
 # On-device brain — build bundle
 
@@ -92,7 +92,7 @@ Verify current URLs in `listen/AmbientConfig.kt` before release. Then:
 Settings → Ambient listening ON, and set a distinctive wake name.
 
 The patch adds the `listen/` package — AmbientConfig, Segmenter (energy
-gate), WhisperNative (+ `cpp/ultra_whisper.cpp`), AmbientMemory (FTS4
+gate), WhisperNative (+ `cpp/jarvis_whisper.cpp`), AmbientMemory (FTS4
 store), WakeFilter, AmbientListenService (mic foreground service),
 BootReceiver — plus the `ambient_recall` tool, ambient-context injection on
 wake, a TTS echo guard, settings UI, manifest permissions/service/receiver,
