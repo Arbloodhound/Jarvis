@@ -8,7 +8,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,11 +23,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -39,7 +44,7 @@ import kotlin.math.roundToInt
 
 /**
  * The floating diagnostic button drawn over every app screen (MainActivity). Tap to run the live
- * diagnostic: it glows green with a countdown while it captures the real app for 5 minutes
+ * diagnostic: it glows green with a countdown while it captures the real app for 15 minutes
  * ([LiveDiagnostic]), tap again to stop early. When it finishes it shows two separate buttons:
  * SEND (share sheet) and RESET (back to DIAG for a new capture), so neither is hit by accident
  * (owner, 2026-10-20: it used to stay on SEND with no way to start over).
@@ -70,9 +75,13 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .offset { IntOffset(dx.roundToInt(), dy.roundToInt()) }
-            .pointerInput(Unit) {
-                detectDragGestures { change, drag -> change.consume(); dx += drag.x; dy += drag.y }
-            },
+            .diagGestures(
+                // In the finished state the surface is drag-only: SEND/RESET own their taps, and
+                // a stray press between them must not start a new capture over the unsent file.
+                tapEnabled = running || file == null,
+                onTap = { LiveDiagnostic.toggle(ctx) },
+                onDrag = { mx, my -> dx += mx; dy += my },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         val done = file
@@ -88,12 +97,7 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .size(if (running) 84.dp else 60.dp)
                 .background(bg, CircleShape)
-                .border(2.dp, if (running) green else accent.copy(alpha = 0.6f), CircleShape)
-                .pointerInput(running, file) {
-                    detectTapGestures(
-                        onTap = { LiveDiagnostic.toggle(ctx) },
-                    )
-                },
+                .border(2.dp, if (running) green else accent.copy(alpha = 0.6f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -104,6 +108,53 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
                     }
                     else -> Text("DIAG", color = accent, fontWeight = FontWeight.Bold, fontSize = 13.sp,
                         textAlign = TextAlign.Center)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Tap + drag for the whole button in ONE gesture detector.
+ *
+ * The old arrangement — detectDragGestures on this outer box, detectTapGestures on the circle
+ * inside it, in two competing pointerInputs — let a drag eat a tap: any finger drift past the
+ * touch slop made the parent start consuming moves, which cancelled the child's wait-for-up, so
+ * the press silently did nothing but nudge the button. Here one detector decides: a release that
+ * never passed the slop is a tap; past the slop it is a drag and no tap fires. The callbacks are
+ * read through rememberUpdatedState and the detector is keyed on Unit, so it is never torn down
+ * mid-gesture (the old tap detector was keyed on running/file and restarted on every state flip).
+ * An up that a child (a SEND/RESET chip) already consumed is the child's press, never ours.
+ */
+@Composable
+private fun Modifier.diagGestures(
+    tapEnabled: Boolean,
+    onTap: () -> Unit,
+    onDrag: (mx: Float, my: Float) -> Unit,
+): Modifier {
+    val tapOn by rememberUpdatedState(onTap)
+    val dragOn by rememberUpdatedState(onDrag)
+    val tapAllowed by rememberUpdatedState(tapEnabled)
+    return pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            var dragging = false
+            while (true) {
+                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                if (change.changedToUp()) {
+                    if (!dragging && tapAllowed && !change.isConsumed) tapOn()
+                    break
+                }
+                if (!change.pressed) break   // gesture cancelled: neither tap nor drag
+                if (!dragging && (change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                    dragging = true
+                }
+                if (dragging) {
+                    val delta = change.positionChange()
+                    if (delta != Offset.Zero) {
+                        change.consume()
+                        dragOn(delta.x, delta.y)
+                    }
                 }
             }
         }
