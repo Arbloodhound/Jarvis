@@ -10,6 +10,15 @@ import { platform } from "node:os";
 
 export const OS = platform();
 
+/** Test seam: pretend to run on another OS (the screen-action tests use it). */
+let osForTest: string | null = null;
+export function useOsForTest(os: string | null): void {
+  osForTest = os;
+}
+function currentOs(): string {
+  return osForTest ?? OS;
+}
+
 /**
  * When Jarvis runs as the desktop app, Electron supplies these natively
  * (clipboard, notifications, screen capture, the default browser) and the
@@ -68,16 +77,16 @@ function launch(cmd: string, args: string[]): Promise<void> {
 export async function openUrl(url: string): Promise<void> {
   if (!/^https?:\/\//i.test(url)) throw new Error("Only http and https links are opened.");
   if (native) return native.openUrl(url);
-  if (OS === "darwin") return launch("open", [url]);
+  if (currentOs() === "darwin") return launch("open", [url]);
   // rundll32 opens a URL without going through cmd.exe's parser.
-  if (OS === "win32") return launch("rundll32", ["url.dll,FileProtocolHandler", url]);
+  if (currentOs() === "win32") return launch("rundll32", ["url.dll,FileProtocolHandler", url]);
   return launch("xdg-open", [url]);
 }
 
 export async function openApp(name: string): Promise<void> {
-  if (/[\\/]|\.\./.test(name) && OS !== "darwin") throw new Error("Give an app name, not a path.");
-  if (OS === "darwin") return launch("open", ["-a", name]);
-  if (OS === "win32") {
+  if (/[\\/]|\.\./.test(name) && currentOs() !== "darwin") throw new Error("Give an app name, not a path.");
+  if (currentOs() === "darwin") return launch("open", ["-a", name]);
+  if (currentOs() === "win32") {
     // cmd's `start` finds apps by name; only plain names reach cmd's parser.
     if (!/^[\w .+-]+$/.test(name)) throw new Error("App names may hold letters, digits, spaces, dots, + and - only.");
     return launch("cmd.exe", ["/d", "/c", "start", "", name]);
@@ -89,26 +98,26 @@ export async function openApp(name: string): Promise<void> {
 
 export async function clipboardRead(): Promise<string> {
   if (native) return native.clipboardRead();
-  if (OS === "darwin") return run("pbpaste", []);
-  if (OS === "win32") return run("powershell", ["-NoProfile", "-Command", "Get-Clipboard -Raw"]);
+  if (currentOs() === "darwin") return run("pbpaste", []);
+  if (currentOs() === "win32") return run("powershell", ["-NoProfile", "-Command", "Get-Clipboard -Raw"]);
   try { return await run("wl-paste", ["--no-newline"]); } catch { return run("xclip", ["-selection", "clipboard", "-o"]); }
 }
 
 export async function clipboardWrite(text: string): Promise<void> {
   if (native) return native.clipboardWrite(text);
-  if (OS === "darwin") { await run("pbcopy", [], text); return; }
-  if (OS === "win32") { await run("powershell", ["-NoProfile", "-Command", "$input | Set-Clipboard"], text); return; }
+  if (currentOs() === "darwin") { await run("pbcopy", [], text); return; }
+  if (currentOs() === "win32") { await run("powershell", ["-NoProfile", "-Command", "$input | Set-Clipboard"], text); return; }
   try { await run("wl-copy", [], text); } catch { await run("xclip", ["-selection", "clipboard"], text); }
 }
 
 export async function notify(title: string, message: string): Promise<void> {
   if (native) return native.notify(title, message);
-  if (OS === "darwin") {
+  if (currentOs() === "darwin") {
     // Pass the strings as AppleScript arguments, never spliced into the script.
     await run("osascript", ["-e", "on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv)\nend run", title, message]);
     return;
   }
-  if (OS === "win32") {
+  if (currentOs() === "win32") {
     const ps = `Add-Type -AssemblyName System.Windows.Forms; $n=New-Object System.Windows.Forms.NotifyIcon; $n.Icon=[System.Drawing.SystemIcons]::Information; $n.Visible=$true; $n.ShowBalloonTip(5000,${psQuote(title)},${psQuote(message)},'Info'); Start-Sleep 6; $n.Dispose()`;
     await powershell(ps, 20000);
     return;
@@ -129,8 +138,8 @@ export async function screenshotBuffer(): Promise<Buffer> {
 
 export async function screenshot(file: string): Promise<void> {
   if (native) { await writeFile(file, await native.screenshot()); return; }
-  if (OS === "darwin") { await run("screencapture", ["-x", file]); return; }
-  if (OS === "win32") {
+  if (currentOs() === "darwin") { await run("screencapture", ["-x", file]); return; }
+  if (currentOs() === "win32") {
     const ps = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $b=[System.Windows.Forms.SystemInformation]::VirtualScreen; $bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height; $g=[System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Left,$b.Top,0,0,$bmp.Size); $bmp.Save(${psQuote(file)})`;
     await powershell(ps, 20000);
     return;
@@ -159,21 +168,84 @@ const LINUX_HINT = "Screen control needs 'xdotool' (X11) or 'ydotool' (Wayland).
 
 export async function screenType(text: string): Promise<void> {
   if (text.length > 2000) throw new Error("Too much text to type at once.");
-  if (OS === "darwin") { await run("osascript", ["-e", "on run argv\ntell application \"System Events\" to keystroke (item 1 of argv)\nend run", text]); return; }
-  if (OS === "win32") { await run("powershell", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(`Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait(${psQuote(text).replace(/([+^%~(){}[\]])/g, "{$1}")})`, "utf16le").toString("base64")]); return; }
+  if (currentOs() === "darwin") { await run("osascript", ["-e", "on run argv\ntell application \"System Events\" to keystroke (item 1 of argv)\nend run", text]); return; }
+  if (currentOs() === "win32") { await run("powershell", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(`Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait(${psQuote(text).replace(/([+^%~(){}[\]])/g, "{$1}")})`, "utf16le").toString("base64")]); return; }
   await first([["xdotool", ["type", "--clearmodifiers", "--", text]], ["ydotool", ["type", text]]], LINUX_HINT);
 }
 
+/** Split "ctrl+shift+c" into its modifiers and the final key. */
+function parseCombo(combo: string): { mods: string[]; key: string } {
+  const parts = combo.split("+").map((s) => s.trim()).filter(Boolean);
+  const key = parts.pop() ?? "";
+  return { mods: parts.map((m) => m.toLowerCase()), key };
+}
+
+const MAC_KEY_CODES: Record<string, number> = {
+  return: 36, enter: 36, tab: 48, space: 49, delete: 51, backspace: 51, escape: 53, esc: 53,
+  home: 115, end: 119, pageup: 116, pagedown: 121,
+  left: 123, right: 124, down: 125, up: 126,
+  f1: 122, f2: 120, f3: 99, f4: 118, f5: 96, f6: 97, f7: 98, f8: 100, f9: 101, f10: 109, f11: 103, f12: 111,
+};
+const MAC_MODIFIERS: Record<string, string> = {
+  ctrl: "control down", control: "control down", alt: "option down", option: "option down",
+  shift: "shift down", cmd: "command down", command: "command down", meta: "command down",
+};
+const SENDKEYS_KEYS: Record<string, string> = {
+  return: "{ENTER}", enter: "{ENTER}", tab: "{TAB}", escape: "{ESC}", esc: "{ESC}", space: " ",
+  delete: "{DELETE}", backspace: "{BACKSPACE}", home: "{HOME}", end: "{END}",
+  pageup: "{PGUP}", pagedown: "{PGDN}", left: "{LEFT}", right: "{RIGHT}", down: "{DOWN}", up: "{UP}",
+  f1: "{F1}", f2: "{F2}", f3: "{F3}", f4: "{F4}", f5: "{F5}", f6: "{F6}",
+  f7: "{F7}", f8: "{F8}", f9: "{F9}", f10: "{F10}", f11: "{F11}", f12: "{F12}",
+};
+const SENDKEYS_MODIFIERS: Record<string, string> = { ctrl: "^", control: "^", alt: "%", shift: "+" };
+
 export async function screenKey(combo: string): Promise<void> {
   if (!/^[A-Za-z0-9+_-]{1,40}$/.test(combo)) throw new Error("Key names may hold letters, digits, + and - only (e.g. ctrl+c, Return, Tab).");
-  if (OS === "darwin") { await run("osascript", ["-e", `tell application "System Events" to key code 36`]).catch(() => {}); return; }
-  if (OS === "win32") { await run("powershell", ["-NoProfile", "-NonInteractive", "-Command", "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')"]).catch(() => {}); return; }
+  if (currentOs() === "darwin") {
+    // The old code sent Return's key code for EVERY combo and swallowed the
+    // result, so any key press "succeeded". Now the requested combo is what
+    // gets sent — or the call fails saying why.
+    const { mods, key } = parseCombo(combo);
+    const using: string[] = [];
+    for (const m of mods) {
+      const mac = MAC_MODIFIERS[m];
+      if (!mac) throw new Error(`Key combo "${combo}": the "${m}" modifier isn't supported on macOS.`);
+      using.push(mac);
+    }
+    const usingClause = using.length ? ` using {${using.join(", ")}}` : "";
+    const code = MAC_KEY_CODES[key.toLowerCase()];
+    let action: string;
+    if (code !== undefined) action = `key code ${code}${usingClause}`;
+    else if (key.length === 1) action = `keystroke ${JSON.stringify(key)}${usingClause}`;
+    else throw new Error(`Key "${key}" isn't one macOS screen control can send (a single character, Return, Tab, Escape, space, Delete, arrows, Home/End, PageUp/PageDown, F1–F12).`);
+    await run("osascript", ["-e", `tell application "System Events" to ${action}`]);
+    return;
+  }
+  if (currentOs() === "win32") {
+    // Same story: the old code sent {ENTER} for every combo and swallowed
+    // the result. SendKeys spells the requested combo, or the call fails.
+    const { mods, key } = parseCombo(combo);
+    let prefix = "";
+    for (const m of mods) {
+      const c = SENDKEYS_MODIFIERS[m];
+      if (!c) throw new Error(`Key combo "${combo}": the "${m}" modifier can't be sent with SendKeys (no Windows/meta key).`);
+      prefix += c;
+    }
+    let body = SENDKEYS_KEYS[key.toLowerCase()];
+    if (body === undefined) {
+      if (key.length === 1) body = key;
+      else throw new Error(`Key "${key}" isn't one Windows screen control can send (a single character, Return, Tab, Escape, space, Delete, arrows, Home/End, PageUp/PageDown, F1–F12).`);
+    }
+    const script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait(${psQuote(prefix + body)})`;
+    await run("powershell", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")]);
+    return;
+  }
   await first([["xdotool", ["key", "--clearmodifiers", combo]], ["ydotool", ["key", combo]]], LINUX_HINT);
 }
 
 export async function screenClick(x: number, y: number, button: "left" | "right" | "middle"): Promise<void> {
   const b = { left: "1", right: "3", middle: "2" }[button];
-  if (OS === "darwin") { await run("osascript", ["-e", `tell application "System Events" to click at {${x}, ${y}}`]).catch(() => {}); return; }
-  if (OS === "win32") throw new Error("Mouse clicking isn't wired up on Windows yet.");
+  if (currentOs() === "darwin") { await run("osascript", ["-e", `tell application "System Events" to click at {${x}, ${y}}`]); return; }
+  if (currentOs() === "win32") throw new Error("Mouse clicking isn't wired up on Windows yet.");
   await first([["xdotool", ["mousemove", String(x), String(y), "click", b]], ["ydotool", ["mousemove", String(x), String(y)]]], LINUX_HINT);
 }
