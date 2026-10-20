@@ -1,7 +1,11 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/ondevice-brain/G15_TEST_GUIDE.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
 # Test run on the Moto G15 (before the Pixel)
 
 > **Not needed any more (2026-10-06):** the Pixel is available, so testing goes straight to
 > `PIXEL_TEST_GUIDE.md`. Kept for a future small-phone check.
+
+> **Status as of 2026-10-19:** preserved as a test procedure. The behaviours listed under "What this proves" are test objectives, not recorded results: the checks in this guide were not re-verified in the 2026-10-19 audits, which were static, grep-level reading of the merged tree, and CI has not yet compiled the merged tree. The install step below has been corrected for the shared test debug keystore (see `../ci/README.md`).
 
 **What this proves:** the app installs and runs; the offline brain code path works (prompt format,
 thinking budget, hidden `<think>` trace, routing, emoji); ambient listening works ("Hey Jarvis",
@@ -29,8 +33,9 @@ handling as the MoE, just small. Every bug fixed today that's not about size get
 ## 1. Install
 
 - [ ] **Uninstall any earlier Jarvis / Agent Ultra first** (long-press the icon → App info →
-      Uninstall). Every GitHub build is signed with a different throwaway debug key, so a new build
-      won't install over an older one ("App not installed").
+      Uninstall). GitHub debug builds are now signed with the shared test debug keystore in `ci/`, so one
+      GitHub debug build installs over another; a locally built debug APK may still use a
+      different key and hit "App not installed".
 - [ ] Copy `app-debug.apk` to the phone and tap it (allow "install unknown apps" for your file
       manager when asked). With adb: `adb install -r app-debug.apk`.
 - [ ] Open it and grant the permissions it asks for.
