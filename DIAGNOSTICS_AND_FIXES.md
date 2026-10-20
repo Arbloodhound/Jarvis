@@ -1,3 +1,20 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/DIAGNOSTICS_AND_FIXES.md`. CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
+The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
+This document is itself dated 2026-10-19: a setup checklist, a speed-boost threshold change, chains continuing after Confirm, retained thinking, 20 real tasks, and speed findings from v3.0.73 phone logs.
+The audits were code-only and grep-level, with no device testing: they do not re-verify the phone speed measurements, the DIAG capture procedure, the background-listening diagnosis, or the 20-task routing/phone results recorded here — those are not covered.
+Per-subsystem verdicts relevant here: `agent/`, `listen/`, and `local/` all work with defects in the merged view.
+Still open and relevant: GGUF downloads verified by size only with no integrity check before native load, and voiceprint speaker tags defaulting ON against their own doc comment.
+On chains and confirmation, note a still-open high: recipe runs can self-confirm steps past the Gate. The standing rule remains that consequential actions stop at confirmation and the user decides.
+Whether the individual 'built, tests pass' items in the body survive the merge is not re-verified, and CI has not compiled the merged tree.
+
+---
+
 # Diagnostics and bug fixes — 2026-10-19
 
 ## Done in this batch
