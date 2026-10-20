@@ -18,7 +18,7 @@
 - [ ] New logic has its own JVM tests (failing before, passing after, where it fixes a bug)
 - [ ] Host harness green if native code (JNI / C++) changed
 - [ ] Gate change (if any) shows what it now refuses and what it still allows; deny-by-default, manifest-failure = deny-all, and taint non-overridability preserved
-- [ ] Shopping invariants preserved (if touched): checkout keeps no purchase path; purchases still always need fresh approval
+- [ ] Shopping / Tor invariants preserved (if touched): onion exclusion stays a separate shopping-layer function; checkout keeps no purchase path; Tor stays fail-closed with no clearnet fallback; purchases still always need fresh approval
 - [ ] If scheduling or the Spotify redirect is touched: how it was tested, given `SchedulerReceiver` and `SpotifyRedirectActivity` are not registered in `AndroidManifest.xml` in the merged tree
 - [ ] No UI change unless the change asks for one
 - [ ] No default the owner chose was changed without asking

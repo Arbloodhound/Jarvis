@@ -46,7 +46,8 @@ For desktop changes, run the `desktop/test` suite as well and report its result 
 
 - Target `main`. Keep a change to one thing, and say what it proves — which tests, and whether it ran on a real phone. Use the evidence labels in `.github/pull_request_template.md` (MEASURED / PROVEN / SOURCE ONLY / UNKNOWN) and label every claim.
 - Anything that touches the policy gate needs a test showing what it now refuses and what it still allows. The gate is deny-by-default; manifest load failure means deny-all; taint blocks can neither be auto-approved nor operator-overridden. PRs must not weaken any of those properties silently.
-- Anything that touches shopping must preserve the audited invariants: `ShoppingCheckout` keeps **no** purchase path (prepare / display / track only). Purchases always need fresh approval; no lasting grant may cover a purchase.
+- Anything that touches shopping must preserve the audited invariants: onion exclusion stays a separate shopping-layer function (`excludeOnion` / `isOnionUrl`), and `ShoppingCheckout` keeps **no** purchase path (prepare / display / track only). Purchases always need fresh approval; no lasting grant may cover a purchase.
+- Anything that touches Tor must preserve fail-closed behaviour: no clearnet fallback anywhere; the only fallback is in-app Tor → Orbot.
 - Anything that touches credentials, codes, or secrets must preserve the vault / placeholder design: credentials live in the platform vault (Keystore AES-GCM) as opaque handles; SMS / email codes and reset links never reach the cloud model.
 - Do not delete "dead code" on suspicion. The audits list ~70 dead-code candidates (zero call sites) — candidates only; reflection, JNI, and framework callbacks can make some live. Each removal needs its own proof that nothing reaches it.
 - `DEVLOG.md` is append-only. Add an entry; don't rewrite old ones.

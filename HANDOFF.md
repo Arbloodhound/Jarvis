@@ -39,6 +39,7 @@ Earlier per-feature runtime notes, release numbers, and phone-test instructions 
 
 - The agent informs and asks; it does not permit or forbid. Consequential actions (send, post, purchase, delete) stop at confirmation; the user decides.
 - Products/shopping = legitimate-product/company verification + scam screening only. "Plugs" = known non-scammers / trusted sources.
+- Tor is opt-in, default OFF. Onion URLs never fall back to clearnet. Onion exclusion stays a separate shopping-layer function.
 - Human verification (CAPTCHA etc.) is the user's: park with the exact link/action, never solve or bypass.
 - Never type into password fields. Screen actions are bound to the snapshot they were planned from; stale screens are refused.
 - SMS/email codes and reset links never reach the cloud model (opaque placeholder references only).
@@ -48,8 +49,9 @@ Earlier per-feature runtime notes, release numbers, and phone-test instructions 
 
 ## Checked clean in the audits
 
+- Tor fail-closed, verified in both audits (three independent guards in TorProxy; no clearnet fallback; only fallback is in-app Tor → Orbot; tests assert it).
 - Gate deny-by-default; taint blocks can neither be auto-approved nor operator-overridden; manifest load failure = deny-all.
-- Shopping: ShoppingCheckout has no purchase path (prepare/display/track only), by design.
+- Shopping: onion exclusion is a separate function (`excludeOnion`/`isOnionUrl`) applied by ShoppingRun; ShoppingCheckout has no purchase path (prepare/display/track only), by design.
 - Harness: purchases are never grant-coverable at either layer; approval tokens bound to exact sorted-args key; Trash has no agent-facing empty/purge; Subagents depth-1 by construction; SecretScrubber + 10-minute placeholder expiry as documented; KeystoreVault AES-GCM; no hardcoded secrets in the 45 harness files; ClaimVerifier lenses fail closed.
 - Screen reads/actions fail closed on protected apps; screen memory stores structure only, no screen text/values.
 

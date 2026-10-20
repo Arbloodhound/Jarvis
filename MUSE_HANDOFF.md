@@ -8,7 +8,7 @@ Read this first, then `HANDOFF_V5_MISSING.md` (now a current status doc, not a b
 
 - **L1** = the Muse reverse-engineering — the v5 harness is this layer; nothing in it gets replaced, everything adapts to it.
 - **L2** = OpenClaw concrete code adopted into the L1 contracts where superior (SQLite memory, credential proxy, lazy skills, owner-tagged jobs, screen guard, notification filter, command-tied approvals). OpenClaw is MIT-licensed; borrowing requires preserving its copyright/license notice.
-- **L3** = project code only where L1+L2 are missing, plus unique features (voice, products, shopping, investigate, router, NLI gate).
+- **L3** = project code only where L1+L2 are missing, plus unique features (voice, Tor, products, shopping, investigate, router, NLI gate).
 
 The six harness base files named in the previous version (`MemoryClaims`, `ApprovalGrants`, `Scheduler`, `SkillStore`, `NotificationForwardingPolicy`, `ScreenGuard`) are part of the harness package described below. Decisions about changing their behaviour remain the owner's; this doc does not re-litigate them.
 
@@ -42,6 +42,7 @@ Items the previous version listed as "not built / not wired" that are **not cove
 
 ## 5. Checked clean (safe to state as verified)
 
+- Tor fail-closed (both audits, three guards in TorProxy, no clearnet fallback).
 - Gate deny-by-default; taint blocks can neither be auto-approved nor operator-overridden.
 - Purchases are never grant-coverable at either layer; Trash has no agent-facing empty/purge (structural, reflection-tested); Subagents depth-1 by construction; SecretScrubber + 10-minute placeholder expiry as documented; KeystoreVault AES-GCM; no hardcoded secrets in the 45 harness files; ClaimVerifier lenses fail closed.
 - Screen reads/actions fail closed on protected apps; screen memory stores structure only.
