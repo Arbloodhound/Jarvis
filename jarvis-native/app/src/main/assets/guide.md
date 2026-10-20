@@ -1026,7 +1026,7 @@ The harness (package `com.agent.jarvis.harness` in the phone app) is the layer t
 - **Proactivity.** Proactive surfacing exists in the harness, inside the same approval rules: anything consequential still stops at confirmation.
 - **Claim checking (ClaimVerifier, NLI head).** A claim verifier checks claims through lenses that fail closed, assisted by an on-device NLI head.
 - **Connectors and credentials.** Connectors exist for Gmail, Google Calendar, Google Docs, Google Drive and Spotify. Credentials live in the platform vault (Keystore, AES-GCM) and Jarvis sees opaque handles only; a secret scrubber keeps secrets out of what reaches models, and SMS / email codes and reset links are opaque placeholder references with a 10-minute expiry — they never reach a cloud model. Still open: `SpotifyRedirectActivity` is not registered in AndroidManifest.xml.
-- **Tor.** Not part of the harness package, but audited alongside it: Tor is opt-in and off by default, fails closed (verified in both audits, with three independent guards and no clearnet fallback anywhere), and onion addresses never fall back to clearnet. Shopping excludes onion results through a separate shopping-layer function, and shopping checkout has no purchase path — it prepares, displays and tracks only.
+- **Shopping.** Shopping checkout has no purchase path — it prepares, displays and tracks only.
 
 ## 12. How it all works (deep dive)
 
@@ -1260,7 +1260,6 @@ Two independent checks stand between Jarvis and anything hard to undo.
 - **Codes stay opaque.** SMS and email codes and reset links never reach a cloud model; Jarvis works with opaque placeholder references that expire after about 10 minutes.
 - **Credentials stay in the vault.** Connector credentials live in the phone's Keystore vault (AES-GCM); Jarvis sees opaque handles only, and a secret scrubber runs over what leaves the device.
 - **Trash is yours.** The agent has no empty or purge for the trash; only you empty it, in settings.
-- **Tor fails closed.** Tor is opt-in and off by default; there is no clearnet fallback, and onion addresses never fall back to clearnet.
 
 ## 14. What Jarvis can't do (yet)
 

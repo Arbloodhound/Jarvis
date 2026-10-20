@@ -28,8 +28,6 @@ It follows OpenClaw's design (a local gateway that clients connect to) and adds 
 
 Provider selection is per run. There is **no fallback between providers**: if the selected provider fails a turn, the run ends — the desktop app does not silently retry the turn on the other provider. That behaviour was confirmed in the 2026-10-19 supplement audit.
 
-Tor is **not** part of the desktop app. Tor belongs to the Kotlin Android app (`jarvis-native/`); do not describe desktop as having Tor.
-
 ## How it works
 
 ### Agent loop

@@ -49,9 +49,8 @@ Combined framing: 206 findings across two audits of different snapshots — **no
 
 ### Checked clean (verified in the audits)
 
-- Tor is fail-closed, verified in both audits with three independent guards in `TorProxy`; no clearnet fallback anywhere; the only fallback is in-app Tor → Orbot. Tests assert it. Tor is opt-in and off by default.
 - Gate is deny-by-default (see above).
-- Shopping: onion exclusion is a separate function (`excludeOnion` / `isOnionUrl`) applied by `ShoppingRun`; `ShoppingCheckout` has **no** purchase path (prepare / display / track only), by design.
+- Shopping: `ShoppingCheckout` has **no** purchase path (prepare / display / track only), by design.
 - Harness: purchases are never grant-coverable at either layer; approval tokens are bound to the exact sorted-args key; Trash has no agent-facing empty / purge; subagents are depth-1 by construction; the secret scrubber and 10-minute placeholder expiry work as documented; the Keystore vault uses AES-GCM; no hardcoded secrets were found in the 45 harness files; claim-verifier lenses fail closed.
 - Screen reads and actions fail closed on protected apps; screen memory stores structure only, no screen text or values.
 - The desktop gate architecture is strong (layered checks, SSRF defence, redaction in the audit log and confirm cards), despite the desktop findings listed in `ARCHITECTURE.md`.
@@ -92,7 +91,6 @@ These rules govern the agent's behaviour and any description of it:
 
 - The agent informs and asks; it does not permit or forbid. Consequential actions (send, post, purchase, delete) stop at confirmation; the user decides.
 - Products / shopping is legitimate-product and company verification plus scam screening only. "Plugs" means known non-scammers / trusted sources.
-- Tor is opt-in, default off. Onion URLs never fall back to clearnet. Onion exclusion stays a separate shopping-layer function.
 - Human verification (CAPTCHA and similar) is the user's: park with the exact link / action, never solve or bypass.
 - Never type into password fields. Screen actions are bound to the snapshot they were planned from; stale screens are refused.
 - SMS / email codes and reset links never reach the cloud model (opaque placeholder references only).

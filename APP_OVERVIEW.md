@@ -36,7 +36,6 @@ At the level the audits verified, the Android app is organised as:
 - **`listen/`** — ambient listening, speech, notes, the Librarian, and claim promotion.
 - **`ui/` + `data/`** — screens and Room storage (`JarvisDatabase`, now v9 in the merged tree).
 - **`local/`** — on-device models via llama.cpp JNI, plus downloads.
-- **`net/`** — Tor support (`TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard`). Tor is opt-in and off by default.
 - **`provider/`** — cloud provider client and configuration.
 - **`research/`** — browse, shopping, and investigate.
 - **`bench/`**, vendored sherpa-onnx, unit tests in `src/test/`, and debug bench code in `src/debug/`.
@@ -45,7 +44,7 @@ Exact tool counts and tool-by-tool lists from the previous version (including "4
 
 - Phone and screen tools exist and are gated; screen reads and actions fail closed on protected apps.
 - Shopping research exists, and checkout has **no purchase path** by design — it can prepare, display, and track only. Shopping means legitimate-product and company verification plus scam screening; the agent informs and asks, and you decide.
-- Research / investigate exists (`research/`), including over Tor when Tor is on. Onion URLs never fall back to clearnet.
+- Research / investigate exists (`research/`).
 - Memory, notes, trash, and forget exist, including in the harness layer (see §5).
 
 ## 4. Voice
@@ -73,7 +72,6 @@ Verified in the 2026-10-19 audits:
 - **Consequential actions stop at confirmation.** Calls, texts, sends, posts, purchases, and deletes: the agent informs and asks; you decide. Purchases always need fresh approval, and no lasting grant covers a purchase at either layer. Approval tokens are bound to the exact sorted-args key.
 - **Typing into password fields is refused.** Screen taps are tied to the snapshot they were planned from; stale screens are refused.
 - **One-time codes are hidden from the cloud model.** SMS / email codes and reset links travel only as opaque placeholder references (10-minute expiry), scrubbed by the harness SecretScrubber. Credentials live in the platform vault (Keystore, AES-GCM); the agent sees opaque handles only. No hardcoded secrets were found in the 45 harness files.
-- **Tor fails closed.** Three independent guards in `TorProxy`; no clearnet fallback anywhere; the only fallback is in-app Tor → Orbot. Tests assert it.
 - **Human verification is yours.** CAPTCHAs and similar checks are parked for you with the exact link / action — never solved or bypassed.
 - The agent **cannot see the approval card and cannot revoke grants**; you manage grants in settings. Subagents are depth-1 by construction.
 
@@ -87,7 +85,7 @@ Open safety findings you should also know (all from the audits, all still open p
 - Supplement (the `ccr` branch, 118 files): **87 findings (0 critical, 12 high, 31 medium, 44 low)**.
 - Together that is 206 findings across two audits of *different* snapshots — not a single deduplicated count for the merged tree.
 - Post-merge: **0 known criticals** (the one critical was the database wiring in §5, now resolved).
-- Per-subsystem verdicts in one line: Tor (`net/`) and `JarvisDatabase` (`data/`) work as designed; `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, bench / tools, harness internals, the desktop app, and the TypeScript live path all **work with defects**; Kotlin unit tests (2 files), the TypeScript `server/`, and harness manifest wiring are **broken**.
+- Per-subsystem verdicts in one line: `JarvisDatabase` (`data/`) works as designed; `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, bench / tools, harness internals, the desktop app, and the TypeScript live path all **work with defects**; Kotlin unit tests (2 files), the TypeScript `server/`, and harness manifest wiring are **broken**.
 
 Earlier claims in this overview about test totals (including a "1633 passing checks" figure) were not re-verified in the 2026-10-19 audits and have been removed. **CI has not compiled the merged tree** — no test total for the merged tree exists yet.
 
@@ -108,7 +106,6 @@ Problems reported from phone logs in the previous version (slow replies, speech-
 Setting names and defaults from the previous version were not re-verified in the 2026-10-19 audits, with two exceptions worth checking first in any build:
 
 - **Speaker / voiceprint tags** — default ON in audited code, against the doc comment. Turn off if unwanted.
-- **Tor** — opt-in, default OFF. Leave off unless you are deliberately using the Tor research paths.
 
 For everything else (offline-only behaviour, model choice, permissions for phone / texts / contacts / voice / location, thinking and voice options), read the Settings screen in your installed build; this overview no longer asserts defaults the audits did not check.
 

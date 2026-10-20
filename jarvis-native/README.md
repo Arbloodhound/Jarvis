@@ -29,13 +29,6 @@ alongside the `desktop/` TypeScript app and the older `src/` TypeScript app
 - **Researches, shops, and investigates.** `research/` covers browsing,
   shopping (legitimate-product and company verification and scam screening
   only), and investigation.
-- **Tor, opt-in.** `net/` (`TorProxy`, `EmbeddedTor`, `TorConnect`,
-  `TorBrowserGuard`) routes through Tor only when enabled — Tor is off by
-  default. Tor is fail-closed, verified in both 2026-10-19 audits by three
-  independent guards in `TorProxy`: there is no clearnet fallback anywhere;
-  the only fallback is in-app Tor → Orbot. Onion URLs never fall back to
-  clearnet, and onion exclusion in shopping is a separate shopping-layer
-  function.
 
 ## The gate
 
@@ -90,8 +83,7 @@ so post-merge there are **0 known criticals**.
 
 Per-subsystem verdicts (merged view):
 
-- **Works as designed:** `net/` Tor property (defects at the margins only),
-  `data/` JarvisDatabase (post-merge).
+- **Works as designed:** `data/` JarvisDatabase (post-merge).
 - **Works with defects:** `agent/`, `gate/`, `listen/`, `local/`,
   `provider/`, `research/`, `bench/` and tools, and the harness's internal
   logic.
@@ -126,7 +118,6 @@ on-device and runtime behaviour was not re-tested.
 | `app/src/main/java/com/agent/jarvis/gate/` | Gate, manifest, contracts, taint |
 | `app/src/main/java/com/agent/jarvis/listen/` | Ambient listening, speech, notes, Librarian, claim promotion |
 | `app/src/main/java/com/agent/jarvis/local/` | On-device models (llama.cpp JNI), downloads |
-| `app/src/main/java/com/agent/jarvis/net/` | Tor proxy / embedded Tor / browser guard |
 | `app/src/main/java/com/agent/jarvis/provider/` | Cloud provider client and config |
 | `app/src/main/java/com/agent/jarvis/research/` | Browse, shopping, investigate |
 | `app/src/main/java/com/agent/jarvis/ui/`, `data/` | UI; Room (`JarvisDatabase`) |
