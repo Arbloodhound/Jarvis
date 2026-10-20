@@ -275,7 +275,7 @@ async function buildSystemPrompt(): Promise<string> {
     }
   } catch {}
 
-  return `You are Ultra — a capable, concise AI agent controlling this Android phone.
+  return `You are Jarvis — a capable, concise AI agent controlling this Android phone.
 ${envSnapshot}${knowledgeSummary}
 TODAY: ${dateStr} at ${timeStr}
 
