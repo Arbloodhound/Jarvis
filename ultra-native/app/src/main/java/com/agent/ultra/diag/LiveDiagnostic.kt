@@ -6,9 +6,11 @@ import android.os.Build
 import android.os.StatFs
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -67,15 +69,19 @@ object LiveDiagnostic {
         job = scope.launch {
             val started = System.currentTimeMillis()
             val log = StringBuilder()
-            var sinceMs = started
-            var lastRam = 0L
-            var lastSave = started
-            var threads = SystemTrace.readThreads()
             val name = fileName(app, started)
-            // Saved to Downloads/Jarvis from the start and again every minute, so a capture the
-            // phone kills halfway is still there (owner: saved automatically, without asking).
-            val saved = withContext(Dispatchers.IO) { createInDownloads(app, name) }
+            var saved: android.net.Uri? = null
+            // The try wraps everything from here on — including the Downloads create — so the
+            // finally below is the only exit and it always runs. (Before, the create sat outside
+            // the try: a stop landing in that window killed the job with no finally at all.)
             try {
+                var sinceMs = started
+                var lastRam = 0L
+                var lastSave = started
+                var threads = SystemTrace.readThreads()
+                // Saved to Downloads/Jarvis from the start and again every minute, so a capture the
+                // phone kills halfway is still there (owner: saved automatically, without asking).
+                saved = withContext(Dispatchers.IO) { createInDownloads(app, name) }
                 while (isActive && System.currentTimeMillis() - started < DURATION_SEC * 1000L) {
                     delay(POLL_MS)
                     val now = System.currentTimeMillis()
@@ -97,9 +103,20 @@ object LiveDiagnostic {
                 RamReport.snapshot(app).forEach { log.append(it).append('\n') }
                 // Catch the tail between the last poll and the stop.
                 drainLogcat(sinceMs).takeIf { it.isNotBlank() }?.let { log.append(it).append('\n') }
+            } catch (e: CancellationException) {
+                throw e   // stopped on purpose (or superseded); the finally still writes the capture
+            } catch (e: Exception) {
+                // A snapshot helper throwing mid-poll must not take the capture — or the app —
+                // with it: this is a root launch, so an uncaught exception would reach the
+                // thread's default handler. Note it in the report and finish with what we have.
+                log.append("(diagnostic capture ended early: ${e.javaClass.simpleName}: ${e.message})").append('\n')
             } finally {
                 remainingSec.intValue = 0
-                val file = withContext(Dispatchers.IO) { writeReport(app, started, log.toString(), name, saved) }
+                // NonCancellable is load-bearing: after stop() cancels this coroutine, a plain
+                // withContext here can never deliver its result — it throws CancellationException
+                // and the two assignments below it never ran, so running stayed true forever:
+                // frozen REC 0:00, no file, and every later tap routed to stop() on a dead job.
+                val file = withContext(NonCancellable + Dispatchers.IO) { writeReport(app, started, log.toString(), name, saved) }
                 lastFile.value = file
                 running.value = false
             }
@@ -158,11 +175,21 @@ object LiveDiagnostic {
     private fun writeReport(ctx: Context, startedMs: Long, log: String, name: String, saved: android.net.Uri?): File? {
         val text = header(ctx, startedMs, log, partial = false) + log
         saved?.let { writeDownloads(ctx, it, text) }   // the copy in Downloads/Jarvis, final
-        // cacheDir/exports is the FileProvider-shared path (res/xml/file_paths.xml) used by the share sheet.
-        return try {
-            val dir = File(ctx.cacheDir, "exports").also { it.mkdirs() }
-            File(dir, name).also { it.writeText(text) }
-        } catch (_: Exception) { null }
+        // The share-sheet copy. cacheDir/exports is the FileProvider-shared path
+        // (res/xml/file_paths.xml) used by the share sheet, so it is tried first; if that write
+        // fails, fall back to other app-private storage so a finished capture still ends with
+        // lastFile set. (filesDir is outside file_paths.xml, so SEND of that last-resort copy
+        // no-ops via the guard in share() — the Downloads copy remains the one to send.)
+        val dirs = listOf(
+            File(ctx.cacheDir, "exports").also { runCatching { it.mkdirs() } },
+            ctx.cacheDir,
+            ctx.filesDir,
+        )
+        for (dir in dirs) {
+            try { return File(dir, name).also { it.writeText(text) } }
+            catch (_: Exception) { /* fall through to the next location */ }
+        }
+        return null
     }
 
     /** A new file in Downloads/Jarvis (no storage permission on API 29+), or null. */
@@ -186,14 +213,19 @@ object LiveDiagnostic {
 
     /** Open the Android share sheet for a finished report (send it on, or save it elsewhere). */
     fun share(ctx: Context, file: File) {
-        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
-        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(android.content.Intent.EXTRA_STREAM, uri)
-            putExtra(android.content.Intent.EXTRA_SUBJECT, file.name)
-            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        ctx.startActivity(android.content.Intent.createChooser(send, "Send Jarvis diagnostic")
-            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        // Guarded: this runs inside a tap callback, where an exception (a file outside the
+        // FileProvider roots, no activity to launch) would crash the app and read as "SEND is
+        // broken". On failure the report stays in Downloads/Jarvis and on disk; nothing wedges.
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, file.name)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            ctx.startActivity(android.content.Intent.createChooser(send, "Send Jarvis diagnostic")
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) { /* the file is still in Downloads/Jarvis and the exports copy */ }
     }
 }
