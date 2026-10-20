@@ -62,8 +62,11 @@ class AppMatchTest {
         assertEquals("app.vanadium.browser", AppMatch.find("web browser", graphene, "app.vanadium.browser"))
     }
     @Test fun browserWordNeverFallsToTorWithoutADefault() {
-        assertNull(AppMatch.find("browser", graphene))
-        assertNull(AppMatch.find("the internet", graphene))
+        // No default known: still a real browser (Vanadium's package says "browser"), never Tor.
+        assertEquals("app.vanadium.browser", AppMatch.find("browser", graphene))
+        val torOnly = listOf(App("Tor Browser", "org.torproject.torbrowser"), App("Settings", "com.android.settings"))
+        assertNull(AppMatch.find("browser", torOnly))
+        assertNull(AppMatch.find("the internet", torOnly))
     }
     @Test fun torBrowserStillOpensWhenNamed() {
         assertEquals("org.torproject.torbrowser", AppMatch.find("tor browser", graphene, "app.vanadium.browser"))
