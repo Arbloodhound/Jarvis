@@ -1,3 +1,20 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/PROMPT_adb_diagnostic.md`. CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
+The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
+This document is a diagnostic prompt: run `adb logcat` against a Samsung device to confirm whether `NativeModules.AppController.moveTaskToBack` exists at runtime, and whether `react_navigate` is selected.
+The audits were code-only and grep-level, with no `adb`, logcat, or device testing: they do not cover `moveTaskToBack`, AppController bridge exposure, or the diagnostic outcomes this prompt is designed to distinguish — that topic is not covered and is not re-verified.
+In the merged tree the surrounding lineage is the `src/` TS app (live path AgentCore / BrainExecutor / TaskExecutor, verdict: works with defects); the shipping app is the `ultra-native/` Kotlin app.
+Still open on that TS live path generally: it bypasses its own SafetyChecker / PermissionBroker, and the TS `server/` is orphaned.
+Standing rule relevant to any follow-up: human verification is the user's — park it with the exact link/action, never solve or bypass it.
+No result is recorded in the body below; it remains a procedure to run, not a finding.
+
+---
+
 # PROMPT: adb logcat diagnostic — moveTaskToBack
 
 ## Context
