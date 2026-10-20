@@ -175,7 +175,11 @@ test("source pin: excludeOnion has exactly one definition and one call site in t
   assert.equal((src.match(/excludeOnion\(/g) || []).length, 2, "definition + the admitRows call, nothing else");
   assert.equal((src.match(/isOnionUrl\(/g) || []).length, 2, "helper definition + its use inside excludeOnion");
   const idx = readFileSync(new URL("../src/tools/index.ts", import.meta.url), "utf8");
-  assert.equal(/onion/i.test(idx.replace(/excludeOnion/g, "")), false, "index.ts never branches on onion");
+  // The transport layer (Tor) legitimately handles .onion in index.ts — refusing it
+  // unless Tor is on. The shopping guarantee pinned here is narrower and exact:
+  // index.ts never CALLS the shopping exclusion; shopping rows are filtered only
+  // inside shopping.ts's admitRows.
+  assert.equal(/excludeOnion\(/.test(idx), false, "index.ts never calls excludeOnion");
 });
 
 // ---------- marketplace extraction ----------
