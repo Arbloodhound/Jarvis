@@ -114,18 +114,14 @@ fun SettingsScreen(
         // Jarvis on/off (also a Quick Settings tile): off stops listening, background work and frees the models.
         run {
             var on by remember { mutableStateOf(com.agent.ultra.JarvisPower.isOn(context)) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Jarvis ${if (on) "on" else "off"}", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (on) "Off stops background listening and background work, and frees the models' memory. " +
-                            "Also in Quick Settings (pull down twice, edit, add \"Jarvis\")."
-                        else "Nothing runs in the background. Opening the app and asking still works.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Switch(checked = on, onCheckedChange = { com.agent.ultra.JarvisPower.set(context, it); on = it })
-            }
+            JarvisSwitchRow(
+                title = "Jarvis ${if (on) "on" else "off"}",
+                detail = if (on) "Off stops background listening and background work, and frees the models' memory. " +
+                        "Also in Quick Settings (pull down twice, edit, add \"Jarvis\")."
+                    else "Nothing runs in the background. Opening the app and asking still works.",
+                checked = on,
+                onCheckedChange = { com.agent.ultra.JarvisPower.set(context, it); on = it },
+            )
         }
 
         // ── Downloads ─────────────────────────────────────────────────
@@ -188,61 +184,43 @@ fun SettingsScreen(
 
         run {
             var offlineOnly by remember { mutableStateOf(UltraPrefs.offlineOnly(context)) }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Offline only", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "No cloud brain, no web search. Model downloads still work.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = offlineOnly, onCheckedChange = { on ->
-                    offlineOnly = on
-                    UltraPrefs.setOfflineOnly(context, on)
-                })
-            }
+            JarvisSwitchRow(
+                title = "Offline only",
+                detail = "No cloud brain, no web search. Model downloads still work.",
+                checked = offlineOnly,
+                onCheckedChange = { on ->
+                        offlineOnly = on
+                        UltraPrefs.setOfflineOnly(context, on)
+                    },
+            )
         }
 
         run {
             var mainReply by remember { mutableStateOf(UltraPrefs.mainReply(context)) }
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Main model writes the reply", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "After on-device tools run, the main model says what happened in plain words. " +
-                            "Slower: one more model run. Off: you see the tool's own result.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = mainReply, onCheckedChange = { on ->
-                    mainReply = on
-                    UltraPrefs.setMainReply(context, on)
-                })
-            }
+            JarvisSwitchRow(
+                title = "Main model writes the reply",
+                detail = "After on-device tools run, the main model says what happened in plain words. " +
+                    "Slower: one more model run. Off: you see the tool's own result.",
+                checked = mainReply,
+                onCheckedChange = { on ->
+                        mainReply = on
+                        UltraPrefs.setMainReply(context, on)
+                    },
+            )
         }
 
         run {
             var actionModel by remember { mutableStateOf(UltraPrefs.actionModel(context)) }
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Action model", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "The small memory model picks tools and drives the screen, so actions are quicker. " +
-                            "The main model still thinks and answers. Off, or if the small model isn't downloaded: the main model does it all.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = actionModel, onCheckedChange = { on ->
-                    actionModel = on
-                    UltraPrefs.setActionModel(context, on)
-                })
-            }
+            JarvisSwitchRow(
+                title = "Action model",
+                detail = "The small memory model picks tools and drives the screen, so actions are quicker. " +
+                    "The main model still thinks and answers. Off, or if the small model isn't downloaded: the main model does it all.",
+                checked = actionModel,
+                onCheckedChange = { on ->
+                        actionModel = on
+                        UltraPrefs.setActionModel(context, on)
+                    },
+            )
         }
 
         run {
@@ -250,18 +228,13 @@ fun SettingsScreen(
             var deep by remember { mutableStateOf(UltraPrefs.deepResearch(context)) }
             var own by remember { mutableStateOf(UltraPrefs.onionKnownGood(context)) }
             var ownSaved by remember { mutableStateOf<String?>(null) }
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Onion research via Tor", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "Read .onion pages in research through Tor (built into the app; Orbot is used if it already runs), " +
-                            "with phishing and scam checks. Off: onion links are skipped. Offline only wins.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = onion, onCheckedChange = { on -> onion = on; UltraPrefs.setOnionResearch(context, on) })
-            }
+            JarvisSwitchRow(
+                title = "Onion research via Tor",
+                detail = "Read .onion pages in research through Tor (built into the app; Orbot is used if it already runs), " +
+                    "with phishing and scam checks. Off: onion links are skipped. Offline only wins.",
+                checked = onion,
+                onCheckedChange = { on -> onion = on; UltraPrefs.setOnionResearch(context, on) },
+            )
             // Manual Tor start (the in-app Tor). The owner's own tap, so it works with onion research
             // off too; the tor_connect tool only works with it on.
             run {
@@ -299,17 +272,12 @@ fun SettingsScreen(
                 }
             }
             if (onion) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Deep research over Tor", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "A bounded onion link crawl, only when you say \"deep research …\" or \"investigate …\".",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        )
-                    }
-                    Switch(checked = deep, onCheckedChange = { on -> deep = on; UltraPrefs.setDeepResearch(context, on) })
-                }
+                JarvisSwitchRow(
+                    title = "Deep research over Tor",
+                    detail = "A bounded onion link crawl, only when you say \"deep research …\" or \"investigate …\".",
+                    checked = deep,
+                    onCheckedChange = { on -> deep = on; UltraPrefs.setDeepResearch(context, on) },
+                )
                 OutlinedTextField(
                     value = own, onValueChange = { own = it; ownSaved = null },
                     label = { Text("Your verified onion addresses (one per line, name optional)") },
@@ -434,81 +402,57 @@ fun SettingsScreen(
 
         run {
             var preload by remember { mutableStateOf(UltraPrefs.preloadBrain(context)) }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Get the brain ready in advance", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "Loads the on-device model in the background when Jarvis opens or starts " +
-                            "listening, so your first question doesn't wait for it. Uses the phone's " +
-                            "memory while loaded; Android can reclaim it if another app needs it.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = preload, onCheckedChange = { on ->
-                    preload = on
-                    UltraPrefs.setPreloadBrain(context, on)
-                    if (on) localEngine.preloadInBackground("setting turned on")
-                })
-            }
+            JarvisSwitchRow(
+                title = "Get the brain ready in advance",
+                detail = "Loads the on-device model in the background when Jarvis opens or starts " +
+                    "listening, so your first question doesn't wait for it. Uses the phone's " +
+                    "memory while loaded; Android can reclaim it if another app needs it.",
+                checked = preload,
+                onCheckedChange = { on ->
+                        preload = on
+                        UltraPrefs.setPreloadBrain(context, on)
+                        if (on) localEngine.preloadInBackground("setting turned on")
+                    },
+            )
         }
 
         run {
             var resident by remember { mutableStateOf(UltraPrefs.keepBrainInMemory(context)) }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Keep the whole brain in memory", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "Copies the model into Jarvis's own memory so Android can't quietly drop " +
-                            "parts of it (which makes answers very slow). Takes effect on the next " +
-                            "load: tap Free memory, then ask something. Falls back automatically " +
-                            "when the phone is short on memory.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = resident, onCheckedChange = { on ->
-                    resident = on
-                    UltraPrefs.setKeepBrainInMemory(context, on)
-                })
-            }
+            JarvisSwitchRow(
+                title = "Keep the whole brain in memory",
+                detail = "Copies the model into Jarvis's own memory so Android can't quietly drop " +
+                    "parts of it (which makes answers very slow). Takes effect on the next " +
+                    "load: tap Free memory, then ask something. Falls back automatically " +
+                    "when the phone is short on memory.",
+                checked = resident,
+                onCheckedChange = { on ->
+                        resident = on
+                        UltraPrefs.setKeepBrainInMemory(context, on)
+                    },
+            )
         }
 
         run {
             var boost by remember { mutableStateOf(UltraPrefs.speedBoost(context)) }
             val draftHere = remember(statusTick) { com.agent.ultra.local.DraftModel.present(context) }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Speed boost (draft model)", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "A small helper model guesses the next few words and the brain checks them " +
-                            "all at once, so answers come faster with the same quality (the brain " +
-                            "still picks every word). Uses about 0.7–1.5 GB of memory beside the " +
-                            "brain; skipped automatically when memory is short. " +
-                            when {
-                                !com.agent.ultra.local.DraftModel.eligible(localEngine.modelFileName) ->
-                                    "Works with the Qwen3 brains only (like the default 4B Thinking), not this one."
-                                draftHere -> "Takes effect on the next answer."
-                                else -> "Needs the 0.4 GB helper: DOWNLOADS → Download all missing."
-                            },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = boost, onCheckedChange = { on ->
-                    boost = on
-                    UltraPrefs.setSpeedBoost(context, on)
-                })
-            }
+            JarvisSwitchRow(
+                title = "Speed boost (draft model)",
+                detail = "A small helper model guesses the next few words and the brain checks them " +
+                    "all at once, so answers come faster with the same quality (the brain " +
+                    "still picks every word). Uses about 0.7–1.5 GB of memory beside the " +
+                    "brain; skipped automatically when memory is short. " +
+                    when {
+                        !com.agent.ultra.local.DraftModel.eligible(localEngine.modelFileName) ->
+                            "Works with the Qwen3 brains only (like the default 4B Thinking), not this one."
+                        draftHere -> "Takes effect on the next answer."
+                        else -> "Needs the 0.4 GB helper: DOWNLOADS → Download all missing."
+                    },
+                checked = boost,
+                onCheckedChange = { on ->
+                        boost = on
+                        UltraPrefs.setSpeedBoost(context, on)
+                    },
+            )
         }
 
         run {
@@ -859,40 +803,27 @@ fun SettingsScreen(
         // ── App access ────────────────────────────────────────────────
         SectionTitle("WHERE THE AGENT MAY GO")
         var unrestricted by remember { mutableStateOf(ProtectedApps.unrestricted(context)) }
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Unrestricted access", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Jarvis may read and use every app on the phone, with no lists. It still asks before paying, " +
-                        "deleting or sending something. On the on-device brain nothing leaves the phone; with an online " +
-                        "AI provider, what it reads on screen is sent to that provider. Switch off to use the lists below.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Switch(checked = unrestricted, onCheckedChange = { unrestricted = it; ProtectedApps.setUnrestricted(context, it) })
-        }
+        JarvisSwitchRow(
+            title = "Unrestricted access",
+            detail = "Jarvis may read and use every app on the phone, with no lists. It still asks before paying, " +
+                "deleting or sending something. On the on-device brain nothing leaves the phone; with an online " +
+                "AI provider, what it reads on screen is sent to that provider. Switch off to use the lists below.",
+            checked = unrestricted,
+            onCheckedChange = { unrestricted = it; ProtectedApps.setUnrestricted(context, it) },
+        )
         var allowMode by remember { mutableStateOf(ProtectedApps.allowlistMode(context)) }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Only apps I choose", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Recommended. The agent can read and act only in apps you tick below; " +
-                        "everything else is invisible to it. The alternative is a block list, " +
-                        "which means naming every risky app in advance — on a phone with " +
-                        "hundreds of apps that is a bet you lose once.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Switch(checked = allowMode, onCheckedChange = {
-                allowMode = it
-                ProtectedApps.setAllowlistMode(context, it)
-            })
-        }
+        JarvisSwitchRow(
+            title = "Only apps I choose",
+            detail = "Recommended. The agent can read and act only in apps you tick below; " +
+                "everything else is invisible to it. The alternative is a block list, " +
+                "which means naming every risky app in advance — on a phone with " +
+                "hundreds of apps that is a bet you lose once.",
+            checked = allowMode,
+            onCheckedChange = {
+                    allowMode = it
+                    ProtectedApps.setAllowlistMode(context, it)
+                },
+        )
         Text(
             "Blocking matters both ways: whatever the agent reads on screen is sent to the " +
                 "cloud model to decide what to do next, so \"don't look\" is as important " +
@@ -977,65 +908,44 @@ fun SettingsScreen(
 
         SectionTitle("PERSONAL DATA")
         var personal by remember { mutableStateOf(UltraPrefs.allowPersonalData(context)) }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Messages, contacts and location", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Off by default. These read Android's own databases rather than the " +
-                        "screen, so the app list above does not cover them. With this off, " +
-                        "the agent cannot read your texts, look up a contact, send an SMS, " +
-                        "or fetch your location — it is told so and carries on.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Switch(checked = personal, onCheckedChange = {
-                personal = it
-                UltraPrefs.setAllowPersonalData(context, it)
-            })
-        }
+        JarvisSwitchRow(
+            title = "Messages, contacts and location",
+            detail = "Off by default. These read Android's own databases rather than the " +
+                "screen, so the app list above does not cover them. With this off, " +
+                "the agent cannot read your texts, look up a contact, send an SMS, " +
+                "or fetch your location — it is told so and carries on.",
+            checked = personal,
+            onCheckedChange = {
+                    personal = it
+                    UltraPrefs.setAllowPersonalData(context, it)
+                },
+        )
 
         var capture by remember { mutableStateOf(UltraPrefs.captureNotifications(context)) }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Keep a notification log", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Off by default. When on, notification titles and previews are written " +
-                        "to a file on this phone whether or not you asked for anything — " +
-                        "including message previews and one-time codes. Protected apps are " +
-                        "never logged.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Switch(checked = capture, onCheckedChange = {
-                capture = it
-                UltraPrefs.setCaptureNotifications(context, it)
-            })
-        }
+        JarvisSwitchRow(
+            title = "Keep a notification log",
+            detail = "Off by default. When on, notification titles and previews are written " +
+                "to a file on this phone whether or not you asked for anything — " +
+                "including message previews and one-time codes. Protected apps are " +
+                "never logged.",
+            checked = capture,
+            onCheckedChange = {
+                    capture = it
+                    UltraPrefs.setCaptureNotifications(context, it)
+                },
+        )
         if (capture) run {
             var filterOn by remember { mutableStateOf(UltraPrefs.notificationFilter(context)) }
             val (qs, qe) = remember { UltraPrefs.quietHours(context) }
             var start by remember { mutableStateOf(qs.toString()) }
             var end by remember { mutableStateOf(qe.toString()) }
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Notification filter", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "Off by default. When on, the log skips notifications during quiet hours and " +
-                            "more than 5 a minute from one app. Scam warnings still fire.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = filterOn, onCheckedChange = { filterOn = it; UltraPrefs.setNotificationFilter(context, it) })
-            }
+            JarvisSwitchRow(
+                title = "Notification filter",
+                detail = "Off by default. When on, the log skips notifications during quiet hours and " +
+                    "more than 5 a minute from one app. Scam warnings still fire.",
+                checked = filterOn,
+                onCheckedChange = { filterOn = it; UltraPrefs.setNotificationFilter(context, it) },
+            )
             if (filterOn) Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 fun save() {
                     val a = start.toIntOrNull(); val b = end.toIntOrNull()
@@ -1056,64 +966,40 @@ fun SettingsScreen(
         }) { Text("Delete notification log") }
 
         var smsCode by remember { mutableStateOf(UltraPrefs.autoExtractSmsCode(context)) }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Auto-copy verification codes", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "When an SMS with a verification code arrives, copy the code to " +
-                        "the clipboard automatically. Needs the notification listener.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Switch(checked = smsCode, onCheckedChange = {
-                smsCode = it
-                UltraPrefs.setAutoExtractSmsCode(context, it)
-            })
-        }
+        JarvisSwitchRow(
+            title = "Auto-copy verification codes",
+            detail = "When an SMS with a verification code arrives, copy the code to " +
+                "the clipboard automatically. Needs the notification listener.",
+            checked = smsCode,
+            onCheckedChange = {
+                    smsCode = it
+                    UltraPrefs.setAutoExtractSmsCode(context, it)
+                },
+        )
 
         var scamShield by remember { mutableStateOf(UltraPrefs.scamShield(context)) }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Scam warnings", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Warn when a message looks like a scam, and ask before sending anything to " +
-                        "its numbers or links. Runs on the phone; nothing is saved. Needs the " +
-                        "notification listener.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Switch(checked = scamShield, onCheckedChange = {
-                scamShield = it
-                UltraPrefs.setScamShield(context, it)
-            })
-        }
+        JarvisSwitchRow(
+            title = "Scam warnings",
+            detail = "Warn when a message looks like a scam, and ask before sending anything to " +
+                "its numbers or links. Runs on the phone; nothing is saved. Needs the " +
+                "notification listener.",
+            checked = scamShield,
+            onCheckedChange = {
+                    scamShield = it
+                    UltraPrefs.setScamShield(context, it)
+                },
+        )
 
         var sysTriggers by remember { mutableStateOf(UltraPrefs.systemTriggers(context)) }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("System event triggers", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Toast on battery low/ok, charger plug/unplug, screen on/off, headphones, app install/remove.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Switch(checked = sysTriggers, onCheckedChange = {
-                sysTriggers = it
-                UltraPrefs.setSystemTriggers(context, it)
-            })
-        }
+        JarvisSwitchRow(
+            title = "System event triggers",
+            detail = "Toast on battery low/ok, charger plug/unplug, screen on/off, headphones, app install/remove.",
+            checked = sysTriggers,
+            onCheckedChange = {
+                    sysTriggers = it
+                    UltraPrefs.setSystemTriggers(context, it)
+                },
+        )
 
         // ── Seeing the screen: ML Kit text (built in) and the vision model (download) ──
         SectionTitle("SCREEN VISION")
@@ -1129,25 +1015,17 @@ fun SettingsScreen(
         SectionTitle("VOICE")
         run {
             var ownSpeech by remember { mutableStateOf(UltraPrefs.ownSpeech(context)) }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Jarvis's own speech recognition", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "Understands what you say with the speech model on this phone: no Google, " +
-                            "works offline. Downloads about 60 MB the first time. Off uses Android's " +
-                            "built-in recognizer (Google's, on most phones).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = ownSpeech, onCheckedChange = { on ->
-                    ownSpeech = on
-                    UltraPrefs.setOwnSpeech(context, on)
-                })
-            }
+            JarvisSwitchRow(
+                title = "Jarvis's own speech recognition",
+                detail = "Understands what you say with the speech model on this phone: no Google, " +
+                    "works offline. Downloads about 60 MB the first time. Off uses Android's " +
+                    "built-in recognizer (Google's, on most phones).",
+                checked = ownSpeech,
+                onCheckedChange = { on ->
+                        ownSpeech = on
+                        UltraPrefs.setOwnSpeech(context, on)
+                    },
+            )
         }
         run {
             val ambientCfg = remember { com.agent.ultra.listen.AmbientConfig(context) }
@@ -1215,23 +1093,15 @@ fun SettingsScreen(
         }
 
         var speak by remember { mutableStateOf(UltraPrefs.speakAnswers(context)) }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Speak answers aloud", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Reads replies out with the phone's own voice. Hands-free sessions always speak.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Switch(checked = speak, onCheckedChange = {
-                speak = it
-                UltraPrefs.setSpeakAnswers(context, it)
-            })
-        }
+        JarvisSwitchRow(
+            title = "Speak answers aloud",
+            detail = "Reads replies out with the phone's own voice. Hands-free sessions always speak.",
+            checked = speak,
+            onCheckedChange = {
+                    speak = it
+                    UltraPrefs.setSpeakAnswers(context, it)
+                },
+        )
         Text(
             "Hands-free: set Jarvis as your digital assistant, then hold the power button " +
                 "(or use your phone's assist gesture) to talk without opening the app.",
@@ -1257,23 +1127,18 @@ fun SettingsScreen(
 
         run {
             var skipConfirm by remember { mutableStateOf(UltraPrefs.skipConfirmWhenAsked(context)) }
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Don't ask when I asked for it", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "If you told Jarvis to send, post or install something, it does it without an " +
-                            "\"are you sure?\". It still always asks for anything with money or a price, " +
-                            "deleting or resetting, messages to someone not in your contacts, and anything " +
-                            "it decided on its own.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                }
-                Switch(checked = skipConfirm, onCheckedChange = { on ->
-                    skipConfirm = on
-                    UltraPrefs.setSkipConfirmWhenAsked(context, on)
-                })
-            }
+            JarvisSwitchRow(
+                title = "Don't ask when I asked for it",
+                detail = "If you told Jarvis to send, post or install something, it does it without an " +
+                    "\"are you sure?\". It still always asks for anything with money or a price, " +
+                    "deleting or resetting, messages to someone not in your contacts, and anything " +
+                    "it decided on its own.",
+                checked = skipConfirm,
+                onCheckedChange = { on ->
+                        skipConfirm = on
+                        UltraPrefs.setSkipConfirmWhenAsked(context, on)
+                    },
+            )
         }
 
         // ── Gate audit log ────────────────────────────────────────────
@@ -1333,12 +1198,7 @@ fun SettingsScreen(
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 8.dp),
-    )
+    JarvisSectionTitle(text, modifier = Modifier.padding(top = 8.dp))
 }
 
 /** Tool names out of a recipe's stored step list, for display. */

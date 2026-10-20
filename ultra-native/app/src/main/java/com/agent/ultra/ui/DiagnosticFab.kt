@@ -62,8 +62,9 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
         animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse), label = "glow",
     )
     val green = Color(0xFF22C55E)
+    val accent = Color(0xFF22D3EE)
     val bg by animateColorAsState(
-        if (running) green.copy(alpha = glow) else Color(0xFF2A2A2E), label = "bg",
+        if (running) green.copy(alpha = glow) else Color(0xFF111417), label = "bg",
     )
 
     Box(
@@ -87,7 +88,7 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .size(if (running) 84.dp else 60.dp)
                 .background(bg, CircleShape)
-                .border(2.dp, if (running) green else green.copy(alpha = 0.5f), CircleShape)
+                .border(2.dp, if (running) green else accent.copy(alpha = 0.6f), CircleShape)
                 .pointerInput(running, file) {
                     detectTapGestures(
                         onTap = { LiveDiagnostic.toggle(ctx) },
@@ -101,7 +102,7 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
                         Text("REC", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text(mmss(remaining), color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 15.sp)
                     }
-                    else -> Text("DIAG", color = green, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                    else -> Text("DIAG", color = accent, fontWeight = FontWeight.Bold, fontSize = 13.sp,
                         textAlign = TextAlign.Center)
                 }
             }
@@ -115,7 +116,7 @@ private fun Chip(label: String, color: Color, onTap: () -> Unit) {
     Box(
         modifier = Modifier
             .size(64.dp)
-            .background(Color(0xFF2A2A2E), CircleShape)
+            .background(Color(0xFF111417), CircleShape)
             .border(2.dp, color, CircleShape)
             .pointerInput(label) { detectTapGestures(onTap = { onTap() }) },
         contentAlignment = Alignment.Center,

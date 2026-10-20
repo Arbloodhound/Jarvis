@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -110,38 +109,25 @@ fun VoiceSettings(context: Context) {
         }?.let { voices = it.first; counts = it.second }
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Who's speaking", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "Marks each heard line with who said it ([Me], a name you give, or [Speaker 2]), plus " +
-                    "pauses, talking faster or louder than usual, and laughter. Uses voiceprints made and " +
-                    "kept only on this phone (a 40 MB model, downloaded on Wi-Fi once this is on). It's a guess: similar " +
-                    "voices, TV and distance can mix people up or split one person in two. Check the law " +
-                    "where you live before recording other people.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            )
-        }
-        Switch(checked = on, onCheckedChange = { on = it; cfg.speakerTags = it })
-    }
+    JarvisSwitchRow(
+        title = "Who's speaking",
+        detail = "Marks each heard line with who said it ([Me], a name you give, or [Speaker 2]), plus " +
+            "pauses, talking faster or louder than usual, and laughter. Uses voiceprints made and " +
+            "kept only on this phone (a 40 MB model, downloaded on Wi-Fi once this is on). It's a guess: similar " +
+            "voices, TV and distance can mix people up or split one person in two. Check the law " +
+            "where you live before recording other people.",
+        checked = on,
+        onCheckedChange = { on = it; cfg.speakerTags = it },
+    )
     if (on) {
         var prosody by remember { mutableStateOf(UltraPrefs.prosody(context)) }
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Pitch (experimental)", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Also measures each line's voice pitch and marks it [higher] or [lower] than that " +
-                        "person's own usual. A measurement, not a reading of mood. Off by default.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Switch(checked = prosody, onCheckedChange = { prosody = it; UltraPrefs.setProsody(context, it) })
-        }
+        JarvisSwitchRow(
+            title = "Pitch (experimental)",
+            detail = "Also measures each line's voice pitch and marks it [higher] or [lower] than that " +
+                "person's own usual. A measurement, not a reading of mood. Off by default.",
+            checked = prosody,
+            onCheckedChange = { prosody = it; UltraPrefs.setProsody(context, it) },
+        )
     }
 
     // The speech model: small hears quiet and distant speech better than base.
@@ -168,22 +154,14 @@ fun VoiceSettings(context: Context) {
             else -> "The accurate model (181 MB) downloads when listening starts. Base is used until then."
         }
     }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Accurate speech recognition", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "A larger speech model that picks up quieter and more distant speech. It takes more " +
-                    "of the phone's power; if it can't keep up here, the fast one takes over by itself. " +
-                    "Applies when listening next starts. $modelState",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            )
-        }
-        Switch(checked = accurate, onCheckedChange = { accurate = it; cfg.accurateSpeech = it })
-    }
+    JarvisSwitchRow(
+        title = "Accurate speech recognition",
+        detail = "A larger speech model that picks up quieter and more distant speech. It takes more " +
+            "of the phone's power; if it can't keep up here, the fast one takes over by itself. " +
+            "Applies when listening next starts. $modelState",
+        checked = accurate,
+        onCheckedChange = { accurate = it; cfg.accurateSpeech = it },
+    )
 
     val askMic = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()

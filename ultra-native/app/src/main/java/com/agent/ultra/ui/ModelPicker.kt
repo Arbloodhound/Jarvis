@@ -60,7 +60,7 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
         title = { Text("Choose the brain") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("ON-DEVICE", style = MaterialTheme.typography.labelSmall, color = faint)
+                JarvisSectionTitle("ON-DEVICE", divider = false)
                 run {
                     (localModels + listOfNotNull(recommended)).forEach { m ->
                         Row(selected = !cloud && currentLocal == m.fileName, label = "${m.label} (on-device)" +
@@ -77,7 +77,7 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
                     }
                 }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Text("CLOUD", style = MaterialTheme.typography.labelSmall, color = faint)
+                JarvisSectionTitle("CLOUD", divider = false)
                 if (!cfg.isUsable) {
                     Text("No API key yet — add one in Settings → AI PROVIDER.",
                         style = MaterialTheme.typography.bodySmall, color = faint)

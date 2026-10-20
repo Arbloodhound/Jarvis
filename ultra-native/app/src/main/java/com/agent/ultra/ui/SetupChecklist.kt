@@ -102,7 +102,7 @@ fun SetupChecklistBanner(context: Context) {
 
     if (!SetupSteps.complete(steps)) Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clickable { open = true },
     ) {
         Text(

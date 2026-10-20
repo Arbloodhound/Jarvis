@@ -79,10 +79,7 @@ fun NotesScreen(onBack: () -> Unit, onAsk: () -> Unit) {
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("←", style = MaterialTheme.typography.titleLarge) }
-                Text("Notes", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            JarvisHeader(title = "Notes", onBack = onBack, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
                 Text("$total", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.padding(end = 12.dp))
             }
@@ -100,7 +97,8 @@ fun NotesScreen(onBack: () -> Unit, onAsk: () -> Unit) {
                 }
             }
             OutlinedTextField(value = query, onValueChange = { query = it }, placeholder = { Text("Search notes") },
-                singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
+                singleLine = true, shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = newNote, onValueChange = { newNote = it }, placeholder = { Text("New note") },
@@ -123,7 +121,8 @@ fun NotesScreen(onBack: () -> Unit, onAsk: () -> Unit) {
                 LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(notes, key = { it.id }) { n ->
-                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp),
+                        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                             modifier = Modifier.fillMaxWidth()) {
                             Row(modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically) {

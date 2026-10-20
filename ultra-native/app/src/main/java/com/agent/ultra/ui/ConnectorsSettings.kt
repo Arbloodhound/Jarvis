@@ -52,12 +52,10 @@ fun ConnectorsSettings(context: Context) {
         catch (e: Exception) { "Not connected: ${e.message ?: e.javaClass.simpleName}" }
     }
 
-    Text(
+    JarvisHint(
         "One Google sign-in for Gmail, Calendar, Drive and Docs. Reads run when you ask; anything that " +
             "sends or writes asks you first. Needs an Android OAuth client for this app in your Google " +
             "Cloud project (package com.agent.ultra and this build's signing key).",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
     )
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = {
@@ -80,9 +78,7 @@ fun ConnectorsSettings(context: Context) {
             line = "Disconnected. The tokens were removed from this phone."
         }) { Text("Disconnect") }
     }
-    line?.let {
-        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-    }
+    line?.let { JarvisHint(it) }
     // Spotify: the owner's own Spotify app (developer.spotify.com) client ID; redirect URI to register there:
     // com.agent.ultra://spotify-callback. PKCE, so no secret.
     var spotifyId by remember { mutableStateOf(com.agent.ultra.harness.connectors.SpotifyAuth.clientId(context)) }
@@ -103,7 +99,7 @@ fun ConnectorsSettings(context: Context) {
             spotifyLine = "Spotify disconnected."
         }) { Text("Disconnect") }
     }
-    spotifyLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) }
+    spotifyLine?.let { JarvisHint(it) }
 
     var trusted by remember { mutableStateOf(AppConnectors.trustedRecipients(context).joinToString("\n")) }
     var trustedSaved by remember { mutableStateOf<String?>(null) }
@@ -120,6 +116,6 @@ fun ConnectorsSettings(context: Context) {
                 trustedSaved = "Saved. Every other address — and anything that costs money — still asks."
             }
         }) { Text("Save") }
-        trustedSaved?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)) }
+        trustedSaved?.let { JarvisHint(it) }
     }
 }

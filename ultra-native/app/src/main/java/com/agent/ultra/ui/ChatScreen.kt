@@ -1,5 +1,6 @@
 package com.agent.ultra.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -195,7 +196,7 @@ fun ChatScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
+            ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     // A run writes into whichever conversation is open, so the
                     // open one stays put until it finishes.
@@ -283,6 +284,7 @@ fun ChatScreen(
                 Text("⚙", style = MaterialTheme.typography.titleLarge)
             }
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         // Unfinished setup: one line, opening the checklist (gone once every required step is done).
         SetupChecklistBanner(context)
 
@@ -382,8 +384,10 @@ fun ChatScreen(
                     // Tap: Copy / Edit / Branch under the bubble. Press and hold: select any part of it.
                     Surface(
                         color = if (msg.fromUser) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(14.dp),
+                        else MaterialTheme.colorScheme.surface,
+                        border = if (msg.fromUser) null
+                        else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.clickable { actionsFor = if (actionsFor == msg.id) null else msg.id },
                     ) {
                         androidx.compose.foundation.text.selection.SelectionContainer {
@@ -457,7 +461,7 @@ fun ChatScreen(
         com.agent.ultra.agent.ActionGate.pending?.let { p ->
             Surface(
                 color = MaterialTheme.colorScheme.errorContainer,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -504,7 +508,7 @@ fun ChatScreen(
         brain.pendingConfirm?.let { pending ->
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -597,6 +601,7 @@ fun ChatScreen(
                 }) },
                 modifier = Modifier.weight(1f),
                 maxLines = 4,
+                shape = RoundedCornerShape(24.dp),
             )
             // Voice input — on-device speech recognition fills the box, live as you talk
             var listening by remember { mutableStateOf(false) }

@@ -12,7 +12,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,21 +49,17 @@ fun ForYouScreen(onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("←") }
-            Text("For you", style = MaterialTheme.typography.headlineSmall)
-        }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Refresh by itself", style = MaterialTheme.typography.bodyMedium)
-                Text("Hourly feed, new ideas every few hours, and a notification for the best one — within quiet " +
-                    "hours and at most 3 a day. Off by default; uses the cloud brain.", style = MaterialTheme.typography.bodySmall, color = faint)
-            }
-            Switch(checked = auto, onCheckedChange = { auto = it; ForYou.setAuto(context, it) })
-        }
+        JarvisHeader(title = "For you", onBack = onBack)
+        JarvisSwitchRow(
+            title = "Refresh by itself",
+            detail = "Hourly feed, new ideas every few hours, and a notification for the best one — within quiet " +
+                "hours and at most 3 a day. Off by default; uses the cloud brain.",
+            checked = auto,
+            onCheckedChange = { auto = it; ForYou.setAuto(context, it) },
+        )
         line?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = faint) }
 
-        Text("FEED", style = MaterialTheme.typography.titleSmall)
+        JarvisSectionTitle("FEED")
         OutlinedTextField(value = prompt, onValueChange = { prompt = it }, label = { Text("What your feed is about") },
             modifier = Modifier.fillMaxWidth(), minLines = 2)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -72,8 +67,11 @@ fun ForYouScreen(onBack: () -> Unit) {
             OutlinedButton(enabled = !busy, onClick = { run { ForYou.generateFeed(context) } }) { Text("Refresh feed") }
         }
         feed.units().forEach { u ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
+            Card(Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
+                Column(Modifier.padding(16.dp)) {
                     Text(u.title, style = MaterialTheme.typography.titleSmall)
                     Text(ChatMarkdown.render(u.body), style = MaterialTheme.typography.bodyMedium)
                     Text(u.category, style = MaterialTheme.typography.labelSmall, color = faint)
@@ -86,7 +84,7 @@ fun ForYouScreen(onBack: () -> Unit) {
             }
         }
 
-        Text("IDEAS (from your notes)", style = MaterialTheme.typography.titleSmall)
+        JarvisSectionTitle("IDEAS (from your notes)")
         Text(com.agent.ultra.harness.Ideas.RANK_RULE, style = MaterialTheme.typography.bodySmall, color = faint)
         OutlinedButton(enabled = !busy, onClick = { run { ForYou.generateIdeas(context) } }) { Text("Find ideas") }
         // Bandit-ranked: ideas on topics the owner acts on rise; dismissed ones fall. Shown = a
@@ -97,8 +95,11 @@ fun ForYouScreen(onBack: () -> Unit) {
             ideaList.forEach { ForYou.onIdeaShown(context, it) }
         }
         ideaList.forEach { i ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
+            Card(Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)) {
+                Column(Modifier.padding(16.dp)) {
                     Text(i.title, style = MaterialTheme.typography.titleSmall)
                     Text(i.why, style = MaterialTheme.typography.bodyMedium)
                     Text("From ${i.sources.joinToString()}", style = MaterialTheme.typography.labelSmall, color = faint)
