@@ -4773,3 +4773,9 @@ Owner: "branch the existing work to a new project, a Jarvis client on the comput
 - CI fix (ce82b1b): isSensitivePath compares realpath form too (macOS /var vs /private/var symlink); /proc test Linux-only. 40 tests pass.
 - Pieces 3 (Chromebook/Crostini) and 4 (full feature+competitive review) NOT STARTED. Full handoff in desktop/HANDOFF_DESKTOP.md.
 - Excluded per scope: dark-web/Tor/onion monitoring + dark-web classifier + auto-action pipeline.
+
+## 2026-10-20 — Desktop piece 3: Chromebook / Chrome OS (Crostini)
+- Tray is now optional: makeTray() wrapped in try/catch; when there's no system tray (Crostini has none), the window stays open and closing it quits instead of hiding to a missing tray. Logic extracted to src/app/behavior.ts (onWindowClose, isCrostini) and unit-tested without Electron.
+- Startup note when running in Crostini (screenshots capture only the container; tray/hotkey may be unavailable).
+- README: "Chromebook / Chrome OS" section — the serve+Chrome-browser path (best for low-RAM), the desktop-app path with its caveats, and brain guidance (cloud or small local model).
+- 42 tests pass; native self-test still passes.

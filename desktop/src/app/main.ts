@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, Menu, nativeImage, Notification, screen, shell, Tray } from "electron";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +7,7 @@ import { accessToken, loadConfig, paths } from "../config.js";
 import { Runtime } from "../runtime.js";
 import { startServer, type Gateway } from "../server.js";
 import { useNative } from "../tools/platform.js";
+import { isCrostini, onWindowClose } from "./behavior.js";
 
 /**
  * Jarvis as a native desktop app (Windows, macOS, Linux).
@@ -107,12 +109,19 @@ async function start(): Promise<void> {
     }
   });
   win.on("close", (e) => {
-    if (!quitting && tray) { e.preventDefault(); win?.hide(); }
+    // With a tray, closing hides to it; without one (e.g. a Chromebook's Crostini
+    // container has no system tray), closing must quit, or Jarvis becomes an
+    // unreachable background process with no window and no tray icon.
+    if (onWindowClose(tray !== null, quitting) === "hide") { e.preventDefault(); win?.hide(); }
+    else if (!quitting) { quitting = true; app.quit(); }
   });
   await win.loadURL(gw.url);
 
   makeTray();
-  if (!globalShortcut.register(HOTKEY, toggle)) console.warn(`Hotkey ${HOTKEY} is taken by another app.`);
+  if (!globalShortcut.register(HOTKEY, toggle)) console.warn(`Hotkey ${HOTKEY} is taken by another app (or unavailable here, e.g. inside Crostini).`);
+  if (isCrostini(process.env, existsSync)) {
+    console.log("Running in Chrome OS's Linux container (Crostini): screenshots capture only this container, not the whole Chrome OS screen, and the tray/hotkey may be unavailable. The window works; closing it quits.");
+  }
 
   if (selfTest) { await runSelfTest(); return; }
   if (!process.argv.includes("--hidden")) show();
@@ -143,12 +152,19 @@ function toggle(): void {
 }
 
 function makeTray(): void {
-  let icon = nativeImage.createFromPath(path.join(assets, "tray.png"));
-  if (process.platform === "darwin") icon = icon.resize({ width: 18, height: 18 });
-  tray = new Tray(icon);
-  tray.setToolTip("Jarvis");
-  tray.on("click", toggle);
-  refreshTray();
+  try {
+    let icon = nativeImage.createFromPath(path.join(assets, "tray.png"));
+    if (process.platform === "darwin") icon = icon.resize({ width: 18, height: 18 });
+    tray = new Tray(icon);
+    tray.setToolTip("Jarvis");
+    tray.on("click", toggle);
+    refreshTray();
+  } catch (err) {
+    // Some environments have no system tray (a Chromebook's Crostini container is one).
+    // Jarvis runs without it: the window is the whole app, and closing it quits.
+    tray = null;
+    console.warn(`No system tray here (${err instanceof Error ? err.message : String(err)}); the window stays open and closing it quits.`);
+  }
 }
 
 function refreshTray(): void {

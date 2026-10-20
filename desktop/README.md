@@ -77,6 +77,25 @@ node dist/cli.js serve                      # chat page in your browser
 node dist/cli.js where                      # where config, memory and logs live
 ```
 
+## Chromebook / Chrome OS (and Chrome OS Flex)
+
+Chrome OS runs Linux apps inside a container called **Crostini** ("Linux development environment", which you turn on once in Settings → Advanced → Developers). Jarvis runs there two ways:
+
+**Simplest — run it, open it in Chrome (best for most Chromebooks):**
+```bash
+# inside the Linux terminal (Crostini):
+cd desktop && npm install && npm run build
+node dist/cli.js serve        # prints http://127.0.0.1:PORT/#token=…
+```
+Open that link in the Chrome browser. This skips the desktop app entirely, so there's no tray or hotkey to worry about, and it's light on RAM. The gateway only listens on this computer and needs the token, so it's safe.
+
+**As the desktop app:** install the Linux build (the `.deb`, or the AppImage with `chmod +x`) in Crostini. It runs, but note:
+- Crostini often has **no system tray** — Jarvis detects this, keeps the window open, and **closing the window quits** (instead of hiding to a tray that isn't there).
+- The **global hotkey** and **start-at-login** may not work inside the container.
+- **Screenshots** capture only the Linux container's display, not the whole Chrome OS screen, so `look_at_screen` sees just Jarvis's own window there.
+
+**Which brain:** most Chromebooks don't have the RAM or GPU for a large local model. Use the **Cloud** brain (your Claude key) or a small quantized local model (e.g. a 1–3B model in Ollama). Chrome OS Flex on older PCs is the same story — if it has Crostini, the above works; otherwise use the cloud brain.
+
 ## Your files
 
 Everything lives in `~/.jarvis` (or wherever `JARVIS_HOME` points):

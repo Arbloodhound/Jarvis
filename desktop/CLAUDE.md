@@ -13,6 +13,7 @@ Do not build drug sourcing or "find me X to buy" tooling for controlled or illic
 - `src/gate/`: `gate.ts` (provenance rules), `scam.ts` (port of ScamSignals.kt), `secrets.ts` (keys, one-time codes), `audit.ts`.
 - `src/tools/index.ts`: the tools. Each one declares its effects and which args are targets, paths or egress.
 - `src/providers/`: `claude.ts` (official SDK, streaming) and `local.ts` (OpenAI-compatible local servers).
+- `src/app/behavior.ts`: pure window/tray decisions (`onWindowClose`, `isCrostini`), tested without Electron.
 - `src/app/main.ts`: the native desktop app (Electron main process): window, tray, global hotkey, single instance, native clipboard / notifications / screen capture / browser via `useNative`, and `--self-test`.
 - `src/server.ts`: the gateway (127.0.0.1, token, Host/Origin checks). `src/ui/index.html`: the chat page.
 
