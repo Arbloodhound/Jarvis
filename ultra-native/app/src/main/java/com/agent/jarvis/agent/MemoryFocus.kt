@@ -5,7 +5,7 @@ package com.agent.jarvis.agent
  * (what Jarvis heard) and/or notes (what the memory model and the owner wrote down). Chosen from
  * the chat's Focus menu, or by the words of a request, typed or spoken ("search my notes for
  * Lisbon", "what's in my memory about Sam", "read my to-dos"). Pure parts JVM-tested; the search
- * itself is [provider], set by the app (UltraApplication), like [MemoryBrief.provider].
+ * itself is [provider], set by the app (JarvisApplication), like [MemoryBrief.provider].
  */
 object MemoryFocus {
 

@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * the sentence embedder; or when the owner records their voice in Settings.
  */
 object VoicePrints {
-    private const val TAG = "UltraVoice"
+    private const val TAG = "JarvisVoice"
     const val MODEL = "nemo_en_titanet_small.onnx"
     const val MODEL_URL =
         "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx"

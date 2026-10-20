@@ -44,7 +44,7 @@ class Manifest(private val specs: Map<String, ToolSpec>) {
                 fromJson(JSONObject(r.readText()))
             }
         } catch (e: Exception) {
-            android.util.Log.e("UltraGate", "manifest load failed — gate will deny everything", e)
+            android.util.Log.e("JarvisGate", "manifest load failed — gate will deny everything", e)
             fromJson(JSONObject("""{"tools":[]}"""))
         }
 

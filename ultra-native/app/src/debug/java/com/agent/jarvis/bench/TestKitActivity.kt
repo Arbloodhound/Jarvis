@@ -39,7 +39,7 @@ import com.agent.jarvis.local.Downloads
 import com.agent.jarvis.local.LocalModelEngine
 import com.agent.jarvis.ui.ChatMessage
 import com.agent.jarvis.ui.ChatStore
-import com.agent.jarvis.ui.theme.AgentUltraTheme
+import com.agent.jarvis.ui.theme.JarvisTheme
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -82,7 +82,7 @@ class TestKitActivity : ComponentActivity() {
         // Feature check otherwise finds "running=no", Pixel 2026-10-06 20:44).
         com.agent.jarvis.listen.AmbientListenService.resumeIfOff(this)
         setContent {
-            AgentUltraTheme {
+            JarvisTheme {
                 Surface(Modifier.fillMaxSize()) {
                     Column(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -262,7 +262,7 @@ class TestKitActivity : ComponentActivity() {
         val t0 = System.currentTimeMillis()
         val ran = withContext(Dispatchers.IO) { AccelProbeReceiver.runNow(applicationContext) }
         if (!ran) { say("A hardware check is already running."); return }
-        val log = logcat(t0, listOf("UltraAccel"))
+        val log = logcat(t0, listOf("JarvisAccel"))
         record("HARDWARE CHECK", log)
         log.filter { "verdict" in it || " cpu=" in it }.forEach { say(it.substringAfter("): ")) }
         say("Done. Saved.")
@@ -302,7 +302,7 @@ class TestKitActivity : ComponentActivity() {
             }
             val answer = try { askBrain(q) } finally { ticker.cancel(); status.value = "" }
             val secs = (System.currentTimeMillis() - t0) / 1000
-            val log = logcat(t0, listOf("UltraLlm", "UltraRoute", "AndroidRuntime"))
+            val log = logcat(t0, listOf("JarvisLlm", "JarvisRoute", "AndroidRuntime"))
             val gen = KitReport.mainGen(log)
             tps += gen?.tokPerSec
             val leaked = "<think>" in answer || "</think>" in answer
@@ -362,7 +362,7 @@ class TestKitActivity : ComponentActivity() {
         val t0 = System.currentTimeMillis()
         val ran = withContext(Dispatchers.IO) { BenchReceiver.runNow(applicationContext) }
         if (!ran) { say("A speed test is already running."); return }
-        val log = logcat(t0, listOf("UltraBench"))
+        val log = logcat(t0, listOf("JarvisBench"))
         record("SPEED TEST", log)
         log.filter { "threads=" in it && "warmup" !in it && "start" !in it }.forEach { say(it.substringAfter("): ")) }
         say("Done. Saved.")
@@ -706,8 +706,8 @@ class TestKitActivity : ComponentActivity() {
     companion object {
         private const val KIT_CONFIG_VERSION = -7001
         private val LOG_TAGS = listOf(
-            "UltraLlm", "UltraRoute", "UltraBrain", "UltraAmbient", "UltraAccel", "UltraBench",
-            "UltraThermal", "UltraMemory", "UltraSpeak", "UltraOfflineNav", "UltraLibrarian", "AndroidRuntime",
+            "JarvisLlm", "JarvisRoute", "JarvisBrain", "JarvisAmbient", "JarvisAccel", "JarvisBench",
+            "JarvisThermal", "JarvisMemory", "JarvisSpeak", "JarvisOfflineNav", "JarvisLibrarian", "AndroidRuntime",
         )
         /** One per thinking tier the router uses: light, short maths, normal. */
         val QUICK_QUESTIONS = FeatureCases.QUICK_QUESTIONS

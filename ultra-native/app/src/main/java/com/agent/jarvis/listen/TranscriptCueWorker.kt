@@ -172,7 +172,7 @@ class TranscriptCueWorker(private val ctx: Context, private val mem: AmbientMemo
         val level = CueAudio.speechLevelDb(db, gate)?.toDouble()
         // Experimental prosody (Settings): pitch against this speaker's own usual. Needs the audio,
         // which is kept only while speaker tags are on.
-        val hz = if (com.agent.jarvis.ui.UltraPrefs.prosody(ctx)) pcm?.let { CueAudio.pitchHz(it, span)?.toDouble() } else null
+        val hz = if (com.agent.jarvis.ui.JarvisPrefs.prosody(ctx)) pcm?.let { CueAudio.pitchHz(it, span)?.toDouble() } else null
         val lead = ArrayList<String>()
         j.gapBeforeMs?.let { lead += CueTags.pause(it) }
         val v = voice
@@ -212,7 +212,7 @@ class TranscriptCueWorker(private val ctx: Context, private val mem: AmbientMemo
     private fun sample(ms: Long): Int = (ms * AmbientConfig.SAMPLE_RATE / 1000).toInt()
 
     companion object {
-        private const val TAG = "UltraAmbient"
+        private const val TAG = "JarvisAmbient"
         /** Silences shorter than this aren't considered, even joined. */
         private const val PART_MS = 300L
         private const val OVERLAP_MIN_SPEECH_MS = 4_000L

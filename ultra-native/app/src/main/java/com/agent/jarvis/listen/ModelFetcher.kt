@@ -74,7 +74,7 @@ object ModelFetcher {
             part.renameTo(dest)
         } catch (e: Exception) {
             if (!resumable) part.delete()
-            android.util.Log.w("UltraAmbient", "fetch $name failed (kept ${part.length()} B to resume): ${e.message}")
+            android.util.Log.w("JarvisAmbient", "fetch $name failed (kept ${part.length()} B to resume): ${e.message}")
             false
         }
     }

@@ -31,7 +31,7 @@ import kotlin.coroutines.resume
  * Runtime on the phone is unproven: nothing here has run on a device.
  */
 object ScreenVision {
-    private const val TAG = "UltraVision"
+    private const val TAG = "JarvisVision"
 
     /** Why there is no screenshot, or null when one can be taken. */
     fun unavailable(): String? = when {

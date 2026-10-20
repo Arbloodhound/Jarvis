@@ -18,7 +18,7 @@ import android.util.Log
  */
 object EventTrigger {
 
-    private const val TAG = "UltraTrigger"
+    private const val TAG = "JarvisTrigger"
 
     data class Action(
         val type: Type,
@@ -149,7 +149,7 @@ object EventTrigger {
         )
 
         override fun evaluate(context: Context, pkg: String, title: String, text: String): Action? {
-            if (!com.agent.jarvis.ui.UltraPrefs.autoExtractSmsCode(context)) return null
+            if (!com.agent.jarvis.ui.JarvisPrefs.autoExtractSmsCode(context)) return null
             if (pkg !in SMS_PACKAGES && !pkg.contains("messaging") && !pkg.contains("sms")) return null
             val code = SmsCodeDetector.extract(text) ?: return null
             return Action(Action.Type.CLIPBOARD_COPY, "Code $code copied", code)
@@ -166,7 +166,7 @@ object EventTrigger {
         override val name = "scam_shield"
 
         override fun evaluate(context: Context, pkg: String, title: String, text: String): Action? {
-            if (!com.agent.jarvis.ui.UltraPrefs.scamShield(context)) return null
+            if (!com.agent.jarvis.ui.JarvisPrefs.scamShield(context)) return null
             return check(pkg, title, text)
         }
 
@@ -186,7 +186,7 @@ object EventTrigger {
             get() = IntentFilter(Intent.ACTION_BATTERY_LOW)
 
         override fun evaluate(context: Context, intent: Intent): Action? {
-            if (!com.agent.jarvis.ui.UltraPrefs.systemTriggers(context)) return null
+            if (!com.agent.jarvis.ui.JarvisPrefs.systemTriggers(context)) return null
             val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
             val level = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
             val pct = if (level > 0) "$level%" else "low"
@@ -200,7 +200,7 @@ object EventTrigger {
             get() = IntentFilter(Intent.ACTION_BATTERY_OKAY)
 
         override fun evaluate(context: Context, intent: Intent): Action? {
-            if (!com.agent.jarvis.ui.UltraPrefs.systemTriggers(context)) return null
+            if (!com.agent.jarvis.ui.JarvisPrefs.systemTriggers(context)) return null
             return Action(Action.Type.TOAST, "Battery recovered")
         }
     }
@@ -214,7 +214,7 @@ object EventTrigger {
             }
 
         override fun evaluate(context: Context, intent: Intent): Action? {
-            if (!com.agent.jarvis.ui.UltraPrefs.systemTriggers(context)) return null
+            if (!com.agent.jarvis.ui.JarvisPrefs.systemTriggers(context)) return null
             val plugged = intent.action == Intent.ACTION_POWER_CONNECTED
             val label = if (plugged) "Charger connected" else "Charger disconnected"
             return Action(Action.Type.TOAST, label, if (plugged) "connected" else "disconnected")
@@ -230,7 +230,7 @@ object EventTrigger {
             }
 
         override fun evaluate(context: Context, intent: Intent): Action? {
-            if (!com.agent.jarvis.ui.UltraPrefs.systemTriggers(context)) return null
+            if (!com.agent.jarvis.ui.JarvisPrefs.systemTriggers(context)) return null
             val on = intent.action == Intent.ACTION_SCREEN_ON
             return Action(Action.Type.TOAST, if (on) "Screen on" else "Screen off", if (on) "on" else "off")
         }
@@ -242,7 +242,7 @@ object EventTrigger {
             get() = IntentFilter(Intent.ACTION_HEADSET_PLUG)
 
         override fun evaluate(context: Context, intent: Intent): Action? {
-            if (!com.agent.jarvis.ui.UltraPrefs.systemTriggers(context)) return null
+            if (!com.agent.jarvis.ui.JarvisPrefs.systemTriggers(context)) return null
             val plugged = intent.getIntExtra("state", 0) == 1
             val label = if (plugged) "Headphones connected" else "Headphones disconnected"
             return Action(Action.Type.TOAST, label, if (plugged) "connected" else "disconnected")
@@ -259,7 +259,7 @@ object EventTrigger {
             }
 
         override fun evaluate(context: Context, intent: Intent): Action? {
-            if (!com.agent.jarvis.ui.UltraPrefs.systemTriggers(context)) return null
+            if (!com.agent.jarvis.ui.JarvisPrefs.systemTriggers(context)) return null
             val pkg = intent.data?.schemeSpecificPart ?: return null
             // An update arrives as REMOVED then ADDED, both with EXTRA_REPLACING. It is neither.
             if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return null

@@ -37,7 +37,7 @@ class SharedVectorsDeviceTest {
                 wrong += "${v.getString("name")} -> ${if (verdict.allowed) "ALLOW" else "BLOCK " + verdict.rule}"
             }
         }
-        android.util.Log.i("UltraGateVectors", "device vectors: ${vectors.length() - skipped} run, $skipped skipped, ${wrong.size} disagree")
+        android.util.Log.i("JarvisGateVectors", "device vectors: ${vectors.length() - skipped} run, $skipped skipped, ${wrong.size} disagree")
         assertTrue("${wrong.size} of ${vectors.length() - skipped} vectors disagree on device:\n" + wrong.joinToString("\n"), wrong.isEmpty())
     }
 }

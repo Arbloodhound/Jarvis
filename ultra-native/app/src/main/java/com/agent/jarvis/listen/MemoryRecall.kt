@@ -29,7 +29,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 object MemoryRecall {
     const val SOURCE_HEARD = "heard"
     const val SCAN_LIMIT = 40_000
-    private const val TAG = "UltraMemory"
+    private const val TAG = "JarvisMemory"
     private const val SEM_TOP = 48
     private const val KEYWORD_ROWS = 100
     private const val WINDOW_ROWS = 200

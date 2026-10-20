@@ -10,7 +10,7 @@ package com.agent.jarvis.gate
  * ClipboardManager, PackageManager) return ground truth, so they are HIGH.
  *
  * The operator's tap on a gate card is HIGH, but only because it reaches
- * this code through the onClick callback in Ultra's own process, not through
+ * this code through the onClick callback in Jarvis's own process, not through
  * the tree reporting the card "looks confirmed." If the tree were the
  * source, the tap would carry the same LOW as every other tree observation
  * and the gate's one escape hatch would be rebuilt inside the wall.

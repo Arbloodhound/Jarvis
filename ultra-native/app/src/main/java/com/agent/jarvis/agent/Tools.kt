@@ -54,7 +54,7 @@ class Tools(
         // accessibility service sees on screen, and reading the SMS database
         // never goes near a screen. On a phone taking real calls and texts,
         // the default has to be no.
-        if (tool in PERSONAL_TOOLS && !com.agent.jarvis.ui.UltraPrefs.allowPersonalData(context)) {
+        if (tool in PERSONAL_TOOLS && !com.agent.jarvis.ui.JarvisPrefs.allowPersonalData(context)) {
             return "Error: messages, contacts and location are switched off for this agent. " +
                 "The user can turn them on in Settings under PERSONAL DATA. " +
                 "Do not retry — tell them, and carry on with the rest of the task."
@@ -303,7 +303,7 @@ class Tools(
                 // Starts Tor (Orbot) for the onion route; never turns onion research on.
                 "tor_connect" -> when {
                     NetPolicy.offlineOnly(context) -> "Offline-only mode is on, so Tor stays off. Nothing was started."
-                    !com.agent.jarvis.ui.UltraPrefs.onionResearch(context) ->
+                    !com.agent.jarvis.ui.JarvisPrefs.onionResearch(context) ->
                         "Onion research via Tor is off in Settings, so Tor stays off — the owner can turn it on there. Nothing was started."
                     else -> com.agent.jarvis.net.TorConnect.describe(com.agent.jarvis.net.TorConnect.connect(context))
                 }
@@ -589,11 +589,11 @@ class Tools(
             )
             dao.trimTo(SCREEN_MEMORY_LIMIT)
             android.util.Log.i(
-                "UltraPerceive",
+                "JarvisPerceive",
                 "learned screen ${fp.key} (${fp.confidence}) ${rows.size} records, fields=[$fields], ${controls.size} controls",
             )
         } catch (e: Exception) {
-            android.util.Log.w("UltraPerceive", "could not record screen: ${e.message}")
+            android.util.Log.w("JarvisPerceive", "could not record screen: ${e.message}")
         }
     }
 
@@ -626,15 +626,15 @@ class Tools(
                 kotlinx.coroutines.delay(RESTORE_SETTLE_MS)
             }
         } catch (e: Exception) {
-            android.util.Log.w("UltraPerceive", "deep read: scroll restore failed: ${e.message}")
+            android.util.Log.w("JarvisPerceive", "deep read: scroll restore failed: ${e.message}")
         }
         if (undone < scrolls) {
             android.util.Log.w(
-                "UltraPerceive",
+                "JarvisPerceive",
                 "deep read: restored only $undone/$scrolls scrolls — page left part-way down",
             )
         } else {
-            android.util.Log.i("UltraPerceive", "deep read: restored $undone/$scrolls scrolls")
+            android.util.Log.i("JarvisPerceive", "deep read: restored $undone/$scrolls scrolls")
         }
     }
 
@@ -687,7 +687,7 @@ class Tools(
             scrolls++
             kotlinx.coroutines.delay(SCROLL_SETTLE_MS)
             val gained = absorb(controller.screenFlat())
-            android.util.Log.i("UltraPerceive", "deep scroll $scrolls: +$gained new (labels ${seen.size}, items ${items.size})")
+            android.util.Log.i("JarvisPerceive", "deep scroll $scrolls: +$gained new (labels ${seen.size}, items ${items.size})")
             if (gained == 0) break
             if (seen.size >= MAX_DEEP_LABELS) { stoppedBecause = "hit the ${MAX_DEEP_LABELS}-item limit"; break }
         }
@@ -702,7 +702,7 @@ class Tools(
         if (items.size >= 3) {
             val rows = items.values.sortedBy { it.top }
             val (body, shown) = ScreenStructure.render(rows, DEEP_BUDGET)
-            android.util.Log.i("UltraPerceive", "deep read: STRUCTURED ${rows.size} items, $scrolls scrolls")
+            android.util.Log.i("JarvisPerceive", "deep read: STRUCTURED ${rows.size} items, $scrolls scrolls")
             val omitted = if (shown < rows.size) "\n… ${rows.size - shown} more items not shown (output limit)." else ""
             return "Read ${rows.size} list items across ${scrolls + 1} screen(s) — $stoppedBecause.\n" +
                 "Each numbered item's lines belong together; they come from the same element on the page.\n\n" +
@@ -719,7 +719,7 @@ class Tools(
             used += l.length + 1
             shown++
         }
-        android.util.Log.i("UltraPerceive", "deep read: FLAT ${all.size} labels, $scrolls scrolls")
+        android.util.Log.i("JarvisPerceive", "deep read: FLAT ${all.size} labels, $scrolls scrolls")
         val footer = if (shown < all.size) "\n… ${all.size - shown} more items not shown (output limit)." else ""
         return "Read ${all.size} items across ${scrolls + 1} screen(s) — $stoppedBecause. " +
             "No repeating list structure on this screen, so these are in page order.\n" +
@@ -748,7 +748,7 @@ class Tools(
             c.readTimeout = 240_000
             c.doOutput = true
             c.setRequestProperty("Content-Type", "application/json")
-            c.setRequestProperty("X-Ultra-Token", token)
+            c.setRequestProperty("X-Jarvis-Token", token)
             c.outputStream.use { it.write(JSONObject().put("question", question.take(2000)).toString().toByteArray()) }
             val code = c.responseCode
             val body = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.readText().orEmpty()
@@ -785,7 +785,7 @@ class Tools(
         if (!skipResearch) try {
             WebResearchRun.run(query, ::readPageOnScreen, onion = OnionAccess.of(context), dir = context.filesDir)?.let { return@withContext it }
         } catch (e: kotlinx.coroutines.CancellationException) { throw e   // Stop must reach the caller
-        } catch (e: Exception) { android.util.Log.w("UltraWeb", "research failed: ${e.message}") }
+        } catch (e: Exception) { android.util.Log.w("JarvisWeb", "research failed: ${e.message}") }
         instantAnswer(query)?.let { return@withContext it }
         wikipedia(query)?.let { return@withContext it }
         scrapeDdg(query)
@@ -812,7 +812,7 @@ class Tools(
             val text = if (OcrLayout.sparse(tree, 200)) listOf(tree, ScreenVision.readScreen(controller).orEmpty())
                 .filter { it.isNotBlank() }.joinToString("\n") else tree
             controller.noteScreenSecrets(text)
-            android.util.Log.i("UltraWeb", "read on screen ${WebResearch.domainOf(url)}: ${text.length} chars")
+            android.util.Log.i("JarvisWeb", "read on screen ${WebResearch.domainOf(url)}: ${text.length} chars")
             text.takeIf { it.isNotBlank() }
         } finally {
             svc?.hideTakeover()
@@ -826,7 +826,7 @@ class Tools(
         val url = "https://api.duckduckgo.com/?q=" + URLEncoder.encode(query, "UTF-8") +
             "&format=json&no_html=1&skip_disambig=1"
         val req = Request.Builder().url(url)
-            .header("User-Agent", "AgentUltra/2.0").build()
+            .header("User-Agent", "Jarvis/2.0").build()
         val call = http.newCall(req)
         com.agent.jarvis.net.cancelOnStop(call) { call.execute().use { resp ->
             if (!resp.isSuccessful) return@cancelOnStop null
@@ -858,7 +858,7 @@ class Tools(
         val searchUrl = "https://en.wikipedia.org/w/api.php?action=opensearch&limit=3&format=json&search=" +
             URLEncoder.encode(query, "UTF-8")
         val req = Request.Builder().url(searchUrl)
-            .header("User-Agent", "AgentUltra/2.0").build()
+            .header("User-Agent", "Jarvis/2.0").build()
         val call = http.newCall(req)
         val title = com.agent.jarvis.net.cancelOnStop(call) { call.execute().use { resp ->
             if (!resp.isSuccessful) return@cancelOnStop null
@@ -869,7 +869,7 @@ class Tools(
         val sumUrl = "https://en.wikipedia.org/api/rest_v1/page/summary/" +
             URLEncoder.encode(title, "UTF-8")
         val req2 = Request.Builder().url(sumUrl)
-            .header("User-Agent", "AgentUltra/2.0").build()
+            .header("User-Agent", "Jarvis/2.0").build()
         val call2 = http.newCall(req2)
         com.agent.jarvis.net.cancelOnStop(call2) { call2.execute().use { resp2 ->
             if (!resp2.isSuccessful) return@cancelOnStop null
@@ -950,7 +950,7 @@ class Tools(
             com.agent.jarvis.research.ShoppingRun.run(query, onion = OnionAccess.of(context), sort = sort)
                 ?: "No shopping listings found for \"$query\"."
         } catch (e: kotlinx.coroutines.CancellationException) { throw e   // Stop must reach the caller
-        } catch (e: Exception) { android.util.Log.w("UltraShop", "shop_search failed: ${e.message}"); "Error: shopping search failed: ${e.message}" }
+        } catch (e: Exception) { android.util.Log.w("JarvisShop", "shop_search failed: ${e.message}"); "Error: shopping search failed: ${e.message}" }
     }
 
     /**
@@ -965,7 +965,7 @@ class Tools(
         try {
             com.agent.jarvis.research.BrowseRun.run(task, onion = OnionAccess.of(context))
         } catch (e: kotlinx.coroutines.CancellationException) { throw e   // Stop must reach the caller
-        } catch (e: Exception) { android.util.Log.w("UltraBrowse", "web_browse failed: ${e.message}"); "Error: browse failed: ${e.message}" }
+        } catch (e: Exception) { android.util.Log.w("JarvisBrowse", "web_browse failed: ${e.message}"); "Error: browse failed: ${e.message}" }
     }
 
     /**
@@ -1018,7 +1018,7 @@ class Tools(
         if (subject.isBlank()) return "Error: forget needs a 'subject'"
         val notes = com.agent.jarvis.listen.MemoryNotes.get(context)
         val f = com.agent.jarvis.harness.Forget(listOf(
-            com.agent.jarvis.harness.ClaimsForgetSource(com.agent.jarvis.data.UltraDatabase.get(context).claimForget()),
+            com.agent.jarvis.harness.ClaimsForgetSource(com.agent.jarvis.data.JarvisDatabase.get(context).claimForget()),
             com.agent.jarvis.harness.NotesForgetSource(
                 { q -> withContext(Dispatchers.IO) { notes.list(null, q, 200).map { it.id to it.text } } },
                 { id -> withContext(Dispatchers.IO) { notes.delete(id) } }),

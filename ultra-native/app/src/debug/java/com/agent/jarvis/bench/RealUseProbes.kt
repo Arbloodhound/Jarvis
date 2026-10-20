@@ -41,7 +41,7 @@ object RealUseProbes {
         env.status("Listening to the room for 60 s — talk near the phone if you like")
         delay(60_000)
         val lines = AmbientMemory.get(env.ctx).newestTagged(200).filter { it.ts >= t0 }
-        val whisper = env.logcat(t0, listOf("UltraAmbient")).mapNotNull { l ->
+        val whisper = env.logcat(t0, listOf("JarvisAmbient")).mapNotNull { l ->
             Regex("audioMs=(\\d+) ms=(\\d+)").find(l)?.let { it.groupValues[1].toLong() to it.groupValues[2].toLong() }
         }
         val rtf = whisper.filter { it.first > 0 }.map { it.second.toDouble() / it.first }.sorted()
@@ -171,9 +171,9 @@ object RealUseProbes {
         val engine = LocalModelEngine.shared(env.ctx)
         if (!engine.modelPresent) return listOf(Result(f, Verdict.MISSING, "no brain downloaded", "needs the on-device model: Settings → ON-DEVICE MODEL"))
         if (!com.agent.jarvis.gate.GateAuditLog.isInitialized()) return listOf(Result(f, Verdict.FAIL, "audit log not started", "nothing to read the routes from"))
-        val was = com.agent.jarvis.ui.UltraPrefs.offlineOnly(env.ctx)
+        val was = com.agent.jarvis.ui.JarvisPrefs.offlineOnly(env.ctx)
         try {
-            com.agent.jarvis.ui.UltraPrefs.setOfflineOnly(env.ctx, true)
+            com.agent.jarvis.ui.JarvisPrefs.setOfflineOnly(env.ctx, true)
             env.status("Loading the brain")
             if (!engine.ensureLoaded()) return listOf(Result(f, Verdict.FAIL, "brain didn't load", "the on-device model failed to load"))
             val brain = Brain(env.ctx, engine).also { it.recordTurns = false }
@@ -200,7 +200,7 @@ object RealUseProbes {
                     else -> "stayed on the phone: no cloud, no web"
                 }))
         } finally {
-            com.agent.jarvis.ui.UltraPrefs.setOfflineOnly(env.ctx, was)
+            com.agent.jarvis.ui.JarvisPrefs.setOfflineOnly(env.ctx, was)
         }
     }
 

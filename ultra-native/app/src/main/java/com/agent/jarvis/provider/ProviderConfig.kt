@@ -74,7 +74,7 @@ data class ProviderConfig(
                     model = j.optString("model", DEFAULT_MODEL),
                 )
                 // Imported: a plaintext key does not stay on shared storage.
-                if (!f.delete()) android.util.Log.w("UltraProvider", "could not delete ultra_provider.json after import")
+                if (!f.delete()) android.util.Log.w("JarvisProvider", "could not delete ultra_provider.json after import")
                 cfg
             } catch (_: Exception) {
                 null

@@ -27,7 +27,7 @@ import java.io.File
  * RUNTIME-UNPROVEN: alarm delivery timing on the phone (Doze, GrapheneOS) has not been observed.
  */
 object SchedulerRuntime {
-    private const val TAG = "UltraScheduler"
+    private const val TAG = "JarvisScheduler"
     const val ACTION_TICK = "com.agent.jarvis.harness.TICK"
 
     private val handlers = java.util.concurrent.ConcurrentHashMap<String, suspend (CronJob) -> Unit>()

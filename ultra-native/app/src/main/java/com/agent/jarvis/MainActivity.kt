@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.agent.jarvis.local.LocalModelEngine
 import com.agent.jarvis.ui.ChatScreen
 import com.agent.jarvis.ui.SettingsScreen
-import com.agent.jarvis.ui.theme.AgentUltraTheme
+import com.agent.jarvis.ui.theme.JarvisTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
         AgentAccessibilityService.applySetupFile(this)
         enableEdgeToEdge()
         setContent {
-            AgentUltraTheme {
+            JarvisTheme {
                 // Saveable: rotating inside Settings must not bounce back to chat.
                 var screen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("chat") }
                 var guideFrom by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("chat") }
@@ -89,7 +89,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         com.agent.jarvis.ui.ChatStore.uiVisible = true
-        if (com.agent.jarvis.ui.UltraPrefs.preloadBrain(this)) {
+        if (com.agent.jarvis.ui.JarvisPrefs.preloadBrain(this)) {
             LocalModelEngine.shared(applicationContext).preloadInBackground("app opened")
         }
         // Ambient listening the user left on but that isn't running (Android 15+ refuses to start

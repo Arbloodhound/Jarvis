@@ -74,7 +74,7 @@ fun NotesScreen(onBack: () -> Unit, onAsk: () -> Unit) {
     }
     androidx.activity.compose.BackHandler(onBack = onBack)
     val zone = remember { ZoneId.systemDefault() }
-    val owner = remember { UltraPrefs.ownerName(context) }
+    val owner = remember { JarvisPrefs.ownerName(context) }
     val heardFmt = remember { SimpleDateFormat("EEE d MMM, h:mm a", Locale.UK) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

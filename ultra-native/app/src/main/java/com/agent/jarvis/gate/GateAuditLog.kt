@@ -16,7 +16,7 @@ import java.io.File
  */
 object GateAuditLog {
 
-    private const val TAG = "UltraAudit"
+    private const val TAG = "JarvisAudit"
     private const val FILE_NAME = "gate_audit.jsonl"
     /** The previous generation: when the log passes [MAX_BYTES] it is renamed to this
      * (replacing any older one) and a fresh log starts. At most ~2 × MAX_BYTES on disk. */
@@ -36,10 +36,10 @@ object GateAuditLog {
     /** File I/O off the caller's thread (Brain records from Main.immediate). One
      * thread, so lines land in the order they were recorded. */
     private val writer = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
-        Thread(r, "UltraAuditWriter").apply { isDaemon = true }
+        Thread(r, "JarvisAuditWriter").apply { isDaemon = true }
     }
 
-    /** Set by [init] (UltraApplication.onCreate). [recordRoute] / [recordAction] have no
+    /** Set by [init] (JarvisApplication.onCreate). [recordRoute] / [recordAction] have no
      * Context of their own, so they do nothing until this is set. */
     @Volatile private var appContext: Context? = null
 

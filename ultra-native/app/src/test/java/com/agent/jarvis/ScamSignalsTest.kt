@@ -101,7 +101,7 @@ class ScamSignalsTest {
 
     @Test fun triggerIgnoresOrdinaryAndOwnMessages() {
         assertNull(EventTrigger.ScamTrigger.check("com.google.android.apps.messaging", "Dad", "Can you pick up milk?"))
-        assertNull(EventTrigger.ScamTrigger.check("com.agent.jarvis", "Ultra", "Buy gift cards and send me the codes"))
+        assertNull(EventTrigger.ScamTrigger.check("com.agent.jarvis", "Jarvis", "Buy gift cards and send me the codes"))
         assertTrue(ScamWatch.recent().isEmpty())
     }
 

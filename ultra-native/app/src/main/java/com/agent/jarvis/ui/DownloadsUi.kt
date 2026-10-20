@@ -119,7 +119,7 @@ fun DownloadsSection() {
 @Composable
 fun DownloadsCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var dismissed by remember { mutableStateOf(UltraPrefs.downloadsCardDismissed(context)) }
+    var dismissed by remember { mutableStateOf(JarvisPrefs.downloadsCardDismissed(context)) }
     if (dismissed) return
     val run by Downloads.state.collectAsState()
     val assets = liveAssets(run.running) ?: return
@@ -140,7 +140,7 @@ fun DownloadsCard(modifier: Modifier = Modifier) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DownloadAllButton("Download all", run.running, DownloadPlan.missingBytes(assets))
-                TextButton(onClick = { UltraPrefs.setDownloadsCardDismissed(context, true); dismissed = true }) {
+                TextButton(onClick = { JarvisPrefs.setDownloadsCardDismissed(context, true); dismissed = true }) {
                     Text("Not now")
                 }
             }

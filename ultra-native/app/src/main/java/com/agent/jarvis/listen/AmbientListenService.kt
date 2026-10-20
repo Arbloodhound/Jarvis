@@ -105,7 +105,7 @@ class AmbientListenService : Service() {
                 startForeground(NOTIF_ID, notification())
             }
         } catch (e: Exception) {
-            android.util.Log.w("UltraAmbient", "cannot start listening: ${e.message}")
+            android.util.Log.w("JarvisAmbient", "cannot start listening: ${e.message}")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -120,7 +120,7 @@ class AmbientListenService : Service() {
         }
         Librarian.start(this, scope)   // organises what was heard while charging, screen off
         // "Hey Jarvis" shouldn't have to wait for the brain to load either.
-        if (com.agent.jarvis.ui.UltraPrefs.preloadBrain(this)) {
+        if (com.agent.jarvis.ui.JarvisPrefs.preloadBrain(this)) {
             com.agent.jarvis.local.LocalModelEngine.shared(applicationContext).preloadInBackground("ambient listening started")
         }
         return START_STICKY
@@ -153,7 +153,7 @@ class AmbientListenService : Service() {
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.w("UltraAmbient", "pipeline failed: ${e.message}")
+            android.util.Log.w("JarvisAmbient", "pipeline failed: ${e.message}")
             stopSelf()
         } finally {
             gate?.close(); gate = null
@@ -202,7 +202,7 @@ class AmbientListenService : Service() {
             dropped.forEach { held.remove(it) }
             if (!idleNow()) held.add(u)
             if (!ready()) {
-                if (backlog.size == 1) android.util.Log.i("UltraAmbient", "brain busy: holding transcription")
+                if (backlog.size == 1) android.util.Log.i("JarvisAmbient", "brain busy: holding transcription")
                 // Once per window: its first queued utterance may be a bare "Hey Jarvis." whose
                 // judging (and window reopening) now happens late.
                 if (u.windowId != 0L && u.windowId != heldWindow && u.windowId != consumedWindowId) {
@@ -227,7 +227,7 @@ class AmbientListenService : Service() {
                     if (idleNow()) capLogged = false
                     else if (!capLogged) {
                         capLogged = true
-                        android.util.Log.i("UltraAmbient", "brain busy: transcribing now (to Jarvis, a short \"stop\", or held over ${maxHold / 1000} s), " +
+                        android.util.Log.i("JarvisAmbient", "brain busy: transcribing now (to Jarvis, a short \"stop\", or held over ${maxHold / 1000} s), " +
                             "${backlog.size} queued (whisper cpus=${whisperCpus.toList()})")
                     }
                     val u = backlog.removeAt(nextIndex() ?: 0)
@@ -259,13 +259,13 @@ class AmbientListenService : Service() {
             }
         } finally {
             watcher.cancel()
-            if (backlog.isNotEmpty()) android.util.Log.i("UltraAmbient", "stopping with ${backlog.size} untranscribed")
+            if (backlog.isNotEmpty()) android.util.Log.i("JarvisAmbient", "stopping with ${backlog.size} untranscribed")
         }
     }
 
     private fun logDropped(why: String, samples: Int, window: Boolean) {
         val n = dropped.incrementAndGet()
-        android.util.Log.w("UltraAmbient", "$why: dropped a ${samples * 1000L / AmbientConfig.SAMPLE_RATE} ms " +
+        android.util.Log.w("JarvisAmbient", "$why: dropped a ${samples * 1000L / AmbientConfig.SAMPLE_RATE} ms " +
             "utterance untranscribed (window=$window, $n dropped since start)")
     }
 
@@ -277,7 +277,7 @@ class AmbientListenService : Service() {
         // First run: fetch models (~60 MB, once). ASR is required; VAD and the
         // wake-word trio are optional and fail soft (text-match wake still works).
         if (!ModelFetcher.ensure(modelDir, AmbientConfig.ASR_MODEL, AmbientConfig.ASR_URL, 10_000_000L)) {
-            android.util.Log.w("UltraAmbient", "no ASR model and download failed; stopping")
+            android.util.Log.w("JarvisAmbient", "no ASR model and download failed; stopping")
             return false
         }
         ModelFetcher.ensure(modelDir, AmbientConfig.VAD_MODEL, AmbientConfig.VAD_URL, 100_000L)
@@ -291,11 +291,11 @@ class AmbientListenService : Service() {
         whisper = loadAsr(asrName)
         if (whisper == 0L && asrName != AmbientConfig.ASR_MODEL) { asrName = AmbientConfig.ASR_MODEL; whisper = loadAsr(asrName) }
         if (whisper == 0L) return false
-        android.util.Log.i("UltraAmbient", "speech model: $asrName")
+        android.util.Log.i("JarvisAmbient", "speech model: $asrName")
         asrModelName = asrName
         // The larger model downloads in the background; the transcriber switches to it once it's here.
         if (cfg.accurateSpeech && !cfg.smallTooSlow && !AmbientConfig.smallReady(modelDir)) scope.launch(Dispatchers.IO) {
-            if (AmbientConfig.fetchSmall(modelDir)) { wantAsr = AmbientConfig.ASR_SMALL_MODEL; android.util.Log.i("UltraAmbient", "small speech model downloaded") }
+            if (AmbientConfig.fetchSmall(modelDir)) { wantAsr = AmbientConfig.ASR_SMALL_MODEL; android.util.Log.i("JarvisAmbient", "small speech model downloaded") }
         }
         currentCoroutineContext().ensureActive()
         gate = WakeGate(this@AmbientListenService,
@@ -331,11 +331,11 @@ class AmbientListenService : Service() {
         wantAsr = null
         if (want == asrName) return
         val h = loadAsr(want)
-        if (h == 0L) { android.util.Log.w("UltraAmbient", "couldn't load speech model $want; keeping $asrName"); return }
+        if (h == 0L) { android.util.Log.w("JarvisAmbient", "couldn't load speech model $want; keeping $asrName"); return }
         val old = whisper
         whisper = h; asrName = want; asrModelName = want
         if (old != 0L) WhisperNative.nativeFree(old)
-        android.util.Log.i("UltraAmbient", "speech model now: $want")
+        android.util.Log.i("JarvisAmbient", "speech model now: $want")
     }
 
     /** Reads the mic until cancelled. A dead or failing AudioRecord (audioserver
@@ -357,10 +357,10 @@ class AmbientListenService : Service() {
             if (captureOnce(seg)) return
             failures++
             seg.reset()
-            android.util.Log.w("UltraAmbient", "mic failed ($failures/$MAX_MIC_FAILURES); retrying")
+            android.util.Log.w("JarvisAmbient", "mic failed ($failures/$MAX_MIC_FAILURES); retrying")
             delay(1_000L * failures)
         }
-        if (failures >= MAX_MIC_FAILURES) android.util.Log.w("UltraAmbient", "mic keeps failing; stopping")
+        if (failures >= MAX_MIC_FAILURES) android.util.Log.w("JarvisAmbient", "mic keeps failing; stopping")
     }
 
     /** One AudioRecord's life. True when stopped by cancellation, false on a mic error. */
@@ -398,7 +398,7 @@ class AmbientListenService : Service() {
             while (currentCoroutineContext().isActive) {
                 val n = rec.read(frame, 0, frame.size)
                 if (n < 0) {                        // ERROR_DEAD_OBJECT etc. never recover in place
-                    android.util.Log.w("UltraAmbient", "AudioRecord.read error $n")
+                    android.util.Log.w("JarvisAmbient", "AudioRecord.read error $n")
                     return false
                 }
                 if (n == 0) continue
@@ -448,7 +448,7 @@ class AmbientListenService : Service() {
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.w("UltraAmbient", "capture failed: ${e.message}")
+            android.util.Log.w("JarvisAmbient", "capture failed: ${e.message}")
             return false
         } finally {
             capturing = false
@@ -493,13 +493,13 @@ class AmbientListenService : Service() {
         )
         // Whether whisper keeps up with speech: ms > audioMs means slower than real time.
         val took = System.currentTimeMillis() - t0
-        android.util.Log.d("UltraAmbient", "whisper model=$model audioMs=$audioMs ms=$took " +
+        android.util.Log.d("JarvisAmbient", "whisper model=$model audioMs=$audioMs ms=$took " +
             "threads=$threads cpus=${cpus.toList()}")
         // small timed on the fast cores (brain idle): if it can't keep up with speech, base takes over.
         if (!useBase && asrName == AmbientConfig.ASR_SMALL_MODEL && !com.agent.jarvis.local.LocalModelEngine.anyBusy.value) {
             asrSpeed.record(audioMs, took)
             if (asrSpeed.tooSlow()) {
-                android.util.Log.w("UltraAmbient", "small speech model slower than speech here: back to base")
+                android.util.Log.w("JarvisAmbient", "small speech model slower than speech here: back to base")
                 cfg.smallTooSlow = true
                 wantAsr = AmbientConfig.ASR_MODEL
             }
@@ -587,7 +587,7 @@ class AmbientListenService : Service() {
             com.agent.jarvis.agent.Interrupt.Decision.Stop -> { stopEverything(); return }
             is com.agent.jarvis.agent.Interrupt.Decision.Run -> d.request
             is com.agent.jarvis.agent.Interrupt.Decision.After -> {
-                android.util.Log.i("UltraAmbient", "add-on heard mid-run: runs after it")
+                android.util.Log.i("JarvisAmbient", "add-on heard mid-run: runs after it")
                 answeredAt = System.currentTimeMillis()
                 say("Okay, after this.")
                 val seq = commandSeq.incrementAndGet()
@@ -597,7 +597,7 @@ class AmbientListenService : Service() {
                 return
             }
             is com.agent.jarvis.agent.Interrupt.Decision.Replace -> {
-                android.util.Log.i("UltraAmbient", "change heard mid-run: the run stops, the new request runs")
+                android.util.Log.i("JarvisAmbient", "change heard mid-run: the run stops, the new request runs")
                 clearedUpTo.set(commandSeq.get())
                 com.agent.jarvis.agent.Brain.stopAll()
                 com.agent.jarvis.ui.SpeechQueue.stopAll()
@@ -651,7 +651,7 @@ class AmbientListenService : Service() {
             val cue = if (quiet == WaitCue.Cue.STILL_WORKING &&
                 !com.agent.jarvis.ui.VoicePrefs.sayOnIt(this@AmbientListenService)) WaitCue.Cue.NONE else quiet
             WaitCue.text(cue)?.let {
-                android.util.Log.i("UltraAmbient", "late cue for command $seq: $cue")
+                android.util.Log.i("JarvisAmbient", "late cue for command $seq: $cue")
                 say(it)
             }
         }
@@ -662,7 +662,7 @@ class AmbientListenService : Service() {
         if (commandRunner == null) commandRunner = scope.launch {
             for ((seq, r) in pendingCommands) {
                 if (seq <= clearedUpTo.get()) continue          // stopped before its turn
-                if (busy.value) android.util.Log.i("UltraAmbient", "command heard while the brain is busy: runs after it")
+                if (busy.value) android.util.Log.i("JarvisAmbient", "command heard while the brain is busy: runs after it")
                 busy.first { !it }
                 // A stopped run lets go of the engine at its next token but may still be unwinding.
                 while (com.agent.jarvis.agent.Brain.anyRunning) delay(100)
@@ -702,7 +702,7 @@ class AmbientListenService : Service() {
             catch (e: Exception) {
                 // Said out loud, as the voice screen does: the owner heard "On it." and must not
                 // be left with silence. Stop (a CancellationException) is rethrown above, unspoken.
-                android.util.Log.w("UltraAmbient", "command failed: ${e.message}")
+                android.util.Log.w("JarvisAmbient", "command failed: ${e.message}")
                 answeredAt = System.currentTimeMillis()
                 // Locked: no detail, it can carry private content (LockedPolicy strips it too).
                 say(CommandFailure.reply(e, withDetail = km?.isKeyguardLocked != true))
@@ -750,7 +750,7 @@ class AmbientListenService : Service() {
         }
         woke("barge-in")
         chime()
-        android.util.Log.i("UltraAmbient", "barge-in: speech stopped by the wake word")
+        android.util.Log.i("JarvisAmbient", "barge-in: speech stopped by the wake word")
     }
 
     /** "Stop": every run, every queued command and all speech, then a short "Stopped." */
@@ -761,7 +761,7 @@ class AmbientListenService : Service() {
         mutedUntil = 0L
         answeredAt = System.currentTimeMillis()
         lastCommandDoneAt = System.currentTimeMillis()
-        android.util.Log.i("UltraAmbient", "STOP heard: run=$ran speech=$spoke")
+        android.util.Log.i("JarvisAmbient", "STOP heard: run=$ran speech=$spoke")
         say(if (ran || spoke) "Stopped." else "Okay.")
     }
 
@@ -891,7 +891,7 @@ class AmbientListenService : Service() {
                 ctx, android.Manifest.permission.RECORD_AUDIO
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
             if (!micOk) {
-                android.util.Log.w("UltraAmbient", "not starting: RECORD_AUDIO not granted")
+                android.util.Log.w("JarvisAmbient", "not starting: RECORD_AUDIO not granted")
                 return false
             }
             val i = Intent(ctx, AmbientListenService::class.java)
@@ -899,7 +899,7 @@ class AmbientListenService : Service() {
                 if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
                 true
             } catch (e: Exception) {
-                android.util.Log.w("UltraAmbient", "not starting: ${e.message}")
+                android.util.Log.w("JarvisAmbient", "not starting: ${e.message}")
                 false
             }
         }

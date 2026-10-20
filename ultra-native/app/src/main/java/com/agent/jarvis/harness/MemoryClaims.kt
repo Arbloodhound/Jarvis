@@ -18,7 +18,7 @@ import kotlin.math.ln
  * Retrieval: hybrid keyword scoring blended with a confidence prior, times
  * a query-time temporal-decay factor (30-day half-life; evergreen exempt).
  *
- * DB wiring (repo session): add ClaimEntity to UltraDatabase entities,
+ * DB wiring (repo session): add ClaimEntity to JarvisDatabase entities,
  * bump version, add migration. This file never touches existing files.
  */
 @Entity(
@@ -150,7 +150,7 @@ class MemoryClaims(private val dao: ClaimDao) {
         resolveHandle: (String) -> String? = { null },
         salience: String = "medium", confidence: Double = 0.7,
         quote: String = "", evergreen: Boolean = false,
-        log: (String) -> Unit = { msg -> runCatching { android.util.Log.i("UltraClaims", msg) } },
+        log: (String) -> Unit = { msg -> runCatching { android.util.Log.i("JarvisClaims", msg) } },
     ): WriteOutcome {
         val staged = StagedClaim(claimText = text, quote = quote, speaker = speaker,
             grounded = grounded, evidenceHandles = evidenceHandles, embedding = embedding)

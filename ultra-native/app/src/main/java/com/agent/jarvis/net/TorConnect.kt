@@ -78,7 +78,7 @@ object TorConnect {
         connectedVia()?.let { return Outcome(State.ON, 0, it) }
         if (!EmbeddedTor.start(ctx)) return Outcome(State.FAILED, 0)
         val out = withContext(Dispatchers.IO) { await({ EmbeddedTor.ready() }, { EmbeddedTor.bootstrapPercent() }, waitMs) }
-        android.util.Log.i("UltraTor", "connect: ${out.state} in ${out.ms} ms (bootstrap ${EmbeddedTor.bootstrapPercent()}%, port ${EmbeddedTor.socksPort()})")
+        android.util.Log.i("JarvisTor", "connect: ${out.state} in ${out.ms} ms (bootstrap ${EmbeddedTor.bootstrapPercent()}%, port ${EmbeddedTor.socksPort()})")
         return out
     }
 }

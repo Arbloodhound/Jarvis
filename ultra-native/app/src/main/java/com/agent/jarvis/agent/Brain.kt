@@ -37,7 +37,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
     /** Log how many leading fragments match the previous on-device prompt (fragment-level estimate). */
     private fun trackPromptEnvelope(env: com.agent.jarvis.harness.SessionEnvelope) {
         val n = LocalEnvelope.reusableFragments(promptEnvelope, env)
-        android.util.Log.i("UltraPrompt", "reusable fragments=$n/${LocalEnvelope.TOTAL}")
+        android.util.Log.i("JarvisPrompt", "reusable fragments=$n/${LocalEnvelope.TOTAL}")
         promptEnvelope = env
     }
 
@@ -45,11 +45,11 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
     private val tools: Tools
     private val client: OpenAiClient?
     private val gate: Gate
-    private val taskMemory = com.agent.jarvis.data.UltraDatabase.get(appContext).taskMemory()
-    private val lessonDao = com.agent.jarvis.data.UltraDatabase.get(appContext).lessons()
+    private val taskMemory = com.agent.jarvis.data.JarvisDatabase.get(appContext).taskMemory()
+    private val lessonDao = com.agent.jarvis.data.JarvisDatabase.get(appContext).lessons()
     /** Lessons served to the run in progress; their counts move when it ends. */
     @Volatile private var servedThisRun: List<String> = emptyList()
-    private val recipes = Recipes(com.agent.jarvis.data.UltraDatabase.get(appContext).recipes())
+    private val recipes = Recipes(com.agent.jarvis.data.JarvisDatabase.get(appContext).recipes())
 
     /** Called with the final user-facing answer of a run (shown by the voice screen; the
      * ambient service's "On it." check). Speaking goes through [onSpeak]. */
@@ -135,7 +135,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
             com.agent.jarvis.listen.AmbientMemory.get(appContext)
                 .record("${com.agent.jarvis.listen.MemoryNoteRequest.TO_JARVIS} ${text.take(600)}", System.currentTimeMillis(), 1f)
         } catch (e: Exception) {
-            android.util.Log.w("UltraBrain", "couldn't keep the request in memory: ${e.message}")
+            android.util.Log.w("JarvisBrain", "couldn't keep the request in memory: ${e.message}")
         }
     }
 
@@ -202,18 +202,18 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
     init {
         // What the preload reads ahead: the on-device system prompt as every request starts it.
         com.agent.jarvis.local.LocalModelEngine.warmPrompt = {
-            LocalPrompt.build(LocalPrompt.offlineSystem(com.agent.jarvis.ui.UltraPrefs.ownerName(appContext),
+            LocalPrompt.build(LocalPrompt.offlineSystem(com.agent.jarvis.ui.JarvisPrefs.ownerName(appContext),
                 TalkStyle.combine(com.agent.jarvis.ui.VoicePrefs.styleInstructions(appContext),
-                    com.agent.jarvis.ui.UltraPrefs.customInstructions(appContext))), emptyList(), "hi")
+                    com.agent.jarvis.ui.JarvisPrefs.customInstructions(appContext))), emptyList(), "hi")
         }
         val cfg = ProviderConfig.load(appContext)
         client = if (cfg.isUsable) OpenAiClient(cfg) else null
         tools = Tools(appContext, controller)
         if (client != null) tools.navigator = ReActNavigator(controller, client).also {
-            it.screenMemory = com.agent.jarvis.data.UltraDatabase.get(appContext).screenMemory()
+            it.screenMemory = com.agent.jarvis.data.JarvisDatabase.get(appContext).screenMemory()
         }
         tools.recipes = recipes
-        tools.screenMemory = com.agent.jarvis.data.UltraDatabase.get(appContext).screenMemory()
+        tools.screenMemory = com.agent.jarvis.data.JarvisDatabase.get(appContext).screenMemory()
         tools.recipeRunner = { name -> runRecipe(name) }
         gate = Gate(loadManifest(appContext))
     }
@@ -272,7 +272,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         // A card confirmed long after it was raised: the situation it described may be gone.
         if (pauseExpired(p.createdAtMs, android.os.SystemClock.elapsedRealtime())) {
             GateAuditLog.record(appContext, p.tool, GateAuditLog.Outcome.BLOCKED, "confirm_expired", p.episode.observations)
-            android.util.Log.i("UltraGate", "EXPIRED pause ${p.tool}: confirmed too late")
+            android.util.Log.i("JarvisGate", "EXPIRED pause ${p.tool}: confirmed too late")
             answer("Cancelled: ${p.description} (it waited over ${PAUSE_TIMEOUT_MS / 60_000} minutes — ask again)")
             return@withLock
         }
@@ -280,7 +280,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
             p.targets.forEach { p.episode.confirm(it) }
             p.episode.observeOperatorConfirmation(p.tool)
             GateAuditLog.record(appContext, p.tool, GateAuditLog.Outcome.OVERRIDDEN, null, p.episode.observations)
-            android.util.Log.i("UltraGate", "CONFIRMED (local) ${p.tool} targets=${p.targets}")
+            android.util.Log.i("JarvisGate", "CONFIRMED (local) ${p.tool} targets=${p.targets}")
             val res = tools.execute(p.tool, p.params)
             p.episode.observeSecrets(res)
             p.episode.observeTool(p.tool, res.take(80))
@@ -309,7 +309,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         p.targets.forEach { p.episode.confirm(it) }
         p.episode.observeOperatorConfirmation(p.tool)
         GateAuditLog.record(appContext, p.tool, GateAuditLog.Outcome.OVERRIDDEN, null, p.episode.observations)
-        android.util.Log.i("UltraGate", "CONFIRMED ${p.tool} targets=${p.targets}")
+        android.util.Log.i("JarvisGate", "CONFIRMED ${p.tool} targets=${p.targets}")
         val resultText = tools.execute(p.tool, p.params)
         p.episode.observeSecrets(resultText)
         p.episode.observeTool(p.tool, resultText.take(80))
@@ -372,7 +372,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
                 throw e
             } catch (e: Exception) {
                 // A log line is never worth a crash.
-                android.util.Log.w("UltraBrain", "quiet-run line failed: ${e.message}")
+                android.util.Log.w("JarvisBrain", "quiet-run line failed: ${e.message}")
             }
         }
     }
@@ -402,7 +402,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
             // Our own stop cancelled the run's scope: the caller goes on. Anything else is the
             // caller's own cancellation and goes up.
             if (!stopRequested || kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.isActive == false) throw e
-            android.util.Log.i("UltraBrain", "RUN STOPPED")
+            android.util.Log.i("JarvisBrain", "RUN STOPPED")
         } finally {
             runJob = null
             running.remove(this)
@@ -414,7 +414,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         // could be confirmed later, in the middle of something else entirely.
         pendingConfirm?.let { stale ->
             pendingConfirm = null
-            android.util.Log.i("UltraGate", "CANCELLED stale pause ${stale.tool}: a new request came in")
+            android.util.Log.i("JarvisGate", "CANCELLED stale pause ${stale.tool}: a new request came in")
             emit("Cancelled: ${stale.description} (a new request came in)")
         }
         // A new request starts with no memory of what was on screen during the
@@ -449,7 +449,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         // default brain) opened Google Play for exactly that request, 3 of 3 times.
         spokenWarning = null
         ScamSignals.assess("", userInput).takeIf { it.scam }?.let { a ->
-            android.util.Log.i("UltraBrain", "SCAM IN REQUEST: ${a.reasons}")
+            android.util.Log.i("JarvisBrain", "SCAM IN REQUEST: ${a.reasons}")
             val warning = "Careful — this sounds like a common scam (${a.reasons}). Real family, banks and " +
                 "government offices don't ask for gift cards, codes, or money moved to a \"safe\" " +
                 "account. If it's someone you know, call them on a number you already have."
@@ -467,14 +467,14 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         tools.navigator?.routeHint = ""
         tools.navigator?.routePlay = null
         if (tryRecipeShortcut(userInput)) {
-            android.util.Log.i("UltraBrain", "RUN COMPLETE (recipe shortcut)")
+            android.util.Log.i("JarvisBrain", "RUN COMPLETE (recipe shortcut)")
             return
         }
 
         // "Speaker 2 is Sam", "the person I was just talking to is Sam": name that voice.
         com.agent.jarvis.listen.NameInference.told(IntentRouter.requestPart(userInput))?.let { (who, name) ->
             answer(nameVoice(who, name))
-            android.util.Log.i("UltraBrain", "RUN COMPLETE (voice named)")
+            android.util.Log.i("JarvisBrain", "RUN COMPLETE (voice named)")
             return
         }
         // Notes from what was already heard ("make a note of what Sam said about the boiler") or from
@@ -484,7 +484,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
                 val last = com.agent.jarvis.ui.ChatStore.messages.dropLast(1).lastOrNull { !it.fromUser && it.text.isNotBlank() }?.text
                 val text = last?.let { com.agent.jarvis.listen.MemoryNoteRequest.fromAnswer(it) }
                 answer(if (text == null) "There's no answer to save yet." else controller.createNote(text))
-                android.util.Log.i("UltraBrain", "RUN COMPLETE (last answer noted)")
+                android.util.Log.i("JarvisBrain", "RUN COMPLETE (last answer noted)")
                 return
             }
             is com.agent.jarvis.listen.MemoryNoteRequest.Kind.FromMemory -> MemoryFocus.Ask(MemoryFocus.Focus.MEMORY, nr.query)
@@ -494,7 +494,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         // Into the one notes store (the Notes screen); no model needed.
         if (noteFromMemory == null) com.agent.jarvis.listen.UserNotes.command(IntentRouter.requestPart(userInput))?.let { text ->
             answer(controller.createNote(text).let { if (it.startsWith("Error")) "I couldn't save that note. $it" else it })
-            android.util.Log.i("UltraBrain", "RUN COMPLETE (note saved)")
+            android.util.Log.i("JarvisBrain", "RUN COMPLETE (note saved)")
             return
         }
         // "How did I talk today?", "who talks the most?": conversation insights, counted from what was heard.
@@ -502,7 +502,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
             val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 com.agent.jarvis.listen.Insights.report(appContext, period) }
             answer(com.agent.jarvis.listen.ConversationInsights.answer(r, period))
-            android.util.Log.i("UltraBrain", "RUN COMPLETE (insights)")
+            android.util.Log.i("JarvisBrain", "RUN COMPLETE (insights)")
             return
         }
         // "Open my notes" / "show my memory": the screen when the app is in front; otherwise
@@ -511,7 +511,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         if (screenAsk != null && com.agent.jarvis.ui.ChatStore.uiVisible) {
             com.agent.jarvis.ui.ChatStore.screenRequest.value = screenAsk
             answer(if (screenAsk == "memory") "Opening your memory." else "Opening your notes.")
-            android.util.Log.i("UltraBrain", "RUN COMPLETE (open $screenAsk)")
+            android.util.Log.i("JarvisBrain", "RUN COMPLETE (open $screenAsk)")
             return
         }
         // The memory / notes tools: a focused question (its own words, or the chat's Focus menu).
@@ -526,7 +526,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         if (spokenFocus == null && menuFocus == null) QuickReply.reply(userInput, java.time.ZonedDateTime.now())?.let {
             GateAuditLog.recordRoute(GateAuditLog.ROUTE_LOCAL_ANSWER, "quick")
             answer(it)
-            android.util.Log.i("UltraBrain", "RUN COMPLETE (quick reply)")
+            android.util.Log.i("JarvisBrain", "RUN COMPLETE (quick reply)")
             return
         }
 
@@ -623,14 +623,14 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         // Task memory: prior successful sequence for this request, and any
         // tools with a failing record, become a system-side hint.
         memoryHint(userInput)?.let {
-            android.util.Log.i("UltraBrain", "MEMORY HINT injected: ${it.take(100)}")
+            android.util.Log.i("JarvisBrain", "MEMORY HINT injected: ${it.take(100)}")
             messages.add(1, OpenAiClient.ChatMessage("system", it))
         }
         lessonsFor(userInput)?.let { messages.add(1, OpenAiClient.ChatMessage("system", it)) }
 
         GateAuditLog.recordRoute(GateAuditLog.ROUTE_CLOUD, "request")
         runLoop(ai, userInput, messages)
-        android.util.Log.i("UltraBrain", "RUN COMPLETE")
+        android.util.Log.i("JarvisBrain", "RUN COMPLETE")
     }
 
     /** Run a saved recipe directly when the request names one. Requires either
@@ -675,7 +675,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
             // afterwards is too late to be told the agent was guessing.
             val before = recipes.competenceOf(row.name)
             android.util.Log.i(
-                "UltraWalk",
+                "JarvisWalk",
                 "walking \"${row.name}\": ${route.size} screens — ${before?.describe() ?: "no history"}",
             )
             val result = nav.walkRoute(row.name, route)
@@ -691,10 +691,10 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
                     doorsMoved = moved,
                 )
                 val known = result.learned.count { it.via.isNotBlank() }
-                android.util.Log.i("UltraWalk", "remembered the way for $known hop(s)")
-                if (moved > 0) android.util.Log.i("UltraWalk", "$moved door(s) had moved since last time")
+                android.util.Log.i("JarvisWalk", "remembered the way for $known hop(s)")
+                if (moved > 0) android.util.Log.i("JarvisWalk", "$moved door(s) had moved since last time")
             } catch (e: Exception) {
-                android.util.Log.w("UltraWalk", "could not keep what was learned: ${e.message}")
+                android.util.Log.w("JarvisWalk", "could not keep what was learned: ${e.message}")
             }
             // Only worth saying when the agent was working partly blind, or
             // when the app turned out to have changed. Announcing full
@@ -716,7 +716,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
             }
         }
 
-        android.util.Log.i("UltraBrain", "RECIPE RUN ${row.name} (${steps.size} steps)")
+        android.util.Log.i("JarvisBrain", "RECIPE RUN ${row.name} (${steps.size} steps)")
         val lines = mutableListOf<String>()
         var failures = 0
         for ((i, step) in steps.withIndex()) {
@@ -730,19 +730,19 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
             if (!verdict.allowed) {
                 GateAuditLog.record(appContext, step.tool, GateAuditLog.Outcome.BLOCKED, verdict.rule, episode.observations, verdict.riskScore)
                 val hint = verdict.violations.firstOrNull()?.hint ?: "blocked"
-                android.util.Log.i("UltraGate", "RECIPE BLOCK ${step.tool}: $hint")
+                android.util.Log.i("JarvisGate", "RECIPE BLOCK ${step.tool}: $hint")
                 lines += "${i + 1}. ${step.tool} — blocked by policy gate ($hint)"
                 failures++
                 continue
             }
             val auditOutcome = if (verdict.autoApproved) GateAuditLog.Outcome.AUTO_APPROVED else GateAuditLog.Outcome.ALLOWED
-            if (verdict.autoApproved) android.util.Log.i("UltraGate", "RECIPE AUTO-APPROVE ${step.tool} (risk=${verdict.riskScore?.total})")
+            if (verdict.autoApproved) android.util.Log.i("JarvisGate", "RECIPE AUTO-APPROVE ${step.tool} (risk=${verdict.riskScore?.total})")
             GateAuditLog.record(appContext, step.tool, auditOutcome, verdict.rule, episode.observations, verdict.riskScore)
             val result = tools.execute(step.tool, step.params)
             episode.observeSecrets(result)
             episode.observeTool(step.tool, result.take(80))
             if (result.startsWith("Error:")) failures++
-            android.util.Log.i("UltraBrain", "RECIPE STEP ${step.tool}: ${result.take(80)}")
+            android.util.Log.i("JarvisBrain", "RECIPE STEP ${step.tool}: ${result.take(80)}")
             lines += "${i + 1}. ${result.take(200)}"
         }
         recipes.markRun(row.name)
@@ -842,17 +842,17 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
 
             // Opening an app is not how a job gets done. "Run the stopwatch" ended after one
             // app_launch with nothing failing, so the run counted as a success and the shortcut
-            // "run the stopwatch -> app_launch" was stored and served back — teaching Ultra to
+            // "run the stopwatch -> app_launch" was stored and served back — teaching Jarvis to
             // stop at the front door (AndroidWorld, 2026-09-19).
             val onlyOpened = steps.size == 1 && steps[0].tool == "app_launch"
             val wantsMore = Regex("\\b(run|start|stop|set|create|add|make|send|delete|remove|turn|play|find|search|write|rename|move|copy|record)\\b",
                 RegexOption.IGNORE_CASE).containsMatchIn(userInput)
             if (onlyOpened && wantsMore) {
-                android.util.Log.i("UltraBrain", "MEMORY: not recorded (only opened the app for an action request)")
+                android.util.Log.i("JarvisBrain", "MEMORY: not recorded (only opened the app for an action request)")
                 return null
             }
             if (!taskSucceeded || steps.isEmpty()) {
-                android.util.Log.i("UltraBrain", "MEMORY: not recorded (task succeeded=$taskSucceeded)")
+                android.util.Log.i("JarvisBrain", "MEMORY: not recorded (task succeeded=$taskSucceeded)")
                 return null
             }
             val key = requestKey(userInput)
@@ -869,7 +869,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
                     stepsJson,
                 )
             )
-            android.util.Log.i("UltraBrain", "MEMORY: recorded \"$key\" -> ${steps.joinToString(" → ") { it.tool }}")
+            android.util.Log.i("JarvisBrain", "MEMORY: recorded \"$key\" -> ${steps.joinToString(" → ") { it.tool }}")
             return key
         } catch (_: Exception) {}
         return null
@@ -907,7 +907,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
     /** The small model that picks tools and drives screens (Settings → Action model): the memory model
      *  when it is downloaded and a thinking model, else the main one. */
     private val toolEngine: com.agent.jarvis.local.LocalModelEngine get() {
-        if (!com.agent.jarvis.ui.UltraPrefs.actionModel(appContext)) return local
+        if (!com.agent.jarvis.ui.JarvisPrefs.actionModel(appContext)) return local
         val lib = com.agent.jarvis.local.LocalModelEngine.librarian(appContext)
         return if (lib !== local && lib.modelFileSizeBytes > 0 && lib.isThinkingModel) lib else local
     }
@@ -918,7 +918,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         return OfflineNavigator(
             controller,
             tools.navigator ?: ReActNavigator(controller, null).also {
-                it.screenMemory = com.agent.jarvis.data.UltraDatabase.get(appContext).screenMemory()
+                it.screenMemory = com.agent.jarvis.data.JarvisDatabase.get(appContext).screenMemory()
             },
             engine,
         ).also { offlineNavigator = it; offlineNavEngine = engine }
@@ -930,14 +930,14 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         if (!toolEngine.isThinkingModel) return null
         val task = OfflineNav.task(IntentRouter.requestPart(userInput)) ?: return null
         if (task.appHint.isNotBlank() && controller.findPackage(task.appHint) == null) return null
-        // "scroll down" typed into Ultra's own chat has no other app to act on: answer in text as before.
+        // "scroll down" typed into Jarvis's own chat has no other app to act on: answer in text as before.
         if (task.appHint.isBlank() && controller.foregroundPackage().let { it == null || it == appContext.packageName }) return null
         return task
     }
 
     private suspend fun runOfflineNav(userInput: String, task: OfflineNav.Task) {
         GateAuditLog.recordRoute(GateAuditLog.ROUTE_OFFLINE_NAV, "task")
-        android.util.Log.i("UltraBrain", "OFFLINE NAV: goal=\"${task.goal.take(120)}\" app=\"${task.appHint}\"")
+        android.util.Log.i("JarvisBrain", "OFFLINE NAV: goal=\"${task.goal.take(120)}\" app=\"${task.appHint}\"")
         val out = offlineNavigator().run(task, userInput)
         val steps = "${out.steps} step${if (out.steps == 1) "" else "s"}"
         answer(when {
@@ -945,7 +945,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
             out.stopped ->"Stopped after $steps."
             else -> "I couldn't finish that on-device: ${out.summary} (after $steps)."
         })
-        android.util.Log.i("UltraBrain", "RUN COMPLETE (offline nav, ok=${out.success}, steps=${out.steps})")
+        android.util.Log.i("JarvisBrain", "RUN COMPLETE (offline nav, ok=${out.success}, steps=${out.steps})")
     }
 
     /** Direct local answer for the offline path. Thinking MoE presets get ChatML,
@@ -991,7 +991,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
                     userInput,
                 )
                 val history = if (needsHistory.include) HistoryPolicy.window(past, historyChars) else emptyList()
-                android.util.Log.d("UltraRoute", "history turns=${history.size} chars=${history.sumOf { it.text.length }} " +
+                android.util.Log.d("JarvisRoute", "history turns=${history.size} chars=${history.sumOf { it.text.length }} " +
                     "reason=${needsHistory.reason}")
                 val memory = if (focus == null && (!wantsMemory.search || MemoryBrief.provider == null)) null else {
                     // The search can take up to MemoryBrief.TIMEOUT_MS: show it, not an empty bubble.
@@ -1010,7 +1010,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
                         ChatStore.clearStatus(searching)
                     }
                 }
-                android.util.Log.d("UltraRoute", "memory reason=${wantsMemory.reason} provider=${MemoryBrief.provider != null} " +
+                android.util.Log.d("JarvisRoute", "memory reason=${wantsMemory.reason} provider=${MemoryBrief.provider != null} " +
                     "briefChars=${memory?.length ?: 0}")
                 // The web, when the phone is online and the question needs it (WebNeed): the app
                 // searches, the brain reads the results. Not for a memory / notes question.
@@ -1031,7 +1031,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
                     } catch (e: Exception) { null } finally { ChatStore.clearStatus(searching) }
                 }
                 if (webQuery != null) GateAuditLog.recordRoute(GateAuditLog.ROUTE_WEB, if (web != null) "found" else "empty")
-                android.util.Log.d("UltraRoute", "web query=${webQuery?.take(60)} found=${web != null}")
+                android.util.Log.d("JarvisRoute", "web query=${webQuery?.take(60)} found=${web != null}")
                 // The search ran and found nothing: tell the model, or it writes the results itself
                 // (Pixel 2026-10-18: invented sellers, prices and links, and "typing in Google" it never did).
                 val userForPrompt = if (webQuery != null && web == null)
@@ -1040,8 +1040,8 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
                 else userInput
                 // System block from the fixed-order fragments (persona, profile, tools, history):
                 // byte-identical to LocalPrompt.offlineSystem, tracked for KV prefix reuse.
-                val envelope = LocalEnvelope.answer(com.agent.jarvis.ui.UltraPrefs.ownerName(appContext),
-                    TalkStyle.combine(com.agent.jarvis.ui.VoicePrefs.styleInstructions(appContext), com.agent.jarvis.ui.UltraPrefs.customInstructions(appContext)),
+                val envelope = LocalEnvelope.answer(com.agent.jarvis.ui.JarvisPrefs.ownerName(appContext),
+                    TalkStyle.combine(com.agent.jarvis.ui.VoicePrefs.styleInstructions(appContext), com.agent.jarvis.ui.JarvisPrefs.customInstructions(appContext)),
                     history, historyChars)
                 trackPromptEnvelope(envelope)
                 val system = LocalEnvelope.systemText(envelope.fragments, "\n")
@@ -1056,7 +1056,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
                     })
                 val reserve = LocalPrompt.answerReserve(level)
                 val speed = local.decodeTokPerSec
-                val depth = com.agent.jarvis.ui.UltraPrefs.thinkingDepth(appContext)
+                val depth = com.agent.jarvis.ui.JarvisPrefs.thinkingDepth(appContext)
                     .let { if (it > maxThinkingDepth) maxThinkingDepth else it }
                 // Spoken: answer within seconds, whatever the tier (WaitBudget.spoken).
                 val timed = WaitBudget.budget(route.tier, speed, depth)
@@ -1067,7 +1067,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
                     LocalPrompt.estimateTokens(prompt), reserve,
                 )
                 val budget = WaitBudget.scaleForHeat(clipped, level, depth)
-                android.util.Log.d("UltraRoute", "tier=${route.tier} reason=${route.reason} level=$level budget=$budget " +
+                android.util.Log.d("JarvisRoute", "tier=${route.tier} reason=${route.reason} level=$level budget=$budget " +
                     "depth=$depth maxWaitS=${WaitBudget.maxSilentSeconds(route.tier, depth).toInt()} " +
                     "ceiling=${WaitBudget.tokenCeiling(route.tier, depth)} timed=$timed clipped=$clipped ctx=$nCtx " +
                     "tierBudget=${route.thinkBudget} tokPerSec=${speed?.let { "%.2f".format(it) } ?: "unknown"}")
@@ -1127,7 +1127,7 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
         val episode = Gate.Episode(userInput)
         // An obvious one-shot command ("flashlight on", "call mom"): the tool call without a model run.
         FastCommand.match(userInput)?.let { fast ->
-            android.util.Log.i("UltraBrain", "FAST COMMAND (no model): ${fast.first} ${fast.second}")
+            android.util.Log.i("JarvisBrain", "FAST COMMAND (no model): ${fast.first} ${fast.second}")
             runLocalCall(userInput, episode, fast)
             return true
         }
@@ -1138,11 +1138,11 @@ class Brain(private val appContext: Context, private val local: com.agent.jarvis
             bestShortcut(userInput)?.first?.takeIf { !it.toolsCsv.contains("→") }?.toolsCsv
         } catch (_: Exception) { null }
         if (recalled != null) {
-            android.util.Log.i("UltraBrain", "MEMORY HINT (local): $recalled")
+            android.util.Log.i("JarvisBrain", "MEMORY HINT (local): $recalled")
         }
         if (toolEngine.isThinkingModel) {
             val call = thinkingToolCall(userInput, recalled) ?: return false
-            val compose = com.agent.jarvis.ui.UltraPrefs.mainReply(appContext)
+            val compose = com.agent.jarvis.ui.JarvisPrefs.mainReply(appContext)
             val collected = mutableListOf<String>()
             val result = runLocalCall(userInput, episode, call, speak = !compose, collect = collected, chainStep = 1)
             // "call mom and then text Sam": more than one job -> next tool, up to MAX_CHAIN. A confirm card
@@ -1201,7 +1201,7 @@ JSON:"""
             // few-shot examples as if the conversation continued. Cut at the
             // first echoed turn so the logs and the parser see one answer.
             val out = raw.split(Regex("""\n\s*(User|JSON)\s*:"""), limit = 2).first().trim()
-            android.util.Log.i("UltraBrain", "LOCAL turn $attempt: ${out.take(120)}")
+            android.util.Log.i("JarvisBrain", "LOCAL turn $attempt: ${out.take(120)}")
             // The 1B model reliably emits the tool NAME, not the JSON wrapper
             // (measured on-device). Parse both: JSON first, bare name second —
             // a deterministic engine shapes the params either way.
@@ -1249,14 +1249,14 @@ JSON:"""
                 )
                 // The small action model could not run (no room, or it gave way): the main model does it.
                 if (first.isFailure && engine !== local) {
-                    android.util.Log.i("UltraBrain", "action model failed, using the main model: ${first.exceptionOrNull()?.message}")
+                    android.util.Log.i("JarvisBrain", "action model failed, using the main model: ${first.exceptionOrNull()?.message}")
                     local.generate(prompt, maxTokens = budget + reserve + 32, thinkBudget = think, onStart = started)
                 } else first
             }.getOrElse { return null }
         } finally {
             shown?.let { ChatStore.clearStatus(it) }
         }
-        android.util.Log.i("UltraBrain", "LOCAL (thinking, budget=$budget): ${raw.take(160)}")
+        android.util.Log.i("JarvisBrain", "LOCAL (thinking, budget=$budget): ${raw.take(160)}")
         return when (val parsed = LocalToolCall.extract(raw)) {
             is LocalToolCall.Parsed.Call -> parsed.tool to parsed.params
             // A reply that is only a tool's name; params shaped from the request.
@@ -1265,7 +1265,7 @@ JSON:"""
             // Stays loaded for the session, so later prompts keep the same (stable) tool fragment.
             is LocalToolCall.Parsed.LoadNamespace -> {
                 val loaded = toolNamespaces.load(parsed.namespace)
-                android.util.Log.i("UltraPrompt", "load_tool_namespace ${parsed.namespace} loaded=$loaded")
+                android.util.Log.i("JarvisPrompt", "load_tool_namespace ${parsed.namespace} loaded=$loaded")
                 if (loaded && reloads > 0) thinkingToolCall(userInput, recalled, reloads - 1) else null
             }
             LocalToolCall.Parsed.Declined, LocalToolCall.Parsed.Unparsed -> null
@@ -1356,14 +1356,14 @@ JSON:"""
         }
         if (!verdict.allowed) {
             GateAuditLog.record(appContext, call.first, GateAuditLog.Outcome.BLOCKED, verdict.rule, episode.observations, verdict.riskScore)
-            android.util.Log.i("UltraGate", "LOCAL BLOCK ${call.first}: ${verdict.violations.firstOrNull()?.hint}")
+            android.util.Log.i("JarvisGate", "LOCAL BLOCK ${call.first}: ${verdict.violations.firstOrNull()?.hint}")
             answer("Blocked by policy gate: ${verdict.violations.firstOrNull()?.hint}")
             return null
         }
         val localOutcome = if (verdict.autoApproved) GateAuditLog.Outcome.AUTO_APPROVED else GateAuditLog.Outcome.ALLOWED
-        if (verdict.autoApproved) android.util.Log.i("UltraGate", "LOCAL AUTO-APPROVE ${call.first} (risk=${verdict.riskScore?.total})")
+        if (verdict.autoApproved) android.util.Log.i("JarvisGate", "LOCAL AUTO-APPROVE ${call.first} (risk=${verdict.riskScore?.total})")
         GateAuditLog.record(appContext, call.first, localOutcome, verdict.rule, episode.observations, verdict.riskScore)
-        android.util.Log.i("UltraBrain", "LOCAL TOOL: ${call.first} ${call.second.toString().take(80)}")
+        android.util.Log.i("JarvisBrain", "LOCAL TOOL: ${call.first} ${call.second.toString().take(80)}")
         val result = tools.execute(call.first, call.second)
         episode.observeSecrets(result)
         episode.observeTool(call.first, result.take(80))
@@ -1371,7 +1371,7 @@ JSON:"""
         val failed = result.startsWith("Error:")
         collect?.add("${call.first}: $result")
         if (speak) answer((if (failed) "Tried on-device: $result" else "$result (on-device)") + verification)
-        android.util.Log.i("UltraBrain", "RUN COMPLETE (local, tool=${call.first}, ok=${!failed})")
+        android.util.Log.i("JarvisBrain", "RUN COMPLETE (local, tool=${call.first}, ok=${!failed})")
         // On-device runs feed task memory and the recipe buffer too —
         // otherwise "save that as X" after a local command has nothing
         // to save.
@@ -1456,7 +1456,7 @@ JSON:"""
             // stopped at max_tokens counts too, even when the cut JSON happens to parse.
             if ((toolCall == null && ModelOutput.cutShortCall(raw)) || (toolCall != null && ai.lastReplyTruncated)) {
                 ChatStore.removeById(streamMsg.id)
-                android.util.Log.i("UltraBrain", "CUT-SHORT CALL, asking again: ${raw.take(200)}")
+                android.util.Log.i("JarvisBrain", "CUT-SHORT CALL, asking again: ${raw.take(200)}")
                 messages += OpenAiClient.ChatMessage("assistant", raw)
                 messages += OpenAiClient.ChatMessage("user",
                     "Your tool call was cut off before it ended. Send the complete JSON tool call again.")
@@ -1475,7 +1475,7 @@ JSON:"""
                 finalText = raw
                 finalStreamId = streamMsg.id
                 naturalFinish = true
-                android.util.Log.i("UltraBrain", "FINAL TEXT (${raw.length} chars): ${raw.replace("\n", " ").take(200)}")
+                android.util.Log.i("JarvisBrain", "FINAL TEXT (${raw.length} chars): ${raw.replace("\n", " ").take(200)}")
                 break
             }
 
@@ -1485,13 +1485,13 @@ JSON:"""
 
             // Logged BEFORE the gate: a blocked call never reached the TOOL CALL line below, so
             // the log said a call was refused and never what it was (AndroidWorld run, 2026-09-19).
-            android.util.Log.i("UltraBrain", "TOOL ATTEMPT: ${toolCall.first} params=${toolCall.second.toString().take(200)}")
+            android.util.Log.i("JarvisBrain", "TOOL ATTEMPT: ${toolCall.first} params=${toolCall.second.toString().take(200)}")
 
             // ── POLICY GATE (M3) — deterministic, no model judgment ──
             val verdict = gate.enforceCall(episode, toolCall.first, toolCall.second)
             if (!verdict.allowed) {
                 val blockMsg = Gate.renderBlock(verdict)
-                android.util.Log.i("UltraGate", "BLOCK ${toolCall.first}: ${verdict.violations.firstOrNull()?.hint}")
+                android.util.Log.i("JarvisGate", "BLOCK ${toolCall.first}: ${verdict.violations.firstOrNull()?.hint}")
                 if (verdict.confirmable) {
                     GateAuditLog.record(appContext, toolCall.first, GateAuditLog.Outcome.BLOCKED, verdict.rule, episode.observations, verdict.riskScore)
                     val targets = verdict.violations.mapNotNull { v ->
@@ -1519,7 +1519,7 @@ JSON:"""
                 continue
             }
             val cloudOutcome = if (verdict.autoApproved) GateAuditLog.Outcome.AUTO_APPROVED else GateAuditLog.Outcome.ALLOWED
-            if (verdict.autoApproved) android.util.Log.i("UltraGate", "AUTO-APPROVE ${toolCall.first} (risk=${verdict.riskScore?.total})")
+            if (verdict.autoApproved) android.util.Log.i("JarvisGate", "AUTO-APPROVE ${toolCall.first} (risk=${verdict.riskScore?.total})")
             GateAuditLog.record(appContext, toolCall.first, cloudOutcome, verdict.rule, episode.observations, verdict.riskScore)
 
             // Confirmation notice for destructive tools — UX layer; the gate
@@ -1529,7 +1529,7 @@ JSON:"""
                 emit("About to: $desc")
             }
 
-            android.util.Log.i("UltraBrain", "TOOL CALL: ${toolCall.first} params=${toolCall.second.toString().take(600)}")
+            android.util.Log.i("JarvisBrain", "TOOL CALL: ${toolCall.first} params=${toolCall.second.toString().take(600)}")
 
             // Duplicate-call dedupe: the same tool with identical params just
             // succeeded → tell the model it's done instead of re-firing.
@@ -1560,7 +1560,7 @@ JSON:"""
             // a release build there is no debugger and this is the only window
             // into what the model was given, so log enough to check it.
             // Android caps a single entry near 4 KB and splits on newlines.
-            android.util.Log.i("UltraBrain", "TOOL RESULT (${if (failed) "fail" else "ok"}): ${resultText.take(TOOL_LOG_CHARS)}${verification ?: ""}")
+            android.util.Log.i("JarvisBrain", "TOOL RESULT (${if (failed) "fail" else "ok"}): ${resultText.take(TOOL_LOG_CHARS)}${verification ?: ""}")
 
             // Stuck detector: same tool failed twice in a row → stop honestly
             if (failed && lastToolFailed && lastTool == toolCall.first) {
@@ -1587,7 +1587,7 @@ JSON:"""
             // Addressed by id: comparing the last bubble's text failed on the
             // trimmed/untrimmed difference and showed the answer twice.
             val streamId = finalStreamId
-            android.util.Log.i("UltraBrain", "EMIT TAIL: ${finalText.length}ch alreadyOnScreen=${streamId != null}")
+            android.util.Log.i("JarvisBrain", "EMIT TAIL: ${finalText.length}ch alreadyOnScreen=${streamId != null}")
             if (streamId != null) {
                 ChatStore.setText(streamId, finalText)
                 ChatStore.persist(ChatMessage(fromUser = false, text = finalText, id = streamId))
@@ -1605,7 +1605,7 @@ JSON:"""
         } else {
             answer("I couldn't finish that — I ran out of steps without an answer.")
         }
-        android.util.Log.i("UltraBrain", "OBSERVATIONS: ${episode.observations.summary()}")
+        android.util.Log.i("JarvisBrain", "OBSERVATIONS: ${episode.observations.summary()}")
         val credited = naturalFinish && !anyToolFailed
         val served = servedThisRun
         val memoryKey = recordMemory(userInput, toolSequence, credited)
@@ -1641,7 +1641,7 @@ JSON:"""
                         .put("ok", it.ok).put("result", it.result.take(200))) }
                 })
             lastRunFile().writeText(o.toString())
-        } catch (e: Exception) { android.util.Log.w("UltraLearn", "last run not saved: ${e.message}") }
+        } catch (e: Exception) { android.util.Log.w("JarvisLearn", "last run not saved: ${e.message}") }
     }
 
     private fun loadLastRun(): LastRun? = try {
@@ -1656,23 +1656,23 @@ JSON:"""
     } catch (_: Exception) { null }
 
     /**
-     * Someone other than Ultra says whether the last run did the job.
+     * Someone other than Jarvis says whether the last run did the job.
      *
-     * A pass changes nothing: the run was already counted as one. A fail on a run Ultra had
+     * A pass changes nothing: the run was already counted as one. A fail on a run Jarvis had
      * counted as a success takes all of it back — the stored "this is how" shortcut, the good
      * mark on every lesson it was served, any fix it thought it had found — and leaves one
      * lesson saying that approach doesn't do the job.
      */
     suspend fun applyVerdict(passed: Boolean, why: String) {
         val run = lastRun ?: loadLastRun() ?: run {
-            android.util.Log.i("UltraLearn", "VERDICT ${if (passed) "pass" else "fail"} ($why): no record of the last run to apply it to")
+            android.util.Log.i("JarvisLearn", "VERDICT ${if (passed) "pass" else "fail"} ($why): no record of the last run to apply it to")
             return
         }
         lastRun = null
         lastRunFile().delete()
         try {
             if (passed || !run.credited) {
-                android.util.Log.i("UltraLearn", "VERDICT ${if (passed) "pass" else "fail"} ($why): nothing to take back")
+                android.util.Log.i("JarvisLearn", "VERDICT ${if (passed) "pass" else "fail"} ($why): nothing to take back")
                 return
             }
             for (uid in run.served) lessonDao.recount(uid, -1, 1)
@@ -1682,11 +1682,11 @@ JSON:"""
                 else taskMemory.deleteShortcut(key)
             }
             for (uid in run.learnedFixes) lessonDao.delete(uid)
-            android.util.Log.i("UltraLearn", "VERDICT fail ($why): took back memory=${run.memoryKey != null}, " +
+            android.util.Log.i("JarvisLearn", "VERDICT fail ($why): took back memory=${run.memoryKey != null}, " +
                 "${run.served.size} lesson outcome(s), ${run.learnedFixes.size} fix lesson(s)")
             Experience.verdict(run.request, run.steps)?.let { saveLessons(listOf(it)) }
             exportForLaptop()
-        } catch (e: Exception) { android.util.Log.w("UltraLearn", "verdict failed: ${e.message}") }
+        } catch (e: Exception) { android.util.Log.w("JarvisLearn", "verdict failed: ${e.message}") }
     }
 
     /** verdict.json, written by whoever checked the last run: {"passed":false,"request":"…"}. */
@@ -1700,17 +1700,17 @@ JSON:"""
                 // A verdict for some other request says nothing about this run.
                 val mine = (lastRun ?: loadLastRun())?.request
                 if (mine == null) {
-                    android.util.Log.i("UltraLearn", "VERDICT ignored: no record of the last run")
+                    android.util.Log.i("JarvisLearn", "VERDICT ignored: no record of the last run")
                     return
                 }
                 if (Experience.tokens(o.optString("request")) != Experience.tokens(mine)) {
-                    android.util.Log.i("UltraLearn", "VERDICT ignored: it is for a different request")
+                    android.util.Log.i("JarvisLearn", "VERDICT ignored: it is for a different request")
                     return
                 }
                 applyVerdict(o.getBoolean("passed"), o.optString("by", "outside check"))
                 return
             } catch (e: Exception) {
-                android.util.Log.i("UltraLearn", "verdict file unreadable at ${dir.path}: ${e.message}")
+                android.util.Log.i("JarvisLearn", "verdict file unreadable at ${dir.path}: ${e.message}")
             }
         }
     }
@@ -1723,7 +1723,7 @@ JSON:"""
             val mine = AppMatch.canonical(userInput, named, apps) ?: return
             if (mine != named.lowercase()) {
                 params.put(key, mine)
-                android.util.Log.i("UltraBrain", "APP NAME: \"$named\" -> the user's \"$mine\" (same app)")
+                android.util.Log.i("JarvisBrain", "APP NAME: \"$named\" -> the user's \"$mine\" (same app)")
             }
         } catch (_: Exception) {}
     }
@@ -1748,13 +1748,13 @@ JSON:"""
         val routeLesson = playable?.first ?: routes.firstOrNull()
         tools.navigator?.routeHint = routeLesson?.text?.let(RoutePlayer::forModel).orEmpty()
         tools.navigator?.routePlay = playable?.let { (lesson, route, values) ->
-            android.util.Log.i("UltraLearn", "ROUTE bound: ${lesson.uid} with ${values.size} value(s) from the request")
+            android.util.Log.i("JarvisLearn", "ROUTE bound: ${lesson.uid} with ${values.size} value(s) from the request")
             route to values
         }
         Experience.block(hits)?.also {
-            android.util.Log.i("UltraLearn", "LESSONS SERVED: ${hits.joinToString { it.uid }}")
+            android.util.Log.i("JarvisLearn", "LESSONS SERVED: ${hits.joinToString { it.uid }}")
         }
-    } catch (e: Exception) { android.util.Log.w("UltraLearn", "recall failed: ${e.message}"); null }
+    } catch (e: Exception) { android.util.Log.w("JarvisLearn", "recall failed: ${e.message}"); null }
 
     /** The run is over: count it against every lesson it was given, and keep any wall it got past. */
     private suspend fun learnFromRun(userInput: String, steps: List<Experience.Step>, success: Boolean, finished: Boolean): List<String> {
@@ -1765,7 +1765,7 @@ JSON:"""
                 val good = held ?: success
                 lessonDao.outcome(uid, if (good) 1 else 0, if (good) 0 else 1)
             }
-            if (servedThisRun.isNotEmpty()) android.util.Log.i("UltraLearn", "OUTCOME ${if (success) "ok" else "fail"} for ${servedThisRun.joinToString()}")
+            if (servedThisRun.isNotEmpty()) android.util.Log.i("JarvisLearn", "OUTCOME ${if (success) "ok" else "fail"} for ${servedThisRun.joinToString()}")
             val counted = servedThisRun.isNotEmpty()
             servedThisRun = emptyList()
             val learned = Experience.capture(userInput, steps, finished)
@@ -1774,7 +1774,7 @@ JSON:"""
             if (counted && learned.isEmpty()) exportForLaptop()
             // Dead ends stay true whatever a later verdict says; a "fix" is only a fix if the job got done.
             return learned.filter { "-self-" in it.uid }.map { it.uid }
-        } catch (e: Exception) { android.util.Log.w("UltraLearn", "learn failed: ${e.message}") }
+        } catch (e: Exception) { android.util.Log.w("JarvisLearn", "learn failed: ${e.message}") }
         return emptyList()
     }
 
@@ -1785,7 +1785,7 @@ JSON:"""
             val old = lessonDao.byUid(l.uid)
             lessonDao.upsert(com.agent.jarvis.data.LessonEntity.of(
                 if (old == null) l else l.copy(served = old.served, ok = old.ok, fail = old.fail, createdAt = old.createdAt)))
-            android.util.Log.i("UltraLearn", "LEARNED ${l.uid} (${l.source}): ${l.text.take(160)}")
+            android.util.Log.i("JarvisLearn", "LEARNED ${l.uid} (${l.source}): ${l.text.take(160)}")
         }
         exportForLaptop()
     }
@@ -1799,7 +1799,7 @@ JSON:"""
                 tmp.writeText(lines + "\n")
                 tmp.renameTo(java.io.File(dir, "experience.jsonl"))
             }
-        } catch (e: Exception) { android.util.Log.w("UltraLearn", "export failed: ${e.message}") }
+        } catch (e: Exception) { android.util.Log.w("JarvisLearn", "export failed: ${e.message}") }
     }
 
     /** northstar_lessons.jsonl, pushed by `northstar phone push`: read once, then deleted. */
@@ -1822,13 +1822,13 @@ JSON:"""
                     f.delete()
                     break
                 } catch (e: Exception) {
-                    android.util.Log.i("UltraLearn", "lesson file unreadable at ${dir.path}: ${e.message}")
+                    android.util.Log.i("JarvisLearn", "lesson file unreadable at ${dir.path}: ${e.message}")
                 }
             }
             if (got.isEmpty()) return
             saveLessons(got)
-            android.util.Log.i("UltraLearn", "IMPORTED ${got.size} lesson(s) from Northstar ($from)")
-        } catch (e: Exception) { android.util.Log.w("UltraLearn", "import failed: ${e.message}") }
+            android.util.Log.i("JarvisLearn", "IMPORTED ${got.size} lesson(s) from Northstar ($from)")
+        } catch (e: Exception) { android.util.Log.w("JarvisLearn", "import failed: ${e.message}") }
     }
 
     // ── Parsing & prompt (ported shapes) ───────────────────────────────
@@ -2023,8 +2023,8 @@ JSON:"""
             controller.currentWifiSsid()?.let { add("WiFi: $it") }
         }.joinToString(" | ")
 
-        val owner = LocalPrompt.ownerSection(com.agent.jarvis.ui.UltraPrefs.ownerName(appContext),
-            TalkStyle.combine(com.agent.jarvis.ui.VoicePrefs.styleInstructions(appContext), com.agent.jarvis.ui.UltraPrefs.customInstructions(appContext))).let { if (it.isEmpty()) "" else "\n$it\n" }
+        val owner = LocalPrompt.ownerSection(com.agent.jarvis.ui.JarvisPrefs.ownerName(appContext),
+            TalkStyle.combine(com.agent.jarvis.ui.VoicePrefs.styleInstructions(appContext), com.agent.jarvis.ui.JarvisPrefs.customInstructions(appContext))).let { if (it.isEmpty()) "" else "\n$it\n" }
         return """You are Jarvis — a capable, concise AI agent controlling this Android phone. You have unrestricted access to it and everything on it through its accessibility service: you can see and use the screen (read, tap, type, scroll), every app (any browser, ${torBrowserNote()}), messages, contacts, notifications, settings, screenshots. Never say you can't see the screen or can't access or control the phone, unless the ACCESS NOW line says that part is off.
 ACCESS NOW: ${accessNow()}
 PHONE STATE: $env

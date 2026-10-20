@@ -4,7 +4,7 @@ import android.app.Application
 import android.content.Intent
 import androidx.core.content.ContextCompat
 
-class UltraApplication : Application() {
+class JarvisApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -28,7 +28,7 @@ class UltraApplication : Application() {
                 this, Intent(this, AgentBackgroundService::class.java)
             )
         } catch (e: Exception) {
-            android.util.Log.w("UltraApp", "background service start failed", e)
+            android.util.Log.w("JarvisApp", "background service start failed", e)
         }
     }
 
@@ -39,7 +39,7 @@ class UltraApplication : Application() {
         // Notes the old note tool left as text files join the one notes store (once).
         Thread {
             runCatching { com.agent.jarvis.listen.MemoryNotes.get(ctx).importLegacyFiles(ctx.filesDir) }
-                .onSuccess { if (it > 0) android.util.Log.i("UltraMemory", "imported $it old note file(s)") }
+                .onSuccess { if (it > 0) android.util.Log.i("JarvisMemory", "imported $it old note file(s)") }
         }.start()
         com.agent.jarvis.listen.MemoryRecall.extraSources +=
             com.agent.jarvis.listen.MemoryRecall.textSource("notes") { q, n ->
@@ -49,7 +49,7 @@ class UltraApplication : Application() {
         // gate). active() only, so a superseded claim never resurfaces next to its replacement.
         com.agent.jarvis.listen.MemoryRecall.extraSources +=
             com.agent.jarvis.listen.MemoryRecall.textSource("memory") { q, n ->
-                com.agent.jarvis.harness.MemoryClaims(com.agent.jarvis.data.UltraDatabase.get(ctx).claims())
+                com.agent.jarvis.harness.MemoryClaims(com.agent.jarvis.data.JarvisDatabase.get(ctx).claims())
                     .searchScored(q).take(n).map { (c, _) -> c.reinforcedAt to c.text }
             }
         com.agent.jarvis.agent.MemoryBrief.provider = { q, now ->
@@ -97,7 +97,7 @@ class UltraApplication : Application() {
         }
 
     companion object {
-        lateinit var instance: UltraApplication
+        lateinit var instance: JarvisApplication
             private set
     }
 }

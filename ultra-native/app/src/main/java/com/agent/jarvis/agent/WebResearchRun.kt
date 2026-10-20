@@ -44,10 +44,10 @@ class OnionAccess(
 
         /** From the owner's settings; [OFF] when the setting is off or offline only is on. */
         fun of(ctx: android.content.Context): OnionAccess {
-            if (!com.agent.jarvis.ui.UltraPrefs.onionResearch(ctx) || NetPolicy.offlineOnly(ctx)) return OFF
+            if (!com.agent.jarvis.ui.JarvisPrefs.onionResearch(ctx) || NetPolicy.offlineOnly(ctx)) return OFF
             // Resolved per use: the in-app Tor may start (or stop) after this was made.
-            return OnionAccess(true, com.agent.jarvis.ui.UltraPrefs.deepResearch(ctx),
-                OnionSafety.knownGood(com.agent.jarvis.ui.UltraPrefs.onionKnownGood(ctx)),
+            return OnionAccess(true, com.agent.jarvis.ui.JarvisPrefs.deepResearch(ctx),
+                OnionSafety.knownGood(com.agent.jarvis.ui.JarvisPrefs.onionKnownGood(ctx)),
                 { TorProxy.current().isAvailable() }, { u -> TorProxy.current().get(u) })
         }
     }
@@ -106,7 +106,7 @@ object WebResearchRun {
         cancelOnStop(call) { call.execute().use { r ->
             val html = r.body?.string().orEmpty()
             if (!r.isSuccessful || WebResearch.ddgBlocked(r.code, html)) {
-                android.util.Log.w("UltraWeb", "search blocked or failed: HTTP ${r.code}")
+                android.util.Log.w("JarvisWeb", "search blocked or failed: HTTP ${r.code}")
                 null
             } else html
         } }
@@ -205,7 +205,7 @@ object WebResearchRun {
         val claims = if (!onion.enabled) emptyMap() else ranked.take(8).associate { r ->
             r.hit.url to (OnionSafety.addressesIn(raw[r.hit.url].orEmpty() + " " + r.hit.snippet + " " + r.hit.title))
         }.filterValues { it.isNotEmpty() }
-        android.util.Log.i("UltraWeb", "research kind=$kind queries=${queries.size} results=${ranked.size} pages=${pages.size} onions=${report.sources.size}")
+        android.util.Log.i("JarvisWeb", "research kind=$kind queries=${queries.size} results=${ranked.size} pages=${pages.size} onions=${report.sources.size}")
         Outcome(kind, queries, ranked, pages, raw, report.copy(claims = claims, known = onion.known), System.currentTimeMillis())
     }
 

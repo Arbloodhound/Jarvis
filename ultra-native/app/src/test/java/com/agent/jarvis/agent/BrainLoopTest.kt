@@ -50,7 +50,7 @@ class BrainLoopTest {
         ChatStore.uiVisible = false
         Brain.lastRequest = ""
         Brain.lastRunSteps = emptyList()
-        com.agent.jarvis.ui.UltraPrefs.setOfflineOnly(ctx, false); com.agent.jarvis.ui.UltraPrefs.setCloudBrain(ctx, true)
+        com.agent.jarvis.ui.JarvisPrefs.setOfflineOnly(ctx, false); com.agent.jarvis.ui.JarvisPrefs.setCloudBrain(ctx, true)
         brain = Brain(ctx, LocalModelEngine(ctx))
         brain.onAnswer = { answers += it }
         brain.speakTyped = { false }
@@ -60,7 +60,7 @@ class BrainLoopTest {
     @After fun tearDown() {
         server.close()
         ChatStore.messages.clear()
-        com.agent.jarvis.ui.UltraPrefs.setOfflineOnly(ctx, false); com.agent.jarvis.ui.UltraPrefs.setCloudBrain(ctx, true)
+        com.agent.jarvis.ui.JarvisPrefs.setOfflineOnly(ctx, false); com.agent.jarvis.ui.JarvisPrefs.setCloudBrain(ctx, true)
     }
 
     /** Runs [block] off the main thread (the brain's IO and Room calls), idling the main looper —
@@ -111,7 +111,7 @@ class BrainLoopTest {
     }
 
     @Test fun offlineOnlyNeverCallsTheCloudEvenWithAKey() {
-        com.agent.jarvis.ui.UltraPrefs.setOfflineOnly(ctx, true)
+        com.agent.jarvis.ui.JarvisPrefs.setOfflineOnly(ctx, true)
         assertTrue(brain.configured)   // the key is set: only the switch keeps the cloud out
         drive { brain.run("what is the capital of France") }
         assertEquals(0, server.requests.size)
@@ -124,7 +124,7 @@ class BrainLoopTest {
         server.reply("""{"tool":"sms_send","params":{"to":"5551234567","message":"running late"}}""")
         drive { brain.run("text my wife that I'm running late") }
         assertNotNull(brain.pendingConfirm)
-        com.agent.jarvis.ui.UltraPrefs.setOfflineOnly(ctx, true)
+        com.agent.jarvis.ui.JarvisPrefs.setOfflineOnly(ctx, true)
         drive { brain.resolvePending(true) }
         assertEquals(1, server.requests.size)
         assertEquals("Cancelled: Send a text to 5551234567: \"running late\" (offline-only mode is on, so the cloud brain can't carry on)",

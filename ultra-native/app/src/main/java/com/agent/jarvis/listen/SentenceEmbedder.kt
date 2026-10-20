@@ -149,7 +149,7 @@ class SentenceEmbedder private constructor(model: File, vocab: File) {
     }
 
     companion object {
-        private const val TAG = "UltraMemory"
+        private const val TAG = "JarvisMemory"
         const val MAX_LEN = 128
         const val DIM = 384
         private const val THREADS = 2       // leave the big cores to the LLM

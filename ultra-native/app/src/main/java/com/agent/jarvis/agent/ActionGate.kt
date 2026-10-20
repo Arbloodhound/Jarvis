@@ -53,13 +53,13 @@ object ActionGate {
         waiter = d
         onUi { pending = Pending(action, label, app, reason) }
         android.util.Log.i(TAG, "PAUSED: $action on \"$label\" in $app (matched \"$reason\")")
-        // The navigator drives another app, so Ultra is in the background when this fires. A
+        // The navigator drives another app, so Jarvis is in the background when this fires. A
         // card nobody can see is a gate that silently denies everything after two minutes.
         //
         // The question goes ON TOP of the app it is about, as an accessibility overlay. Bringing
-        // Ultra forward instead made the app underneath redraw when it came back: Markor dropped
+        // Jarvis forward instead made the app underneath redraw when it came back: Markor dropped
         // its selection, "Delete" was gone, and an approved delete could never happen
-        // (2026-09-20). Only when the overlay cannot be drawn is Ultra brought forward, the old way.
+        // (2026-09-20). Only when the overlay cannot be drawn is Jarvis brought forward, the old way.
         val svc = com.agent.jarvis.AgentAccessibilityService.getInstance()
         val drawn = try {
             svc?.showGateOverlay(
@@ -68,7 +68,7 @@ object ActionGate {
                 { resolve(true) }, { resolve(false) },
             ) ?: false
         } catch (e: Exception) { false }
-        if (!drawn) bringUltraForward()
+        if (!drawn) bringJarvisForward()
         var ok = false
         try {
             ok = withTimeoutOrNull(TIMEOUT_MS) { d.await() } ?: false
@@ -132,9 +132,9 @@ object ActionGate {
         return if (unreadable) UNREADABLE else null
     }
 
-    private fun bringUltraForward() {
+    private fun bringJarvisForward() {
         try {
-            val ctx = com.agent.jarvis.UltraApplication.instance
+            val ctx = com.agent.jarvis.JarvisApplication.instance
             ctx.startActivity(
                 android.content.Intent(ctx, com.agent.jarvis.MainActivity::class.java)
                     .addFlags(
@@ -147,7 +147,7 @@ object ActionGate {
         }
     }
 
-    private const val TAG = "UltraActionGate"
+    private const val TAG = "JarvisActionGate"
     /** The reason given when the label is in a script the word list cannot read. */
     const val UNREADABLE = "a label in a language I can't read"
     private const val TIMEOUT_MS = 120_000L

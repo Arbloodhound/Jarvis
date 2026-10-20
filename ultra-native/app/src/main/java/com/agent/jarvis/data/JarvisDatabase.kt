@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         com.agent.jarvis.harness.BanditArmEntity::class],
     version = 9,
 )
-abstract class UltraDatabase : RoomDatabase() {
+abstract class JarvisDatabase : RoomDatabase() {
     abstract fun conversations(): ConversationDao
     abstract fun taskMemory(): TaskMemoryDao
     abstract fun recipes(): RecipeDao
@@ -29,7 +29,7 @@ abstract class UltraDatabase : RoomDatabase() {
     abstract fun banditArms(): com.agent.jarvis.harness.BanditArmDao
 
     companion object {
-        @Volatile private var instance: UltraDatabase? = null
+        @Volatile private var instance: JarvisDatabase? = null
 
         /** v2 → v3 adds the recipes table. Written as a real migration rather
          * than a destructive fallback: conversations and task memory are the
@@ -102,7 +102,7 @@ abstract class UltraDatabase : RoomDatabase() {
 
         /** v7 → v8 adds the harness tables: memory claims (harness/MemoryClaims.kt) and durable
          * approval grants (harness/ApprovalGrants.kt). Columns and indices match what Room
-         * generates for those entities (UltraDatabaseMigrationTest compares them). */
+         * generates for those entities (JarvisDatabaseMigrationTest compares them). */
         internal val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -148,9 +148,9 @@ abstract class UltraDatabase : RoomDatabase() {
             }
         }
 
-        fun get(context: Context): UltraDatabase = instance ?: synchronized(this) {
+        fun get(context: Context): JarvisDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
-                context.applicationContext, UltraDatabase::class.java, "ultra.db"
+                context.applicationContext, JarvisDatabase::class.java, "ultra.db"
             ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
             // Only the pre-migration dev schema (v1) may be wiped. A future version
             // bump without its migration now fails loudly instead of silently

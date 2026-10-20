@@ -119,7 +119,7 @@ class ExperienceTest {
         assertTrue(Experience.recall("Create a playlist called road trip in Retro Music", listOf(lesson)).isEmpty())
     }
 
-    // A run Ultra called done that an outside check found not done (AndroidWorld, 2026-09-20).
+    // A run Jarvis called done that an outside check found not done (AndroidWorld, 2026-09-20).
     @Test fun aFailedVerdictNamesTheApproachThatDidNotDoTheJob() {
         val l = Experience.verdict("Create a timer with 0 hours, 16 minutes, and 35 seconds.", listOf(
             step("note_create", """{"text":"Timer"}""", true),

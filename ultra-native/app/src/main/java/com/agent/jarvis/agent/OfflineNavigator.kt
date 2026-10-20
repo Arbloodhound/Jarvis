@@ -191,7 +191,7 @@ class OfflineNavigator(
     }
 
     companion object {
-        private const val TAG = "UltraOfflineNav"
+        private const val TAG = "JarvisOfflineNav"
         private const val OWN_PACKAGE = "com.agent.jarvis"
 
         /** The run in progress, whichever Brain (chat, voice, ambient) started it. */

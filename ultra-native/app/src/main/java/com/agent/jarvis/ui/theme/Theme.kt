@@ -87,7 +87,7 @@ private val JarvisShapes = Shapes(
 )
 
 @Composable
-fun AgentUltraTheme(content: @Composable () -> Unit) {
+fun JarvisTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = DarkColors,
         typography = JarvisTypography,

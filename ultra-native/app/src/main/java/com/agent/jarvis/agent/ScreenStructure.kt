@@ -445,12 +445,12 @@ object ScreenStructure {
                 // changes the answer is not a shortcut.
                 val records = withSplitHalves(recalled, children, labelCount, nodes)
                 android.util.Log.i(
-                    "UltraPerceive",
+                    "JarvisPerceive",
                     "structure: recalled template, ${records.size} records",
                 )
                 return finish(records, children)
             }
-            android.util.Log.i("UltraPerceive", "structure: remembered template no longer fits")
+            android.util.Log.i("JarvisPerceive", "structure: remembered template no longer fits")
         }
 
         // Preferred: the page's own repeating template. Falls through to the
@@ -465,7 +465,7 @@ object ScreenStructure {
             lastTemplate = shapeOf(byTemplate.first(), children, SHAPE_DEPTH, HashMap())
             val records = withSplitHalves(byTemplate, children, labelCount, nodes)
             android.util.Log.i(
-                "UltraPerceive",
+                "JarvisPerceive",
                 "structure: template match, ${byTemplate.size} records" +
                     if (records !== byTemplate) " (+${records.size - byTemplate.size} paired halves)" else "",
             )
@@ -487,7 +487,7 @@ object ScreenStructure {
             if (score > bestScore) { bestScore = score; bestKids = items }
         }
         if (bestKids.isEmpty()) return emptyList()
-        android.util.Log.i("UltraPerceive", "structure: fallback scoring, ${bestKids.size} rows")
+        android.util.Log.i("JarvisPerceive", "structure: fallback scoring, ${bestKids.size} rows")
         return finish(bestKids, children)
     }
 

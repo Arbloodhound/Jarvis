@@ -36,14 +36,14 @@ import com.agent.jarvis.ui.ChatMessage
 import com.agent.jarvis.ui.ChatStore
 import com.agent.jarvis.ui.Speaker
 import com.agent.jarvis.ui.VoiceInput
-import com.agent.jarvis.ui.theme.AgentUltraTheme
+import com.agent.jarvis.ui.theme.JarvisTheme
 import kotlinx.coroutines.launch
 import com.agent.jarvis.ui.queue
 
 /**
  * The ear — a hands-free session.
  *
- * Registered for ACTION_ASSIST, so once Ultra is the device's digital
+ * Registered for ACTION_ASSIST, so once Jarvis is the device's digital
  * assistant the power-button long-press (or the assist gesture) opens straight
  * into listening. It shows over the lock screen: talk, get an answer spoken
  * back, done. Everything said here lands in the normal conversation history.
@@ -79,7 +79,7 @@ class VoiceActivity : ComponentActivity() {
         ) { granted -> micPermission = granted }
 
         setContent {
-            AgentUltraTheme {
+            JarvisTheme {
                 var state by remember { mutableStateOf("starting") }
                 var heard by remember { mutableStateOf("") }
                 var reply by remember { mutableStateOf("") }
@@ -176,7 +176,7 @@ class VoiceActivity : ComponentActivity() {
                     }
                 }
 
-                // Ambient "Ultra, ..." commands run on this same brain instance.
+                // Ambient "Jarvis, ..." commands run on this same brain instance.
                 remember(brain) {
                     val handler: (String) -> Unit = { request -> runBrain { brain.run(request) } }
                     ambientHandler = handler

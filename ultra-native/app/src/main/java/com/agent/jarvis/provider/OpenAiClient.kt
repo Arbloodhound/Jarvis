@@ -67,7 +67,7 @@ class OpenAiClient(
         val r = send()
         if (!temperatureRejected && r.exceptionOrNull()?.message?.let { rejectedTemperature(it) } == true) {
             temperatureRejected = true
-            android.util.Log.i("UltraProvider", "provider rejected temperature; sent without it from now on")
+            android.util.Log.i("JarvisProvider", "provider rejected temperature; sent without it from now on")
             return send()
         }
         return r
@@ -145,7 +145,7 @@ class OpenAiClient(
         val r = retryWithoutTemperature { streamOnce(messages, maxTokens, temperature, if (useTools) tools else null, onToken) }
         if (useTools && r.exceptionOrNull()?.message?.let { NativeTools.rejectedTools(it) } == true) {
             nativeToolsRejected = true
-            android.util.Log.i("UltraProvider", "provider rejected native tools; text protocol from now on")
+            android.util.Log.i("JarvisProvider", "provider rejected native tools; text protocol from now on")
             return retryWithoutTemperature { streamOnce(messages, maxTokens, temperature, null, onToken) }
         }
         return r
@@ -220,7 +220,7 @@ class OpenAiClient(
                 // A native call wins over any text around it: the loop runs one tool per turn.
                 calls.asTextCall()?.let { return@cancelOnStop Result.success(it) }
                 if (finish == "length") {
-                    android.util.Log.w("UltraProvider", "reply cut off at max_tokens=$maxTokens (finish_reason=length)")
+                    android.util.Log.w("JarvisProvider", "reply cut off at max_tokens=$maxTokens (finish_reason=length)")
                 }
                 if (full.isBlank()) Result.failure(Exception("empty stream"))
                 else Result.success(full.toString())
@@ -250,7 +250,7 @@ class OpenAiClient(
      * Measured on llama-3.3-70b: with it, prompt_tokens goes 26 -> 1081 and
      * the model's chat template breaks outright (replies come back as
      * "assistant<|end_header_id|>assistant..."), or it answers questions about
-     * itself instead of the user's. Ultra ships its own system prompt, so
+     * itself instead of the user's. Jarvis ships its own system prompt, so
      * Venice's is turned off. Only sent to Venice hosts — other
      * OpenAI-compatible servers reject unknown top-level fields.
      */

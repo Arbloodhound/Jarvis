@@ -47,7 +47,7 @@ class AgentController(private val context: Context) {
         for (f in found) {
             if (seenSecrets.none { it.value == f.value && it.pkg == f.pkg }) {
                 seenSecrets += f
-                android.util.Log.i("UltraFlow", "noted ${f.why} on screen in ${f.pkg}")
+                android.util.Log.i("JarvisFlow", "noted ${f.why} on screen in ${f.pkg}")
             }
         }
         // A handful is all a single request should ever produce; a screen
@@ -234,7 +234,7 @@ class AgentController(private val context: Context) {
                 android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
                 "ultra:screenTask",
             ).acquire(45_000L)
-            android.util.Log.i("UltraNav", "screen woken for an app task")
+            android.util.Log.i("JarvisNav", "screen woken for an app task")
             true
         }
     } catch (_: Exception) { false }
@@ -244,7 +244,7 @@ class AgentController(private val context: Context) {
         // the app policy has to be asked here too. Otherwise "only apps I
         // choose" would still put a bank on screen — unreadable, but open.
         if (!AgentAccessibilityService.agentMayUse(packageName)) {
-            android.util.Log.i("UltraNav", "launch refused by app policy: $packageName")
+            android.util.Log.i("JarvisNav", "launch refused by app policy: $packageName")
             return false
         }
         val intent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
@@ -468,7 +468,7 @@ class AgentController(private val context: Context) {
      *  the setting is off; with contacts unreadable a message can't be shown to be to a known
      *  contact, so it asks. */
     fun directlyRequested(request: String, commitWord: String, screen: String): Boolean {
-        if (!com.agent.jarvis.ui.UltraPrefs.skipConfirmWhenAsked(context)) return false
+        if (!com.agent.jarvis.ui.JarvisPrefs.skipConfirmWhenAsked(context)) return false
         val names = mutableListOf<String>()
         try {
             context.contentResolver.query(
@@ -573,7 +573,7 @@ class AgentController(private val context: Context) {
         context.startActivity(i)
         true
     } catch (e: Exception) {
-        android.util.Log.w("AgentUltra", "setAlarm failed", e)
+        android.util.Log.w("Jarvis", "setAlarm failed", e)
         false
     }
 

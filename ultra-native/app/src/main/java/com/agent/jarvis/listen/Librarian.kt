@@ -277,7 +277,7 @@ object Librarian {
     const val MORE_CHECK_MS = 60_000L
     const val WATCH_MS = 5_000L
 
-    private const val TAG = "UltraLibrarian"
+    private const val TAG = "JarvisLibrarian"
     private val failures = LibrarianRun.Failures()
     private var job: Job? = null
     /** The run in progress, so a "Hey Jarvis" can stop it at once ([yieldNow]). */
@@ -434,13 +434,13 @@ object Librarian {
     ): Passes {
         val store = MemoryNotes.get(ctx)
         val zone = ZoneId.systemDefault()
-        LibrarianPrompt.ownerName = com.agent.jarvis.ui.UltraPrefs.ownerName(ctx)
+        LibrarianPrompt.ownerName = com.agent.jarvis.ui.JarvisPrefs.ownerName(ctx)
         val log: (String) -> Unit = { android.util.Log.w(TAG, it) }
         val start = System.currentTimeMillis()
         // Promote durable new notes (facts, people) to verified claims — the two-lens verifier + NLI
         // gate runs inside writeVerified, so a contradiction supersedes instead of piling up. Built
         // once per pass; a failure here never breaks note filing (the caller catches it).
-        val db = com.agent.jarvis.data.UltraDatabase.get(ctx)
+        val db = com.agent.jarvis.data.JarvisDatabase.get(ctx)
         val claims = com.agent.jarvis.harness.MemoryClaims(db.claims())
         val embDao = db.embeddings()
         val embedder = SentenceEmbedder.shared(ctx)
@@ -478,7 +478,7 @@ object Librarian {
             val mem = AmbientMemory.get(ctx)
             val voices = mem.voices()
             val names = NameInference.infer(mem.voiceLines(System.currentTimeMillis() - 14 * 86_400_000L, 20_000),
-                taken = voices.mapNotNull { it.name }.toSet(), ownerName = com.agent.jarvis.ui.UltraPrefs.ownerName(ctx))
+                taken = voices.mapNotNull { it.name }.toSet(), ownerName = com.agent.jarvis.ui.JarvisPrefs.ownerName(ctx))
             for ((voice, name) in names) {
                 mem.renameVoice(voice, name)
                 android.util.Log.i(TAG, "named voice $voice \"$name\" from what was said")

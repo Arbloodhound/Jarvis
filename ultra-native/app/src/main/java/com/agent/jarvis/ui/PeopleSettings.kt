@@ -24,8 +24,8 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun PeopleSettings(context: Context) {
-    var name by remember { mutableStateOf(UltraPrefs.ownerName(context)) }
-    var saved by remember { mutableStateOf(UltraPrefs.ownerName(context)) }
+    var name by remember { mutableStateOf(JarvisPrefs.ownerName(context)) }
+    var saved by remember { mutableStateOf(JarvisPrefs.ownerName(context)) }
     JarvisHint(
         "Your name: Jarvis calls you by it, and notes say it instead of \"Me\".",
         modifier = Modifier.padding(top = 8.dp),
@@ -34,7 +34,7 @@ fun PeopleSettings(context: Context) {
         OutlinedTextField(value = name, onValueChange = { name = it.take(40) }, label = { Text("Your name") },
             singleLine = true, modifier = Modifier.weight(1f))
         TextButton(enabled = name.trim() != saved, onClick = {
-            UltraPrefs.setOwnerName(context, name); saved = UltraPrefs.ownerName(context); name = saved
+            JarvisPrefs.setOwnerName(context, name); saved = JarvisPrefs.ownerName(context); name = saved
         }) { Text("Save") }
     }
     VoiceList(context)
@@ -46,8 +46,8 @@ fun PeopleSettings(context: Context) {
  */
 @Composable
 fun SystemPromptSettings(context: Context) {
-    var text by remember { mutableStateOf(UltraPrefs.customInstructions(context)) }
-    var saved by remember { mutableStateOf(UltraPrefs.customInstructions(context)) }
+    var text by remember { mutableStateOf(JarvisPrefs.customInstructions(context)) }
+    var saved by remember { mutableStateOf(JarvisPrefs.customInstructions(context)) }
     var showBuiltIn by remember { mutableStateOf(false) }
     JarvisHint(
         "Your instructions: how Jarvis should talk to you, things it should always know or do. Added to " +
@@ -56,13 +56,13 @@ fun SystemPromptSettings(context: Context) {
         modifier = Modifier.padding(top = 8.dp),
     )
     OutlinedTextField(
-        value = text, onValueChange = { text = it.take(UltraPrefs.MAX_INSTRUCTIONS) },
-        label = { Text("Your instructions (${text.length}/${UltraPrefs.MAX_INSTRUCTIONS})") },
+        value = text, onValueChange = { text = it.take(JarvisPrefs.MAX_INSTRUCTIONS) },
+        label = { Text("Your instructions (${text.length}/${JarvisPrefs.MAX_INSTRUCTIONS})") },
         minLines = 3, maxLines = 10, modifier = Modifier.fillMaxWidth(),
     )
     Row {
         TextButton(enabled = text.trim() != saved, onClick = {
-            UltraPrefs.setCustomInstructions(context, text); saved = UltraPrefs.customInstructions(context)
+            JarvisPrefs.setCustomInstructions(context, text); saved = JarvisPrefs.customInstructions(context)
         }) { Text("Save") }
         TextButton(onClick = { showBuiltIn = !showBuiltIn }) {
             Text(if (showBuiltIn) "Hide the built-in instructions" else "Show the built-in instructions")
@@ -70,7 +70,7 @@ fun SystemPromptSettings(context: Context) {
     }
     if (showBuiltIn) Column(modifier = Modifier.padding(bottom = 8.dp)) {
         Text(
-            com.agent.jarvis.agent.LocalPrompt.offlineSystem(UltraPrefs.ownerName(context), saved),
+            com.agent.jarvis.agent.LocalPrompt.offlineSystem(JarvisPrefs.ownerName(context), saved),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
         )

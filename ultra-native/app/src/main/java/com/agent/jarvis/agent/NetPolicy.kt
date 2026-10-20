@@ -23,8 +23,8 @@ object NetPolicy {
 
     /** The cloud brain answers: chosen in the model picker (default: on-device) and offline-only off. */
     fun cloudBrainOn(ctx: Context): Boolean =
-        com.agent.jarvis.ui.UltraPrefs.cloudBrain(ctx) && !offlineOnly(ctx)
+        com.agent.jarvis.ui.JarvisPrefs.cloudBrain(ctx) && !offlineOnly(ctx)
 
-    /** The owner's setting (UltraPrefs, off by default). */
-    fun offlineOnly(ctx: Context): Boolean = com.agent.jarvis.ui.UltraPrefs.offlineOnly(ctx)
+    /** The owner's setting (JarvisPrefs, off by default). */
+    fun offlineOnly(ctx: Context): Boolean = com.agent.jarvis.ui.JarvisPrefs.offlineOnly(ctx)
 }

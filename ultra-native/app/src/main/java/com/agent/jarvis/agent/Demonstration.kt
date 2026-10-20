@@ -247,7 +247,7 @@ object Demonstration {
             // The digest is logged so two recordings of the same walk can be
             // compared. It is a hash of which view ids a screen is built from
             // and holds nothing that was on the screen.
-            android.util.Log.i("UltraLearn", "screen ${route.size}: ${w.pkg}/${w.digest}")
+            android.util.Log.i("JarvisLearn", "screen ${route.size}: ${w.pkg}/${w.digest}")
         }
         pendingWaypoint = null
     }
@@ -270,7 +270,7 @@ object Demonstration {
         // which is the worst possible answer because it blames the user for
         // the tool's mistake.
         if (recording) {
-            android.util.Log.i("UltraLearn", "already watching — kept the ${captured.size} steps so far")
+            android.util.Log.i("JarvisLearn", "already watching — kept the ${captured.size} steps so far")
             return false
         }
         com.agent.jarvis.AgentAccessibilityService.drainPendingLogs()
@@ -281,7 +281,7 @@ object Demonstration {
         pendingSince = 0L
         startedAt = System.currentTimeMillis()
         recording = true
-        android.util.Log.i("UltraLearn", "watching — nothing was kept from before this moment")
+        android.util.Log.i("JarvisLearn", "watching — nothing was kept from before this moment")
         return true
     }
 
@@ -325,7 +325,7 @@ object Demonstration {
         recording = false
         val result = captured.toList()
         captured.clear()
-        android.util.Log.i("UltraLearn", "stopped watching after ${result.size} steps")
+        android.util.Log.i("JarvisLearn", "stopped watching after ${result.size} steps")
         return result
     }
 

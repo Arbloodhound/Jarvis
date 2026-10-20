@@ -53,7 +53,7 @@ object GoogleAccess {
         val token = r.accessToken
         if (r.hasResolution() || token.isNullOrBlank()) false else { store(vault, token, connectors); true }
     } catch (e: Exception) {
-        android.util.Log.i("UltraConnect", "google refresh failed: ${e.javaClass.simpleName}")
+        android.util.Log.i("JarvisConnect", "google refresh failed: ${e.javaClass.simpleName}")
         false
     }
 }

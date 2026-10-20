@@ -139,7 +139,7 @@ class ConnectorRegistry(
     }
 }
 
-/** [GrantCheck] over the durable grants in UltraDatabase (harness/ApprovalGrants.kt). */
+/** [GrantCheck] over the durable grants in JarvisDatabase (harness/ApprovalGrants.kt). */
 class ApprovalGrantsCheck(private val grants: com.agent.jarvis.harness.ApprovalGrants) : GrantCheck {
     override suspend fun covered(level: String, tool: String, argsJson: String, channel: String?, account: String?, recipient: String?) =
         grants.isCovered(level, tool = tool, argsJson = argsJson, channel = channel, account = account, recipient = recipient)

@@ -14,7 +14,7 @@ import com.agent.jarvis.agent.ThermalPolicy.AmbientMode
  * Never skips an utterance that could carry a command:
  *  - an open command window (acoustic wake already fired), or
  *  - no acoustic gate loaded: the name is then only detectable in the transcript,
- *    so skipping would make Ultra deaf to its own name exactly when it's hot.
+ *    so skipping would make Jarvis deaf to its own name exactly when it's hot.
  */
 object AmbientThrottle {
     data class Decision(val transcribe: Boolean, val threads: Int)

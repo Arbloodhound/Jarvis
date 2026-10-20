@@ -3,7 +3,7 @@ package com.agent.jarvis.ui
 import android.content.Context
 
 /** App-level preferences that are not provider credentials. */
-object UltraPrefs {
+object JarvisPrefs {
     private const val PREFS = "ultra_settings"
 
     private const val K_OWNER_NAME = "owner_name"

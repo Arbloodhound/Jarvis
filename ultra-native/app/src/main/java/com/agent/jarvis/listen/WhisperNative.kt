@@ -22,13 +22,13 @@ object WhisperNative {
             try {
                 System.loadLibrary(name)
                 variant = name
-                android.util.Log.i("UltraAmbient", "whisper cpu variant=$name")
+                android.util.Log.i("JarvisAmbient", "whisper cpu variant=$name")
                 return true
             } catch (e: Throwable) {
-                android.util.Log.w("UltraAmbient", "$name not loadable: ${e.message}")
+                android.util.Log.w("JarvisAmbient", "$name not loadable: ${e.message}")
             }
         }
-        android.util.Log.w("UltraAmbient", "whisper library not in this build")
+        android.util.Log.w("JarvisAmbient", "whisper library not in this build")
         return false
     }
 

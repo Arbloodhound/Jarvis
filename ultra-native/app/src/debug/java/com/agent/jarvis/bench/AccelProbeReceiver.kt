@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *       [--es hal "name1,name2" | --es hal none] [--ez complete true]
  *
  * (hal: NNAPI service names the script found; complete: both dumpsys and lshal were read.)
- * Logs (tag UltraAccel): SoC, CPU topology, ONNX Runtime providers, then for each openWakeWord
+ * Logs (tag JarvisAccel): SoC, CPU topology, ONNX Runtime providers, then for each openWakeWord
  * model already in filesDir (the same files WakeGate loads) a CPU / NNAPI(CPU_DISABLED) / XNNPACK
  * timing, vendor NN-driver file names, the NNAPI / TPU verdicts (AccelReport), then OpenCL /
  * Vulkan presence and loadability. Ends with "done status=ok|error". Never touches WakeGate's
@@ -218,7 +218,7 @@ class AccelProbeReceiver : BroadcastReceiver() {
             return true
         }
 
-        private const val TAG = "UltraAccel"
+        private const val TAG = "JarvisAccel"
         private const val WARMUP = 3
         private const val TIMED = 10
         private val LIB_DIRS = listOf("/vendor/lib64", "/system/lib64", "/system/vendor/lib64")

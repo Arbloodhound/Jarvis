@@ -44,7 +44,7 @@ public class AgentAccessibilityService extends AccessibilityService {
 
     // ── The action gate's question, drawn over the app it is about ─────────────────────────────
     //
-    // The gate used to bring Ultra to the front to ask "press Delete?". An app that redraws when
+    // The gate used to bring Jarvis to the front to ask "press Delete?". An app that redraws when
     // it comes back loses what was selected: Markor dropped its selection, "Delete" was gone, and
     // a delete the person had just approved could never happen (AndroidWorld MarkorDeleteNote,
     // 2026-09-20 — and the same on a real phone). An accessibility overlay sits on top without
@@ -124,12 +124,12 @@ public class AgentAccessibilityService extends AccessibilityService {
                     yes.getLocationOnScreen(a);
                     int[] b = new int[2];
                     no.getLocationOnScreen(b);
-                    Log.i("UltraActionGate", "OVERLAY shown: do_it=" + (a[0] + yes.getWidth() / 2) + ","
+                    Log.i("JarvisActionGate", "OVERLAY shown: do_it=" + (a[0] + yes.getWidth() / 2) + ","
                             + (a[1] + yes.getHeight() / 2) + " dont=" + (b[0] + no.getWidth() / 2) + ","
                             + (b[1] + no.getHeight() / 2));
                 });
             } catch (Exception e) {
-                Log.w("UltraActionGate", "overlay could not be drawn: " + e.getMessage());
+                Log.w("JarvisActionGate", "overlay could not be drawn: " + e.getMessage());
             }
             latch.countDown();
         };
@@ -476,7 +476,7 @@ public class AgentAccessibilityService extends AccessibilityService {
     public static boolean isPackageBlocked(String pkg) { return blockedPackages.contains(pkg); }
     public static java.util.List<String> getBlockedPackages() { return new java.util.ArrayList<>(blockedPackages); }
 
-    // === UltraDevLog v4: A11y Event Stream ===
+    // === JarvisDevLog v4: A11y Event Stream ===
     private long lastContentChangedLog = 0;
     private static final long CONTENT_THROTTLE_MS = 2000;
     private String lastLoggedWindowPkg = "";
@@ -532,7 +532,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 .apply();
         } catch (Exception e) {}
         android.util.Log.i("AgentA11y", "SERVICE_CONNECTED");
-        // === UltraDevLog v4: Crash survival ===
+        // === JarvisDevLog v4: Crash survival ===
         // Once per process: each reconnect used to wrap the previous wrapper, chaining
         // every old service instance into the handler.
         if (!crashHandlerInstalled.compareAndSet(false, true)) return;
@@ -614,7 +614,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 || type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             emitUiTreeChanged();
         }
-        // === UltraDevLog v4: Event stream ===
+        // === JarvisDevLog v4: Event stream ===
         try {
             switch (type) {
                 case AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED: {
@@ -933,8 +933,8 @@ public class AgentAccessibilityService extends AccessibilityService {
                     }
                 }
                 // A window whose package reads null while it is still coming up passes the
-                // skip above and turns out to be Ultra's own chat: the navigator then drove
-                // Ultra's UI, tapping its ☰ forever (AndroidWorld, 2026-09-19). Check again
+                // skip above and turns out to be Jarvis's own chat: the navigator then drove
+                // Jarvis's UI, tapping its ☰ forever (AndroidWorld, 2026-09-19). Check again
                 // once the root is in hand.
                 if (root != null) {
                     CharSequence again = root.getPackageName();
@@ -1328,8 +1328,8 @@ public class AgentAccessibilityService extends AccessibilityService {
                     }
                 }
                 // A window whose package reads null while it is still coming up passes the
-                // skip above and turns out to be Ultra's own chat: the navigator then drove
-                // Ultra's UI, tapping its ☰ forever (AndroidWorld, 2026-09-19). Check again
+                // skip above and turns out to be Jarvis's own chat: the navigator then drove
+                // Jarvis's UI, tapping its ☰ forever (AndroidWorld, 2026-09-19). Check again
                 // once the root is in hand.
                 if (root != null) {
                     CharSequence again = root.getPackageName();
@@ -1628,7 +1628,7 @@ public class AgentAccessibilityService extends AccessibilityService {
     /**
      * May an action land in this window? checkPackageAllowed() gates the topmost
      * window; the multi-window scans below then picked their own window, which in
-     * split screen could be a protected app, or Ultra itself. Each window is asked
+     * split screen could be a protected app, or Jarvis itself. Each window is asked
      * the same question before anything is done in it.
      */
     private static boolean mayActIn(AccessibilityNodeInfo windowRoot) {
@@ -2112,7 +2112,7 @@ public class AgentAccessibilityService extends AccessibilityService {
         return false;
     }
 
-    // === UltraDevLog v4: System State Snapshot ===
+    // === JarvisDevLog v4: System State Snapshot ===
     public String getSystemStateSnapshot() {
         try {
             org.json.JSONObject state = new org.json.JSONObject();

@@ -34,7 +34,7 @@ import java.security.MessageDigest
  * One OfflineTts at a time, loaded on first use and freed after a minute idle, like [LocalWhisper].
  */
 object LocalVoice {
-    private const val TAG = "UltraSpeak"
+    private const val TAG = "JarvisSpeak"
     /** The first voice's folder name (kept: what a phone may already have unpacked). */
     const val VOICE = VoiceCatalog.NORMAN
     /** Unpacked, Kokoro is ~160 MB; anything far past the largest voice is not one of these. */

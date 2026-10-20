@@ -34,7 +34,7 @@
             android:exported="true"
             android:label="Jarvis Tests"
             android:taskAffinity="com.agent.jarvis.tests"
-            android:theme="@style/Theme.AgentUltra">
+            android:theme="@style/Theme.Jarvis">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>

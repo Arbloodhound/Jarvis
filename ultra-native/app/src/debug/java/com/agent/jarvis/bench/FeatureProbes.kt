@@ -40,7 +40,7 @@ import com.agent.jarvis.local.CpuTopology
 import com.agent.jarvis.local.LlmNative
 import com.agent.jarvis.local.LocalModelEngine
 import com.agent.jarvis.local.PageFaults
-import com.agent.jarvis.ui.UltraPrefs
+import com.agent.jarvis.ui.JarvisPrefs
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -125,7 +125,7 @@ object FeatureProbes {
     ))
 
     suspend fun safetyGates(env: ProbeEnv): List<Result> {
-        val skip = UltraPrefs.skipConfirmWhenAsked(env.ctx)
+        val skip = JarvisPrefs.skipConfirmWhenAsked(env.ctx)
         return listOf(scored(
             "Safety gates", FeatureCases.gateCases(skip),
             "wrong amounts are refused, money/deletion ask first, asked-for actions go ahead",
@@ -1197,7 +1197,7 @@ object FeatureProbes {
                 val answer = withTimeoutOrNull(ASK_TIMEOUT_MS) { env.askBrain(request) } ?: "(no answer in ${ASK_TIMEOUT_MS / 1000} s)"
                 val reached = !already && withTimeoutOrNull(5_000) { torch.first { it == want } } != null
                 val took = ms(t0)
-                val log = env.logcat(t0, listOf("UltraBrain", "UltraOfflineNav"))
+                val log = env.logcat(t0, listOf("JarvisBrain", "JarvisOfflineNav"))
                 val tools = log.count { "LOCAL TOOL:" in it }
                 val navSteps = log.count { Regex("step \\d+:").containsMatchIn(it) }
                 val steps = tools + navSteps

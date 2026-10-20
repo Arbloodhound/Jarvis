@@ -223,7 +223,7 @@ object LocalWhisper {
         val r = try {
             WhisperNative.transcribe(handle, MicGain.normalize(pcm), threads, "Jarvis", topo.llmCpus.toIntArray())   // far speech brought up
         } catch (e: Exception) {
-            android.util.Log.w("UltraAmbient", "local speech failed: ${e.message}"); null
+            android.util.Log.w("JarvisAmbient", "local speech failed: ${e.message}"); null
         }
         idle = scope.launch {
             delay(IDLE_MS)

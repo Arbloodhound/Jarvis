@@ -340,7 +340,7 @@ fun ChatScreen(
             TextButton(onClick = onOpenForYou) { Text("✨") }     // For you: feed + ideas
             TextButton(onClick = onOpenGuide) { Text("📖") }   // the complete guide
             // Hands-free session. Reachable here too, so it works before the
-            // user has made Ultra their assistant app.
+            // user has made Jarvis their assistant app.
             TextButton(onClick = {
                 try {
                     context.startActivity(

@@ -63,7 +63,7 @@ object VisionModel {
                 for (attempt in 1..5) {
                     try { ParallelDownload.run(client, url, part, size) {}; ok = true; break }
                     catch (e: java.io.IOException) {
-                        android.util.Log.w("UltraVlm", "vision download ${file.name} attempt $attempt: ${e.message}")
+                        android.util.Log.w("JarvisVlm", "vision download ${file.name} attempt $attempt: ${e.message}")
                         delay(2_000L * attempt)
                     }
                 }
@@ -113,7 +113,7 @@ object VisionModel {
                 val t0 = System.currentTimeMillis()
                 handle = VisionNative.nativeVlmLoad(modelFile(c).path, mmprojFile(c).path, THREADS, 4096,
                     CpuTopology.current.llmCpus.toIntArray())
-                android.util.Log.i("UltraVlm", "load handle=${handle != 0L} in ${System.currentTimeMillis() - t0} ms")
+                android.util.Log.i("JarvisVlm", "load handle=${handle != 0L} in ${System.currentTimeMillis() - t0} ms")
                 if (handle == 0L) return@withLock null
             }
             val scaled = scale(bitmap, MAX_SIDE)
@@ -122,7 +122,7 @@ object VisionModel {
             if (scaled !== bitmap) scaled.recycle()
             val t1 = System.currentTimeMillis()
             val out = VisionNative.nativeVlmDescribe(handle, rgb, w, h, prompt, maxTokens, THREADS)
-            android.util.Log.i("UltraVlm", "describe ${w}x$h in ${System.currentTimeMillis() - t1} ms: ${out?.take(80)}")
+            android.util.Log.i("JarvisVlm", "describe ${w}x$h in ${System.currentTimeMillis() - t1} ms: ${out?.take(80)}")
             idle = scope.launch { delay(IDLE_MS); lock.withLock { if (handle != 0L) { VisionNative.nativeVlmFree(handle); handle = 0L } } }
             out?.trim()?.takeIf { it.isNotEmpty() }
         } }

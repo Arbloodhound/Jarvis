@@ -35,7 +35,7 @@ object EmbeddedTor {
         if (bound) return true
         val app = ctx.applicationContext
         bound = try { app.bindService(Intent(app, TorService::class.java), conn, Context.BIND_AUTO_CREATE) } catch (_: Exception) { false }
-        android.util.Log.i("UltraTor", "in-app tor bind=$bound")
+        android.util.Log.i("JarvisTor", "in-app tor bind=$bound")
         return bound
     }
 
@@ -46,7 +46,7 @@ object EmbeddedTor {
         bound = false
         service = null
         TorProxy.embeddedPort = -1
-        android.util.Log.i("UltraTor", "in-app tor stopped")
+        android.util.Log.i("JarvisTor", "in-app tor stopped")
     }
 
     val started: Boolean get() = bound

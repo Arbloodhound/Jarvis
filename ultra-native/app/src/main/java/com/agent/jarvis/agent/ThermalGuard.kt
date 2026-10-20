@@ -63,7 +63,7 @@ object ThermalGuard {
         val next = ThermalPolicy.levelFor(h, status, level)
         if (next != level) {
             level = next
-            android.util.Log.i("UltraThermal", "level=$next headroom=$h status=$status")
+            android.util.Log.i("JarvisThermal", "level=$next headroom=$h status=$status")
             listeners.forEach { try { it(next) } catch (_: Exception) {} }
         }
     }

@@ -5,7 +5,7 @@ import org.json.JSONObject
 /**
  * A route a check has already passed, played by the engine instead of re-read by a model.
  *
- * A route is the steps of a run that something OUTSIDE Ultra said did the job (northstar/routes.py
+ * A route is the steps of a run that something OUTSIDE Jarvis said did the job (northstar/routes.py
  * makes them from benchmark-passed episodes). Shown to a weak model as text, it helped a little:
  * llama-3.3-70b keyed a timer in correctly from one and then didn't know it had finished, wrote
  * `type(1,"name")` where the route said `type("name")`, and cut its own tool call short

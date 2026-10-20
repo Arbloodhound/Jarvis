@@ -27,7 +27,7 @@ import java.security.MessageDigest
  * resolved executable path + content hash, revalidated at launch. Any
  * drift fails closed (kills the TOCTOU class).
  *
- * DB wiring (repo session): add GrantEntity to UltraDatabase entities,
+ * DB wiring (repo session): add GrantEntity to JarvisDatabase entities,
  * bump version, add migration. This file never touches existing files.
  */
 @Entity(

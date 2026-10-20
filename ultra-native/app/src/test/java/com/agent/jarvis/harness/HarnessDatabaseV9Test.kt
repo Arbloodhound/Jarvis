@@ -5,7 +5,7 @@ import androidx.room.util.TableInfo
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.test.core.app.ApplicationProvider
-import com.agent.jarvis.data.UltraDatabase
+import com.agent.jarvis.data.JarvisDatabase
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -25,10 +25,10 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class HarnessDatabaseV9Test {
-    private lateinit var db: UltraDatabase
+    private lateinit var db: JarvisDatabase
 
     @Before fun open() {
-        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), UltraDatabase::class.java)
+        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), JarvisDatabase::class.java)
             .allowMainThreadQueries().build()
     }
 
@@ -42,7 +42,7 @@ class HarnessDatabaseV9Test {
                 override fun onUpgrade(db: androidx.sqlite.db.SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
             }).build())
         val raw = helper.writableDatabase
-        UltraDatabase.MIGRATION_8_9.migrate(raw)
+        JarvisDatabase.MIGRATION_8_9.migrate(raw)
         val room = db.openHelper.writableDatabase
         for (t in listOf("memory_embeddings", "bandit_arm_state")) {
             assertEquals(t, TableInfo.read(room, t), TableInfo.read(raw, t))

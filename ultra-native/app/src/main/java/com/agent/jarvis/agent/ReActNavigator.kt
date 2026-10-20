@@ -18,7 +18,7 @@ class ReActNavigator(
     companion object {
         private const val MAX_ITER = 15
 
-        /** Ultra surfacing its own action-gate card is not drifting away from
+        /** Jarvis surfacing its own action-gate card is not drifting away from
          * the task — it is the task waiting for a tap. */
         private const val OWN_PACKAGE = "com.agent.jarvis"
 
@@ -259,7 +259,7 @@ ACTION:"""
         // already on screen ("Run the stopwatch" named no app, and the run died here —
         // AndroidWorld, 2026-09-19). Fall back to whatever is in front of us.
         val named = controller.findPackage(if (appHint.isBlank()) goal else appHint)
-        // Never fall back onto Ultra itself: with the chat in front, an unresolved app name sent the
+        // Never fall back onto Jarvis itself: with the chat in front, an unresolved app name sent the
         // navigator tapping through its own UI (AndroidWorld, 2026-09-19).
         val pkg = named ?: controller.foregroundPackage()?.takeIf { it != OWN_PACKAGE }
             ?: return NavResult(false, "no app matching '$appHint' and nothing on screen", 0)
@@ -268,7 +268,7 @@ ACTION:"""
             if (!controller.launchApp(pkg)) return NavResult(false, "could not launch $pkg", 0)
             ScreenSettle.await(launched, maxMs = 2500, quietMs = 500, minMs = 800)
         } else {
-            android.util.Log.i("UltraNav", "no app matching '$appHint'; working on what's on screen ($pkg)")
+            android.util.Log.i("JarvisNav", "no app matching '$appHint'; working on what's on screen ($pkg)")
         }
 
         known = loadOrLearnControls(pkg)
@@ -307,7 +307,7 @@ ACTION:"""
         var planActive = plan.isNotEmpty()
         if (plan.isNotEmpty()) {
             stagePreSatisfied = NavPlan.satisfied(plan[0], observation)
-            android.util.Log.i("UltraNav", "PLAN ${plan.size} stages, $stageBudget steps each: " +
+            android.util.Log.i("JarvisNav", "PLAN ${plan.size} stages, $stageBudget steps each: " +
                 plan.joinToString(" | ") { "${it.description} => ${it.expect.ifBlank { "(model decides)" }}" })
         }
 
@@ -360,12 +360,12 @@ ACTION:"""
             // The screen as the model saw it. Without this the log shows which action it chose and
             // never what it was choosing from, so "why did it keep tapping instead of typing?"
             // could not be answered from a run (AndroidWorld, 2026-09-19).
-            android.util.Log.i("UltraNav", "step $iter sees: ${observation.replace("\n", " | ").take(1600)}")
+            android.util.Log.i("JarvisNav", "step $iter sees: ${observation.replace("\n", " | ").take(1600)}")
 
             val said = extractAction(reply) ?: run {
                 // One bad reply is not the end of the job, and what it said is the only clue to
                 // why: a whole task was lost at step 0 with nothing in the log (2026-09-20).
-                android.util.Log.i("UltraNav", "step $iter unparseable reply: ${reply.replace("\n", " ").take(300)}")
+                android.util.Log.i("JarvisNav", "step $iter unparseable reply: ${reply.replace("\n", " ").take(300)}")
                 unparseable++
                 if (unparseable >= 3) return NavResult(false, "model gave no parseable action", iter - 1)
                 history += "step $iter: your reply was not one of the listed actions. Reply with exactly ONE action line, e.g. tap(\"Start\")."
@@ -378,12 +378,12 @@ ACTION:"""
             val action = if (!isTap) said else {
                 val idx = resolveTap(said.trim().replaceFirst(Regex("^long_press", RegexOption.IGNORE_CASE), "tap"), labelled, listedIndexes)
                 if (idx == null) {
-                    android.util.Log.i("UltraNav", "step $iter action: $said — nothing listed fits")
+                    android.util.Log.i("JarvisNav", "step $iter action: $said — nothing listed fits")
                     history += "step $iter: $said → NOT DONE: nothing listed on this screen fits that. Tap by the exact words shown, e.g. tap(\"Start\")."
                     // Asked twice for something that is not there: the stage wants a screen we
                     // are already on ("Tap Timer" while the Timer tab is open burned 15 steps).
                     if (said.trim() in missing && planActive && stage < plan.size - 1) {
-                        android.util.Log.i("UltraNav", "stage ${stage + 1}/${plan.size} skipped at step $iter: its target is not on this screen")
+                        android.util.Log.i("JarvisNav", "stage ${stage + 1}/${plan.size} skipped at step $iter: its target is not on this screen")
                         stage++
                         stageSteps = 0
                         stagePreSatisfied = NavPlan.satisfied(plan[stage], observation)
@@ -406,7 +406,7 @@ ACTION:"""
             // The model was told this action does nothing here and chose it anyway. Asking again
             // costs a model call; doing it again costs a step and teaches nothing.
             if (action in deadHere) {
-                android.util.Log.i("UltraNav", "step $iter action: $action — REFUSED, dead on this screen")
+                android.util.Log.i("JarvisNav", "step $iter action: $action — REFUSED, dead on this screen")
                 history += "step $iter: $said → REFUSED: already tried on this exact screen, nothing happened. Choose a different action."
                 continue
             }
@@ -421,13 +421,13 @@ ACTION:"""
             // index means nothing on the next run.
             val tappedWords = Regex("""^(?:tap|long_press)\((\d+)\)$""").find(action)?.groupValues?.get(1)?.toIntOrNull()
                 ?.let { n -> labelled.firstOrNull { it.second == n }?.first }
-            android.util.Log.i("UltraNav", "step $iter action: $action" +
+            android.util.Log.i("JarvisNav", "step $iter action: $action" +
                 (if (tappedWords != null) "  = \"$tappedWords\"" else "") + (if (byLabel != null) "  <- $said" else ""))
             // Bound to the screen it was chosen from (Muse's ScreenGuard, OpenClaw's snapshot preflight):
             // a window or app change since that read means the choice may no longer mean the same thing.
             val stale = controller.snapshotStale(lastSnapshotId)
             if (stale != null) {
-                android.util.Log.i("UltraNav", "step $iter action: $action — NOT DONE, $stale; reading the screen again")
+                android.util.Log.i("JarvisNav", "step $iter action: $action — NOT DONE, $stale; reading the screen again")
                 history += "step $iter: the screen changed before $said could run, so it was read again. Choose from the new screen."
                 observation = observe()
                 continue
@@ -461,7 +461,7 @@ ACTION:"""
                     stageSteps = 0
                     stagePreSatisfied = plan.getOrNull(stage)
                         ?.let { NavPlan.satisfied(it, observation) } ?: false
-                    android.util.Log.i("UltraNav", "stage $stage/${plan.size} passed (nothing to check) at step $iter")
+                    android.util.Log.i("JarvisNav", "stage $stage/${plan.size} passed (nothing to check) at step $iter")
                     if (stage >= plan.size) {
                         // The last stage had nothing to check, so "done" here means only that the
                         // screen moved. AndroidWorld 2026-09-19: the plan for "Run the stopwatch"
@@ -469,7 +469,7 @@ ACTION:"""
                         // stopwatch never started, and the run reported success. Carry on toward
                         // the goal instead; the model still has to say done, or a later stage has
                         // to check out.
-                        android.util.Log.i("UltraNav", "last stage was uncheckable — not calling that done")
+                        android.util.Log.i("JarvisNav", "last stage was uncheckable — not calling that done")
                         planActive = false
                         history += "step $iter: the plan ran out and nothing confirmed the task is done — " +
                             "do the action the task actually asks for, then answer done"
@@ -480,10 +480,10 @@ ACTION:"""
                     stagePreSatisfied = plan.getOrNull(stage)
                         ?.let { NavPlan.satisfied(it, observation) } ?: false
                     if (stagePreSatisfied) {
-                        android.util.Log.i("UltraNav",
+                        android.util.Log.i("JarvisNav",
                             "stage ${stage + 1} expects something already on screen — treating it as guidance")
                     }
-                    android.util.Log.i("UltraNav", "stage ${stage}/${plan.size} reached at step $iter")
+                    android.util.Log.i("JarvisNav", "stage ${stage}/${plan.size} reached at step $iter")
                     history += "step $iter: reached \"${here.description}\" — now do the next stage"
                     if (stage >= plan.size) {
                         return NavResult(true, "all ${plan.size} stages done", iter)
@@ -502,13 +502,13 @@ ACTION:"""
                             stagePreSatisfied = fresh.firstOrNull()
                                 ?.let { NavPlan.satisfied(it, observation) } ?: false
                             stageBudget = NavPlan.budgetFor(MAX_ITER - iter, fresh.size)
-                            android.util.Log.i("UltraNav", "REPLAN at step $iter: ${fresh.size} stages")
+                            android.util.Log.i("JarvisNav", "REPLAN at step $iter: ${fresh.size} stages")
                             history += "step $iter: that approach stalled, starting a new plan"
                         } else {
                             planActive = false
                         }
                     } else {
-                        android.util.Log.i("UltraNav", "plan abandoned at step $iter, continuing on the goal")
+                        android.util.Log.i("JarvisNav", "plan abandoned at step $iter, continuing on the goal")
                         planActive = false
                     }
                 }
@@ -540,7 +540,7 @@ ACTION:"""
                 leftAppFor++
                 if (grace < MAX_RECOVERY_GRACE) grace++
                 android.util.Log.i(
-                    "UltraNav",
+                    "JarvisNav",
                     "DRIFT: now in $onPkg, target $pkg (step $iter, $leftAppFor in a row, grace $grace)",
                 )
             } else {
@@ -564,7 +564,7 @@ ACTION:"""
             else ""
             if (!changed && refusal == null) dead.getOrPut(before) { mutableSetOf() } += action
             if (changed) missing.clear()
-            android.util.Log.i("UltraNav", "step $iter outcome: $outcome$drift")
+            android.util.Log.i("JarvisNav", "step $iter outcome: $outcome$drift")
             // In the model's own words: the screen is listed by words now, so "tap(9)" in its
             // history was an index it had never been shown. It could not tell it had already
             // tapped Timer, and tapped Timer, Clock, Timer, Clock for 15 steps (2026-09-20).
@@ -701,7 +701,7 @@ ACTION:"""
         repeat(3) {
             if (settledKey() == anchor) return true
             if (controller.activePackage() != pkg) {
-                android.util.Log.i("UltraWalk", "left $pkg; reopening")
+                android.util.Log.i("JarvisWalk", "left $pkg; reopening")
                 controller.launchApp(pkg)
                 delay(1800)
             } else {
@@ -720,10 +720,10 @@ ACTION:"""
         if (replayTo(route, hop)) {
             val landed = settledKey()
             if (landed == anchor) {
-                android.util.Log.i("UltraWalk", "hop $hop: walked back to the screen")
+                android.util.Log.i("JarvisWalk", "hop $hop: walked back to the screen")
                 return true
             }
-            android.util.Log.i("UltraWalk", "walked back but landed somewhere else")
+            android.util.Log.i("JarvisWalk", "walked back but landed somewhere else")
         }
         return false
     }
@@ -739,12 +739,12 @@ ACTION:"""
     private suspend fun replayTo(route: List<ScreenJourney.Waypoint>, hop: Int): Boolean {
         val needed = (1 until hop).map { route[it] }
         if (needed.any { it.via.isBlank() }) {
-            android.util.Log.i("UltraWalk", "cannot walk back: an earlier hop is still unknown")
+            android.util.Log.i("JarvisWalk", "cannot walk back: an earlier hop is still unknown")
             return false
         }
         val launched = ScreenSettle.mark()
         if (!controller.launchApp(route.first().pkg)) {
-            android.util.Log.i("UltraWalk", "cannot walk back: ${route.first().pkg} would not open")
+            android.util.Log.i("JarvisWalk", "cannot walk back: ${route.first().pkg} would not open")
             return false
         }
         ScreenSettle.await(launched, maxMs = 2500, quietMs = 500, minMs = 800)
@@ -765,10 +765,10 @@ ACTION:"""
                 delay(1200)
             }
             if (choice == null) {
-                android.util.Log.i("UltraWalk", "cannot walk back: ${w.via} is not on this screen")
+                android.util.Log.i("JarvisWalk", "cannot walk back: ${w.via} is not on this screen")
                 return false
             }
-            android.util.Log.i("UltraWalk", "walking back through ${w.via}")
+            android.util.Log.i("JarvisWalk", "walking back through ${w.via}")
             if (!tapCandidate(choice)) return false
             delay(1800)
         }
@@ -855,7 +855,7 @@ ACTION:"""
             val pkg = controller.activePackage()
 
             if (ScreenJourney.arrivedAt(target, pkg, here)) {
-                android.util.Log.i("UltraWalk", "hop $hop/${route.size - 1} reached")
+                android.util.Log.i("JarvisWalk", "hop $hop/${route.size - 1} reached")
                 hop++
                 continue
             }
@@ -880,7 +880,7 @@ ACTION:"""
             var whyStopped = ""
             for (attempt in 1..RouteWalker.TRIES_PER_HOP) {
                 if (!restoreAnchor(anchor, anchorPkg, learned, hop)) {
-                    android.util.Log.i("UltraWalk", "hop $hop: lost the screen I was searching from")
+                    android.util.Log.i("JarvisWalk", "hop $hop: lost the screen I was searching from")
                     whyStopped = "I lost the screen I was searching from"
                     break
                 }
@@ -898,7 +898,7 @@ ACTION:"""
                 // having walked it.
                 var choice = RouteWalker.rememberedChoice(flatNow, target.via, tried)
                 if (choice != null) {
-                    android.util.Log.i("UltraWalk", "hop $hop: remembered ${target.via}")
+                    android.util.Log.i("JarvisWalk", "hop $hop: remembered ${target.via}")
                 }
                 if (choice == null) {
                     choice = RouteWalker.candidatesFor(flatNow, tried, name).firstOrNull()
@@ -913,7 +913,7 @@ ACTION:"""
                 tries++
                 tried += RouteWalker.keyOf(choice)
                 android.util.Log.i(
-                    "UltraWalk",
+                    "JarvisWalk",
                     "hop $hop: trying ${choice.vid.ifBlank { "[" + choice.index + "]" }}",
                 )
                 if (!tapCandidate(choice)) continue
@@ -926,15 +926,15 @@ ACTION:"""
                     // means something else next time.
                     if (choice.vid.isNotBlank() && learned[hop].via != choice.vid) {
                         learned[hop] = learned[hop].copy(via = choice.vid)
-                        android.util.Log.i("UltraWalk", "hop $hop: learned the way is ${choice.vid}")
+                        android.util.Log.i("JarvisWalk", "hop $hop: learned the way is ${choice.vid}")
                     }
-                    android.util.Log.i("UltraWalk", "hop $hop/${route.size - 1} reached")
+                    android.util.Log.i("JarvisWalk", "hop $hop/${route.size - 1} reached")
                     hop++
                     moved = true
                     break
                 }
                 android.util.Log.i(
-                    "UltraWalk",
+                    "JarvisWalk",
                     "hop $hop: landed on ${afterKey.ifBlank { "an unreadable screen" }}, " +
                         "wanted ${target.key}",
                 )
@@ -1124,7 +1124,7 @@ ACTION:"""
      * coordinates). Falls back to the old fixed 1080x2400 only when it cannot be read.
      */
     private fun displaySize(): Pair<Int, Int> = try {
-        val ctx = com.agent.jarvis.UltraApplication.instance
+        val ctx = com.agent.jarvis.JarvisApplication.instance
         val dm = ctx.getSystemService(android.hardware.display.DisplayManager::class.java)
         val display = dm.getDisplay(android.view.Display.DEFAULT_DISPLAY)
         val m = android.util.DisplayMetrics()
@@ -1207,7 +1207,7 @@ ACTION:"""
             // not a check, it is a log entry about a leak that already happened.
             controller.refuseTyping(text)?.let { why ->
                 lastRefusal = "I did not type that: $why"
-                android.util.Log.i("UltraFlow", "REFUSED typing into ${controller.activePackage()}: $why")
+                android.util.Log.i("JarvisFlow", "REFUSED typing into ${controller.activePackage()}: $why")
                 return false
             }
             val ok = controller.typeInto(selector, text)
@@ -1226,7 +1226,7 @@ ACTION:"""
             if (landed != null && !landed.contains(text, ignoreCase = true)) {
                 lastRefusal = "the field holds \"$landed\", not \"$text\" — " +
                     "it did not accept that text, so try another way in"
-                android.util.Log.i("UltraNav", "type mismatch: wanted \"$text\", field has \"$landed\"")
+                android.util.Log.i("JarvisNav", "type mismatch: wanted \"$text\", field has \"$landed\"")
                 return false
             }
             // Enter is the keystroke that sends the message or submits the form, and it went out
@@ -1316,20 +1316,20 @@ ACTION:"""
             val action = if (boxed != null) {
                 val at = typeableIndexes.getOrNull(boxed.groupValues[1].toInt() - 1)
                 if (at == null) {
-                    android.util.Log.i("UltraNav", "ROUTE step ${n + 1}/${script.actions.size}: $said — this screen has no such text box; the model takes over")
+                    android.util.Log.i("JarvisNav", "ROUTE step ${n + 1}/${script.actions.size}: $said — this screen has no such text box; the model takes over")
                     return Played(false, done, "A route that has passed a check was followed for $done step(s); its next step, $said, did not fit this screen. Carry on from here.")
                 }
                 "type($at, ${boxed.groupValues[2]})"
             } else if (!isTap) said else {
                 val idx = resolveTap(said.replaceFirst("long_press", "tap"), labelled, listedIndexes)
                 if (idx == null) {
-                    android.util.Log.i("UltraNav", "ROUTE step ${n + 1}/${script.actions.size}: $said — nothing on this screen has those words; the model takes over")
+                    android.util.Log.i("JarvisNav", "ROUTE step ${n + 1}/${script.actions.size}: $said — nothing on this screen has those words; the model takes over")
                     return Played(false, done, "A route that has passed a check was followed for $done step(s); its next step, $said, did not fit this screen. Carry on from here.")
                 }
                 (if (said.startsWith("long_press")) "long_press" else "tap") + "($idx)"
             }
             controller.snapshotStale(lastSnapshotId)?.let { why ->
-                android.util.Log.i("UltraNav", "ROUTE step ${n + 1}/${script.actions.size}: $said — NOT DONE, $why; the model takes over")
+                android.util.Log.i("JarvisNav", "ROUTE step ${n + 1}/${script.actions.size}: $said — NOT DONE, $why; the model takes over")
                 return Played(false, done, "A route that has passed a check was followed for $done step(s); the screen changed before $said could run. Carry on from here.")
             }
             val acted = ScreenSettle.mark()
@@ -1340,7 +1340,7 @@ ACTION:"""
             val changed = after != before || screenText(lastFlat) != textBefore
             val refusal = lastRefusal
             lastRefusal = null
-            android.util.Log.i("UltraNav", "ROUTE step ${n + 1}/${script.actions.size} played: $said -> " +
+            android.util.Log.i("JarvisNav", "ROUTE step ${n + 1}/${script.actions.size} played: $said -> " +
                 (if (refusal != null) "NOT DONE: $refusal" else if (changed) "screen changed" else if (ok) "no change" else "failed"))
             if (refusal != null || !(changed || (ok && said.startsWith("scroll_to")))) {
                 return Played(false, done, "A route that has passed a check was followed for $done step(s); then $said did not work here" +
@@ -1378,11 +1378,11 @@ ACTION:"""
         return when (val outcome = controller.clickByViewId(c.vid, c.index, "")) {
             "ok" -> true
             "gone" -> {
-                android.util.Log.i("UltraWalk", "${c.vid} left the screen before it could be pressed")
+                android.util.Log.i("JarvisWalk", "${c.vid} left the screen before it could be pressed")
                 false
             }
             else -> {
-                android.util.Log.i("UltraWalk", "press on ${c.vid} came back $outcome")
+                android.util.Log.i("JarvisWalk", "press on ${c.vid} came back $outcome")
                 false
             }
         }
@@ -1402,7 +1402,7 @@ ACTION:"""
             "ok" -> true
             "moved" -> {
                 lastRefusal = "the screen changed before that could be tapped — look at it again"
-                android.util.Log.i("UltraNav", "tap refused: [$index] no longer holds \"$label\"")
+                android.util.Log.i("JarvisNav", "tap refused: [$index] no longer holds \"$label\"")
                 false
             }
             "gone" -> {
@@ -1410,7 +1410,7 @@ ACTION:"""
                 false
             }
             else -> {
-                android.util.Log.i("UltraNav", "tap failed on [$index] \"$label\" ($outcome)")
+                android.util.Log.i("JarvisNav", "tap failed on [$index] \"$label\" ($outcome)")
                 false
             }
         }
@@ -1532,20 +1532,20 @@ ACTION:"""
                 "Nothing was committed. Tell me which is right and I will carry on."
             stoppedOnDisagreement = stopReason
             lastRefusal = stopReason
-            android.util.Log.i("UltraNav", "DISAGREE refused \"$label\": $why")
+            android.util.Log.i("JarvisNav", "DISAGREE refused \"$label\": $why")
             return false
         }
 
         // Option B (owner's decision, 2026-10-08): a commitment the person asked for in their own
         // words goes ahead without the card; money, deletion, new recipients etc. still ask.
         val direct = controller.directlyRequested(userRequest, reason, screenNow)
-        if (direct) android.util.Log.i("UltraNav", "NO CARD (you asked for this): \"$label\" matched \"$reason\"")
+        if (direct) android.util.Log.i("JarvisNav", "NO CARD (you asked for this): \"$label\" matched \"$reason\"")
         val approved = direct || ActionGate.approve(action, label, pkg ?: "this app", reason)
         if (!approved) {
-            android.util.Log.i("UltraNav", "action refused by operator: \"$label\"")
+            android.util.Log.i("JarvisNav", "action refused by operator: \"$label\"")
             return false
         }
-        // Answering the card put Ultra in front. Tapping now would hit Ultra's
+        // Answering the card put Jarvis in front. Tapping now would hit Jarvis's
         // own UI at the target's coordinates, so put the target back first.
         if (pkg != null && controller.activePackage() != pkg) {
             controller.launchApp(pkg)
@@ -1597,7 +1597,7 @@ ACTION:"""
                 if (x < 0 || y < 0) return null
                 controller.tap(x, y)
                 delay(500)
-                android.util.Log.i("UltraNav", "typed into known control #${target.vid}")
+                android.util.Log.i("JarvisNav", "typed into known control #${target.vid}")
                 return target.vid
             }
             null
@@ -1663,12 +1663,12 @@ ACTION:"""
 
             val all = (found + remembered).distinctBy { it.vid }
             android.util.Log.i(
-                "UltraNav",
+                "JarvisNav",
                 "screen ${fp.key}: ${found.size} on screen, ${remembered.size} remembered, ${all.size} usable",
             )
             all
         } catch (e: Exception) {
-            android.util.Log.w("UltraNav", "controls unavailable: ${e.message}")
+            android.util.Log.w("JarvisNav", "controls unavailable: ${e.message}")
             emptyList()
         }
     }
@@ -1690,7 +1690,7 @@ ACTION:"""
             ).getOrNull() ?: return emptyList()
             NavPlan.parse(reply)
         } catch (e: Exception) {
-            android.util.Log.w("UltraNav", "planning failed, continuing without one: ${e.message}")
+            android.util.Log.w("JarvisNav", "planning failed, continuing without one: ${e.message}")
             emptyList()
         }
     }

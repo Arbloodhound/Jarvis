@@ -8,7 +8,7 @@ object VisionNative {
     /** The natives are present: the library [LlmNative] loaded has them. */
     val available: Boolean by lazy {
         LlmNative.available && try { nativeVlmFree(0L); true } catch (e: Throwable) {
-            android.util.Log.w("UltraVlm", "vision natives missing: ${e.message}"); false
+            android.util.Log.w("JarvisVlm", "vision natives missing: ${e.message}"); false
         }
     }
 

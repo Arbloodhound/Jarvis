@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Choose the brain, from the chat's model chip: the cloud model (when a key is set) or any on-device
- * model already downloaded. Switching flips [UltraPrefs.offlineOnly] (which decides cloud vs local for
+ * model already downloaded. Switching flips [JarvisPrefs.offlineOnly] (which decides cloud vs local for
  * chat AND voice) and, for a local pick, points the engine at that model ([LocalModelEngine.selectModel]
  * — the same setter Settings uses). [onChanged] bumps the config version so the brain rebuilds.
  *
@@ -39,7 +39,7 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val cfg = remember { ProviderConfig.load(context) }
-    var cloud by remember { mutableStateOf(UltraPrefs.cloudBrain(context)) }
+    var cloud by remember { mutableStateOf(JarvisPrefs.cloudBrain(context)) }
     var cloudModel by remember { mutableStateOf(cfg.model) }
     val downloaded = remember { localEngine.downloadedFileNames() }
     val localModels = remember { LocalModelEngine.PRESETS.filter { it.fileName in downloaded } }
@@ -68,7 +68,7 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
                             scope.launch {
                                 localEngine.selectModel(m)
                                 if (m.fileName !in downloaded) com.agent.jarvis.local.Downloads.downloadAllMissing(context)
-                                UltraPrefs.setCloudBrain(context, false)
+                                JarvisPrefs.setCloudBrain(context, false)
                                 cloud = false
                                 onChanged()
                                 onDismiss()
@@ -85,7 +85,7 @@ fun ModelPicker(localEngine: LocalModelEngine, onChanged: () -> Unit, onDismiss:
                     cloudIds.forEach { id ->
                         Row(selected = cloud && cloudModel == id, label = "Cloud · $id") {
                             ProviderConfig.save(context, cfg.copy(model = id))
-                            UltraPrefs.setCloudBrain(context, true)
+                            JarvisPrefs.setCloudBrain(context, true)
                             cloud = true; cloudModel = id
                             onChanged()
                         }

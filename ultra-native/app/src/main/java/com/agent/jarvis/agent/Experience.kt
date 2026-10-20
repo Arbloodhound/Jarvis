@@ -5,7 +5,7 @@ import org.json.JSONObject
 import java.security.MessageDigest
 
 /**
- * Ultra's own Northstar: lessons learned from its own mistakes on this phone.
+ * Jarvis's own Northstar: lessons learned from its own mistakes on this phone.
  *
  * Task memory already keeps what WORKED for a request. It cannot say what went
  * wrong on the way, so the next run walks into the same wall and has to find the
@@ -153,10 +153,10 @@ object Experience {
     }
 
     /**
-     * A run Ultra reported done that a check OUTSIDE Ultra found not done: the benchmark reading
+     * A run Jarvis reported done that a check OUTSIDE Jarvis found not done: the benchmark reading
      * the device's state, or the person saying "no, that's wrong".
      *
-     * Ultra's own idea of success is "the model stopped and no tool failed". On AndroidWorld that
+     * Jarvis's own idea of success is "the model stopped and no tool failed". On AndroidWorld that
      * was wrong in 33 of 98 failed episodes (2026-09-20) — "create a timer" done with note_create
      * and alarm_set, 14 runs of 14 — and each one was stored as the way to do the job.
      */

@@ -125,7 +125,7 @@ class WakeFilter(private val cfg: AmbientConfig) {
         }
 
         /**
-         * Removes a leading wake phrase ("Hey Jarvis," / "Ultra:") from a transcript and
+         * Removes a leading wake phrase ("Hey Jarvis," / "Jarvis:") from a transcript and
          * returns what is left — the command, or "" if the utterance was only the wake
          * phrase. A lone "Hey <word>" is also treated as wake-only: whisper often
          * mishears the name ("Hey, Jervis."), and the acoustic gate already said it fired.

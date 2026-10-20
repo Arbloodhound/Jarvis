@@ -37,7 +37,7 @@ class BrainHarness : AutoCloseable {
         ChatStore.uiVisible = false
         Brain.lastRequest = ""
         Brain.lastRunSteps = emptyList()
-        com.agent.jarvis.ui.UltraPrefs.setOfflineOnly(ctx, false); com.agent.jarvis.ui.UltraPrefs.setCloudBrain(ctx, true)
+        com.agent.jarvis.ui.JarvisPrefs.setOfflineOnly(ctx, false); com.agent.jarvis.ui.JarvisPrefs.setCloudBrain(ctx, true)
         brain = Brain(ctx, LocalModelEngine(ctx))
         brain.onAnswer = { answers += it }
         brain.onSpeak = { spoken += it }
@@ -48,7 +48,7 @@ class BrainHarness : AutoCloseable {
         awaitAuditQuiet()
         server.close()
         ChatStore.messages.clear()
-        com.agent.jarvis.ui.UltraPrefs.setOfflineOnly(ctx, false); com.agent.jarvis.ui.UltraPrefs.setCloudBrain(ctx, true)
+        com.agent.jarvis.ui.JarvisPrefs.setOfflineOnly(ctx, false); com.agent.jarvis.ui.JarvisPrefs.setCloudBrain(ctx, true)
     }
 
     /** Runs [block] off the main thread, idling the main looper (ChatStore's UI updates) until it ends. */

@@ -33,7 +33,7 @@ package com.agent.jarvis.harness
  *
  * Adapted from OpenClaw's NotificationForwardingPolicy.kt
  * (https://github.com/openclaw/openclaw — apps/android/.../NotificationForwardingPolicy.kt).
- * The repo's UltraNotificationService has allow/blocklist + capture toggle
+ * The repo's JarvisNotificationService has allow/blocklist + capture toggle
  * but no quiet hours, no rate limiting, no own-package exclusion; wire this
  * policy in front of it.
  */

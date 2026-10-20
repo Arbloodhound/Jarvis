@@ -34,7 +34,7 @@ object WakeChime {
             tg.startTone(ToneGenerator.TONE_PROP_BEEP2, TONE_MS)
             Handler(Looper.getMainLooper()).postDelayed({ tg.release() }, TONE_MS + 200L)
         } catch (e: RuntimeException) {   // no audio resources: waking still works, silently
-            android.util.Log.w("UltraAmbient", "wake chime unavailable: ${e.message}")
+            android.util.Log.w("JarvisAmbient", "wake chime unavailable: ${e.message}")
         }
     }
 }

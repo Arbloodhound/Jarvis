@@ -21,13 +21,13 @@ object LlmNative {
             try {
                 System.loadLibrary(name)
                 variant = name
-                android.util.Log.i("UltraLlm", "cpu variant=$name")
+                android.util.Log.i("JarvisLlm", "cpu variant=$name")
                 return true
             } catch (e: Throwable) {
-                android.util.Log.w("UltraLlm", "$name not loadable: ${e.message}")
+                android.util.Log.w("JarvisLlm", "$name not loadable: ${e.message}")
             }
         }
-        android.util.Log.w("UltraLlm", "native model library not in this build")
+        android.util.Log.w("JarvisLlm", "native model library not in this build")
         return false
     }
 

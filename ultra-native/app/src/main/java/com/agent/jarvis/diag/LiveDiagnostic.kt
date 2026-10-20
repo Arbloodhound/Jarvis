@@ -38,12 +38,12 @@ object LiveDiagnostic {
 
     /** Every log tag the app writes (collected from the source), so nothing it does is missed. */
     private val TAGS = listOf(
-        "UltraActionGate", "UltraAmbient", "UltraApp", "UltraAudit", "UltraAuditWriter", "UltraBrain",
-        "UltraBrowse", "UltraClaims", "UltraConnect", "UltraDownloads", "UltraFlow", "UltraGate",
-        "UltraLearn", "UltraLibrarian", "UltraLlm", "UltraMemory", "UltraNav", "UltraNotif",
-        "UltraObserve", "UltraOfflineNav", "UltraPerceive", "UltraPrompt", "UltraProvider",
-        "UltraRoute", "UltraScheduler", "UltraShop", "UltraSpeak", "UltraThermal", "UltraTor",
-        "UltraTrigger", "UltraVision", "UltraVlm", "UltraVoice", "UltraWalk", "UltraWeb",
+        "JarvisActionGate", "JarvisAmbient", "JarvisApp", "JarvisAudit", "JarvisAuditWriter", "JarvisBrain",
+        "JarvisBrowse", "JarvisClaims", "JarvisConnect", "JarvisDownloads", "JarvisFlow", "JarvisGate",
+        "JarvisLearn", "JarvisLibrarian", "JarvisLlm", "JarvisMemory", "JarvisNav", "JarvisNotif",
+        "JarvisObserve", "JarvisOfflineNav", "JarvisPerceive", "JarvisPrompt", "JarvisProvider",
+        "JarvisRoute", "JarvisScheduler", "JarvisShop", "JarvisSpeak", "JarvisThermal", "JarvisTor",
+        "JarvisTrigger", "JarvisVision", "JarvisVlm", "JarvisVoice", "JarvisWalk", "JarvisWeb",
         "AndroidRuntime",  // uncaught exceptions / FATAL
     )
 

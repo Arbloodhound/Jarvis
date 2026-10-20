@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
- * Answers spoken aloud, on-device. With [UltraPrefs.ownVoice] on, Jarvis's own voice
+ * Answers spoken aloud, on-device. With [JarvisPrefs.ownVoice] on, Jarvis's own voice
  * ([LocalVoice]: sherpa-onnx, no Google, no network); otherwise — or whenever that can't speak
  * (library missing, voice not downloaded yet, synthesis error) — Android's TextToSpeech, which
  * is only created when first needed, so a working own voice never wakes the platform engine.
@@ -36,7 +36,7 @@ import java.util.Locale
  * unfinished one (QUEUE_FLUSH) and drops the old whenDone, as the platform engine always has:
  * firing it would end the echo guard of the speech now starting.
  *
- * Start and finish are logged (`UltraSpeak`) — that is how speak-back gets verified on a
+ * Start and finish are logged (`JarvisSpeak`) — that is how speak-back gets verified on a
  * machine that cannot hear the phone.
  */
 class Speaker(
@@ -86,7 +86,7 @@ class Speaker(
     init {
         // Without the own voice, warm the platform engine now (it starts asynchronously), as
         // before; with it, the engine is only created if a fallback ever needs it.
-        if (!UltraPrefs.ownVoice(app)) {
+        if (!JarvisPrefs.ownVoice(app)) {
             synchronized(lock) { creating = true }
             main.post { createEngine() }
         }
@@ -97,7 +97,7 @@ class Speaker(
         val clean = forSpeech(text)
         if (clean.isBlank()) { whenDone?.invoke(); return }
         markTalking()
-        val ownVoice = UltraPrefs.ownVoice(app)
+        val ownVoice = JarvisPrefs.ownVoice(app)
         val old: Playback?
         val g: Long
         synchronized(lock) {
@@ -417,7 +417,7 @@ class Speaker(
 
         /** "Hey Jarvis" over Jarvis's speech: listen at once, no echo tail. */
         fun clearEchoTail() { lastTalkEndAt = 0L }
-        private const val TAG = "UltraSpeak"
+        private const val TAG = "JarvisSpeak"
         /** The first piece synthesised: Piper made a 169-char sentence in one go before a word was
          *  heard (Pixel 2026-10-17 22:47). ~80 chars is a few seconds of speech. */
         private const val FIRST_PART_CHARS = 80

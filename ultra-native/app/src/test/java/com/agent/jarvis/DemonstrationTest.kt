@@ -148,7 +148,7 @@ class DemonstrationTest {
     }
 
     /**
-     * The user has to open Agent Ultra to say "stop watching", so its screens
+     * The user has to open Jarvis to say "stop watching", so its screens
      * are always in the sample. They are never part of the route.
      */
     @Test

@@ -66,7 +66,7 @@ class WakeGate(
                 mel = placed("mel", m, longArrayOf(1, MEL_CTX.toLong())).also { melIn = it.inputNames.first() }
                 emb = placed("emb", e, longArrayOf(1, MEL_WIN.toLong(), MEL_BINS.toLong(), 1)).also { embIn = it.inputNames.first() }
                 cls = placed("cls", c, longArrayOf(1, EMB_WIN.toLong(), EMB_DIM.toLong())).also { clsIn = it.inputNames.first() }
-                android.util.Log.i("UltraAmbient", "wake gate on: $placement")
+                android.util.Log.i("JarvisAmbient", "wake gate on: $placement")
                 true
             } catch (_: Exception) { close(); false }
         } else false
@@ -110,7 +110,7 @@ class WakeGate(
                     val out = run1(s, sIn, shape, input)
                     measured[name] = timeMs { run1(s, sIn, shape, input) } to maxAbsDiff(cpuOut, out)
                 } catch (e: Exception) {
-                    android.util.Log.w("UltraAmbient", "wake model $tag: $name failed (${e.message})")
+                    android.util.Log.w("JarvisAmbient", "wake model $tag: $name failed (${e.message})")
                 }
             }
             // CPU timed again after the candidates, best of two: clocks ramping up during the
@@ -121,11 +121,11 @@ class WakeGate(
             fun ms(k: String) = measured[k]?.let { "%.2fms".format(it.first) } ?: "n/a"
             fun df(k: String) = measured[k]?.let { "%.1e".format(it.second) } ?: "n/a"
             // diff is xnnpack/nnapi, each vs the CPU output
-            android.util.Log.i("UltraAmbient", "wake model $tag: cpu=%.2fms xnnpack=%s nnapi=%s diff=%s/%s -> %s"
+            android.util.Log.i("JarvisAmbient", "wake model $tag: cpu=%.2fms xnnpack=%s nnapi=%s diff=%s/%s -> %s"
                 .format(cpuMs, ms("xnnpack"), ms("nnapi"), df("xnnpack"), df("nnapi"), c))
             c
         } catch (e: Exception) {
-            android.util.Log.w("UltraAmbient", "wake model $tag: placement check failed (${e.message}); cpu")
+            android.util.Log.w("JarvisAmbient", "wake model $tag: placement check failed (${e.message}); cpu")
             "cpu"
         }
         placement += "$tag=$choice "
@@ -138,7 +138,7 @@ class WakeGate(
         try {
             OrtSession.SessionOptions().use { o -> o.setup(); env.createSession(file.absolutePath, o) }
         } catch (e: Exception) {
-            android.util.Log.i("UltraAmbient", "wake $name unavailable (${e.message})")
+            android.util.Log.i("JarvisAmbient", "wake $name unavailable (${e.message})")
             null
         }
 

@@ -19,7 +19,7 @@ import java.io.File
  *
  * Enabled via: settings put secure enabled_notification_listeners
  */
-class UltraNotificationService : NotificationListenerService() {
+class JarvisNotificationService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         Log.i(TAG, "notification listener connected")
@@ -47,10 +47,10 @@ class UltraNotificationService : NotificationListenerService() {
             // Capture is standing collection, not a per-task read: without
             // this check every banking alert, message preview and two-factor
             // code lands in a log on disk.
-            if (!com.agent.jarvis.ui.UltraPrefs.captureNotifications(this)) return
+            if (!com.agent.jarvis.ui.JarvisPrefs.captureNotifications(this)) return
             // Notification filter (Settings, off by default): quiet hours and a per-app burst limit
             // decide what Jarvis keeps. The triggers above already saw it (scam shield, codes).
-            if (com.agent.jarvis.ui.UltraPrefs.notificationFilter(this) &&
+            if (com.agent.jarvis.ui.JarvisPrefs.notificationFilter(this) &&
                 !forwardingPolicy().shouldForward(com.agent.jarvis.harness.IncomingNotification(sbn.packageName, title, text, sbn.postTime))) {
                 Log.i(TAG, "filtered (quiet hours or burst): ${sbn.packageName}")
                 return
@@ -79,7 +79,7 @@ class UltraNotificationService : NotificationListenerService() {
 
     /** One policy per quiet-hours setting (it keeps the per-app burst counts). */
     private fun forwardingPolicy(): com.agent.jarvis.harness.NotificationForwardingPolicy {
-        val hours = com.agent.jarvis.ui.UltraPrefs.quietHours(this)
+        val hours = com.agent.jarvis.ui.JarvisPrefs.quietHours(this)
         if (policy == null || policyHours != hours) {
             policy = com.agent.jarvis.harness.NotificationForwardingPolicy(
                 ownPackage = packageName, quietStartHour = hours.first, quietEndHour = hours.second)
@@ -104,7 +104,7 @@ class UltraNotificationService : NotificationListenerService() {
                     android.os.Handler(mainLooper).post {
                         if (!posted) Toast.makeText(this, "Jarvis: " + a.label, Toast.LENGTH_LONG).show()
                         // Said out loud too: the person most likely to fall for it may not read a toast.
-                        if (com.agent.jarvis.ui.UltraPrefs.speakAnswers(this)) {
+                        if (com.agent.jarvis.ui.JarvisPrefs.speakAnswers(this)) {
                             speaker().speak("Careful. " + a.label + " Don't send money, codes or cards to it.")
                         }
                     }
@@ -172,7 +172,7 @@ class UltraNotificationService : NotificationListenerService() {
     }
 
     companion object {
-        private const val TAG = "UltraNotif"
+        private const val TAG = "JarvisNotif"
         private const val SCAM_CHANNEL = "ultra_scam_warnings"
         // 7001 is AgentBackgroundService's foreground notification and 7101
         // AmbientListenService's; 7000 + (ms % 1000) replaced them.

@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 
 /**
  * Ambient transcript store. Its OWN SQLite file, deliberately not the Room
- * UltraDatabase: this is high-churn, capped, and purgeable, and must never
+ * JarvisDatabase: this is high-churn, capped, and purgeable, and must never
  * complicate the agent's schema migrations. FTS4 so the agent can search it
  * as a tool; a capacity trigger so it can never grow without bound.
  */

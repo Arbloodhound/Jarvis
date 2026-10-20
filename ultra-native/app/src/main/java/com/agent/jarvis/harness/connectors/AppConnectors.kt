@@ -19,7 +19,7 @@ object AppConnectors {
         val oauth = GoogleOAuth("android")
         val g = listOf(GmailConnector(v, transport, oauth), GoogleCalendarConnector(v, transport, oauth),
             GoogleDriveConnector(v, transport, oauth), GoogleDocsConnector(v, transport, oauth))
-        val grants = ApprovalGrantsCheck(com.agent.jarvis.harness.ApprovalGrants(com.agent.jarvis.data.UltraDatabase.get(app).grants()))
+        val grants = ApprovalGrantsCheck(com.agent.jarvis.harness.ApprovalGrants(com.agent.jarvis.data.JarvisDatabase.get(app).grants()))
         ConnectorRegistry(grants).also { r ->
             g.forEach(r::register); r.register(SpotifyConnector(v, transport)); registry = r; google = g; vault = v
         }
@@ -38,7 +38,7 @@ object AppConnectors {
 
     /** Sets the list: grants for new addresses, revokes for removed ones. Purchases never get grants. */
     suspend fun setTrustedRecipients(ctx: Context, addresses: List<String>) {
-        val grants = com.agent.jarvis.harness.ApprovalGrants(com.agent.jarvis.data.UltraDatabase.get(ctx.applicationContext).grants())
+        val grants = com.agent.jarvis.harness.ApprovalGrants(com.agent.jarvis.data.JarvisDatabase.get(ctx.applicationContext).grants())
         val old = trustedRecipients(ctx).toSet()
         val new = addresses.map { it.trim().lowercase() }.filter { '@' in it }.toSet()
         (old - new).forEach { grants.revokeRecipient("gmail", ACCOUNT, it) }

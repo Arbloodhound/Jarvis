@@ -86,7 +86,7 @@ object BenchReport {
      * sample and before that token's decode, so the first callback lands when the prompt
      * is done and the n-1 gaps between first and last callback are one decode each.
      * A token whose piece is empty gets no callback, so then this reads slightly low; the
-     * engine's own UltraLlm "gen tokens=" line has the native count to compare.
+     * engine's own JarvisLlm "gen tokens=" line has the native count to compare.
      */
     fun decodeTokPerSec(tokens: Int, firstTokenAtMs: Long, lastTokenAtMs: Long): Double {
         val span = lastTokenAtMs - firstTokenAtMs

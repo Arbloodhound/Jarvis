@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   adb shell am broadcast -a com.agent.jarvis.BENCH -n com.agent.jarvis/.bench.BenchReceiver \
  *       [--ei threads N] [--ei tokens M]
  *
- * Logs (tag UltraBench) the CPU topology, then for each setting of [BenchReport.configs] (each
+ * Logs (tag JarvisBench) the CPU topology, then for each setting of [BenchReport.configs] (each
  * thread count without and with the speed boost's draft model, then other draft lengths) runs a
  * fixed prompt [BenchReport.RUNS] times through LocalModelEngine and reports the last run. Ends
  * with "done".
@@ -138,7 +138,7 @@ class BenchReceiver : BroadcastReceiver() {
                         accepted = engine.lastSpecStats[1],
                     )
                     if (draftLen > 0 && engine.lastSpecStats[0] < 0)
-                        Log.w(TAG, "draft=$draftLen asked but not used (no room, or refused: see UltraLlm 'draft' lines)")
+                        Log.w(TAG, "draft=$draftLen asked but not used (no room, or refused: see JarvisLlm 'draft' lines)")
                     if (run < BenchReport.RUNS) Log.i(TAG, "warmup $line")
                     else {
                         Log.i(TAG, line)
@@ -183,7 +183,7 @@ class BenchReceiver : BroadcastReceiver() {
             return true
         }
 
-        private const val TAG = "UltraBench"
+        private const val TAG = "JarvisBench"
         private val running = AtomicBoolean(false)
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

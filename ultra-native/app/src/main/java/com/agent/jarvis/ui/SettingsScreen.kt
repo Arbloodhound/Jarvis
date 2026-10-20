@@ -183,20 +183,20 @@ fun SettingsScreen(
         }
 
         run {
-            var offlineOnly by remember { mutableStateOf(UltraPrefs.offlineOnly(context)) }
+            var offlineOnly by remember { mutableStateOf(JarvisPrefs.offlineOnly(context)) }
             JarvisSwitchRow(
                 title = "Offline only",
                 detail = "No cloud brain, no web search. Model downloads still work.",
                 checked = offlineOnly,
                 onCheckedChange = { on ->
                         offlineOnly = on
-                        UltraPrefs.setOfflineOnly(context, on)
+                        JarvisPrefs.setOfflineOnly(context, on)
                     },
             )
         }
 
         run {
-            var mainReply by remember { mutableStateOf(UltraPrefs.mainReply(context)) }
+            var mainReply by remember { mutableStateOf(JarvisPrefs.mainReply(context)) }
             JarvisSwitchRow(
                 title = "Main model writes the reply",
                 detail = "After on-device tools run, the main model says what happened in plain words. " +
@@ -204,13 +204,13 @@ fun SettingsScreen(
                 checked = mainReply,
                 onCheckedChange = { on ->
                         mainReply = on
-                        UltraPrefs.setMainReply(context, on)
+                        JarvisPrefs.setMainReply(context, on)
                     },
             )
         }
 
         run {
-            var actionModel by remember { mutableStateOf(UltraPrefs.actionModel(context)) }
+            var actionModel by remember { mutableStateOf(JarvisPrefs.actionModel(context)) }
             JarvisSwitchRow(
                 title = "Action model",
                 detail = "The small memory model picks tools and drives the screen, so actions are quicker. " +
@@ -218,22 +218,22 @@ fun SettingsScreen(
                 checked = actionModel,
                 onCheckedChange = { on ->
                         actionModel = on
-                        UltraPrefs.setActionModel(context, on)
+                        JarvisPrefs.setActionModel(context, on)
                     },
             )
         }
 
         run {
-            var onion by remember { mutableStateOf(UltraPrefs.onionResearch(context)) }
-            var deep by remember { mutableStateOf(UltraPrefs.deepResearch(context)) }
-            var own by remember { mutableStateOf(UltraPrefs.onionKnownGood(context)) }
+            var onion by remember { mutableStateOf(JarvisPrefs.onionResearch(context)) }
+            var deep by remember { mutableStateOf(JarvisPrefs.deepResearch(context)) }
+            var own by remember { mutableStateOf(JarvisPrefs.onionKnownGood(context)) }
             var ownSaved by remember { mutableStateOf<String?>(null) }
             JarvisSwitchRow(
                 title = "Onion research via Tor",
                 detail = "Read .onion pages in research through Tor (built into the app; Orbot is used if it already runs), " +
                     "with phishing and scam checks. Off: onion links are skipped. Offline only wins.",
                 checked = onion,
-                onCheckedChange = { on -> onion = on; UltraPrefs.setOnionResearch(context, on) },
+                onCheckedChange = { on -> onion = on; JarvisPrefs.setOnionResearch(context, on) },
             )
             // Manual Tor start (the in-app Tor). The owner's own tap, so it works with onion research
             // off too; the tor_connect tool only works with it on.
@@ -276,7 +276,7 @@ fun SettingsScreen(
                     title = "Deep research over Tor",
                     detail = "A bounded onion link crawl, only when you say \"deep research …\" or \"investigate …\".",
                     checked = deep,
-                    onCheckedChange = { on -> deep = on; UltraPrefs.setDeepResearch(context, on) },
+                    onCheckedChange = { on -> deep = on; JarvisPrefs.setDeepResearch(context, on) },
                 )
                 OutlinedTextField(
                     value = own, onValueChange = { own = it; ownSaved = null },
@@ -285,7 +285,7 @@ fun SettingsScreen(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = {
-                        own = UltraPrefs.setOnionKnownGood(context, own)
+                        own = JarvisPrefs.setOnionKnownGood(context, own)
                         val n = own.lines().count { it.isNotBlank() }
                         ownSaved = "Saved $n valid address${if (n == 1) "" else "es"}."
                     }) { Text("Save") }
@@ -401,7 +401,7 @@ fun SettingsScreen(
         }
 
         run {
-            var preload by remember { mutableStateOf(UltraPrefs.preloadBrain(context)) }
+            var preload by remember { mutableStateOf(JarvisPrefs.preloadBrain(context)) }
             JarvisSwitchRow(
                 title = "Get the brain ready in advance",
                 detail = "Loads the on-device model in the background when Jarvis opens or starts " +
@@ -410,14 +410,14 @@ fun SettingsScreen(
                 checked = preload,
                 onCheckedChange = { on ->
                         preload = on
-                        UltraPrefs.setPreloadBrain(context, on)
+                        JarvisPrefs.setPreloadBrain(context, on)
                         if (on) localEngine.preloadInBackground("setting turned on")
                     },
             )
         }
 
         run {
-            var resident by remember { mutableStateOf(UltraPrefs.keepBrainInMemory(context)) }
+            var resident by remember { mutableStateOf(JarvisPrefs.keepBrainInMemory(context)) }
             JarvisSwitchRow(
                 title = "Keep the whole brain in memory",
                 detail = "Copies the model into Jarvis's own memory so Android can't quietly drop " +
@@ -427,13 +427,13 @@ fun SettingsScreen(
                 checked = resident,
                 onCheckedChange = { on ->
                         resident = on
-                        UltraPrefs.setKeepBrainInMemory(context, on)
+                        JarvisPrefs.setKeepBrainInMemory(context, on)
                     },
             )
         }
 
         run {
-            var boost by remember { mutableStateOf(UltraPrefs.speedBoost(context)) }
+            var boost by remember { mutableStateOf(JarvisPrefs.speedBoost(context)) }
             val draftHere = remember(statusTick) { com.agent.jarvis.local.DraftModel.present(context) }
             JarvisSwitchRow(
                 title = "Speed boost (draft model)",
@@ -450,13 +450,13 @@ fun SettingsScreen(
                 checked = boost,
                 onCheckedChange = { on ->
                         boost = on
-                        UltraPrefs.setSpeedBoost(context, on)
+                        JarvisPrefs.setSpeedBoost(context, on)
                     },
             )
         }
 
         run {
-            var depth by remember { mutableStateOf(UltraPrefs.thinkingDepth(context)) }
+            var depth by remember { mutableStateOf(JarvisPrefs.thinkingDepth(context)) }
             Text("Thinking depth", style = MaterialTheme.typography.bodyMedium)
             Text(
                 when (depth) {
@@ -474,7 +474,7 @@ fun SettingsScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (d in com.agent.jarvis.agent.WaitBudget.Depth.values()) {
                     val name = d.name.lowercase().replaceFirstChar { it.uppercase() }
-                    val pick = { depth = d; UltraPrefs.setThinkingDepth(context, d) }
+                    val pick = { depth = d; JarvisPrefs.setThinkingDepth(context, d) }
                     if (d == depth) Button(onClick = pick) { Text(name) }
                     else OutlinedButton(onClick = pick) { Text(name) }
                 }
@@ -763,7 +763,7 @@ fun SettingsScreen(
 
         // ── Recipes ───────────────────────────────────────────────────
         SectionTitle("ROUTINES")
-        val recipeDao = remember { com.agent.jarvis.data.UltraDatabase.get(context).recipes() }
+        val recipeDao = remember { com.agent.jarvis.data.JarvisDatabase.get(context).recipes() }
         var recipeList by remember {
             mutableStateOf<List<com.agent.jarvis.data.RecipeEntity>>(emptyList())
         }
@@ -907,7 +907,7 @@ fun SettingsScreen(
         PermissionPanel(context)
 
         SectionTitle("PERSONAL DATA")
-        var personal by remember { mutableStateOf(UltraPrefs.allowPersonalData(context)) }
+        var personal by remember { mutableStateOf(JarvisPrefs.allowPersonalData(context)) }
         JarvisSwitchRow(
             title = "Messages, contacts and location",
             detail = "Off by default. These read Android's own databases rather than the " +
@@ -917,11 +917,11 @@ fun SettingsScreen(
             checked = personal,
             onCheckedChange = {
                     personal = it
-                    UltraPrefs.setAllowPersonalData(context, it)
+                    JarvisPrefs.setAllowPersonalData(context, it)
                 },
         )
 
-        var capture by remember { mutableStateOf(UltraPrefs.captureNotifications(context)) }
+        var capture by remember { mutableStateOf(JarvisPrefs.captureNotifications(context)) }
         JarvisSwitchRow(
             title = "Keep a notification log",
             detail = "Off by default. When on, notification titles and previews are written " +
@@ -931,12 +931,12 @@ fun SettingsScreen(
             checked = capture,
             onCheckedChange = {
                     capture = it
-                    UltraPrefs.setCaptureNotifications(context, it)
+                    JarvisPrefs.setCaptureNotifications(context, it)
                 },
         )
         if (capture) run {
-            var filterOn by remember { mutableStateOf(UltraPrefs.notificationFilter(context)) }
-            val (qs, qe) = remember { UltraPrefs.quietHours(context) }
+            var filterOn by remember { mutableStateOf(JarvisPrefs.notificationFilter(context)) }
+            val (qs, qe) = remember { JarvisPrefs.quietHours(context) }
             var start by remember { mutableStateOf(qs.toString()) }
             var end by remember { mutableStateOf(qe.toString()) }
             JarvisSwitchRow(
@@ -944,12 +944,12 @@ fun SettingsScreen(
                 detail = "Off by default. When on, the log skips notifications during quiet hours and " +
                     "more than 5 a minute from one app. Scam warnings still fire.",
                 checked = filterOn,
-                onCheckedChange = { filterOn = it; UltraPrefs.setNotificationFilter(context, it) },
+                onCheckedChange = { filterOn = it; JarvisPrefs.setNotificationFilter(context, it) },
             )
             if (filterOn) Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 fun save() {
                     val a = start.toIntOrNull(); val b = end.toIntOrNull()
-                    if (a != null && b != null) UltraPrefs.setQuietHours(context, a, b)
+                    if (a != null && b != null) JarvisPrefs.setQuietHours(context, a, b)
                 }
                 OutlinedTextField(value = start, onValueChange = { start = it.filter(Char::isDigit).take(2); save() },
                     label = { Text("Quiet from (hour)") }, modifier = Modifier.weight(1f), singleLine = true)
@@ -965,7 +965,7 @@ fun SettingsScreen(
             }
         }) { Text("Delete notification log") }
 
-        var smsCode by remember { mutableStateOf(UltraPrefs.autoExtractSmsCode(context)) }
+        var smsCode by remember { mutableStateOf(JarvisPrefs.autoExtractSmsCode(context)) }
         JarvisSwitchRow(
             title = "Auto-copy verification codes",
             detail = "When an SMS with a verification code arrives, copy the code to " +
@@ -973,11 +973,11 @@ fun SettingsScreen(
             checked = smsCode,
             onCheckedChange = {
                     smsCode = it
-                    UltraPrefs.setAutoExtractSmsCode(context, it)
+                    JarvisPrefs.setAutoExtractSmsCode(context, it)
                 },
         )
 
-        var scamShield by remember { mutableStateOf(UltraPrefs.scamShield(context)) }
+        var scamShield by remember { mutableStateOf(JarvisPrefs.scamShield(context)) }
         JarvisSwitchRow(
             title = "Scam warnings",
             detail = "Warn when a message looks like a scam, and ask before sending anything to " +
@@ -986,18 +986,18 @@ fun SettingsScreen(
             checked = scamShield,
             onCheckedChange = {
                     scamShield = it
-                    UltraPrefs.setScamShield(context, it)
+                    JarvisPrefs.setScamShield(context, it)
                 },
         )
 
-        var sysTriggers by remember { mutableStateOf(UltraPrefs.systemTriggers(context)) }
+        var sysTriggers by remember { mutableStateOf(JarvisPrefs.systemTriggers(context)) }
         JarvisSwitchRow(
             title = "System event triggers",
             detail = "Toast on battery low/ok, charger plug/unplug, screen on/off, headphones, app install/remove.",
             checked = sysTriggers,
             onCheckedChange = {
                     sysTriggers = it
-                    UltraPrefs.setSystemTriggers(context, it)
+                    JarvisPrefs.setSystemTriggers(context, it)
                 },
         )
 
@@ -1014,7 +1014,7 @@ fun SettingsScreen(
         // ── Voice ─────────────────────────────────────────────────────
         SectionTitle("VOICE")
         run {
-            var ownSpeech by remember { mutableStateOf(UltraPrefs.ownSpeech(context)) }
+            var ownSpeech by remember { mutableStateOf(JarvisPrefs.ownSpeech(context)) }
             JarvisSwitchRow(
                 title = "Jarvis's own speech recognition",
                 detail = "Understands what you say with the speech model on this phone: no Google, " +
@@ -1023,7 +1023,7 @@ fun SettingsScreen(
                 checked = ownSpeech,
                 onCheckedChange = { on ->
                         ownSpeech = on
-                        UltraPrefs.setOwnSpeech(context, on)
+                        JarvisPrefs.setOwnSpeech(context, on)
                     },
             )
         }
@@ -1092,14 +1092,14 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        var speak by remember { mutableStateOf(UltraPrefs.speakAnswers(context)) }
+        var speak by remember { mutableStateOf(JarvisPrefs.speakAnswers(context)) }
         JarvisSwitchRow(
             title = "Speak answers aloud",
             detail = "Reads replies out with the phone's own voice. Hands-free sessions always speak.",
             checked = speak,
             onCheckedChange = {
                     speak = it
-                    UltraPrefs.setSpeakAnswers(context, it)
+                    JarvisPrefs.setSpeakAnswers(context, it)
                 },
         )
         Text(
@@ -1126,7 +1126,7 @@ fun SettingsScreen(
         }) { Text("Choose assistant app") }
 
         run {
-            var skipConfirm by remember { mutableStateOf(UltraPrefs.skipConfirmWhenAsked(context)) }
+            var skipConfirm by remember { mutableStateOf(JarvisPrefs.skipConfirmWhenAsked(context)) }
             JarvisSwitchRow(
                 title = "Don't ask when I asked for it",
                 detail = "If you told Jarvis to send, post or install something, it does it without an " +
@@ -1136,7 +1136,7 @@ fun SettingsScreen(
                 checked = skipConfirm,
                 onCheckedChange = { on ->
                         skipConfirm = on
-                        UltraPrefs.setSkipConfirmWhenAsked(context, on)
+                        JarvisPrefs.setSkipConfirmWhenAsked(context, on)
                     },
             )
         }

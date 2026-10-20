@@ -30,11 +30,11 @@ object JarvisPower {
     fun set(ctx: Context, on: Boolean) {
         val app = ctx.applicationContext
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_ON, on).apply()
-        android.util.Log.i("UltraApp", "Jarvis turned ${if (on) "ON" else "OFF"}")
+        android.util.Log.i("JarvisApp", "Jarvis turned ${if (on) "ON" else "OFF"}")
         if (on) {
             try {
                 androidx.core.content.ContextCompat.startForegroundService(app, Intent(app, AgentBackgroundService::class.java))
-            } catch (e: Exception) { android.util.Log.w("UltraApp", "background service start failed: ${e.message}") }
+            } catch (e: Exception) { android.util.Log.w("JarvisApp", "background service start failed: ${e.message}") }
             com.agent.jarvis.listen.AmbientListenService.resumeIfOff(app)
         } else {
             com.agent.jarvis.agent.Brain.stopAll()

@@ -75,10 +75,10 @@ fun VoiceTest(context: Context) {
         val am = context.getSystemService(android.media.AudioManager::class.java)
         val vol = am?.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) ?: -1
         val max = am?.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) ?: 0
-        val own = if (UltraPrefs.ownVoice(context) && com.agent.jarvis.listen.LocalVoice.available)
+        val own = if (JarvisPrefs.ownVoice(context) && com.agent.jarvis.listen.LocalVoice.available)
             com.agent.jarvis.listen.LocalVoice.speakingModel(context) else null
         status = (if (own != null) "Speaking with Jarvis's own voice (${own.label})…"
-            else if (!UltraPrefs.ownVoice(context)) "Speaking with the phone's voice…"
+            else if (!JarvisPrefs.ownVoice(context)) "Speaking with the phone's voice…"
             else "Speaking with the phone's voice (Jarvis's own isn't downloaded yet)…") +
             if (vol == 0) "\nMedia volume is at 0: turn it up with the volume buttons." else " (media volume $vol/$max)"
         speaker.speak("Hello, I'm Jarvis. If you can hear me, my voice works.") {
@@ -120,13 +120,13 @@ fun VoiceSettings(context: Context) {
         onCheckedChange = { on = it; cfg.speakerTags = it },
     )
     if (on) {
-        var prosody by remember { mutableStateOf(UltraPrefs.prosody(context)) }
+        var prosody by remember { mutableStateOf(JarvisPrefs.prosody(context)) }
         JarvisSwitchRow(
             title = "Pitch (experimental)",
             detail = "Also measures each line's voice pitch and marks it [higher] or [lower] than that " +
                 "person's own usual. A measurement, not a reading of mood. Off by default.",
             checked = prosody,
-            onCheckedChange = { prosody = it; UltraPrefs.setProsody(context, it) },
+            onCheckedChange = { prosody = it; JarvisPrefs.setProsody(context, it) },
         )
     }
 

@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * even while the backlog is still being worked through.
  */
 object MemoryIndexer {
-    private const val TAG = "UltraMemory"
+    private const val TAG = "JarvisMemory"
     private const val BATCH = 16
     private const val PAUSE_MS = 50L
     private const val FETCH_RETRY_MS = 3 * 3_600_000L

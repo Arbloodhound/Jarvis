@@ -242,5 +242,5 @@ object Downloads {
 
     private const val BUSY_RETRIES = 30
 
-    private const val TAG = "UltraDownloads"
+    private const val TAG = "JarvisDownloads"
 }

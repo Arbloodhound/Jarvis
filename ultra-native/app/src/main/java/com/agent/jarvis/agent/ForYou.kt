@@ -25,7 +25,7 @@ object ForYou {
 
     // --- Bandit ranking: ideas learn from what the owner acts on vs dismisses (no fine-tuning). ---
     private fun bandit(ctx: Context) =
-        com.agent.jarvis.harness.BanditArmState(com.agent.jarvis.data.UltraDatabase.get(ctx).banditArms())
+        com.agent.jarvis.harness.BanditArmState(com.agent.jarvis.data.JarvisDatabase.get(ctx).banditArms())
 
     /** How much the learned arm signal (fast mean, [-1,1]) nudges an idea's own [Ideas.Idea.score]. */
     private const val BANDIT_WEIGHT = 0.5
@@ -84,13 +84,13 @@ object ForYou {
     }
 
     private fun client(ctx: Context): OpenAiClient? {
-        if (com.agent.jarvis.ui.UltraPrefs.offlineOnly(ctx)) return null
+        if (com.agent.jarvis.ui.JarvisPrefs.offlineOnly(ctx)) return null
         return ProviderConfig.load(ctx).takeIf { it.isUsable }?.let { OpenAiClient(it) }
     }
 
     /** Why nothing can be generated, or null when it can. */
     fun unavailable(ctx: Context): String? = when {
-        com.agent.jarvis.ui.UltraPrefs.offlineOnly(ctx) -> "Offline-only mode is on, so nothing new is written here."
+        com.agent.jarvis.ui.JarvisPrefs.offlineOnly(ctx) -> "Offline-only mode is on, so nothing new is written here."
         !ProviderConfig.load(ctx).isUsable -> "This needs the cloud brain (Settings → AI PROVIDER)."
         else -> null
     }
@@ -155,7 +155,7 @@ object ForYou {
     /** Proactivity over the open ideas: send what passes (quiet hours, mutes, budget), as a notification. */
     suspend fun proactive(ctx: Context) {
         val hist = loadHistory(ctx)
-        val (qs, qe) = com.agent.jarvis.ui.UltraPrefs.quietHours(ctx)
+        val (qs, qe) = com.agent.jarvis.ui.JarvisPrefs.quietHours(ctx)
         val cands = ideas(ctx).ranked(5).map {
             Proactivity.Candidate(it.id, it.title.lowercase().split(' ').firstOrNull().orEmpty(), it.title, Proactivity.Reason.NEW_OPPORTUNITY, "idea:${it.id}")
         }

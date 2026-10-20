@@ -93,7 +93,7 @@ class ObservationLog {
     }
 
     companion object {
-        private const val TAG = "UltraObserve"
+        private const val TAG = "JarvisObserve"
 
         private fun log(msg: String) { android.util.Log.i(TAG, msg) }
     }

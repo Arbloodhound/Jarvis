@@ -1,7 +1,7 @@
 package com.agent.jarvis.listen
 
 /**
- * Bounded mic mute while Ultra speaks. Replaces mutedUntil = Long.MAX_VALUE, which
+ * Bounded mic mute while Jarvis speaks. Replaces mutedUntil = Long.MAX_VALUE, which
  * left the mic deaf forever if TTS never fired its "done" callback (error, interrupt).
  * The done callback still unmutes early; this is the ceiling. Pure, JVM-tested.
  */

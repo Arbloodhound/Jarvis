@@ -6,16 +6,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WakeFilterTest {
-    private val names = listOf("Ultra", "jarvis")
+    private val names = listOf("Jarvis", "jarvis")
     private fun strip(s: String) = WakeFilter.stripWakePhrase(s, names)
 
     @Test fun wakePhraseAloneLeavesNothing() {
-        for (s in listOf("Hey Jarvis.", "hey jarvis", "Jarvis!", "Ultra.", "Hey, Jervis.", "  Hey Jarvis?  "))
+        for (s in listOf("Hey Jarvis.", "hey jarvis", "Jarvis!", "Jarvis.", "Hey, Jervis.", "  Hey Jarvis?  "))
             assertEquals(s, "", strip(s))
     }
     @Test fun commandAfterWakePhraseIsKept() {
         assertEquals("what's the weather", strip("Hey Jarvis, what's the weather"))
-        assertEquals("turn on the flashlight.", strip("Ultra: turn on the flashlight."))
+        assertEquals("turn on the flashlight.", strip("Jarvis: turn on the flashlight."))
     }
     @Test fun nameMustBeAWholeWord() = assertEquals("Ultraviolet light is harmful", strip("Ultraviolet light is harmful"))
     @Test fun noLeadingWakePhraseLeavesTextAlone() =

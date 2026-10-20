@@ -7,7 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import com.agent.jarvis.data.ConversationEntity
 import com.agent.jarvis.data.MessageEntity
-import com.agent.jarvis.data.UltraDatabase
+import com.agent.jarvis.data.JarvisDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -98,7 +98,7 @@ object ChatStore {
     }
 
     suspend fun init(context: Context) {
-        val db = UltraDatabase.get(context)
+        val db = JarvisDatabase.get(context)
         dao = db.conversations()
         val list = withContext(Dispatchers.IO) { db.conversations().listConversations() }
         conversations.clear(); conversations.addAll(list)
@@ -281,7 +281,7 @@ object ChatStore {
         val speech = chatSpeech ?: speaker.queue().also { chatSpeech = it }
         return com.agent.jarvis.agent.Brain(app, engine).also { b ->
             // A spoken request is always answered out loud; a typed one when "Speak answers" is on.
-            b.speakTyped = { UltraPrefs.speakAnswers(app) }
+            b.speakTyped = { JarvisPrefs.speakAnswers(app) }
             b.onSpeak = { text -> speech.add(text) }
             chatBrain = b
             chatBrainVersion = configVersion

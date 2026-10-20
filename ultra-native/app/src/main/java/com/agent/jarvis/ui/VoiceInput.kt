@@ -31,7 +31,7 @@ class VoiceInput(
     fun start(): Boolean {
         // Jarvis's own whisper when the user prefers it (default: no Google), or when the phone has
         // no system recognizer at all (a de-Googled phone).
-        if (UltraPrefs.ownSpeech(context) || !SpeechRecognizer.isRecognitionAvailable(context)) {
+        if (JarvisPrefs.ownSpeech(context) || !SpeechRecognizer.isRecognitionAvailable(context)) {
             stopInternal()
             return own.start()
         }
@@ -119,7 +119,7 @@ class VoiceInput(
     }
 
     companion object {
-        private const val TAG = "UltraVoice"
+        private const val TAG = "JarvisVoice"
 
         fun errorName(code: Int): String = when (code) {
             SpeechRecognizer.ERROR_AUDIO -> "audio error"

@@ -147,7 +147,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         modelUrl = choice.url
         modelFileName = choice.fileName
         prefs.edit().putString(K_LABEL, choice.label).apply()
-        android.util.Log.i("UltraLlm", "selected model: ${choice.label} (${choice.fileName})")
+        android.util.Log.i("JarvisLlm", "selected model: ${choice.label} (${choice.fileName})")
     }
 
     /** Delete the weights for the current selection. */
@@ -191,7 +191,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         // One download at a time. Two of them write the same model.part and
         // the result is a corrupt file that still looks the right size.
         if (!downloadInFlight.compareAndSet(false, true)) {
-            android.util.Log.w("UltraLlm", "download already running — ignoring second request")
+            android.util.Log.w("JarvisLlm", "download already running — ignoring second request")
             return@withContext Result.failure(IllegalStateException("a download is already running"))
         }
         // Snapshot the target now. modelFile follows the current selection, and
@@ -202,14 +202,14 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         // The other engine may have picked the same file: one writer per .part across both.
         if (!downloadsInFlight.add(target.name)) {
             downloadInFlight.set(false)
-            android.util.Log.w("UltraLlm", "${target.name} is already downloading — ignoring second request")
+            android.util.Log.w("JarvisLlm", "${target.name} is already downloading — ignoring second request")
             return@withContext Result.failure(IllegalStateException("this model is already downloading"))
         }
         // Per-model partial file: a leftover from one model can never be
         // renamed into another model's name.
         val tmp = File(target.parentFile, target.name + PART_SUFFIX)
         downloadProgress.value = 0f
-        android.util.Log.i("UltraLlm", "download start: $url -> ${target.name} (have ${tmp.length() / 1_048_576} MB)")
+        android.util.Log.i("JarvisLlm", "download start: $url -> ${target.name} (have ${tmp.length() / 1_048_576} MB)")
         // A 10 GB file over a phone's Wi-Fi will be interrupted. The bytes already in the .part
         // are kept and the rest is asked for with a Range request, retrying with a back-off;
         // it used to delete the .part on any error and start again from zero. The CPU wake lock
@@ -233,7 +233,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             for (attempt in 1..MAX_DOWNLOAD_ATTEMPTS) {
                 if (attempt > 1) {
                     val wait = DownloadResume.backoffMs(attempt - 1)
-                    android.util.Log.i("UltraLlm", "download retry $attempt/$MAX_DOWNLOAD_ATTEMPTS in ${wait / 1000}s " +
+                    android.util.Log.i("JarvisLlm", "download retry $attempt/$MAX_DOWNLOAD_ATTEMPTS in ${wait / 1000}s " +
                         "(have ${tmp.length() / 1_048_576} MB): ${lastError?.message}")
                     // Not cancellable: the download is started from the Settings screen's scope, and
                     // leaving Settings mid-wait must not end it (the transfer itself already outlives it).
@@ -246,7 +246,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                             ParallelDownload.totalFromProbe(r.code, r.header("Content-Range"))
                         }?.takeIf { it >= ParallelDownload.MIN_PARALLEL_BYTES }
                         probed = true
-                        android.util.Log.i("UltraLlm", "download: ${if (parallelTotal != null)
+                        android.util.Log.i("JarvisLlm", "download: ${if (parallelTotal != null)
                             "${ParallelDownload.CONNECTIONS} connections, ${parallelTotal!! / 1_048_576} MB" else "one connection"}")
                     }
                     val ptotal = parallelTotal
@@ -258,7 +258,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                         if (!tmp.renameTo(target)) {
                             return@withContext Result.failure(Exception("could not move the download into place"))
                         }
-                        android.util.Log.i("UltraLlm", "download complete: ${ptotal / 1_048_576} MB (attempt $attempt, parallel)")
+                        android.util.Log.i("JarvisLlm", "download complete: ${ptotal / 1_048_576} MB (attempt $attempt, parallel)")
                         return@withContext Result.success(ptotal)
                     }
                     // One connection: a .part written by the parallel download is sparse (its length
@@ -270,7 +270,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                     }.build()
                     client.newCall(req).execute().use { resp ->
                         val len = resp.body?.contentLength() ?: -1
-                        android.util.Log.i("UltraLlm", "download HTTP ${resp.code}, length=$len, from=$existing")
+                        android.util.Log.i("JarvisLlm", "download HTTP ${resp.code}, length=$len, from=$existing")
                         val plan = DownloadResume.plan(existing, resp.code, len, resp.header("Content-Range"))
                         if (plan == null) {
                             if (resp.code == 416) tmp.delete()           // .part doesn't match the file: start over
@@ -307,18 +307,18 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                         if (!tmp.renameTo(target)) {
                             return@withContext Result.failure(Exception("could not move the download into place"))
                         }
-                        android.util.Log.i("UltraLlm", "download complete: ${written / 1_048_576} MB (attempt $attempt)")
+                        android.util.Log.i("JarvisLlm", "download complete: ${written / 1_048_576} MB (attempt $attempt)")
                         return@withContext Result.success(written)
                     }
                 } catch (e: java.io.IOException) {
                     lastError = e                                       // keep the .part; retry resumes it
                 }
             }
-            android.util.Log.w("UltraLlm", "download gave up after $MAX_DOWNLOAD_ATTEMPTS attempts", lastError)
+            android.util.Log.w("JarvisLlm", "download gave up after $MAX_DOWNLOAD_ATTEMPTS attempts", lastError)
             Result.failure(Exception("${lastError?.message ?: "network error"} — tap Download again to continue " +
                 "from ${tmp.length() / 1_048_576} MB"))
         } catch (e: Exception) {
-            android.util.Log.w("UltraLlm", "download failed", e)
+            android.util.Log.w("JarvisLlm", "download failed", e)
             Result.failure(e)
         } finally {
             runCatching { if (wake?.isHeld == true) wake.release() }
@@ -375,7 +375,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 if (handle != 0L) return true
                 if (!LlmNative.available || !modelPresent) return loadBlocking()   // logs why
                 if (role == Role.LIBRARIAN && thinkerDemand.get() > 0) {
-                    android.util.Log.i("UltraLlm", "$role load deferred: the thinker is using the engine")
+                    android.util.Log.i("JarvisLlm", "$role load deferred: the thinker is using the engine")
                     return false
                 }
                 val other = otherEngine()
@@ -399,12 +399,12 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 when (decision) {
                     LoadDecision.LOAD -> return loadBlocking(otherMappedBesideCopy, ctx)
                     LoadDecision.REFUSE -> {
-                        android.util.Log.w("UltraLlm", "$role refused: availMB=${avail / MIB} " +
+                        android.util.Log.w("JarvisLlm", "$role refused: availMB=${avail / MIB} " +
                             "otherMappedMB=${otherMapped / MIB} needMB=${need / MIB} (+${MIN_AVAIL_BYTES / MIB} headroom)")
                         return false
                     }
                     LoadDecision.LIBRARIAN_YIELDS -> {
-                        android.util.Log.i("UltraLlm", "$role needs room: availMB=${avail / MIB} " +
+                        android.util.Log.i("JarvisLlm", "$role needs room: availMB=${avail / MIB} " +
                             "otherMappedMB=${otherMapped / MIB} needMB=${need / MIB} — unloading the librarian")
                         other
                     }
@@ -412,7 +412,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             }
             yielding?.unload()
         }
-        android.util.Log.w("UltraLlm", "$role not loaded: the librarian was still loaded after " +
+        android.util.Log.w("JarvisLlm", "$role not loaded: the librarian was still loaded after " +
             "$MAX_YIELD_ROUNDS rounds, and both don't fit")
         return false
     }
@@ -429,13 +429,13 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         preloadScope.launch {
             val t0 = System.currentTimeMillis()
             val ok = ensureLoaded()
-            android.util.Log.i("UltraLlm", "preload ($reason) ok=$ok in ${System.currentTimeMillis() - t0}ms")
+            android.util.Log.i("JarvisLlm", "preload ($reason) ok=$ok in ${System.currentTimeMillis() - t0}ms")
             // Read the brain's own system prompt once now, so the first real question reuses it from
             // the cache instead of reading ~750 tokens first (Real-use check 2.6.28: ~25 s of 32).
             if (ok && role == Role.THINKER) warmPrompt?.let { build ->
                 val t1 = System.currentTimeMillis()
                 val r = generate(build(), maxTokens = 1)
-                android.util.Log.i("UltraLlm", "prompt warm-up ok=${r.isSuccess} in ${System.currentTimeMillis() - t1}ms")
+                android.util.Log.i("JarvisLlm", "prompt warm-up ok=${r.isSuccess} in ${System.currentTimeMillis() - t1}ms")
             }
         }
     }
@@ -465,10 +465,10 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                     while (true) { val r = input.read(buf); if (r < 0) break; n += r }
                 }
             } catch (e: Exception) {
-                android.util.Log.w("UltraLlm", "warm ($reason) failed after ${n / 1_048_576} MB: ${e.message}")
+                android.util.Log.w("JarvisLlm", "warm ($reason) failed after ${n / 1_048_576} MB: ${e.message}")
                 return@launch
             }
-            android.util.Log.i("UltraLlm", "warm ($reason) read ${n / 1_048_576} MB in ${System.currentTimeMillis() - t0}ms " +
+            android.util.Log.i("JarvisLlm", "warm ($reason) read ${n / 1_048_576} MB in ${System.currentTimeMillis() - t0}ms " +
                 "availMB=${availableRam() / 1_048_576}")
         } }
     }
@@ -485,14 +485,14 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         if (loaded) return true
         if (!LlmNative.available) return false          // build without llama.cpp (emulator)
         if (!modelPresent) {
-            android.util.Log.w("UltraLlm", "$role model file missing: ${modelFile.absolutePath}")
+            android.util.Log.w("JarvisLlm", "$role model file missing: ${modelFile.absolutePath}")
             return false
         }
         busyWhile {
             if (handle != 0L) return true
             val avail = availableRam()
             if (avail > 0 && avail < MIN_AVAIL_BYTES) {
-                android.util.Log.w("UltraLlm", "refusing load: avail=${avail / 1_048_576}MB need=${MIN_AVAIL_BYTES / 1_048_576}MB")
+                android.util.Log.w("JarvisLlm", "refusing load: avail=${avail / 1_048_576}MB need=${MIN_AVAIL_BYTES / 1_048_576}MB")
                 return false
             }
             val t0 = System.currentTimeMillis()
@@ -502,21 +502,21 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             val pool = poolThreads
             val cpus = if (role == Role.LIBRARIAN) topo.fastestFirst.filter { it in topo.llmCpus }.take(pool).sorted()
                 else topo.llmCpus
-            android.util.Log.i("UltraLlm", "$role cpus llm=$cpus whisper=${topo.whisperCpus} threads=$threads pool=$pool")
+            android.util.Log.i("JarvisLlm", "$role cpus llm=$cpus whisper=${topo.whisperCpus} threads=$threads pool=$pool")
             val ctx = if (plannedCtx > 0) plannedCtx else plannedContext()
             // A resident copy can't give pages back: what a ctx above 4096 adds (KV, mask) must
             // also fit beside it. At 4096 the check is unchanged (its headroom covered that size).
             // The librarian is always mapped: the setting is about the thinker, and availMem
             // counts the thinker's mapped weights as free, which a resident copy would take.
             val resident = role == Role.THINKER && residentLoad(
-                com.agent.jarvis.ui.UltraPrefs.keepBrainInMemory(context), roomBesideOther(avail, otherMappedBytes),
+                com.agent.jarvis.ui.JarvisPrefs.keepBrainInMemory(context), roomBesideOther(avail, otherMappedBytes),
                 modelFileSizeBytes + ctxGrowthBytes(modelFileName, ctx))
-            android.util.Log.i("UltraLlm", "$role load resident=$resident ctx=$ctx availMB=${avail / 1_048_576} " +
+            android.util.Log.i("JarvisLlm", "$role load resident=$resident ctx=$ctx availMB=${avail / 1_048_576} " +
                 "otherMappedMB=${otherMappedBytes / 1_048_576} " +
                 "fileMB=${modelFileSizeBytes / 1_048_576} totalMB=${totalRam / 1_048_576}")
             handle = LlmNative.nativeLoad(modelFile.absolutePath, pool, ctx, cpus.toIntArray(), resident)
             loadedCtx = if (handle != 0L) LlmNative.nativeContextSize(handle) else 0
-            android.util.Log.i("UltraLlm", "nativeLoad -> handle=$handle ctx=$loadedCtx in ${System.currentTimeMillis() - t0}ms")
+            android.util.Log.i("JarvisLlm", "nativeLoad -> handle=$handle ctx=$loadedCtx in ${System.currentTimeMillis() - t0}ms")
             residentLoaded = resident && handle != 0L
             // A resident copy can't be dropped, so only the mapped mode needs the page cache warmed.
             if (handle != 0L && !resident) warmPageCache("after load")
@@ -550,7 +550,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
     private fun syncDraft(want: Boolean?) {
         val h = handle
         if (h == 0L || role != Role.THINKER) return
-        val wanted = (want ?: com.agent.jarvis.ui.UltraPrefs.speedBoost(context)) &&
+        val wanted = (want ?: com.agent.jarvis.ui.JarvisPrefs.speedBoost(context)) &&
             DraftModel.eligible(modelFileName) && DraftModel.present(context)
         if (!wanted) {
             // Only the setting turning it off frees it; the speed test's "without" run keeps it
@@ -558,7 +558,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
             if (draftCtx > 0 && want == null) {
                 LlmNative.nativeDetachDraft(h)
                 draftCtx = 0
-                android.util.Log.i("UltraLlm", "draft detached (speed boost off)")
+                android.util.Log.i("JarvisLlm", "draft detached (speed boost off)")
             }
             return
         }
@@ -570,14 +570,14 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
         val room = DraftModel.roomAfterThinker(avail, otherMapped, if (residentLoaded) 0L else modelFileSizeBytes)
         val ctx = DraftModel.contextFor(room, loadedCtx)
         if (ctx == 0) {
-            android.util.Log.i("UltraLlm", "draft skipped: roomMB=${room / MIB} (need " +
+            android.util.Log.i("JarvisLlm", "draft skipped: roomMB=${room / MIB} (need " +
                 "${DraftModel.needBytes(CTX_SIZE) / MIB} + ${DraftModel.FREE_AFTER_BYTES / MIB} free)")
             return
         }
         val t0 = System.currentTimeMillis()
         val r = LlmNative.nativeAttachDraft(h, DraftModel.file(context).absolutePath, ctx)
         if (r > 0) draftCtx = r else draftFailed = true
-        android.util.Log.i("UltraLlm", "draft attach -> $r (ctx=$ctx roomMB=${room / MIB} " +
+        android.util.Log.i("JarvisLlm", "draft attach -> $r (ctx=$ctx roomMB=${room / MIB} " +
             "needMB=${DraftModel.needBytes(ctx) / MIB}) in ${System.currentTimeMillis() - t0}ms")
     }
 
@@ -715,22 +715,22 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                 val faults1 = PageFaults.read()
                 val spec = LlmNative.nativeSpecStats(h).takeIf { it.size == 2 } ?: intArrayOf(-1, 0)
                 lastSpecStats = spec
-                android.util.Log.i("UltraLlm", "gen tokens=$n ms=$ms tokPerSec=${"%.1f".format(n * 1000.0 / ms)} " +
+                android.util.Log.i("JarvisLlm", "gen tokens=$n ms=$ms tokPerSec=${"%.1f".format(n * 1000.0 / ms)} " +
                     "majfaults=${if (faults0 >= 0 && faults1 >= 0) faults1 - faults0 else -1} " +
                     "availMB=${availableRam() / 1_048_576} model=${modelFile.name} cpu=${LlmNative.variant} threads=$nThreads " +
                     "draft=${specLabel(spec)}")
                 if (n >= 0 && pieces > 1) decodeSpeed.observe(modelFile.name, pieces - 1, tLast - tFirst)
                 thinkBudget?.let {
-                    android.util.Log.d("UltraRoute", "thinkTokens=${it.thinkTokens} forced=${it.forced} budget=${it.budgetTokens}")
+                    android.util.Log.d("JarvisRoute", "thinkTokens=${it.thinkTokens} forced=${it.forced} budget=${it.budgetTokens}")
                 }
                 when {
                     n < 0 -> Result.failure(IllegalStateException("native generate failed ($n)"))
                     cancelled -> {
-                        android.util.Log.i("UltraLlm", "$role stopped after $pieces tokens: caller cancelled")
+                        android.util.Log.i("JarvisLlm", "$role stopped after $pieces tokens: caller cancelled")
                         Result.failure(kotlinx.coroutines.CancellationException("caller cancelled"))
                     }
                     stopped -> {
-                        android.util.Log.i("UltraLlm", "$role stopped after $pieces tokens: the thinker asked for the engine")
+                        android.util.Log.i("JarvisLlm", "$role stopped after $pieces tokens: the thinker asked for the engine")
                         Result.failure(YieldedToThinker())
                     }
                     else -> Result.success(sb.toString())
@@ -771,7 +771,7 @@ class LocalModelEngine(private val context: Context, val role: Role = Role.THINK
                     decodeSpeed.reset()
                     loadedCtx = 0
                     residentLoaded = false
-                    android.util.Log.i("UltraLlm", "$role unloaded")
+                    android.util.Log.i("JarvisLlm", "$role unloaded")
                 }
             }
         }
