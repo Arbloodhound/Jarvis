@@ -75,3 +75,47 @@ A fresh agent attacked the patched gate. It found one critical regression I had 
 | Low | `ls /root/.s[s]h` glob dodged the path check. | `[` `]` `*` `?` rejected in path arguments. |
 
 Held on re-test: SSRF in every address form (IPv4-mapped IPv6, decimal/octal/short IPv4, DNS rebinding via pinned lookup), workspace confinement through symlinks, sensitive-path reads, raw-secret egress, the trifecta rule, and lasting-effect cards.
+
+## Round 3: feature + competitive review (2026-10-20)
+
+Since the first two rounds the desktop app gained: a **model picker** (any model your server reports), **semantic memory** (any OpenAI-compatible embedding model, with word-overlap fallback), **vision** (a local VLM or the cloud brain reads screenshots and image files), **experimental screen control** (off by default, every action confirmed), and **Chromebook / Chrome OS** support.
+
+### Every feature verified on both brains
+
+`test/integration.test.ts` runs the real agent loop, gate and tools against both a local-shaped and a cloud-shaped model, and asserts each tool category runs identically: system info, file write (workspace), remember + recall (semantic, via a stub embedder), vision (via a stub VLM), and clipboard. It also asserts the gate still cards a sensitive read on the cloud brain and that declining turns into a tool error. Confirmed wiring:
+
+- **Brain switch** is read per request (header chip or tray), so local ↔ cloud applies to the next message; a local turn's tool results are masked before any later cloud request.
+- **Offline-only** blocks the cloud brain, the web tools, *and* a non-local embedder — all in one switch.
+- **Vision** follows the brain: a configured local VLM keeps it offline; otherwise the cloud model reads the image.
+- **Semantic memory** degrades safely: no embedder, a down server, or a model mismatch all fall back to word-overlap rather than failing a request.
+- **Screen control** is absent from the tool list unless turned on, and every action is a confirm card.
+
+45 host tests pass; the native app self-test (window, clipboard, screen capture, notification, tray, hotkey) passes on Windows, macOS and Linux in CI; the Chromebook path degrades gracefully (no tray → window stays, closing quits).
+
+### What Jarvis Desktop does better than current clients
+
+- **Injection defense is code, not a prompt or a pattern list.** The provenance gate decides from where a value came, not from how it reads, and the lethal-trifecta rule is an enforced invariant. Peer clients lean on approval prompts, a pattern matcher, or an optional reviewer model that fails open.
+- **Fail-closed by default.** Shell commands and anything leaving the machine stop at a card unless they trace to the owner's own words; a declined action is never retried another way.
+- **Secrets never leave, even when approved** — including base64/percent/hex-encoded forms, and they're hidden from the cloud model.
+- **No plugin marketplace to poison.** Capability is a fixed, audited tool set, so there's no third-party-code supply chain to review.
+- **One small, legible codebase** (one folder, three runtime dependencies) versus large monorepos — easier for the owner to actually read and trust.
+
+### Where it's still behind, ranked by how much users rely on it
+
+1. **MCP / tool extensions** — peers plug into dozens of external tools; Jarvis has a fixed set. This is the biggest gap and the natural next feature.
+2. **Chat-app channels** (WhatsApp/Telegram/Slack) — none yet.
+3. **An OS-level command sandbox** — Jarvis relies on the confirm card, not a container; a sandbox would be defense-in-depth under it.
+4. **Scheduled / recurring tasks** — none yet.
+5. **Browser automation** beyond fetch — no clicking through logged-in sites.
+6. **Voice** — none yet (the phone app has it).
+7. **A bundled local model engine** — Jarvis needs an external server (Ollama/llama.cpp); some peers ship llama.cpp in the app.
+8. **Signing / notarization and auto-update** — installers are unsigned (warnings) and don't self-update.
+
+### Recommended next steps, in order
+
+1. **MCP client** — the single highest-leverage addition; it closes gap #1 and much of #5 at once, and every tool it adds still passes through the same gate.
+2. **Scheduled tasks** — small, high-value, and the gate already covers what they'd run.
+3. **An OS sandbox for `run_command`** (the macOS/Linux sandbox-exec / seccomp route), as a layer beneath the card.
+4. **Code signing + auto-update**, once there's a certificate.
+
+Honesty status: the feature wiring above is PROVEN by host tests and the cross-platform CI self-test; day-to-day use on a real desktop (and the experimental screen control on a real screen) remains SOURCE-FIXED BUT RUNTIME-UNPROVEN.

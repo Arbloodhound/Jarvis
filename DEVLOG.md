@@ -4854,3 +4854,10 @@ Owner: "branch the existing work to a new project, a Jarvis client on the comput
 - Startup note when running in Crostini (screenshots capture only the container; tray/hotkey may be unavailable).
 - README: "Chromebook / Chrome OS" section — the serve+Chrome-browser path (best for low-RAM), the desktop-app path with its caveats, and brain guidance (cloud or small local model).
 - 42 tests pass; native self-test still passes.
+
+## 2026-10-20 — Desktop piece 4: feature + competitive review (+ cloud-vision gate fix)
+- PR #16 merged into the base (pieces 1-3: model picker, semantic memory, vision, screen control, Chromebook). This is follow-up work on a fresh branch from the merged base.
+- Integration test (test/integration.test.ts): the real agent loop + gate run every tool category on BOTH a local-shaped and cloud-shaped provider (system_info, write_file, remember/recall with stub embedder, look_at_screen with stub VLM, clipboard), and the gate still cards a sensitive read on cloud. Proves features are wired for both brains.
+- Fixed a gap the review surfaced: a screenshot sent to CLOUD vision left the machine with no gate check. look_at_screen/look_at_image now carry alwaysConfirm when the vision backend is cloud (local vision needs no card); runtime passes cloudVision into toolsFor.
+- REVIEW.md round 3: verification notes, what-we-do-better, ranked gaps (MCP first), next steps. No new Tor/dark-web references anywhere.
+- 46 host tests pass; native self-test passes.

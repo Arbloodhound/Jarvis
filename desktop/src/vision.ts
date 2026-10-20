@@ -34,6 +34,10 @@ export interface Image {
 export class Vision {
   constructor(private readonly cfg: VisionConfig) {}
 
+  get kind(): "local" | "cloud" {
+    return this.cfg.kind;
+  }
+
   get label(): string {
     return this.cfg.kind === "cloud" ? `Claude (${this.cfg.model})` : `Local VLM (${this.cfg.model})`;
   }

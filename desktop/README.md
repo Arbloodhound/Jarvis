@@ -68,7 +68,7 @@ The supplement audit covered the ccr branch snapshot that brought `desktop/` in:
 Open desktop highs from that audit — still open post-merge unless a later fix is shown:
 
 - The desktop **broadcasts unredacted tool arguments to all clients**. Confirm cards and the audit log redact; the broadcast path does not. Treat connected clients as able to see raw tool args until this is fixed.
-- **Screenshots sent to cloud Vision are ungated.** A screenshot can leave the machine to the cloud provider without a gate check.
+- **Cloud Vision now asks first.** When the vision backend is the cloud provider, `look_at_screen` and `look_at_image` show a confirm card, since the image leaves the machine; a local vision model needs no card.
 - **macOS and Windows screen actions report false success** — they report success for actions they did not perform. Screen control on those platforms is therefore not proven by a success return.
 - No cross-provider fallback (see above) — listed here because it surprises users; it is the audited behaviour, not a hidden fallback.
 
