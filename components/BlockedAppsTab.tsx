@@ -137,7 +137,7 @@ export default function BlockedAppsTab({ isNative }: BlockedAppsTabProps) {
       <View style={s.noticeBox}>
         <Ionicons name="warning-outline" size={14} color="#fbbf24" />
         <Text style={s.noticeText}>
-          Agent Ultra will refuse to interact with blocked apps via accessibility.
+          Jarvis will refuse to interact with blocked apps via accessibility.
           This does NOT prevent you from using those apps normally.
         </Text>
       </View>
