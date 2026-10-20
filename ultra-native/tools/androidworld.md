@@ -1,8 +1,14 @@
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/ultra-native/tools/androidworld.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
 # AndroidWorld: Ultra on a public benchmark
 
 [AndroidWorld](https://github.com/google-research/android_world) (Google Research) runs 116
 hand-written tasks across 20 real Android apps on an emulator and checks the device's own state
 afterwards. It grades; nothing of ours does.
+
+## Status as of 2026-10-19
+
+Preserved as the run book and record of the September 2026 scored rounds. The setup paths and commands below are the original run's own (that laptop, those directories) and are kept as they were used. The results at the end were **not re-run or re-verified in the 2026-10-19 audits**, which were static, grep-level reading of the merged tree (all work now on `main`); CI has not yet compiled the merged tree. The `bench/` and tools code carries the audit verdict "works with defects". The Gate behaviour described below matches the audited merged-tree properties — deny-by-default, and taint blocks that can neither be auto-approved nor operator-overridden — but that audits the code, not these scores.
 
 ## Setup on this laptop (once)
 
