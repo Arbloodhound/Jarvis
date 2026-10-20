@@ -1,3 +1,13 @@
+> **Post-merge replacement — 2026-10-19.** This is a point-in-time document. Its body is preserved verbatim as the historical record; the status section below states what the 2026-10-19 code audits and the full-branch consolidation (all work now on `main`) changed. The previous version is preserved at `archive/2026-10-19/desktop/REVIEW.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+
+## Status as of 2026-10-19
+
+- **This review is a point-in-time record.** Its findings-and-fixes tables describe the code as reviewed on 2026-10-19, before the full-branch consolidation. All work is now on `main` (tip `c8043e1c`); `desktop/` arrived via the `ccr-c9b6f798-uako9v` merge. CI has not yet compiled the merged tree, and audit verification was grep-level, not compilation.
+- **Later audit result.** The supplement audit of the ccr snapshot (118 files) found 87 findings — 0 critical, 12 high, 31 medium, 44 low. Desktop app verdict: works with defects. Desktop tests verdict: works as designed (1 low). Post-merge there are 0 known criticals overall (the pass-2 critical, harness DB wiring, is resolved in the merged tree). The fix claims in the body below were not re-audited line-by-line against the merged tree in the supplement — treat them as the review's own record, not as a current pass claim.
+- **Gate architecture is strong** per the audits (layered checks, SSRF defence, redaction in audit log/confirm cards), but three desktop highs remain open and qualify the body's "fixed" picture: (1) unredacted tool args are broadcast to all clients (confirm cards and the audit log redact; the broadcast path does not), (2) screenshots sent to cloud Vision are ungated, (3) macOS/Windows screen actions report false success for actions they did not perform.
+- **Providers:** Claude cloud + local, selection per run, with **no cross-provider fallback** — a failed turn ends the run. The comparison table in the body predates the audits; its claims about other products were not re-verified in the 2026-10-19 audits.
+- **Tests are sound** per the supplement verdict above (works as designed, 1 low) — that supports the body's "each fix has a test" approach without confirming any specific test count today.
+
 # Jarvis Desktop: pre-release review (2026-10-19)
 
 Four Haiku agents reviewed the code and researched the field in parallel. Every finding below was then checked against the code, and each fix has a test in `test/`.
