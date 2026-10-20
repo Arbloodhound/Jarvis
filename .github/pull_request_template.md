@@ -2,7 +2,7 @@
 
 ## What changed
 <!-- One or two lines per change, in plain words. Say which tree: ultra-native/ (Kotlin),
-     harness (com.agent.ultra.harness), desktop/ (TypeScript), or src/ (TypeScript lineage).
+     harness (com.agent.jarvis.harness), desktop/ (TypeScript), or src/ (TypeScript lineage).
      Target branch must be main. -->
 
 ## Evidence (label every claim)

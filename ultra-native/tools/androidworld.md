@@ -50,7 +50,7 @@ cd ~/androidworld && ANDROID_SERIAL=emulator-5554 .venv/bin/python bench_ultra.p
   off between tasks was tried: every task then failed. Ultra's stays on, the harness retries, and
   the adapter drives Ultra over adb + uiautomator, which keeps working.
 - **Ultra's app policy** defaults to allow-list with nothing allowed. In the emulator write
-  `/data/data/com.agent.ultra/shared_prefs/ultra_protected_apps.xml` with `allowlist_mode=false`
+  `/data/data/com.agent.jarvis/shared_prefs/ultra_protected_apps.xml` with `allowlist_mode=false`
   (adb root; a file pushed to /sdcard/Android/data is not readable by the app).
 - **The benchmark reads the live screen**, so the adapter brings the task's app back to the front
   when Ultra's chat ended up there — and only then: reordering an app that is already in front

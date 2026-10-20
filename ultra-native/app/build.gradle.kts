@@ -35,11 +35,11 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 
-    namespace = "com.agent.ultra"
+    namespace = "com.agent.jarvis"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.agent.ultra"
+        applicationId = "com.agent.jarvis"
         minSdk = 26
         targetSdk = 35
         // release-apk.yml passes -PciBuildNumber=<run number>, so every GitHub build is a newer

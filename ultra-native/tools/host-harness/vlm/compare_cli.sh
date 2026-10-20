@@ -24,6 +24,6 @@ PROMPT="<__media__>Describe this screen."
   --temp 0.2 --top-k 40 --top-p 0.9 --min-p 0 --seed 42 --repeat-penalty 1.0 \
   > "$OUT/cli.out" 2> "$OUT/cli.err"
 java -Djava.library.path="$OUT" -Dmodel="$V/tiny-qwen25vl.gguf" -Dmmproj="$V/tiny-qwen25vl-mmproj.gguf" \
-  -Dprompt="$PROMPT" -Dmax="$MAX" -Dout="$OUT/shim.out" -cp "$OUT/classes" com.agent.ultra.local.VlmOnce 2> "$OUT/shim.err" | grep -v JAVA_TOOL || true
+  -Dprompt="$PROMPT" -Dmax="$MAX" -Dout="$OUT/shim.out" -cp "$OUT/classes" com.agent.jarvis.local.VlmOnce 2> "$OUT/shim.err" | grep -v JAVA_TOOL || true
 grep -E "sampler chain|sampler seed|image_tokens->n|decoding image|n_tokens_batch" "$OUT/cli.err" || true
 python3 "$V/compare_cli.py" "$OUT/cli.out" "$OUT/shim.out"

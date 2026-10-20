@@ -1,6 +1,6 @@
 // On-device vision: a vision-language model (text GGUF + its mmproj GGUF) through llama.cpp's
 // libmtmd. Compiled into the same libultra_llm*.so as ultra_llm.cpp, so both share the one
-// llama/ggml; Kotlin binds it as com.agent.ultra.local.VisionNative (an `object`, hence the
+// llama/ggml; Kotlin binds it as com.agent.jarvis.local.VisionNative (an `object`, hence the
 // jobject `thiz` in every signature). One describe at a time per handle: Kotlin serialises.
 //
 // Each describe is a fresh, self-contained prompt: the KV memory is cleared, the image and the
@@ -159,7 +159,7 @@ std::string applyTemplate(const llama_model *model, const std::string &prompt) {
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_com_agent_ultra_local_VisionNative_nativeVlmLoad(
+Java_com_agent_jarvis_local_VisionNative_nativeVlmLoad(
         JNIEnv *env, jobject, jstring jmodel, jstring jmmproj, jint threads, jint nCtx, jintArray jcpus) {
     if (!backendReady) { llama_backend_init(); backendReady = true; }
     mtmd_helper_log_set(mtmdLog, nullptr);
@@ -232,7 +232,7 @@ Java_com_agent_ultra_local_VisionNative_nativeVlmLoad(
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_agent_ultra_local_VisionNative_nativeVlmDescribe(
+Java_com_agent_jarvis_local_VisionNative_nativeVlmDescribe(
         JNIEnv *env, jobject, jlong handle, jbyteArray jrgb, jint width, jint height,
         jstring jprompt, jint maxTokens, jint threads) {
     auto *e = reinterpret_cast<VlmEngine *>(handle);
@@ -346,7 +346,7 @@ Java_com_agent_ultra_local_VisionNative_nativeVlmDescribe(
 }
 
 JNIEXPORT void JNICALL
-Java_com_agent_ultra_local_VisionNative_nativeVlmFree(JNIEnv *, jobject, jlong handle) {
+Java_com_agent_jarvis_local_VisionNative_nativeVlmFree(JNIEnv *, jobject, jlong handle) {
     freeEngine(reinterpret_cast<VlmEngine *>(handle));
 }
 

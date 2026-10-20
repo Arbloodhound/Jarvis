@@ -11,7 +11,7 @@
 # Every section tolerates failure (non-root lshal and dumpsys often refuse) and says so.
 set -uo pipefail
 TIMEOUT="${1:-180}"
-APP=com.agent.ultra
+APP=com.agent.jarvis
 RECEIVER=$APP/.bench.AccelProbeReceiver
 
 section() { echo; echo "=== $1"; }
@@ -67,7 +67,7 @@ fi
 adb shell am start -n $APP/.MainActivity > /dev/null 2>&1
 sleep 3
 adb logcat -c
-adb shell am broadcast -a com.agent.ultra.ACCEL_PROBE -n $RECEIVER ${HAL_EXTRA[@]+"${HAL_EXTRA[@]}"} > /dev/null
+adb shell am broadcast -a com.agent.jarvis.ACCEL_PROBE -n $RECEIVER ${HAL_EXTRA[@]+"${HAL_EXTRA[@]}"} > /dev/null
 
 logs() { adb logcat -d -v tag -s UltraAccel 2>/dev/null | tr -d '\r'; }
 

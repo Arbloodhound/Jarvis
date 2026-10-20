@@ -26,7 +26,7 @@ if [ "${SAN:-}" = asan ]; then
 fi
 [ -n "${VALGRIND:-}" ] && PRE=(valgrind --error-exitcode=99 --leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --gen-suppressions=no --log-file="$OUT/valgrind.log" --smc-check=all-non-file)
 set +e
-"${PRE[@]}" java -Xss4m -Djava.library.path="$OUT" "$@" -cp "$OUT/classes" com.agent.ultra.local.VlmHarness 2>"$OUT/native.log"
+"${PRE[@]}" java -Xss4m -Djava.library.path="$OUT" "$@" -cp "$OUT/classes" com.agent.jarvis.local.VlmHarness 2>"$OUT/native.log"
 rc=$?; set -e
 echo "native log: $OUT/native.log"
 grep -E "^\[UltraVlm\]|image|encod|n_tokens|batch" "$OUT/native.log" | sort | uniq -c | sort -rn | head -30 || true

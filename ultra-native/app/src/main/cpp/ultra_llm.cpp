@@ -491,7 +491,7 @@ int generateSpeculative(Engine *engine, llama_sampler *chain, int maxTokens, int
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_com_agent_ultra_local_LlmNative_nativeLoad(
+Java_com_agent_jarvis_local_LlmNative_nativeLoad(
         JNIEnv *env, jobject, jstring jpath, jint threads, jint ctxSize, jintArray jcpus, jboolean resident) {
     if (!backendReady) { llama_backend_init(); backendReady = true; }
 
@@ -610,7 +610,7 @@ Java_com_agent_ultra_local_LlmNative_nativeLoad(
 }
 
 JNIEXPORT jint JNICALL
-Java_com_agent_ultra_local_LlmNative_nativeGenerate(
+Java_com_agent_jarvis_local_LlmNative_nativeGenerate(
         JNIEnv *env, jobject, jlong handle, jstring jprompt, jint maxTokens,
         jfloat temperature, jint threads, jint draftMax, jobject callback) {
     auto *engine = reinterpret_cast<Engine *>(handle);
@@ -801,7 +801,7 @@ Java_com_agent_ultra_local_LlmNative_nativeGenerate(
 
 // The ctx the loaded context was created with (nativeLoad may have fallen back to 4096).
 JNIEXPORT jint JNICALL
-Java_com_agent_ultra_local_LlmNative_nativeContextSize(JNIEnv *, jobject, jlong handle) {
+Java_com_agent_jarvis_local_LlmNative_nativeContextSize(JNIEnv *, jobject, jlong handle) {
     auto *engine = reinterpret_cast<Engine *>(handle);
     return engine ? engine->ctxSize : 0;
 }
@@ -813,7 +813,7 @@ Java_com_agent_ultra_local_LlmNative_nativeContextSize(JNIEnv *, jobject, jlong 
 // removed (Engine::recurrent). On any failure nothing stays loaded and generate runs as before.
 // Replaces a draft already attached.
 JNIEXPORT jint JNICALL
-Java_com_agent_ultra_local_LlmNative_nativeAttachDraft(JNIEnv *env, jobject, jlong handle, jstring jpath, jint ctxSize) {
+Java_com_agent_jarvis_local_LlmNative_nativeAttachDraft(JNIEnv *env, jobject, jlong handle, jstring jpath, jint ctxSize) {
     auto *engine = reinterpret_cast<Engine *>(handle);
     if (!engine || !engine->ctx || ctxSize <= 0) return 0;
     freeDraft(engine->draft);
@@ -878,7 +878,7 @@ Java_com_agent_ultra_local_LlmNative_nativeAttachDraft(JNIEnv *env, jobject, jlo
 }
 
 JNIEXPORT void JNICALL
-Java_com_agent_ultra_local_LlmNative_nativeDetachDraft(JNIEnv *, jobject, jlong handle) {
+Java_com_agent_jarvis_local_LlmNative_nativeDetachDraft(JNIEnv *, jobject, jlong handle) {
     auto *engine = reinterpret_cast<Engine *>(handle);
     if (!engine) return;
     freeDraft(engine->draft);
@@ -887,7 +887,7 @@ Java_com_agent_ultra_local_LlmNative_nativeDetachDraft(JNIEnv *, jobject, jlong 
 
 // The last generate's speculation: {drafted, accepted}; drafted = -1 when it ran without one.
 JNIEXPORT jintArray JNICALL
-Java_com_agent_ultra_local_LlmNative_nativeSpecStats(JNIEnv *env, jobject, jlong handle) {
+Java_com_agent_jarvis_local_LlmNative_nativeSpecStats(JNIEnv *env, jobject, jlong handle) {
     auto *engine = reinterpret_cast<Engine *>(handle);
     jint v[2] = {engine ? engine->specDrafted : -1, engine ? engine->specAccepted : 0};
     jintArray out = env->NewIntArray(2);
@@ -896,7 +896,7 @@ Java_com_agent_ultra_local_LlmNative_nativeSpecStats(JNIEnv *env, jobject, jlong
 }
 
 JNIEXPORT void JNICALL
-Java_com_agent_ultra_local_LlmNative_nativeFree(JNIEnv *, jobject, jlong handle) {
+Java_com_agent_jarvis_local_LlmNative_nativeFree(JNIEnv *, jobject, jlong handle) {
     auto *engine = reinterpret_cast<Engine *>(handle);
     if (!engine) return;
     // Before the pool: the draft's context uses it too.

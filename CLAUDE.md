@@ -8,7 +8,7 @@
 
 Jarvis (Agent Ultra) is an Android AI assistant. The consolidated repository (`Arbloodhound/Jarvis`, all work on `main` since the 2026-10-19 full-branch consolidation) contains:
 
-- `ultra-native/` — the shipping app: native Kotlin Android app, including the harness package `com.agent.ultra.harness`.
+- `ultra-native/` — the shipping app: native Kotlin Android app, including the harness package `com.agent.jarvis.harness`.
 - `desktop/` — a TypeScript desktop app (agent loop, gate, providers, memory, tools, gateway server + CLI).
 - `src/` — the TypeScript app of the Expo / React Native lineage. Its live path is `AgentCore` / `BrainExecutor` / `TaskExecutor`; its `server/` directory is orphaned.
 
@@ -63,7 +63,7 @@ Treat the repo as these primary subsystems, following the audited code map. Alwa
 - **C. Memory / Listening (Kotlin)** — `ultra-native` `listen/` (ambient listening, speech, notes, Librarian, claim promotion) + `ui/` / `data/` (Room, `UltraDatabase` v9)
 - **D. Device / Models / Network (Kotlin)** — `ultra-native` `local/` (on-device models via llama.cpp JNI, downloads), `provider/` (`OpenAiClient`, `ProviderConfig`), `net/` (`TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard`)
 - **E. Research (Kotlin)** — `ultra-native` `research/` (browse, shopping, investigate) + `bench/`
-- **F. Harness** — `com.agent.ultra.harness` inside `ultra-native`: MemoryClaims, ApprovalGrants, Scheduler (+ runtime / receiver), SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, NLI head, bandit (ForYou), `connectors/` (Gmail, Google Calendar / Docs / Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber)
+- **F. Harness** — `com.agent.jarvis.harness` inside `ultra-native`: MemoryClaims, ApprovalGrants, Scheduler (+ runtime / receiver), SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, NLI head, bandit (ForYou), `connectors/` (Gmail, Google Calendar / Docs / Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber)
 - **G. Desktop (TypeScript)** — `desktop/`: agent loop, gate (8 ordered checks), providers (Claude cloud + local; no cross-provider fallback), memory (embeddings store / recall; forget → 500-cap trash), tools, gateway server + CLI; tests in `desktop/test` (7 files)
 - **H. TS lineage app** — `src/`: live path `AgentCore` / `BrainExecutor` / `TaskExecutor`; `server/` is orphaned — do not build on it
 - **I. Build / Release** — Gradle build for `ultra-native`, desktop build, GitHub Actions, signing (release builds fail without `keystore.properties`, by design)

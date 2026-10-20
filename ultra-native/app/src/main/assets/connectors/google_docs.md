@@ -4,7 +4,7 @@
 Wraps Google's REST API directly (no Google SDK, no Play services).
 
 ## Setup
-1. This connector is implemented in the harness package (`com.agent.ultra.harness.connectors`), alongside the CredentialVault. It reports **needs setup** until you connect an account; nothing is connected before that.
+1. This connector is implemented in the harness package (`com.agent.jarvis.harness.connectors`), alongside the CredentialVault. It reports **needs setup** until you connect an account; nothing is connected before that.
 2. Connect opens Google's sign-in in the browser (using the Google OAuth client configured for the app); you sign in with your own account and allow only the scopes listed below.
 3. The token is stored in the Android Keystore vault as an opaque handle bound to `docs.googleapis.com`. The agent only ever sees the handle; the token is added at the network boundary and never logged or remembered.
 

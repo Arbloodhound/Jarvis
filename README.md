@@ -12,7 +12,7 @@ This repository is the consolidated Jarvis codebase. After the 2026-10-19 full-b
 
 ## What's in here
 
-- `ultra-native/` — the current app. Native Kotlin Android app; this is the shipping app. It contains the harness package `com.agent.ultra.harness` (see below).
+- `ultra-native/` — the current app. Native Kotlin Android app; this is the shipping app. It contains the harness package `com.agent.jarvis.harness` (see below).
 - `desktop/` — a TypeScript desktop app: agent loop, gate, providers, memory, tools, gateway server and CLI, with tests in `desktop/test`.
 - `src/` — the TypeScript app of the Expo / React Native lineage. Its live path is `AgentCore` / `BrainExecutor` / `TaskExecutor`; its `server/` directory is orphaned (see "Known open issues").
 - `ultra-native/app/src/main/cpp/` — native bridge code, including llama.cpp through JNI, so on-device models run without a server. *(Build details for the native libraries were not re-verified in the 2026-10-19 audits.)*
@@ -27,7 +27,7 @@ Older versions of this file described everything outside `ultra-native/` as "his
 - **On-device brain.** On-device models run through llama.cpp via JNI (`local/`). The Brain runs a 12-turn loop (`agent/`).
 - **Cloud escalation.** When the on-device model cannot do a step, the request can go to a cloud model on your own API key (`provider/`: `OpenAiClient`, `ProviderConfig`). No key ships in this repo. The desktop app uses Claude cloud plus a local provider, with no cross-provider fallback — a failed turn ends the run.
 - **The gate.** Tool calls pass a policy gate that runs on the phone (`gate/`: Gate, Manifest, contracts, taint — deny-by-default). It refuses destructive calls rather than asking the model to behave. Manifest load failure means deny-all. Taint blocks can neither be auto-approved nor operator-overridden. When a tap would commit something — delete, send, pay — the flow stops and asks; the agent informs and asks, and the user decides. Purchases always need fresh approval; no lasting grant covers a purchase, anywhere.
-- **The harness.** The package `com.agent.ultra.harness` inside `ultra-native` carries the Muse-style harness layer: memory claims with provenance and supersede chains, approval grants, scheduler, lazy skills, notification forwarding policy, screen guard, trash and forget, depth-1 subagents, feed, ideas, artifacts, proactivity, claim verification, an NLI head, a bandit for the For You feed, and connectors (Gmail, Google Calendar / Docs / Drive, Spotify) with a Keystore AES-GCM credential vault and a secret scrubber. See `ARCHITECTURE.md` for the full map.
+- **The harness.** The package `com.agent.jarvis.harness` inside `ultra-native` carries the Muse-style harness layer: memory claims with provenance and supersede chains, approval grants, scheduler, lazy skills, notification forwarding policy, screen guard, trash and forget, depth-1 subagents, feed, ideas, artifacts, proactivity, claim verification, an NLI head, a bandit for the For You feed, and connectors (Gmail, Google Calendar / Docs / Drive, Spotify) with a Keystore AES-GCM credential vault and a secret scrubber. See `ARCHITECTURE.md` for the full map.
 - **Steps it was shown.** A job a stronger model finished once, and a check outside the app confirmed, can be kept as a short list of steps (recipes / experience). The next request of the same kind plays those steps with your own details. Every played step still goes through the gate. *Note from the audits: recipe runs can self-confirm steps past the Gate — this is a known open high-severity finding, not a guarantee. See "Audit state."*
 
 ## Repository state (2026-10-19)
@@ -59,7 +59,7 @@ Combined framing: 206 findings across two audits of different snapshots — **no
 ### Known open issues (post-merge)
 
 - `SchedulerReceiver` and `SpotifyRedirectActivity` exist in the harness but are **not** registered in `AndroidManifest.xml` (harness manifest wiring is broken for these two components).
-- Kotlin unit tests are broken in 2 files: `HistoryPolicyTest.kt` and `MemoryBriefTest.kt` import `com.agent.ultra.bench.TestKitActivity`, which exists only in `src/debug`.
+- Kotlin unit tests are broken in 2 files: `HistoryPolicyTest.kt` and `MemoryBriefTest.kt` import `com.agent.jarvis.bench.TestKitActivity`, which exists only in `src/debug`.
 - The TypeScript `server/` under `src/` is orphaned: nothing calls it, it registers no routes, and it crashes at startup in the audited tree.
 - ~70 dead-code candidates (zero call sites) — candidates only; reflection, JNI, and framework callbacks can make some of them live.
 - Further high-severity findings (Gate secret patterns, plaintext cloud key storage, model-download integrity, voiceprint defaults, desktop redaction and screen-control issues, and others) are listed in `ARCHITECTURE.md` and in the audit reports. Do not treat this README as the full defect list.

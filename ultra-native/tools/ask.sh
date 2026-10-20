@@ -5,7 +5,7 @@
 set -uo pipefail
 TEXT="${1:?usage: ask.sh \"task\" [timeout]}"
 TIMEOUT="${2:-180}"
-APP=com.agent.ultra
+APP=com.agent.jarvis
 DIR="$(dirname "$0")"
 
 adb shell am start -n $APP/.MainActivity > /dev/null 2>&1

@@ -68,7 +68,7 @@ export class EnhancedReActLoop {
       try {
         try {
           const currentPkg = await AppController.getActivePackage();
-          if (currentPkg === 'com.agent.ultra') {
+          if (currentPkg === 'com.agent.jarvis') {
             DebugLog.error('EnhancedReActLoop', `SAFETY STOP iter ${iteration}: self-interaction`);
             return { success: false, goalAchieved: false, steps, finalObservation: 'Stopped: self-interaction', totalIterations: iteration, error: 'self_interaction' };
           }

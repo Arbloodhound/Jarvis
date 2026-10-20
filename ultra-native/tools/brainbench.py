@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-BRAIN = HERE.parent / "app/src/main/java/com/agent/ultra/agent/Brain.kt"
+BRAIN = HERE.parent / "app/src/main/java/com/agent/jarvis/agent/Brain.kt"
 OUT = HERE / "brainbench"
 VENICE = "https://api.venice.ai/api/v1"
 

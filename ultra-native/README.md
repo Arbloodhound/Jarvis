@@ -67,7 +67,7 @@ not permit or forbid. Some standing rules, as audited:
 
 ## The harness package
 
-`com.agent.ultra.harness`, inside this app, carries the Muse-style harness
+`com.agent.jarvis.harness`, inside this app, carries the Muse-style harness
 layer: MemoryClaims, ApprovalGrants (grant levels plus command binding),
 Scheduler with its runtime/receiver, SkillStore (lazy skills),
 NotificationForwardingPolicy (three gates), ScreenGuard, Trash, Forget,
@@ -122,16 +122,16 @@ on-device and runtime behaviour was not re-tested.
 
 | Path | Contents |
 |---|---|
-| `app/src/main/java/com/agent/ultra/agent/` | Brain loop, tools, navigation |
-| `app/src/main/java/com/agent/ultra/gate/` | Gate, manifest, contracts, taint |
-| `app/src/main/java/com/agent/ultra/listen/` | Ambient listening, speech, notes, Librarian, claim promotion |
-| `app/src/main/java/com/agent/ultra/local/` | On-device models (llama.cpp JNI), downloads |
-| `app/src/main/java/com/agent/ultra/net/` | Tor proxy / embedded Tor / browser guard |
-| `app/src/main/java/com/agent/ultra/provider/` | Cloud provider client and config |
-| `app/src/main/java/com/agent/ultra/research/` | Browse, shopping, investigate |
-| `app/src/main/java/com/agent/ultra/ui/`, `data/` | UI; Room (`UltraDatabase`) |
-| `app/src/main/java/com/agent/ultra/harness/` | The harness package described above |
-| `app/src/main/java/com/agent/ultra/bench/`, `src/debug/` | Benchmarks; debug bench |
+| `app/src/main/java/com/agent/jarvis/agent/` | Brain loop, tools, navigation |
+| `app/src/main/java/com/agent/jarvis/gate/` | Gate, manifest, contracts, taint |
+| `app/src/main/java/com/agent/jarvis/listen/` | Ambient listening, speech, notes, Librarian, claim promotion |
+| `app/src/main/java/com/agent/jarvis/local/` | On-device models (llama.cpp JNI), downloads |
+| `app/src/main/java/com/agent/jarvis/net/` | Tor proxy / embedded Tor / browser guard |
+| `app/src/main/java/com/agent/jarvis/provider/` | Cloud provider client and config |
+| `app/src/main/java/com/agent/jarvis/research/` | Browse, shopping, investigate |
+| `app/src/main/java/com/agent/jarvis/ui/`, `data/` | UI; Room (`UltraDatabase`) |
+| `app/src/main/java/com/agent/jarvis/harness/` | The harness package described above |
+| `app/src/main/java/com/agent/jarvis/bench/`, `src/debug/` | Benchmarks; debug bench |
 | `app/src/test/` | Unit tests (two files broken — see Status) |
 | `ondevice-brain/` | On-device brain bundle: training notebook, build and test guides, signing |
 | `tools/` | Host harness, benchmarks, AndroidWorld |

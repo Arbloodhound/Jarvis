@@ -71,12 +71,12 @@ Model is already wired. Two ways to load the abliterated IQ2_M (10.2GB):
   A) In-app: Settings -> model list -> "Qwen3-30B-A3B Thinking ABLITERATED (IQ2_M)" -> Download.
   B) Sideload: download the GGUF on a PC, then
      (debug build only; the app reads only its private files/models/ folder, not /sdcard)
-     adb push qwen3moe-abliterated-iq2m.gguf /data/local/tmp/ && adb shell run-as com.agent.ultra sh -c 'mkdir -p files/models && cp /data/local/tmp/qwen3moe-abliterated-iq2m.gguf files/models/' && adb shell rm /data/local/tmp/qwen3moe-abliterated-iq2m.gguf
+     adb push qwen3moe-abliterated-iq2m.gguf /data/local/tmp/ && adb shell run-as com.agent.jarvis sh -c 'mkdir -p files/models && cp /data/local/tmp/qwen3moe-abliterated-iq2m.gguf files/models/' && adb shell rm /data/local/tmp/qwen3moe-abliterated-iq2m.gguf
      (rename the downloaded Huihui-...i1-IQ2_M.gguf to qwen3moe-abliterated-iq2m.gguf first),
      then Settings -> model list -> that entry -> Use this.
 Set context 4k. Close all other apps (assistant-only). 
 
-SUCCESS: it answers from the MoE with the phone offline. Watch `adb shell dumpsys meminfo com.agent.ultra`
+SUCCESS: it answers from the MoE with the phone offline. Watch `adb shell dumpsys meminfo com.agent.jarvis`
 — resident set stays stable, no repeated large page-ins (that would be thrashing -> switch to IQ2_S).
 
 ====================================================================
@@ -86,7 +86,7 @@ PHASE 5 — Ambient listening (always-on, local, wake-gated)
     whisper base.en (~60 MB, required), Silero VAD, and the openWakeWord trio (hey_jarvis).
     The phone needs internet for that first start only; after that it's fully offline.
 5a-wake. Custom phrase ("hey blood"): train on the openWakeWord Colab (synthetic TTS, ~1h), then
-      adb push hey_blood.onnx /data/local/tmp/ && adb shell run-as com.agent.ultra cp /data/local/tmp/hey_blood.onnx files/
+      adb push hey_blood.onnx /data/local/tmp/ && adb shell run-as com.agent.jarvis cp /data/local/tmp/hey_blood.onnx files/
     and set prefs key ambient/wake_onnx to hey_blood.onnx. Custom files are never overwritten.
     Shapes/names VERIFIED against the real models + upstream reference (patch 0002).
     Tuning: WakeGate.lastScore exposes the live score; raise threshold (0.5 -> 0.6-0.7) if it false-fires.

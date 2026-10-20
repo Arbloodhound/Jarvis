@@ -108,7 +108,7 @@ Owner: "Fuck the testing, just get straight to building all this." No phone test
 - NOT wired (deliberately): MemoryClaims/ClaimVerifier/LlmNliHead write path and SkillStore duplicate the existing
   memory and Recipes; BanditArmState has no feedback surface beyond Ideas; Spotify/Plaid/Stripe need owner accounts.
 - 1600 JVM tests, 0 failures. Everything RUNTIME-UNPROVEN. Google connectors need an Android OAuth client
-  (package com.agent.ultra + the signing key's SHA-1) in the owner's Google Cloud project.
+  (package com.agent.jarvis + the signing key's SHA-1) in the owner's Google Cloud project.
 
 ## 2026-10-17 (session 01UX5qeo) — in-app Tor, Tor Browser VPN check, Tor do/don'ts, two speed fixes
 Owner: "build and push it all". Subsystems: D/net (Tor), A (prompts), D (navigator waits), A (run start).
@@ -1360,7 +1360,7 @@ ambient off mid-sentence, and an emoji reply on the debug build.
 line-by-line review of everything; this is the explicit request CLAUDE.md requires for app-wide work.
 
 **Rename:** launcher label, notifications, UI text, gate prompt, alarm label, system prompts ("You are
-Jarvis"), the notebook's prompt copy, fine-tune file/repo names. Kept: applicationId `com.agent.ultra`,
+Jarvis"), the notebook's prompt copy, fine-tune file/repo names. Kept: applicationId `com.agent.jarvis`,
 class names, log tags, the `X-Ultra-Token` header. Version 2.5.0-native (16).
 
 **Method:** 7 read-only reviewers (one per slice, each told to trace and try to disprove every finding);
@@ -2034,7 +2034,7 @@ Decisions that affect ongoing work. Update as decisions are made or reversed.
 - **Live window scan is ground truth.** The event-sourced package tracker goes stale on service rebind. `getForegroundPackage()` rescans windows, and `app_launch` / `open_url` verify against it.
 - **Duplicate calls are deduped.** The same tool with identical params right after a success gets "already done" feedback instead of re-firing.
 - **Task memory is Room-backed (DB v2).** Successful tool sequences per normalized request, plus per-tool reliability counters. Hints are injected as a system message on a repeat request.
-- **The provider is configured in Settings.** Base URL, key, and model are edited on the phone; saving bumps a `configVersion` key that rebuilds the Brain. A dev seed path still exists as a fallback: if no key is stored, `ProviderConfig` reads `Android/data/com.agent.ultra/files/ultra_provider.json` once. It is never consulted after a key is saved.
+- **The provider is configured in Settings.** Base URL, key, and model are edited on the phone; saving bumps a `configVersion` key that rebuilds the Brain. A dev seed path still exists as a fallback: if no key is stored, `ProviderConfig` reads `Android/data/com.agent.jarvis/files/ultra_provider.json` once. It is never consulted after a key is saved.
 - **Cloud provider is Venice** (`https://api.venice.ai/api/v1`, `llama-3.3-70b`). Venice prepends its own ~1000-token system prompt unless `venice_parameters.include_venice_system_prompt` is false. Measured on llama-3.3-70b: with it on, prompt_tokens goes 26 → 1081 and the chat template breaks. `OpenAiClient` sends the flag for venice.ai hosts only.
 - **Two-Claude workflow.** Chat Claude (claude.ai) = strategy, planning, architecture. Claude Code = execution, validation, commits. Solution files from Chat Claude are validated against the real codebase before applying.
 
@@ -2541,7 +2541,7 @@ Owner: "turn on R8 and test the build" → "make the public repo my proof of cre
 
 `minifyEnabled` and `shrinkResources` are on for `release`. The APK went **15,014,327 → 8,665,752 bytes**, a 42% cut.
 
-The risk with this app is not Compose or Room, it is **JNI**. Native symbols bind by exact class and method name — `Java_com_agent_ultra_local_LlmNative_nativeLoad` has to still be called that after shrinking, and R8 has no way to know. `proguard-rules.pro` keeps:
+The risk with this app is not Compose or Room, it is **JNI**. Native symbols bind by exact class and method name — `Java_com_agent_jarvis_local_LlmNative_nativeLoad` has to still be called that after shrinking, and R8 has no way to know. `proguard-rules.pro` keeps:
 
 - `LlmNative` entirely, plus `TokenCallback.onToken`, which the C++ calls back into.
 - The service classes **by name only** (`-keep,allowobfuscation,allowoptimization`), because the manifest and `enabled_accessibility_services` refer to them as strings.
@@ -2967,7 +2967,7 @@ Owner: "i heard it, it works." The hands-free chain is now proven end to end by 
 
 Ultra does not implement a `VoiceInteractionService`, so it registers as a legacy assist app. It **is** listed in Samsung's Digital assistant picker, but under a collapsed **"Other apps"** heading — not in the top-level list, which is why it looks absent. Selected it and proved the path:
 
-- `secure assistant` → `com.agent.ultra/.VoiceActivity`
+- `secure assistant` → `com.agent.jarvis/.VoiceActivity`
 - `KEYCODE_ASSIST` from the home screen → VoiceActivity focused, `UltraVoice: LISTENING`
 - `KEYCODE_ASSIST` from a dozing screen → phone woke, VoiceActivity focused, listening. `setShowWhenLocked` + `setTurnScreenOn` doing their job.
 - Backgrounded mid-task (Home pressed right after `HEARD`): launcher took focus, the tool still ran and the answer was still spoken.
@@ -3158,7 +3158,7 @@ Cross-compiled llama.cpp's `llama-bench` for arm64 (NDK 27.1, `GGML_OPENMP=OFF` 
 - `app/src/main/cpp/ultra_llm.cpp` + CMake — JNI shim against llama.cpp static libs (staged at `~/llama-android/{lib,include}`, build recipe: clone llama.cpp, cmake with the NDK android toolchain for arm64, `-DGGML_OPENMP=OFF`, copy `libllama.a`/`libggml*.a` + headers). API: load(path, threads, ctx) → handle; generate(handle, prompt, maxTokens, temp, tokenCallback) streams pieces; free.
 - `local/LlmNative.kt` + `local/LocalModelEngine.kt` — model at `files/models/gemma3-1b-q4km.gguf` (adb-staged via run-as), `ensureLoaded()` memory guard (ActivityManager availMem ≥ 500MB — **mmap'd weights are pageable; the first guard used `_SC_AVPHYS_PAGES` and refused wrongly**; logging shows avail/need), 4 threads, 4K ctx.
 - Hybrid routing in Brain: no provider → local; cloud call fails → "(cloud unreachable — answering on-device)" → local. `/local <text>` forces on-device from the chat box.
-- Model delivery for dev: `adb push` to /data/local/tmp, then `run-as com.agent.ultra cp` into app storage. A first-run download flow is the product path (noted, not built).
+- Model delivery for dev: `adb push` to /data/local/tmp, then `run-as com.agent.jarvis cp` into app storage. A first-run download flow is the product path (noted, not built).
 
 #### Verification (PROVEN on device, screenshots)
 
@@ -3225,7 +3225,7 @@ Cross-compiled llama.cpp's `llama-bench` for arm64 (NDK 27.1, `GGML_OPENMP=OFF` 
 
 #### What was done
 
-- New `ultra-native/` Gradle project (AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, JDK 17 — Aundrea's proven versions). Package `com.agent.ultra`, versionCode 6 / `2.0.0-native`.
+- New `ultra-native/` Gradle project (AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, JDK 17 — Aundrea's proven versions). Package `com.agent.jarvis`, versionCode 6 / `2.0.0-native`.
 - **Ported the two proven Java services out of the Expo plugin into plain Android sources:**
   - `AgentAccessibilityService.java` (57KB) — 4-point surgery only: removed 3 RN imports + the one `DeviceEventEmitter` emit site, replaced with a `UiTreeListener` interface. Everything else byte-identical.
   - `AgentBackgroundService.java` — verbatim (zero RN coupling).
@@ -3242,7 +3242,7 @@ Cross-compiled llama.cpp's `llama-bench` for arm64 (NDK 27.1, `GGML_OPENMP=OFF` 
 
 ```
 adb install -r -i com.android.vending ultra-native/app/build/outputs/apk/debug/app-debug.apk
-adb shell settings put secure enabled_accessibility_services com.agent.ultra/com.agent.ultra.AgentAccessibilityService
+adb shell settings put secure enabled_accessibility_services com.agent.jarvis/com.agent.jarvis.AgentAccessibilityService
 adb shell settings put secure accessibility_enabled 1
 ```
 
@@ -3283,9 +3283,9 @@ adb shell settings put secure accessibility_enabled 1
 #### Verification (all PROVEN on device, screenshots on file)
 
 - Build 30 (v1.3.1/vc5) installed on the A15 5G; `tsc` 0 errors.
-- Force-stop → cold start lands directly on the chat UI: no lock screen, no permission dialog, no settings redirect (mCurrentFocus = com.agent.ultra.MainActivity, visually confirmed).
-- All runtime permissions granted via `pm grant`; WRITE_SECURE_SETTINGS granted; MANAGE_EXTERNAL_STORAGE appop allow; battery-optimization whitelist added (`dumpsys deviceidle whitelist +com.agent.ultra`).
-- **Accessibility service enabled via adb** (`settings put secure enabled_accessibility_services com.agent.ultra/com.agent.ultra.AgentAccessibilityService`) — the old manual re-enable step is now automated.
+- Force-stop → cold start lands directly on the chat UI: no lock screen, no permission dialog, no settings redirect (mCurrentFocus = com.agent.jarvis.MainActivity, visually confirmed).
+- All runtime permissions granted via `pm grant`; WRITE_SECURE_SETTINGS granted; MANAGE_EXTERNAL_STORAGE appop allow; battery-optimization whitelist added (`dumpsys deviceidle whitelist +com.agent.jarvis`).
+- **Accessibility service enabled via adb** (`settings put secure enabled_accessibility_services com.agent.jarvis/com.agent.jarvis.AgentAccessibilityService`) — the old manual re-enable step is now automated.
 
 #### Open / next
 
@@ -3351,7 +3351,7 @@ Full brain architecture audit followed by 8-priority intelligence upgrade, infor
 - Toggle handlers try direct API first (`Settings.Global.putInt()`), fall back to QS automation
 - Airplane mode broadcasts `ACTION_AIRPLANE_MODE_CHANGED` after setting change
 - `android.permission.WRITE_SECURE_SETTINGS` added to app.json permissions
-- Grant command: `adb -s <device-ip>:5555 shell pm grant com.agent.ultra android.permission.WRITE_SECURE_SETTINGS`
+- Grant command: `adb -s <device-ip>:5555 shell pm grant com.agent.jarvis android.permission.WRITE_SECURE_SETTINGS`
 
 **IME_ENTER triple fallback (withAgentNative.js, ReActLoop.ts):**
 - Strategy 1: `ACTION_IME_ENTER` on focused editable node (original)
@@ -3835,7 +3835,7 @@ Full autonomous pipeline:
 
 - **Status:** Build 13 deployed. Toggles, Chrome search, multi-step tasks, web search with text results all PROVEN across Builds 2-9. Builds 10-13 features (knowledge, environment, voice, images, proactive) deployed but runtime-unproven due to ADB instability. Five bugs identified for Build 14.
 - **Next (Build 14):**
-  1. Fix self-interaction: HeadlessJS must abort if screen is com.agent.ultra
+  1. Fix self-interaction: HeadlessJS must abort if screen is com.agent.jarvis
   2. Fix stop button: add cancellation flag to ReActLoop checked each iteration
   3. Fix payload bloat: trim messages to keep under 8KB
   4. Fix URL hallucination: validate URLs before react_navigate
@@ -4017,11 +4017,11 @@ ReActLoop path:
 **Planning call still skipped** (`skipPlanning: true`) — saves one LLM round-trip regardless of the latency root cause.
 **Explicit systemPrompt** passed to avoid redundant default.
 
-#### Problem 2 — GATE Passes for com.agent.ultra
+#### Problem 2 — GATE Passes for com.agent.jarvis
 
-**Investigation:** `checkPackageAllowed()` in AgentAccessibilityService auto-allows ANY package that isn't user-blocked, including `com.agent.ultra`. The JS-side wrong-app detection (Session 8 Bug 3) catches this at iteration boundaries but cannot prevent the GATE from passing at the native level.
+**Investigation:** `checkPackageAllowed()` in AgentAccessibilityService auto-allows ANY package that isn't user-blocked, including `com.agent.jarvis`. The JS-side wrong-app detection (Session 8 Bug 3) catches this at iteration boundaries but cannot prevent the GATE from passing at the native level.
 
-**Fix:** Added `"com.agent.ultra".equals(currentPackage)` check as the FIRST line of `checkPackageAllowed()`. Returns false with `GATE: BLOCKED_SELF` log. This is a hard block at the Java accessibility layer — no tap, text, scroll, or swipe can ever execute against Agent Ultra's own UI, regardless of JS-side state.
+**Fix:** Added `"com.agent.jarvis".equals(currentPackage)` check as the FIRST line of `checkPackageAllowed()`. Returns false with `GATE: BLOCKED_SELF` log. This is a hard block at the Java accessibility layer — no tap, text, scroll, or swipe can ever execute against Agent Ultra's own UI, regardless of JS-side state.
 
 #### Problem 3 — goalAchieved=true Without Verification
 
@@ -4032,7 +4032,7 @@ ReActLoop path:
 
 The agent typed into its own chat and declared success because none of these paths verified the foreground package.
 
-**Fix:** All three paths now check: if `expectedPkg` is set, verify `currentPkg === expectedPkg`. If on `com.agent.ultra` or a different wrong app, goalAchieved is forced to false with `wrong_app_at_done` error.
+**Fix:** All three paths now check: if `expectedPkg` is set, verify `currentPkg === expectedPkg`. If on `com.agent.jarvis` or a different wrong app, goalAchieved is forced to false with `wrong_app_at_done` error.
 
 #### Problem 4 — Toggle tools not exposed to LLM
 
@@ -4043,7 +4043,7 @@ The agent typed into its own chat and declared success because none of these pat
 #### Files Changed
 - `src/core/ReActLoop.ts` — skipPlanning option, package verification on all 3 goalAchieved paths
 - `src/core/HeadlessReActHandler.ts` — skipPlanning: true, explicit systemPrompt
-- `plugins/withAgentNative.js` — GATE BLOCKED_SELF for com.agent.ultra
+- `plugins/withAgentNative.js` — GATE BLOCKED_SELF for com.agent.jarvis
 - `src/core/BrainExecutor.ts` — added wifi_toggle, bluetooth_toggle, airplane_mode, do_not_disturb to TOOLS + routing hints
 - `src/core/provider/CapabilityAdapters.ts` — timing instrumentation
 - `src/core/provider/AiService.ts` — timing instrumentation
@@ -4211,7 +4211,7 @@ EAS cloud builds cached stale native code (Sessions 5-6 blocker). Local Windows 
 - **Date:** 2026-04-04
 - **Subsystems:** H (Build/Release), D (Actions/Device Control)
 - **Work done:**
-  - **Diagnosed config plugin mystery:** withAgentNative.js IS registered in app.json (line 111), file exists, code is correct. Ran `expo prebuild --clean` locally — generated Java in AgentAccessibilityService.java line 336 has `pkg == null || !"com.agent.ultra".contentEquals(pkg)` and all SCREEN_FLAT logs. Config plugin was never broken. EAS cloud was caching generated native code.
+  - **Diagnosed config plugin mystery:** withAgentNative.js IS registered in app.json (line 111), file exists, code is correct. Ran `expo prebuild --clean` locally — generated Java in AgentAccessibilityService.java line 336 has `pkg == null || !"com.agent.jarvis".contentEquals(pkg)` and all SCREEN_FLAT logs. Config plugin was never broken. EAS cloud was caching generated native code.
   - **Established local build pipeline:** `expo prebuild --clean` then `./gradlew assembleRelease` from `C:\au` (Windows junction symlink to project root — required because ninja has 260-char path limit). Symlink created with `cmd /c mklink /J C:\au "C:\Users\<user>\Downloads\Audit-Discuss-Build\Audit-Discuss-Build"`.
   - **Installed JDK 17** (Adoptium Temurin 17.0.17.10-hotspot) — system Java 26 too new for Android. Set `$env:JAVA_HOME` per-session.
   - **Created release signing keystore:** `[local path]`, alias agent-ultra, password [removed]. Never lose this file.
@@ -4245,9 +4245,9 @@ EAS cloud builds cached stale native code (Sessions 5-6 blocker). Local Windows 
   - Discovered getScreenContentFlat window scan rejects null-package TYPE_APPLICATION windows (line 1746: `pkg != null && ...`). YouTube may report null package during transitions on Samsung. Changed to `pkg == null || ...` (commit 59cb635).
   - Added `"prebuildCommand": "npx expo prebuild --clean"` to eas.json preview profile to force config plugin regeneration (commit 7d28ac4).
 - **What is NOT working — every runtime test failed:**
-  - Every SCREEN_FLAT shows root_pkg=com.agent.ultra. YouTube has NEVER appeared in a SCREEN_FLAT read across all tests this session.
+  - Every SCREEN_FLAT shows root_pkg=com.agent.jarvis. YouTube has NEVER appeared in a SCREEN_FLAT read across all tests this session.
   - YouTube NEVER appears in any WINDOWS dump. Only systemui, launcher, honeyboard, agent.ultra.
-  - All TAP/TEXT/SCROLL actions hit com.agent.ultra, honeyboard, or systemui. Zero actions against YouTube.
+  - All TAP/TEXT/SCROLL actions hit com.agent.jarvis, honeyboard, or systemui. Zero actions against YouTube.
   - Agent types "shorts" into its own text box, taps its own UI, scrolls its own UI. Same failure as Sessions 1-4.
 - **EAS build caching problem (unresolved):**
   - TypeScript changes (TaskExecutor.ts, AppController.ts) appear to deploy — timing gap dropped in some runs.
@@ -4272,21 +4272,21 @@ EAS cloud builds cached stale native code (Sessions 5-6 blocker). Local Windows 
 - **Date:** 2026-04-02
 - **Subsystems:** D (Actions/Device Control), A (Brain)
 - **Work done:**
-  - Established adb logcat debugging workflow: `$appid = adb shell pidof com.agent.ultra; adb logcat --pid=$appid -s AgentA11y:*`
+  - Established adb logcat debugging workflow: `$appid = adb shell pidof com.agent.jarvis; adb logcat --pid=$appid -s AgentA11y:*`
   - Added `Log.i(TAG, ...)` calls alongside all `emitA11yLog` calls so native events are visible in adb logcat (previously invisible — emitA11yLog only writes to JS queue)
   - Added comprehensive logcat observability to: checkPackageAllowed (GATE), performTap (TAP), performText (TEXT), performScroll (SCROLL), performSwipe (SWIPE), performClick (CLICK), performBack (BACK), performHome (HOME), moveTaskToBack (MOVE_TO_BACK), getScreenContentFlat (SCREEN_FLAT with root_pkg and first node labels), getActivePackage (GET_PKG), waitForUiChange (WAIT_UI), onAccessibilityEvent (PKG_CHANGE)
   - Added `dumpWindowStack()` method — logs all accessibility windows with layer order, type, package, focused state. Called from getScreenContentFlat.
   - Added import for `AccessibilityWindowInfo`
-  - Removed self-check from checkPackageAllowed (was unreliable — currentPackage flips to com.agent.ultra whenever JS thread fires accessibility events even when Agent Ultra is visually in background, proven via adb)
+  - Removed self-check from checkPackageAllowed (was unreliable — currentPackage flips to com.agent.jarvis whenever JS thread fires accessibility events even when Agent Ultra is visually in background, proven via adb)
   - Added auto-allow to checkPackageAllowed — any non-blocked package is automatically allowed
   - Added moveTaskToBack native method to AccessibilityBridgeModule + AppController.ts interface + TaskExecutor.ts call before ReActLoop.execute()
-  - **Fixed getScreenContentFlat** to scan all accessibility windows via `getWindows()`, pick the first `TYPE_APPLICATION` window that isn't com.agent.ultra, and read its tree. Falls back to `getRootInActiveWindow()` only if no other app window found.
+  - **Fixed getScreenContentFlat** to scan all accessibility windows via `getWindows()`, pick the first `TYPE_APPLICATION` window that isn't com.agent.jarvis, and read its tree. Falls back to `getRootInActiveWindow()` only if no other app window found.
 - **ROOT CAUSES DISCOVERED (all proven via adb logcat):**
-  1. **CRITICAL: getScreenContentFlat() always returned Agent Ultra's own window.** `getRootInActiveWindow()` returns the accessibility service host's window — always com.agent.ultra. The agent has NEVER seen another app's UI tree. Every plan, tap target, and text input has been against its own elements.
+  1. **CRITICAL: getScreenContentFlat() always returned Agent Ultra's own window.** `getRootInActiveWindow()` returns the accessibility service host's window — always com.agent.jarvis. The agent has NEVER seen another app's UI tree. Every plan, tap target, and text input has been against its own elements.
   2. **CRITICAL: moveTaskToBack never fires.** Zero MOVE_TO_BACK log entries in any adb capture. The call path in TaskExecutor.ts is not being reached. Need to inspect lines 1625-1645 to find why.
   3. **CRITICAL: Agent Ultra's activity stays in foreground** because moveTaskToBack never fires. Target app (YouTube) never gets an accessibility window in the stack. Window dumps show only: systemui, launcher, honeyboard, and Agent Ultra.
-  4. **CONFIRMED: currentPackage is unreliable** — flips between com.agent.ultra, com.android.systemui, com.samsung.android.honeyboard, and target app dozens of times per second. Self-check using currentPackage was correctly removed.
-  - **Evidence:** Full adb logcat captures showing `SCREEN_FLAT: root_pkg=com.agent.ultra` on every call, WINDOWS dumps with no YouTube window, `TEXT: text=short pkg=com.agent.ultra` (typing into own text box), zero MOVE_TO_BACK entries.
+  4. **CONFIRMED: currentPackage is unreliable** — flips between com.agent.jarvis, com.android.systemui, com.samsung.android.honeyboard, and target app dozens of times per second. Self-check using currentPackage was correctly removed.
+  - **Evidence:** Full adb logcat captures showing `SCREEN_FLAT: root_pkg=com.agent.jarvis` on every call, WINDOWS dumps with no YouTube window, `TEXT: text=short pkg=com.agent.jarvis` (typing into own text box), zero MOVE_TO_BACK entries.
 - **Committed:** c6a4c0c, b4e703f, f9c3139, 770eac0, cea84fd, fd5ff9e, 252f654, bf4f139, 33f66ed, 839bced, a4b1787
 - **Status:** ROOT-CAUSE-PROVEN via adb. getScreenContentFlat window fix applied. moveTaskToBack call path still unreachable.
 - **Next:** Inspect TaskExecutor.ts lines 1625-1645 to find why moveTaskToBack is unreachable, then build and test both fixes together.
@@ -4406,7 +4406,7 @@ Historical note: previous environment was WSL Ubuntu on a Windows laptop. Build 
 
 5. **Capture logs:**
    ```
-   appid=$(adb shell pidof com.agent.ultra)
+   appid=$(adb shell pidof com.agent.jarvis)
    adb logcat --pid=$appid
    ```
 

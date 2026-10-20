@@ -80,10 +80,10 @@ All notable changes to this project are documented here, organized by feature ve
 - **`ModelRouter.discoverModels()`** now calls `classifyModelType(m.id)` and uses the result as primary type, falling back to Venice API `m.type` only if classifier returns null. Fixes Venice reporting everything as `"text"`.
 
 ### Fixed -- Safety: Self-Interaction Block (Task 1)
-- **`checkPackageAllowed(pkg)`** in `AgentAccessibilityService` now hard-blocks `com.agent.ultra` — agent cannot control itself even if explicitly asked.
+- **`checkPackageAllowed(pkg)`** in `AgentAccessibilityService` now hard-blocks `com.agent.jarvis` — agent cannot control itself even if explicitly asked.
 
 ### Fixed -- Safety: ReActLoop Self-Stop (Task 2)
-- **`ReActLoop.execute()`** checks `getActivePackage()` at the start of each iteration; if foreground is `com.agent.ultra`, aborts immediately with `error: 'self_interaction'`.
+- **`ReActLoop.execute()`** checks `getActivePackage()` at the start of each iteration; if foreground is `com.agent.jarvis`, aborts immediately with `error: 'self_interaction'`.
 
 ### Fixed -- Quick Settings Tap (Task 4)
 - **`tapQuickSettingsTile()`** replaced with gesture-based center-bounds tap (`(left+right)/2`, `(top+bottom)/2`) instead of deprecated `AccessibilityNodeInfo.performAction(ACTION_CLICK)`.

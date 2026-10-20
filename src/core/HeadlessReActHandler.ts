@@ -102,7 +102,7 @@ const headlessReActHandler = async (taskData: any) => {
     let screenAfter = '';
     try {
       const currentPkg = await AppController.getActivePackage();
-      if (currentPkg && currentPkg !== 'com.agent.ultra') {
+      if (currentPkg && currentPkg !== 'com.agent.jarvis') {
         const screenFlat = await AppController.getScreenContentFlat();
         const nodes = JSON.parse(screenFlat);
         if (Array.isArray(nodes) && nodes.length > 0) {

@@ -119,7 +119,7 @@ export class DeviceDiagnostics {
 
   static async logRenderStats(): Promise<void> {
     try {
-      const raw = await exec('dumpsys gfxinfo com.agent.ultra');
+      const raw = await exec('dumpsys gfxinfo com.agent.jarvis');
       if (!raw) return;
 
       const state: Record<string, any> = {};
@@ -156,7 +156,7 @@ export class DeviceDiagnostics {
 
       const state: Record<string, any> = {};
 
-      state.ultraEnabled = raw.includes('com.agent.ultra') && raw.includes('isEnabled=true');
+      state.ultraEnabled = raw.includes('com.agent.jarvis') && raw.includes('isEnabled=true');
 
       const enabledMatches = raw.match(/isEnabled=true/g);
       state.enabledServiceCount = enabledMatches ? enabledMatches.length : 0;
@@ -277,7 +277,7 @@ export class DeviceDiagnostics {
       const wakeLocks = raw.match(/Wake Locks: size=(\d+)/);
       if (wakeLocks) state.wakeLockCount = parseInt(wakeLocks[1]);
 
-      if (raw.includes('com.agent.ultra')) state.ultraHasWakeLock = true;
+      if (raw.includes('com.agent.jarvis')) state.ultraHasWakeLock = true;
 
       const stayOnMatch = raw.match(/mStayOn=(true|false)/);
       if (stayOnMatch) state.stayOn = stayOnMatch[1] === 'true';
@@ -298,7 +298,7 @@ export class DeviceDiagnostics {
       const idleMatch = raw.match(/mState=(\w+)/);
       if (idleMatch) state.idleState = idleMatch[1];
 
-      state.ultraWhitelisted = raw.includes('com.agent.ultra');
+      state.ultraWhitelisted = raw.includes('com.agent.jarvis');
 
       if (raw.match(/Whitelist[\s\S]*com\.agent\.ultra/i)) {
         state.whitelistType = 'system_or_user';
@@ -339,7 +339,7 @@ export class DeviceDiagnostics {
       const ultraNotifs = (raw.match(/com\.agent\.ultra/g) || []).length;
       state.ultraNotificationRefs = ultraNotifs;
 
-      state.hasForegroundNotification = raw.includes('com.agent.ultra') && raw.includes('foreground');
+      state.hasForegroundNotification = raw.includes('com.agent.jarvis') && raw.includes('foreground');
 
       if (Object.keys(state).length > 0) {
         UltraDevLog.push('NOTIFICATION_STATE', state);
@@ -350,7 +350,7 @@ export class DeviceDiagnostics {
   // ── Package Permissions (our app) ────────────────
   static async logPackagePermissions(): Promise<void> {
     try {
-      const raw = await exec('dumpsys package com.agent.ultra');
+      const raw = await exec('dumpsys package com.agent.jarvis');
       if (!raw) return;
       const state: Record<string, any> = {};
 
@@ -411,7 +411,7 @@ export class DeviceDiagnostics {
       if (!raw) return;
       const state: Record<string, any> = {};
 
-      const ultraLine = raw.split('\n').find(l => l.includes('com.agent.ultra'));
+      const ultraLine = raw.split('\n').find(l => l.includes('com.agent.jarvis'));
       if (ultraLine) {
         state.procLine = ultraLine.trim().slice(0, 120);
         if (ultraLine.includes('Top')) state.wasTop = true;
@@ -433,7 +433,7 @@ export class DeviceDiagnostics {
       if (!raw) return;
       const state: Record<string, any> = {};
 
-      const uidRaw = await exec('dumpsys package com.agent.ultra | grep userId=');
+      const uidRaw = await exec('dumpsys package com.agent.jarvis | grep userId=');
       const uidMatch = uidRaw.match(/userId=(\d+)/);
       if (!uidMatch) return;
       const uid = uidMatch[1];

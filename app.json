@@ -15,10 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.agent.ultra"
+      "bundleIdentifier": "com.agent.jarvis"
     },
     "android": {
-      "package": "com.agent.ultra",
+      "package": "com.agent.jarvis",
       "versionCode": 5,
       "softwareKeyboardLayoutMode": "pan",
       "permissions": [

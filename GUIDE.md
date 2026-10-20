@@ -37,7 +37,7 @@ Around the two brains sit several small, specialised models, all running on the 
 
 ### The harness layer
 
-Underneath the assistant sits a harness layer (the package `com.agent.ultra.harness` inside the phone app). It is present in the merged code — this is a change from older descriptions of Jarvis as only the two brains plus helpers:
+Underneath the assistant sits a harness layer (the package `com.agent.jarvis.harness` inside the phone app). It is present in the merged code — this is a change from older descriptions of Jarvis as only the two brains plus helpers:
 
 - **Claims memory** — memory stored as claims, each with a kind, a salience and a confidence score, where it came from (provenance), and chains showing when a newer claim replaces an older one. Search mixes meaning and words and weighs how old a claim is at the moment you ask.
 - **Approvals** — standing grants with levels, bound to the exact command they were given for. Purchases are never covered by a grant, anywhere. Jarvis cannot see the approval card and cannot revoke grants; you manage grants in settings.
@@ -1009,7 +1009,7 @@ Jarvis's pattern notes and Insights use ideas from these works. They describe te
 
 ## 11e. The harness layer in detail
 
-The harness (package `com.agent.ultra.harness` in the phone app) is the layer that gives Jarvis its longer-term abilities. All of the following exist in the merged code as audited on 2026-10-19; the merged tree has not yet been compiled by CI, and two manifest registrations are still open (below).
+The harness (package `com.agent.jarvis.harness` in the phone app) is the layer that gives Jarvis its longer-term abilities. All of the following exist in the merged code as audited on 2026-10-19; the merged tree has not yet been compiled by CI, and two manifest registrations are still open (below).
 
 - **Claims memory (MemoryClaims).** Memory is stored as claims: each claim has a kind, a salience (how much it matters), a confidence, its provenance (where it came from), and a place in a supersede chain when a newer claim replaces an older one. Search is hybrid (meaning plus words) with query-time temporal decay — older claims weigh less when you ask, unless they are still the best match. The database behind this (UltraDatabase, version 9) wires the claim, grant, embedding and bandit tables and their migrations; that wiring was the one critical defect in the first 2026-10-19 audit and is resolved in the merged tree. One defect the audits did flag: claim promotion can never supersede, and stores a model paraphrase as the claim's verbatim quote — treat promoted quotes with care.
 - **Approvals (ApprovalGrants).** Grants have levels and are bound to the exact command (an approval token is keyed to the exact sorted arguments). Purchases are never grant-coverable at either layer. Jarvis informs and asks; it does not permit or forbid — consequential actions (send, post, purchase, delete) stop at confirmation and you decide. Jarvis cannot see the approval card and cannot revoke grants; you manage grants in settings.

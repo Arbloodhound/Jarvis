@@ -33,13 +33,13 @@ Run adb logcat, capture the output, and diagnose.
 ### Step 1 — Start capture
 
 ```bash
-APPID=$(adb shell pidof com.agent.ultra)
+APPID=$(adb shell pidof com.agent.jarvis)
 timeout 120 adb logcat --pid=$APPID -s AgentA11y:* ReactNativeJS:* 2>&1 | tee /tmp/agent_logcat.txt
 ```
 
 If the PID isn't found yet, wait and retry:
 ```bash
-while [ -z "$(adb shell pidof com.agent.ultra)" ]; do sleep 2; echo "Waiting for app..."; done
+while [ -z "$(adb shell pidof com.agent.jarvis)" ]; do sleep 2; echo "Waiting for app..."; done
 ```
 
 ### Step 2 — Watch for these signals

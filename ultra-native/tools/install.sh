@@ -6,8 +6,8 @@
 set -uo pipefail
 APK="${1:-app/build/outputs/apk/debug/app-debug.apk}"
 [ -f "$APK" ] || { echo "[install] APK not found: $APK"; exit 1; }
-PKG=com.agent.ultra
-SVC=$PKG/com.agent.ultra.AgentAccessibilityService
+PKG=com.agent.jarvis
+SVC=$PKG/com.agent.jarvis.AgentAccessibilityService
 
 BEFORE=$(adb shell dumpsys package $PKG 2>/dev/null | grep -o 'lastUpdateTime=.*' | head -1)
 

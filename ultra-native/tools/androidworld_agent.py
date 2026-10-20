@@ -33,7 +33,7 @@ import time
 from android_world import suite_utils
 from android_world.agents import base_agent
 
-PKG = "com.agent.ultra"
+PKG = "com.agent.jarvis"
 DONE = "UltraBrain: RUN COMPLETE"
 HINT = "Ask Jarvis"
 

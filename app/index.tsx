@@ -559,7 +559,7 @@ export default function ChatScreen() {
                       const { startActivityAsync } = await import('expo-intent-launcher');
                       await startActivityAsync(
                         'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-                        { data: 'package:com.agent.ultra' }
+                        { data: 'package:com.agent.jarvis' }
                       );
                     } catch {
                       const { Linking } = require('react-native');

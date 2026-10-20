@@ -8,7 +8,7 @@ Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) 
 CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
 This review records what v4 got right and its HIGH/MEDIUM/LOW findings (mutation-test proof, the paste guard, Kotlin ports that did not compile, Stop behaviour, scam rules, Gate, checkpoints, thermal).
 On compile state, the position is now explicit: CI has not yet compiled the merged tree, so no compile claim about the merged tree is proven; audit verification was grep-level only.
-Still open and aligned with this review's compile concerns: the Kotlin unit tests are broken — `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import `com.agent.ultra.bench.TestKitActivity`, which exists only in `src/debug`.
+Still open and aligned with this review's compile concerns: the Kotlin unit tests are broken — `HistoryPolicyTest.kt` / `MemoryBriefTest.kt` import `com.agent.jarvis.bench.TestKitActivity`, which exists only in `src/debug`.
 Still open on Gate/claims ground this review raised: harness grant keying is the weak core; claim promotion can never supersede; and the TS live path bypasses its own SafetyChecker / PermissionBroker.
 Also still open: `SchedulerReceiver` and `SpotifyRedirectActivity` exist in the harness but are not registered in AndroidManifest.xml; harness manifest wiring is classed broken.
 The audits do not re-verify this review's findings about the v4 Python package itself (`mutate.py`, the paste guard, checkpoint HMAC/clock behaviour, thermal thresholds) — those specifics are not covered.

@@ -12,7 +12,7 @@ set -uo pipefail
 THREADS="${1:-0}"
 TOKENS="${2:-0}"
 TIMEOUT="${3:-1800}"
-APP=com.agent.ultra
+APP=com.agent.jarvis
 RECEIVER=$APP/.bench.BenchReceiver
 
 # Foreground first. The receiver finishes its broadcast before generating, so
@@ -25,7 +25,7 @@ adb logcat -c
 EXTRAS=()
 [ "$THREADS" -gt 0 ] 2>/dev/null && EXTRAS+=(--ei threads "$THREADS")
 [ "$TOKENS" -gt 0 ] 2>/dev/null && EXTRAS+=(--ei tokens "$TOKENS")
-adb shell am broadcast -a com.agent.ultra.BENCH -n $RECEIVER ${EXTRAS[@]+"${EXTRAS[@]}"} > /dev/null
+adb shell am broadcast -a com.agent.jarvis.BENCH -n $RECEIVER ${EXTRAS[@]+"${EXTRAS[@]}"} > /dev/null
 
 # -v tag: "I/UltraBench: message", nothing else to strip.
 logs() { adb logcat -d -v tag -s UltraBench UltraLlm 2>/dev/null | tr -d '\r'; }

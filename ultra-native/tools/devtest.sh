@@ -17,7 +17,7 @@
 set -uo pipefail
 
 ADB="${ANDROID_HOME:-$HOME/Android}/platform-tools/adb"
-PKG=com.agent.ultra
+PKG=com.agent.jarvis
 SVC="$PKG/$PKG.AgentAccessibilityService"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PROJ="$(dirname "$HERE")"

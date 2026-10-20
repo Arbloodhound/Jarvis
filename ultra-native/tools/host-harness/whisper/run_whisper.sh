@@ -28,7 +28,7 @@ fi
 set +e
 java -Djava.library.path="$OUT" -Dmodel="${MODEL:-$W/models/for-tests-ggml-tiny.en.bin}" \
   -Dvad="${VAD:-$W/models/for-tests-silero-v6.2.0-ggml.bin}" -Dwav="$W/samples/jfk.wav" \
-  -cp "$OUT/classes" com.agent.ultra.listen.WhisperHarness 2>"$OUT/native.log"
+  -cp "$OUT/classes" com.agent.jarvis.listen.WhisperHarness 2>"$OUT/native.log"
 rc=$?; set -e
 echo "native log: $OUT/native.log"
 grep -E "error|ERROR|failed|vad|VAD|empty model" "$OUT/native.log" | sort | uniq -c | sort -rn | head -20 || true

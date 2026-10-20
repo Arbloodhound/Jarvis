@@ -2,7 +2,7 @@ const { withDangerousMod, withAndroidManifest } = require('@expo/config-plugins'
 const fs = require('fs');
 const path = require('path');
 
-const NATIVE_MODULE_JAVA = `package com.agent.ultra;
+const NATIVE_MODULE_JAVA = `package com.agent.jarvis;
 
 import com.facebook.react.bridge.*;
 import java.io.*;
@@ -754,7 +754,7 @@ public class AgentNativeModule extends ReactContextBaseJavaModule {
     }
 }`;
 
-const BINARY_MANIFEST_WRITER_JAVA = `package com.agent.ultra;
+const BINARY_MANIFEST_WRITER_JAVA = `package com.agent.jarvis;
 
 import java.io.*;
 import java.nio.*;
@@ -1036,7 +1036,7 @@ public class BinaryManifestWriter {
     }
 }`;
 
-const APK_PACKAGER_JAVA = `package com.agent.ultra;
+const APK_PACKAGER_JAVA = `package com.agent.jarvis;
 
 import java.io.*;
 import java.util.*;
@@ -1093,7 +1093,7 @@ public class ApkPackager {
     }
 }`;
 
-const APK_SIGNER_V1_JAVA = `package com.agent.ultra;
+const APK_SIGNER_V1_JAVA = `package com.agent.jarvis;
 
 import android.content.Context;
 import android.util.Base64;
@@ -1413,7 +1413,7 @@ public class ApkSignerV1 {
     }
 }`;
 
-const NATIVE_PACKAGE_JAVA = `package com.agent.ultra;
+const NATIVE_PACKAGE_JAVA = `package com.agent.jarvis;
 
 import com.facebook.react.ReactPackage;
 import com.facebook.react.bridge.NativeModule;
@@ -1448,7 +1448,7 @@ const FILE_PROVIDER_PATHS = `<?xml version="1.0" encoding="utf-8"?>
 </paths>`;
 
 
-const ACCESSIBILITY_SERVICE_JAVA = `package com.agent.ultra;
+const ACCESSIBILITY_SERVICE_JAVA = `package com.agent.jarvis;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
@@ -1622,7 +1622,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                 }
                 case AccessibilityEvent.TYPE_VIEW_CLICKED: {
                     String pkg = currentPackage;
-                    boolean isOwnApp = "com.agent.ultra".equals(pkg);
+                    boolean isOwnApp = "com.agent.jarvis".equals(pkg);
                     boolean isSystemUi = "com.android.systemui".equals(pkg);
                     boolean isAllowed = isOwnApp || isSystemUi || isPackageAllowed(pkg);
                     String cls = event.getClassName() != null ? event.getClassName().toString() : "null";
@@ -1783,7 +1783,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                             AccessibilityNodeInfo wRoot = w.getRoot();
                             if (wRoot != null) {
                                 CharSequence pkg = wRoot.getPackageName();
-                                if (pkg == null || !"com.agent.ultra".contentEquals(pkg)) {
+                                if (pkg == null || !"com.agent.jarvis".contentEquals(pkg)) {
                                     root = wRoot;
                                     Log.i(TAG, "SCREEN_FLAT: using_window pkg=" + pkg + " layer=" + w.getLayer());
                                     break;
@@ -1802,7 +1802,7 @@ public class AgentAccessibilityService extends AccessibilityService {
                     // GATE: if fallback returns Agent Ultra's own window, reject it
                     if (root != null) {
                         CharSequence fbPkg = root.getPackageName();
-                        if (fbPkg != null && "com.agent.ultra".contentEquals(fbPkg)) {
+                        if (fbPkg != null && "com.agent.jarvis".contentEquals(fbPkg)) {
                             Log.i(TAG, "SCREEN_FLAT: BLOCKED self-read via fallback — returning empty");
                             root.recycle();
                             root = null;
@@ -1886,7 +1886,7 @@ public class AgentAccessibilityService extends AccessibilityService {
     }
     private boolean checkPackageAllowed() {
         // Never allow actions on Agent Ultra's own UI — prevents self-interaction
-        if ("com.agent.ultra".equals(currentPackage)) {
+        if ("com.agent.jarvis".equals(currentPackage)) {
             emitA11yLog("A11Y_GATE", "{\\"action\\":\\"BLOCKED_SELF\\",\\"pkg\\":\\"" + currentPackage + "\\"}");
             Log.i(TAG, "GATE: BLOCKED_SELF pkg=" + currentPackage);
             return false;
@@ -2554,7 +2554,7 @@ public class AgentAccessibilityService extends AccessibilityService {
     }
 }`;
 
-const ACCESSIBILITY_BRIDGE_JAVA = `package com.agent.ultra;
+const ACCESSIBILITY_BRIDGE_JAVA = `package com.agent.jarvis;
 
 import android.content.Context;
 import android.content.Intent;
@@ -2594,7 +2594,7 @@ public class AccessibilityBridgeModule extends ReactContextBaseJavaModule {
                     Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
                 );
                 settingsEnabled = !TextUtils.isEmpty(enabledServices) &&
-                    enabledServices.contains("com.agent.ultra");
+                    enabledServices.contains("com.agent.jarvis");
             } catch (Exception e) {
                 Log.w(TAG, "isServiceEnabled: Settings.Secure read failed: " + e.getMessage());
             }
@@ -2787,7 +2787,7 @@ public class AccessibilityBridgeModule extends ReactContextBaseJavaModule {
     }
 
     // P8: Direct system settings toggle via WRITE_SECURE_SETTINGS permission
-    // Grant with: adb shell pm grant com.agent.ultra android.permission.WRITE_SECURE_SETTINGS
+    // Grant with: adb shell pm grant com.agent.jarvis android.permission.WRITE_SECURE_SETTINGS
     @ReactMethod
     public void setSecureSetting(String namespace, String key, int value, Promise promise) {
         try {
@@ -2818,7 +2818,7 @@ public class AccessibilityBridgeModule extends ReactContextBaseJavaModule {
             }
         } catch (SecurityException e) {
             Log.e(TAG, "setSecureSetting: SecurityException — permission not granted: " + e.getMessage());
-            promise.reject("PERMISSION_DENIED", "WRITE_SECURE_SETTINGS not granted. Run: adb shell pm grant com.agent.ultra android.permission.WRITE_SECURE_SETTINGS");
+            promise.reject("PERMISSION_DENIED", "WRITE_SECURE_SETTINGS not granted. Run: adb shell pm grant com.agent.jarvis android.permission.WRITE_SECURE_SETTINGS");
         } catch (Exception e) {
             Log.e(TAG, "setSecureSetting: " + e.getMessage());
             promise.reject("ERROR", e.getMessage());
@@ -3001,7 +3001,7 @@ public class AccessibilityBridgeModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void updateBackgroundNotification(String text, Promise promise) {
         try {
-            android.content.Intent intent = new android.content.Intent("com.agent.ultra.UPDATE_NOTIFICATION");
+            android.content.Intent intent = new android.content.Intent("com.agent.jarvis.UPDATE_NOTIFICATION");
             intent.putExtra("text", text);
             intent.setPackage(reactContext.getPackageName());
             reactContext.sendBroadcast(intent);
@@ -3049,7 +3049,7 @@ public class AccessibilityBridgeModule extends ReactContextBaseJavaModule {
     }
 }`;
 
-const BACKGROUND_SERVICE_JAVA = `package com.agent.ultra;
+const BACKGROUND_SERVICE_JAVA = `package com.agent.jarvis;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -3152,7 +3152,7 @@ public class AgentBackgroundService extends Service {
 }`;
 
 
-const HEADLESS_TASK_SERVICE_JAVA = `package com.agent.ultra;
+const HEADLESS_TASK_SERVICE_JAVA = `package com.agent.jarvis;
 
 import android.content.Intent;
 import android.os.Bundle;
@@ -3195,7 +3195,7 @@ const ACCESSIBILITY_SERVICE_CONFIG = `<?xml version="1.0" encoding="utf-8"?>
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
     android:canRequestFilterKeyEvents="true"
-    android:settingsActivity="com.agent.ultra.MainActivity"
+    android:settingsActivity="com.agent.jarvis.MainActivity"
     android:accessibilityFlags="flagDefault|flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows" />`;
 
 const STRINGS_XML_ADDITION = `    <string name="accessibility_service_description">Jarvis uses accessibility to interact with other apps on your behalf. Enable only if you want Jarvis to control apps for you.</string>`;
@@ -3325,7 +3325,7 @@ function withAgentNative(config) {
     const manifest = config.modResults;
     const app = manifest.manifest.application[0];
 
-    const appPackage = config.android?.package || config.android?.packageName || 'com.agent.ultra';
+    const appPackage = config.android?.package || config.android?.packageName || 'com.agent.jarvis';
     const fileProviderAuthority = `${appPackage}.fileprovider`;
 
     const hasProvider = (app.provider || []).some(

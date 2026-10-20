@@ -114,7 +114,7 @@ Only when you have your training examples. It needs a rented large GPU (for exam
 
 ## Where things stand (honest, 2026-10-19)
 
-- **Code:** all branches are consolidated on `main` (tip `c8043e1c`). The merged tree contains the `ultra-native/` Kotlin app (including the `com.agent.ultra.harness` package), the `desktop/` TypeScript app, and the `src/` TypeScript app. The harness database wiring that was the audits' one critical defect is resolved in the merged tree (`UltraDatabase` v9); post-merge there are **0 known criticals**.
+- **Code:** all branches are consolidated on `main` (tip `c8043e1c`). The merged tree contains the `ultra-native/` Kotlin app (including the `com.agent.jarvis.harness` package), the `desktop/` TypeScript app, and the `src/` TypeScript app. The harness database wiring that was the audits' one critical defect is resolved in the merged tree (`UltraDatabase` v9); post-merge there are **0 known criticals**.
 - **Not proven:** CI has not compiled the merged tree, and the on-phone behaviour in Parts 3–4 is unproven until you run it. Built and tested in code is not the same as proven on your phone.
 - **Known open items that can affect this guide:** two harness components (`SchedulerReceiver`, `SpotifyRedirectActivity`) are not registered in `AndroidManifest.xml`; two Kotlin unit-test files are broken; GGUF downloads are verified by size only; voiceprint speaker tags default ON against their doc comment. Full list: `ARCHITECTURE.md` and the 2026-10-19 audit reports.
 - **Laptop with adb?** Not needed. If you ever have one, `ultra-native/ondevice-brain/PIXEL_TEST_GUIDE.md` has the adb versions of the same checks (not re-verified in the 2026-10-19 audits).

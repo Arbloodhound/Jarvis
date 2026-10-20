@@ -21,7 +21,7 @@ g++ -std=c++17 -O1 -g -fPIC -shared -fpermissive -w \
 mkdir -p "$OUT/classes"
 javac -d "$OUT/classes" $(find "$DRIVER" -name '*.java')
 set +e
-java -Djava.library.path="$OUT" -Dmodel="${MODEL:-$H/tiny-qwen3.gguf}" -Ddraft="${DRAFT:-}" -DexpectRefused="${EXPECT_REFUSED:-false}" -cp "$OUT/classes" com.agent.ultra.local.Harness 2>"$OUT/native.log"
+java -Djava.library.path="$OUT" -Dmodel="${MODEL:-$H/tiny-qwen3.gguf}" -Ddraft="${DRAFT:-}" -DexpectRefused="${EXPECT_REFUSED:-false}" -cp "$OUT/classes" com.agent.jarvis.local.Harness 2>"$OUT/native.log"
 rc=$?; set -e
 echo "native log: $OUT/native.log ($(grep -c . "$OUT/native.log") lines)"; grep -E "^\[UltraLlm\]" "$OUT/native.log" | sort | uniq -c | sort -rn | head -15
 exit $rc

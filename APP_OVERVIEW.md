@@ -11,7 +11,7 @@ An AI assistant that lives on your Pixel (GrapheneOS), written mainly in Kotlin 
 The repo now holds three codebases together on `main`:
 
 - **`ultra-native/`** — the Kotlin Android app. This is the shipping app, and the subject of most of this overview.
-- **The harness** — a package inside the Android app (`com.agent.ultra.harness`) that carries memory, approvals, scheduling, skills, and connectors in a Muse-style harness layer. It is built and wired into the database (see §5), with two manifest gaps still open (see §8).
+- **The harness** — a package inside the Android app (`com.agent.jarvis.harness`) that carries memory, approvals, scheduling, skills, and connectors in a Muse-style harness layer. It is built and wired into the database (see §5), with two manifest gaps still open (see §8).
 - **`desktop/`** — a TypeScript desktop app with its own agent loop, gate, providers, memory, and tools.
 - **`src/`** — the older TypeScript app (Expo / React Native lineage). Its live path still exists; its `server/` folder is orphaned and crashes at startup — do not rely on it.
 
@@ -59,7 +59,7 @@ One voice-related finding **was** verified, and it matters: **voiceprint speaker
 Two layers, both present in the merged tree:
 
 - **App memory (`listen/` + `data/`)** — heard lines become notes through the Librarian; claim promotion decides what gets kept.
-- **Harness memory (`com.agent.ultra.harness`)** — memory claims carry kind, salience, and confidence, with provenance and supersede chains, hybrid search, and query-time temporal decay. `UltraDatabase` v9 stores them: entities include `ClaimEntity`, `GrantEntity`, `MemoryEmbeddingEntity`, and `BanditArmEntity`, with DAO accessors `claims()`, `claimForget()`, `grants()`, `embeddings()`, and `banditArms()`. This wiring was the audits' one critical defect on the old lineage and is **resolved in the merged tree**.
+- **Harness memory (`com.agent.jarvis.harness`)** — memory claims carry kind, salience, and confidence, with provenance and supersede chains, hybrid search, and query-time temporal decay. `UltraDatabase` v9 stores them: entities include `ClaimEntity`, `GrantEntity`, `MemoryEmbeddingEntity`, and `BanditArmEntity`, with DAO accessors `claims()`, `claimForget()`, `grants()`, `embeddings()`, and `banditArms()`. This wiring was the audits' one critical defect on the old lineage and is **resolved in the merged tree**.
 
 Known memory defects (open, from the audits): claim promotion can never supersede, and it stores a model paraphrase as the claim's verbatim quote. A claim checker and a "For You" feed exist in the harness (ClaimVerifier lenses fail closed; the feed uses a bandit), but do not over-read that: promotion quality is exactly where the defects sit.
 

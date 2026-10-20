@@ -11,7 +11,7 @@ Bug reports and design pushback are the most useful things you can send. All wor
 ## Reporting
 
 - Use the issue templates. Phone model, Android version, and app version matter more than anything else.
-- Say which tree your report is about: `ultra-native/` (Kotlin Android app), the harness (`com.agent.ultra.harness`), `desktop/` (TypeScript), or `src/` (TypeScript lineage app). Reports that don't say are hard to act on.
+- Say which tree your report is about: `ultra-native/` (Kotlin Android app), the harness (`com.agent.jarvis.harness`), `desktop/` (TypeScript), or `src/` (TypeScript lineage app). Reports that don't say are hard to act on.
 - **Never paste an API key, a password, or a screenshot that shows messages, contacts, or notifications.** Issues are public. One-time codes, reset links, and credentials must never appear in a report — in the app itself they only ever travel as opaque placeholder references, and reports must follow the same rule.
 - Version-specific advice from older versions of this file (including withdrawn-build instructions) was not re-verified in the 2026-10-19 audits and has been removed. If in doubt, report against a build from current `main` and give its exact build identifier.
 
@@ -36,7 +36,7 @@ cd ultra-native
 
 **Known breakage (2026-10-19, post-merge) — read before you interpret a failure:**
 
-- `HistoryPolicyTest.kt` and `MemoryBriefTest.kt` import `com.agent.ultra.bench.TestKitActivity`, which exists only in `src/debug`. The unit-test source set cannot resolve it, so the Kotlin unit-test run is broken in those 2 files until fixed. If your run fails there, say so explicitly in your PR instead of claiming a green run.
+- `HistoryPolicyTest.kt` and `MemoryBriefTest.kt` import `com.agent.jarvis.bench.TestKitActivity`, which exists only in `src/debug`. The unit-test source set cannot resolve it, so the Kotlin unit-test run is broken in those 2 files until fixed. If your run fails there, say so explicitly in your PR instead of claiming a green run.
 - `SchedulerReceiver` and `SpotifyRedirectActivity` exist in the harness but are not registered in `AndroidManifest.xml`. Anything touching scheduling or the Spotify redirect must state how it was tested given that gap.
 - Older versions of the docs quoted total test counts. No total for the merged tree is stated here, because CI has not compiled the merged tree and no verified total exists yet.
 

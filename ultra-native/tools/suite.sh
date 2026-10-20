@@ -5,7 +5,7 @@
 set -uo pipefail
 OUT=/tmp/opencode/ultra/suite
 mkdir -p "$OUT"
-APP=com.agent.ultra
+APP=com.agent.jarvis
 
 send_task() {
   local name="$1"; shift

@@ -40,7 +40,7 @@ def tap(text: str) -> bool:
 
 def ask(task: str, timeout: int = 150) -> dict:
     sh("adb shell input keyevent KEYCODE_HOME")
-    sh("adb shell am start -n com.agent.ultra/.MainActivity")
+    sh("adb shell am start -n com.agent.jarvis/.MainActivity")
     time.sleep(2.5)
     # A gate card left open by the previous task hides the input; cancel it (never confirm).
     if "The policy gate paused this action" in screen():
@@ -56,7 +56,7 @@ def ask(task: str, timeout: int = 150) -> dict:
     m = re.search(pat, screen())
     if not m:                                  # a dialog or another app on top: back out, reopen, retry once
         sh("adb shell input keyevent KEYCODE_BACK; adb shell input keyevent KEYCODE_BACK; adb shell input keyevent KEYCODE_HOME")
-        sh("adb shell am start -n com.agent.ultra/.MainActivity")
+        sh("adb shell am start -n com.agent.jarvis/.MainActivity")
         time.sleep(3)
         if "The policy gate paused this action" in screen():
             tap("Cancel"); time.sleep(1.5)

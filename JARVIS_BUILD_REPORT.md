@@ -7,7 +7,7 @@ The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 cr
 Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
 CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
 This report (2026-10-08, branch `claude/new-session-t3cy17`, v2.6.34-test) describes the Kotlin phone app, its models, phone measurements, hardware limits, and safety design.
-The merged tree still centres on `ultra-native/` (the shipping Kotlin app, with the harness package `com.agent.ultra.harness` inside it), plus the `desktop/` TS app and the `src/` TS app.
+The merged tree still centres on `ultra-native/` (the shipping Kotlin app, with the harness package `com.agent.jarvis.harness` inside it), plus the `desktop/` TS app and the `src/` TS app.
 Per-subsystem audit verdicts: `net/` Tor and `data/` UltraDatabase work as designed (defects at the margins only for Tor); `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, and `bench/`/tools work with defects.
 Checked clean and consistent with the safety design described here: Tor fail-closed (three guards, no clearnet fallback), Gate deny-by-default, and purchases never grant-coverable at either layer.
 Still open and relevant to the build described here: GGUF downloads verified by size only with no integrity check before native load; the cloud API key in plaintext SharedPreferences; and voiceprint speaker tags defaulting ON against their own doc comment.
@@ -50,7 +50,7 @@ could not check any of your claims; we treated them as design intent.
 ## 2. How Jarvis is built
 
 ### Stack
-- **App:** native Android, Kotlin + Jetpack Compose, package `com.agent.ultra`. minSdk 26, targetSdk 35. The app code lives in `ultra-native/` in the GitHub repo Arbloodhound/Jarvis, which is private.
+- **App:** native Android, Kotlin + Jetpack Compose, package `com.agent.jarvis`. minSdk 26, targetSdk 35. The app code lives in `ultra-native/` in the GitHub repo Arbloodhound/Jarvis, which is private.
 - **Native, via C++ JNI:**
   - llama.cpp, pinned at commit 8345f33, built with libmtmd for vision.
   - whisper.cpp, pinned at 60c0be6.
@@ -323,7 +323,7 @@ Every conclusion is labelled PROVEN / PARTIALLY PROVEN / SOURCE-FIXED BUT RUNTIM
 - `ARCHITECTURE.md`: diagrams + verification tree.
 - `DEVLOG.md`: every session, with its evidence.
 - `HANDOFF.md`: the current state.
-- `ultra-native/app/src/main/java/com/agent/ultra/`, by area:
+- `ultra-native/app/src/main/java/com/agent/jarvis/`, by area:
   - **Brain and actions:** `agent/Brain.kt`, `agent/Tools.kt`.
   - **Gate:** `gate/Gate.kt`, `gate/Manifest.kt`, `assets/ultra.manifest.json`.
   - **Models:** `local/LocalModelEngine.kt`.

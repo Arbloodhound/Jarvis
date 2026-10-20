@@ -15,7 +15,7 @@ struct Ctx {
 
 extern "C"
 JNIEXPORT jlong JNICALL
-Java_com_agent_ultra_listen_WhisperNative_nativeInit(
+Java_com_agent_jarvis_listen_WhisperNative_nativeInit(
         JNIEnv* env, jobject, jstring jModel, jstring jVad) {
     const char* model = env->GetStringUTFChars(jModel, nullptr);
     const char* vad   = env->GetStringUTFChars(jVad, nullptr);
@@ -36,7 +36,7 @@ Java_com_agent_ultra_listen_WhisperNative_nativeInit(
 
 extern "C"
 JNIEXPORT jbyteArray JNICALL
-Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
+Java_com_agent_jarvis_listen_WhisperNative_nativeTranscribe(
         JNIEnv* env, jobject, jlong handle, jfloatArray jpcm, jint threads, jstring jPrompt,
         jintArray jCpus, jboolean jTiming) {
     const bool timing_on = jTiming == JNI_TRUE;
@@ -169,7 +169,7 @@ Java_com_agent_ultra_listen_WhisperNative_nativeTranscribe(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_agent_ultra_listen_WhisperNative_nativeFree(JNIEnv*, jobject, jlong handle) {
+Java_com_agent_jarvis_listen_WhisperNative_nativeFree(JNIEnv*, jobject, jlong handle) {
     auto* c = reinterpret_cast<Ctx*>(handle);
     if (c) { if (c->w) whisper_free(c->w); delete c; }
 }

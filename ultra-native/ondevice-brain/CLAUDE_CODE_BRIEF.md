@@ -100,7 +100,7 @@ adb logcat -s UltraRoute UltraThermal UltraLlm
 | First start | Enabling ambient listening on a fresh install downloads the models (logcat `UltraAmbient` shows no fetch failures), then listening starts |
 | Wake gate | "hey jarvis" opens a command window (no manual model install needed) |
 | Echo guard | Ultra doesn't transcribe its own spoken reply, and the mic resumes after long answers |
-| Memory | `adb shell dumpsys meminfo com.agent.ultra` stays stable across the 10 questions |
+| Memory | `adb shell dumpsys meminfo com.agent.jarvis` stays stable across the 10 questions |
 
 Report each row with an honesty status. A build passing is not behavioral proof.
 
