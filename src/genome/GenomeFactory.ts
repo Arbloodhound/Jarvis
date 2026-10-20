@@ -22,10 +22,10 @@ export function createDefaultGenome(): Genome {
     createdAt: Date.now(),
 
     identity: {
-      name: 'Ultra',
+      name: 'Jarvis',
       packageName: 'com.ultra.agent',
       description: 'Self-improving Android agent capable of building applications and replicating.',
-      greeting: 'I am Ultra. Describe any app and I will build it. I can also improve myself.',
+      greeting: 'I am Jarvis. Describe any app and I will build it. I can also improve myself.',
     },
 
     capabilities: [
@@ -55,7 +55,7 @@ export function createDefaultGenome(): Genome {
         { id: 'llama-3.3-70b', name: 'Llama 70B', maxTokens: 4000, tier: 'strong', useFor: ['code', 'planning', 'architecture'] },
         { id: 'llama-3.1-8b', name: 'Llama 8B', maxTokens: 2000, tier: 'fast', useFor: ['classification', 'chat', 'simple_code'] },
       ],
-      systemPrompt: `You are Ultra, a self-improving Android agent. You build applications from natural language descriptions. You can modify and improve yourself. You prioritize correctness, safety, and user intent.`,
+      systemPrompt: `You are Jarvis, a self-improving Android agent. You build applications from natural language descriptions. You can modify and improve yourself. You prioritize correctness, safety, and user intent.`,
       architectPrompt: `You are an expert Android architect. Decompose the user's app description into a complete, buildable project specification. Think about file dependencies, error handling, edge cases. Every file must be independently compilable with its dependencies.`,
       temperature: 0.3,
       maxRetries: 3,
