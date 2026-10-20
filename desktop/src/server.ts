@@ -4,7 +4,8 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
-import type { AgentEvent } from "./agent/loop.js";
+import { redactArgs, type AgentEvent } from "./agent/loop.js";
+import { redactSecrets } from "./gate/secrets.js";
 import { startupWarnings } from "./config.js";
 import type { Runtime } from "./runtime.js";
 
@@ -99,9 +100,30 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
     p.resolve(allow);
   };
 
+  /**
+   * The wire copy of an event. Tool-call payloads (tool_start, confirm cards)
+   * reach every connected client here — and confirm cards are re-sent from
+   * `pending` — while cards and the audit log only ever show tool args
+   * redacted. So the broadcast gets the same treatment: args redacted with
+   * the loop's helper, and a card's reason (which quotes the raw command)
+   * passed through redactSecrets. The copies the agent loop and the owner
+   * at the terminal work with are untouched; this shapes only what leaves.
+   */
+  const forWire = (msg: Record<string, unknown>): Record<string, unknown> => {
+    let out = msg;
+    if (msg.args && typeof msg.args === "object" && !Array.isArray(msg.args)) {
+      out = { ...out, args: redactArgs(msg.args as Record<string, unknown>) };
+    }
+    if (msg.type === "confirm" && typeof msg.reason === "string") {
+      out = { ...out, reason: redactSecrets(msg.reason).text };
+    }
+    return out;
+  };
+
   const broadcast = (msg: { type: string } & Record<string, unknown>) => {
-    opts.onEvent?.(msg);
-    const data = JSON.stringify(msg);
+    const out = forWire(msg) as { type: string } & Record<string, unknown>;
+    opts.onEvent?.(out);
+    const data = JSON.stringify(out);
     for (const c of clients) if (c.readyState === c.OPEN) c.send(data);
   };
 
@@ -121,7 +143,7 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
     clients.add(ws);
     ws.send(JSON.stringify({ type: "state", ...rt.state() }));
     for (const w of startupWarnings) ws.send(JSON.stringify({ type: "error", runId: "", message: w }));
-    for (const p of pending.values()) ws.send(JSON.stringify(p.card));
+    for (const p of pending.values()) ws.send(JSON.stringify(forWire(p.card)));
     ws.on("close", () => clients.delete(ws));
     ws.on("message", (raw) => {
       let msg: ClientMsg;

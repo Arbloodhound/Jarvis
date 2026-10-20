@@ -276,7 +276,12 @@ export class Agent {
   }
 }
 
-function redactArgs(args: Record<string, unknown>): Record<string, unknown> {
+/**
+ * The args a tool was called with, as cards and the audit log may show them:
+ * secret-shaped string values hidden, long values trimmed. The args the tool
+ * itself runs with are never changed — this only shapes display copies.
+ */
+export function redactArgs(args: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(args)) {
     if (typeof v !== "string") { out[k] = v; continue; }
