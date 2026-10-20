@@ -1,4 +1,4 @@
-ultra-full-source.txt filter=lfs diff=lfs merge=lfs -text
+jarvis-full-source.txt filter=lfs diff=lfs merge=lfs -text
 
 # The Expo/React Native version at the root is history, not the product.
 # Keep it out of GitHub's language stats so the repo reads as Kotlin.

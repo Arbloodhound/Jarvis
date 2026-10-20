@@ -7,7 +7,7 @@
   by design (3 empty tip commits; `claude/offline-navigation-wip` a superseded WIP snapshot).
 - Two code-only audits completed: pass 2 found 119 defects (1 critical, 16 high, 41 medium,
   61 low); the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low).
-- The pass-2 critical — harness DB wiring — is resolved in the merged tree (UltraDatabase v9
+- The pass-2 critical — harness DB wiring — is resolved in the merged tree (JarvisDatabase v9
   wires the harness entities, DAO accessors and migrations). Post-merge: 0 known criticals.
 - Still open: `SchedulerReceiver` and `SpotifyRedirectActivity` not registered in
   AndroidManifest.xml; 2 Kotlin unit tests broken (debug-only import); the TypeScript
@@ -17,7 +17,7 @@
 - Note: entries dated before 2026-10-19 below are the historical record as written at the
   time; their branch references predate the 2026-10-19 consolidation.
 
-# DEVLOG.md — Agent Ultra Development Log
+# DEVLOG.md — Jarvis Development Log
 
 This file is updated by Claude Code at the end of every work session.
 Read this file at the start of every session to understand previous work.
@@ -74,7 +74,7 @@ Owner: "Do all five items." Subsystems: G (setup UI), B/local (draft), A (chains
   chat (isSimpleLocalIntent only knew "note this"), and "open settings and turn on dark mode" was taken by the tool
   loop and stopped after opening Settings (OfflineNav.opensAppFirst now sends these to the screen driver first).
 - Owner docs: DIAGNOSTICS_AND_FIXES.md (fixes, known bugs, the DIAG steps needed for the speed fix);
-  ultra-native/tools/REAL_TASKS.md (phone checklist for the pass rate).
+  jarvis-native/tools/REAL_TASKS.md (phone checklist for the pass rate).
 - 1636 JVM tests, 0 failures. Routing PROVEN by JVM tests. Everything on the phone is SOURCE-FIXED BUT RUNTIME-UNPROVEN.
   Speed is blocked on a fresh DIAG capture from the newest build.
 
@@ -165,7 +165,7 @@ Subsystems: D (device control), E (security), F (notification log). Scope: wirin
   point (nodeBoundsAt: app windows the agent may act in, visible nodes) and refuses the tap (returns false, logs A11Y_TAP
   UNBOUND) when none / outside bounds. performTapBound(x,y,bounds) is the node-derived form (actByIndex fallback).
   requireNotPassword was ALREADY enforced in performText (confirmed, not changed).
-- OtpScrubber: Tools.kt notification_read / sms_read results are scrubbed; UltraNotificationService scrubs title/text
+- OtpScrubber: Tools.kt notification_read / sms_read results are scrubbed; JarvisNotificationService scrubs title/text
   before they are written to notifications.log (EventTrigger still sees raw text; ScreenSecrets/outboundSecret untouched).
 - BanditArmState/BanditFeedback: NOT wired. harness/Ideas.kt and Proactivity.kt have no production callers (only
   SurfacesTest), so there is no accept/dismiss surface to hook; inventing one would be drift.
@@ -190,10 +190,10 @@ Subsystems: D (device control), E (security), F (notification log). Scope: wirin
 Spec: HANDOFF_V5_MISSING.md. Built on the 6 harness files (not rewritten). 1514 JVM tests, 0 failures (46 new).
 compileDebugKotlin + compileDebugJavaWithJavac OK locally; assembleDebug not run here (no native llama/whisper libs in
 this container) — CI must build it. Everything below is SOURCE + JVM-TESTED, RUNTIME-UNPROVEN on the phone.
-- §0 wire-ins (the only existing files touched): UltraDatabase v7→v8 adds memory_claims + approval_grants
+- §0 wire-ins (the only existing files touched): JarvisDatabase v7→v8 adds memory_claims + approval_grants
   (MIGRATION_7_8; test proves its tables equal Room's generated ones) + claims()/claimForget()/grants() DAOs;
   SchedulerRuntime fires the job book with one inexact AlarmManager alarm (manifest receiver; armed from
-  UltraApplication; re-armed on boot) — jobs are added only when a module registers a handler (no idle wake-ups);
+  JarvisApplication; re-armed on boot) — jobs are added only when a module registers a handler (no idle wake-ups);
   AgentAccessibilityService: every flat screen read is a ScreenGuard snapshot (uiEpoch bumps on window change),
   preflightSnapshot(id) available, and performText refuses password fields.
 - Base fixes needed to compile (minimal): MemoryClaims used non-existent kotlin.math.ln2 → ln(2.0); SkillStore used
@@ -304,9 +304,9 @@ Next: owner runs ★ Real-use check + Feature check on the new release and sends
 Owner: verify all code by cross-referencing public repos, build an architecture skeleton first, make sure it works.
 - Skeleton: ARCHITECTURE.md (8 Mermaid diagrams: overview, voice, tool call + gates, navigation, web, memory, native
   boundary, storage; all rendered in headless Chromium) from two full read-throughs; also published as a page.
-- Native (host, tools/host-harness): ultra_vlm.cpp vs llama.cpp 8345f33 with a tiny random Qwen2.5-VL pair: output
+- Native (host, tools/host-harness): jarvis_vlm.cpp vs llama.cpp 8345f33 with a tiny random Qwen2.5-VL pair: output
   token-for-token identical to llama-mtmd-cli, ASan clean, no leak over 995 describes, error paths OK; 403x896 → 448
-  image tokens. ultra_llm.cpp harness PASS (prefix reuse, threads, inject, pinning). ultra_whisper.cpp vs whisper.cpp
+  image tokens. jarvis_llm.cpp harness PASS (prefix reuse, threads, inject, pinning). jarvis_whisper.cpp vs whisper.cpp
   with a random tiny model + repo VAD: text, word timing, VAD segments, ASan clean. Bug fixed: both LLM shims let
   invalid UTF-8 (overlong, surrogates, > U+10FFFF) through as invalid UTF-16 (6/12 cases failed, now 12/12). PROVEN on host.
 - Android/APIs vs AOSP, googlesamples/mlkit, sherpa-onnx v1.13.8, OkHttp, ddgs/duckduckgo_search/SearXNG: takeScreenshot
@@ -321,14 +321,14 @@ Owner: verify all code by cross-referencing public repos, build an architecture 
   most once per navigation run; DuckDuckGo searched with POST + Referer like the maintained scrapers and a bot check /
   HTTP 202 read as blocked (was parsed as 0 results).
 - Known, not fixed: the overlay covers the status bar (no notification pull-down during a takeover); ML Kit telemetry;
-  dead entries (file_delete in DESTRUCTIVE, wake_onnx pref, ultra_a11y prefs) left per no-refactor rule.
+  dead entries (file_delete in DESTRUCTIVE, wake_onnx pref, jarvis_a11y prefs) left per no-refactor rule.
 1296 JVM tests, 0 failures; assembleDebug OK. Next: owner tests on the phone (describe my screen, a search, an app task).
 
 ## 2026-10-07 (session 01BUKa) — screen vision: ML Kit OCR + on-device vision model (Qwen2.5-VL 3B)
 Owner: add Google's ML Kit and the vision model ("another two to four gigabytes" is fine), all the search-first glue,
 optimised to run on the phone, in one build.
 - Native (subagent, d0a2ebc→e6701f6): llama.cpp @8345f33 built with LLAMA_BUILD_MTMD (libmtmd.a + libvendor-hash.a per
-  CPU variant); `ultra_vlm.cpp` in every libultra_llm*.so: `VisionNative.nativeVlmLoad/Describe/Free` (mmap, CPU, n_ubatch
+  CPU variant); `jarvis_vlm.cpp` in every libjarvis_llm*.so: `VisionNative.nativeVlmLoad/Describe/Free` (mmap, CPU, n_ubatch
   512, image_max_tokens 512, chat template, M-RoPE positions, temp 0.2/top_k 40/top_p 0.9, calling thread pinned). Symbols
   exported in all 3 variants, LOAD align 0x4000, check-cpu-variants OK; CI lib checks extended.
 - `VisionModel`: ggml-org Qwen2.5-VL-3B-Instruct Q4_K_M (1.93 GB) + mmproj Q8_0 (0.84 GB), ParallelDownload, background
@@ -342,7 +342,7 @@ optimised to run on the phone, in one build.
   unlocked only).
 1287 JVM tests, 0 failures; assembleDebug OK. SOURCE-FIXED BUT RUNTIME-UNPROVEN: no image has been described anywhere
 (HF downloads blocked here); screenshot permission, OCR quality, VLM load/encode time and memory all unmeasured.
-Next: owner downloads the vision model, asks "describe my screen", sends a Real-use results file / logcat UltraVlm lines.
+Next: owner downloads the vision model, asks "describe my screen", sends a Real-use results file / logcat JarvisVlm lines.
 
 ## 2026-10-07 (session 01BUKa) — searching first: research engine, product finding, screen takeover
 Owner: the project is a general assistant with a big emphasis on SEARCHING (intelligent web search, product finding
@@ -473,7 +473,7 @@ speaker indicators.
   speech recognition" is on (Settings → VOICE, default ON). Downloaded in the background (resumable); base is used until
   it's there, then the transcriber switches live. `AsrSpeed`: small timed while the brain is idle; if most of the last 8
   utterances took longer than they lasted, base takes over (`small_too_slow`, shown in Settings). Chat 🎙 uses the same.
-- Quiet speech filters loosened: Silero VAD threshold 0.5 → 0.35 (+100 ms pad, `ultra_whisper.cpp`), gate +8 → +6 dB over
+- Quiet speech filters loosened: Silero VAD threshold 0.5 → 0.35 (+100 ms pad, `jarvis_whisper.cpp`), gate +8 → +6 dB over
   the noise floor and -58 → -62 dBFS minimum, confidence floor 0.45 → 0.38, MicGain boost cap +18 → +24 dB.
 - "Who's speaking" defaults ON (was off), so heard lines are stored as [Me] / [name] / [Speaker N] / [Unknown]. Needs the
   40 MB voiceprint model (fetched on Wi-Fi); [Me] needs "Record my voice" once. Lines already stored stay unlabelled
@@ -552,7 +552,7 @@ phone and its screen.
 ## 2026-10-07 (session 01BUKa) — PEOPLE and SYSTEM PROMPT settings, voices named from what is heard and told
 Owner: a system-prompt section; a section to name people, and to give his own name; names inferred from what it
 hears and what he tells it. (G settings, A prompts, C voices.)
-- UltraPrefs.ownerName / customInstructions (≤ 1500 chars). `LocalPrompt.ownerSection` ("The owner … is X. In
+- JarvisPrefs.ownerName / customInstructions (≤ 1500 chars). `LocalPrompt.ownerSection` ("The owner … is X. In
   transcripts and notes "Me" is X." + "The owner's own instructions …") ends the offline system block
   (`offlineSystem`, stable per turn → KV reuse) and is added to the cloud system prompt. The librarian's user message
   says "[Me] is X". Notes screen shows the name for "Me".
@@ -608,7 +608,7 @@ Subsystems C (notes store), A (Brain routing, prompt), G (UI).
   "read my to-do list", "my memory and notes"); the query drops the focus words. Offline, a spoken/typed focus skips
   the device-tool route (so "search my notes for the wifi password" never toggles wifi); the menu focus applies
   after it. The brief: instruction ("answer from … reason across them, say which note or moment, say so if absent")
-  + up to 1800 chars of notes ("[todo, Tue 7 Oct 2026] …") and/or heard lines with times (UltraApplication
+  + up to 1800 chars of notes ("[todo, Tue 7 Oct 2026] …") and/or heard lines with times (JarvisApplication
   `focusedFind`: query match, else newest). Cloud path: focus not applied (it has ambient_recall); offline only.
 - "open my notes" / "show my memory" (`MemoryFocus.screen`): opens the screen when MainActivity is resumed
   (ChatStore.uiVisible/screenRequest); said to ambient listening with the app closed, it answers by reading them.
@@ -633,7 +633,7 @@ never given the date/time. Changes (A brain, C memory):
 - `LocalPrompt.build(now=)`: "Now: Wednesday 7 October 2026, 2:05 pm" in the late system block with the memory brief
   (after history; the KV prefix is unchanged). Brain passes `LocalPrompt.nowLine()`.
 - `MemoryBrief.isOverview` (whole-question patterns) → `Decision.overview` → `MemoryBrief.recallOverview()` = newest
-  6 notes + newest 6 heard lines (UltraApplication `overviewProvider`). A search that finds nothing now gives the
+  6 notes + newest 6 heard lines (JarvisApplication `overviewProvider`). A search that finds nothing now gives the
   block `NOTHING_FOUND` instead of no block.
 - Feature check (F): new REAL probes — "Notes from your real speech" (real notes this week, queue), "Memory in chat:
   what do you remember" and "…recall a real memory" (the owner's newest real note/line, asked in the real chat by
@@ -764,7 +764,7 @@ Branch `claude/cue-fixes` from claude/new-session-t3cy17 @ 3880bb2 (not merged).
    may be taken (tags on, model present), and at most 2 min of audio across the queue (older lines let go of
    it and are tagged without a voiceprint). Worst case ~4 MB audio + ~0.2 MB rest (+ the line being
    processed, <=0.9 MB), was ~21.5 MB (24 x 28 s). Tags off (default): ~0.2 MB. offer() after close is ignored.
-4. Whisper confidence with timestamps on: NOT a bug. `ultra_whisper.cpp` already skips every id >= eot, which
+4. Whisper confidence with timestamps on: NOT a bug. `jarvis_whisper.cpp` already skips every id >= eot, which
    covers all specials and all timestamp tokens (checked against whisper.cpp's vocab layout; header identical).
    Comment added. Still unmeasured: with timestamps on, text-token log-probs are normalised over text +
    timestamp tokens, so the mean may still sit lower than with timing off; the wake probe (6) now prints both.
@@ -822,7 +822,7 @@ Done (merged into claude/new-session-t3cy17):
 - claude/memory-librarian: `Librarian` turns overheard speech into dated notes (`MemoryNotes`) while charging; wired to the memory model in AmbientListenService. `generate()` now stops when its caller is cancelled.
 - claude/semantic-memory: `MemoryRecall.relevant` (MiniLM int8 vectors + keywords + recency + time window), background `MemoryIndexer` (pauses while either model is busy or the phone is warm), `ambient_recall` tool uses it.
 - claude/brain-memory: `HistoryPolicy` (offline history only when the request refers back; stable window for KV reuse) — the Q8/Q11 copying fix; `MemoryBrief` "What I remember" block for memory-type questions.
-- Wiring in UltraApplication: notes are a recall source; `MemoryBrief.provider` = recall brief. Erase ambient memory also erases notes and vectors.
+- Wiring in JarvisApplication: notes are a recall source; `MemoryBrief.provider` = recall brief. Erase ambient memory also erases notes and vectors.
 - 919 JVM tests pass, assembleDebug OK.
 
 Status: SOURCE-FIXED BUT RUNTIME-UNPROVEN — nothing here has run on the Pixel yet (two-model memory fit, embedder speed/placement, recall quality, Q8/Q11).
@@ -872,7 +872,7 @@ run on an older build — no `load resident=`/`warm` lines, so the memory fixes 
   8.6 GB. => the 30B MoE does not fit this phone's real free memory. Not a tunable.
 - Thermal: from Q3 the policy said HOT (status 1, headroom ~0.8) and ran threads=2; the speed sweep
   asked for 4/5/6 and also got 2 → that sweep measured nothing about threads (fixed: exactThreads).
-- CPU: 1×3.78 GHz + 5×3.05 GHz + 2×2.25 GHz, i8mm/sve2/bf16; variant ultra_llm_i8mm loaded.
+- CPU: 1×3.78 GHz + 5×3.05 GHz + 2×2.25 GHz, i8mm/sve2/bf16; variant jarvis_llm_i8mm loaded.
 - Accelerator (PROVEN): NNAPI exposes a device named **google-edgetpu** on Tensor G5 (darwinn HAL,
   edgetpu libs). It rejects the mel/cls wake models ("cannot run using the current set of target
   devices"); it accepts emb with identical output but no reliable speed-up (faster once, slower 4×).
@@ -895,7 +895,7 @@ matching the commitment (send/post/publish/submit/confirm/install …) the tap g
 ActionGate card. Always still asks: money (pay/buy/order/book/subscribe/…, or any price on screen),
 deletion/wipe/reset/uninstall/sign-out, agree/accept, unreadable labels, messages unless a contact
 named in the request is on screen, and anything not matching the request. Settings → "Don't ask
-when I asked for it" (UltraPrefs.skipConfirmWhenAsked, default on). Logged as `NO CARD (you asked
+when I asked for it" (JarvisPrefs.skipConfirmWhenAsked, default on). Logged as `NO CARD (you asked
 for this)`. 766 tests pass; assembleDebug passes. RUNTIME-UNPROVEN.
 
 ## 2026-10-08 (later) — Offline phone control, wait-bounded thinking, ambient yields, context by RAM (4 parallel agents)
@@ -931,7 +931,7 @@ mapped file lets the kernel drop weight pages, which the 42k-fault evidence show
 `lazy_mode = OFF` (it has no use_mmap bool; checked llama.h/llama-model-loader.cpp — AUTO lazy only
 applies to tensors > 4 GiB, so lazy reads were NOT the fault cause). Kotlin: pure
 `LocalModelEngine.residentLoad(setting, avail, file)` (resident only if avail ≥ file + 1 GB; unknown →
-mapped) + 6 tests; UltraPrefs.keepBrainInMemory (default on) + Settings switch; logs
+mapped) + 6 tests; JarvisPrefs.keepBrainInMemory (default on) + Settings switch; logs
 `load resident=… availMB=… fileMB=…`; the page-cache warm only runs in mapped mode. Host harness
 updated to the new signature (passes false). Tests + assembleDebug pass. RUNTIME-UNPROVEN: on 16 GB
 with ~10.2 GB of weights the phone may often not have file+1 GB available → it maps; the log line
@@ -998,14 +998,14 @@ on in withContext(IO).)
   says "Continue download (x.x GB done)" when a .part exists.
 - Preload: `LocalModelEngine.preloadInBackground()` (IO scope) from MainActivity.onResume and
   AmbientListenService.onStartCommand, behind Settings → ON-DEVICE MODEL → "Get the brain ready in
-  advance" (UltraPrefs.preloadBrain, default on). A question during preload waits on the same lock.
+  advance" (JarvisPrefs.preloadBrain, default on). A question during preload waits on the same lock.
 
 **Status:** 673 unit tests, 0 failures; assembleDebug passes. Resume against the real HF/CDN host and
 preload timing: SOURCE-FIXED BUT RUNTIME-UNPROVEN.
 
 ## 2026-10-07 — First Pixel 10 Pro runtime evidence: ANR on model load (fixed in source)
 
-**Evidence** (`ultra-native/ondevice-brain/evidence/2026-10-06-pixel10pro-anr.md`, two ANRs from
+**Evidence** (`jarvis-native/ondevice-brain/evidence/2026-10-06-pixel10pro-anr.md`, two ANRs from
 the Pixel 10 Pro, Android 17, app 2.6.0): "Input dispatching timed out … MainActivity". In both,
 the MAIN thread is in `Brain.runUnlocked → LocalModelEngine.ensureLoaded → LlmNative.nativeLoad`
 (ANR 1 deep in `llama_mmap → mmap`; ANR 2 just after `llama_model_load_from_file` returned).
@@ -1031,7 +1031,7 @@ model does load on the Pixel (handle returned in ANR 2).
 
 Found: every CI debug build was signed with the runner's fresh random debug key, so a new test APK
 could not install over the last one and the only way forward (uninstall) wiped the 10 GB model. Added
-`ultra-native/ci/test-debug.keystore` (test-only key, standard debug passwords, committed on purpose,
+`jarvis-native/ci/test-debug.keystore` (test-only key, standard debug passwords, committed on purpose,
 see ci/README.md; NOT the release key) — debug-apk.yml copies it to ~/.android/debug.keystore and
 then checks the APK's signer is "CN=Jarvis CI test build". First attempt (copy to ~/.android/debug.keystore) worked
 locally but CI run #20 still signed with "CN=Android Debug" (the runner keeps its debug key
@@ -1057,7 +1057,7 @@ servers). So everything now runs on the Pixel itself:
 - `ondevice-brain/Make_Release_Key_Colab.ipynb`: makes the release keystore + base64 in Colab
   (cells run locally here: 4096-bit key + key.txt produced).
 - Fixed: tools/ask.sh, suite.sh, uitap.sh, androidworld_agent.py still looked for the pre-rename
-  "Ask Agent Ultra…" box (would fail to find the chat input).
+  "Ask Jarvis…" box (would fail to find the chat input).
 - START_HERE.md rewritten phone-only (install from the phone's browser, Jarvis Tests, voice checks,
   upload results, Colab key, Releases-UI tag).
 
@@ -1079,7 +1079,7 @@ optional fine-tune. Version bumped to 2.6.0 (versionCode 17) for that release.
 ## 2026-10-06 (night) — Pixel test guide replaces the G15 run
 
 Dafarus gets the Pixel 10 Pro sooner than expected, so the G15 run is dropped. New
-`ultra-native/ondevice-brain/PIXEL_TEST_GUIDE.md`: accelerator probe first, the real MoE (IQ2_M,
+`jarvis-native/ondevice-brain/PIXEL_TEST_GUIDE.md`: accelerator probe first, the real MoE (IQ2_M,
 IQ2_S fallback with the same keep/fallback rule as the client PDF), Google-free voice, ambient,
 safety, adb log checks, results table. It also replaces the PocketPal check (Pixel_Model_Check.pdf),
 since the real model is now tested in Jarvis itself. G15 guide marked "not needed any more".
@@ -1157,7 +1157,7 @@ sherpa-onnx); the G15/Pixel logs for the placement lines.
 
 ## 2026-10-05 (late night) — Pixel 10 Pro optimization batch merged (units 1-6 + llama.cpp CPU variants)
 
-**Subsystems:** B (model/engine: `cpp/ultra_llm.cpp`, `cpp/ultra_whisper.cpp`, `local/`), D (ambient:
+**Subsystems:** B (model/engine: `cpp/jarvis_llm.cpp`, `cpp/jarvis_whisper.cpp`, `local/`), D (ambient:
 `listen/WhisperNative`), H (CMake, build scripts, workflows, host harness). Branch
 `ccr-3726b695-6kt0de` (PR #2 → `claude/new-session-t3cy17`); see `HANDOFF.md` for the per-unit detail.
 
@@ -1187,7 +1187,7 @@ and KV-aware model fit; unit 6 debug-only on-device bench + CPU topology dump.
   `assembleDebug`: **PROVEN**, 75.8 MB.
 - APK `lib/arm64-v8a`: 10 libs, all 29 LOAD segments `0x4000`; `check-cpu-variants.sh`: **CPU variants
   OK** (llm i8mm: 995 sdot / 260 smmla; llm dotprod: 1139 sdot / 0 smmla; whisper i8mm 995 / 260;
-  baselines 0); all three `libultra_llm*.so` carry both the pinning and the `reused=` code.
+  baselines 0); all three `libjarvis_llm*.so` carry both the pinning and the `reused=` code.
 - Everything on the Pixel (speedup, core placement, prefill savings, q8_0 KV quality, Gemma SWA reuse):
   **SOURCE-FIXED BUT RUNTIME-UNPROVEN** until `tools/bench.sh` runs on the client's Pixel 10 Pro.
 - Not on this branch yet: `claude/new-session-t3cy17`'s 9a4ab1b (unlimited lesson/shortcut memory,
@@ -1197,14 +1197,14 @@ and KV-aware model fit; unit 6 debug-only on-device bench + CPU topology dump.
 
 ## 2026-10-05 — on-device brain bundle applied (patches 0001–0009)
 
-**Subsystems:** B (model/engine: `local/`, `cpp/ultra_llm.cpp`) → A (Brain offline path only:
+**Subsystems:** B (model/engine: `local/`, `cpp/jarvis_llm.cpp`) → A (Brain offline path only:
 `Brain.emitLocal`) → D (ambient listening: `listen/`), with H (CMake, Gradle dep) alongside.
 Cloud brain, tool-loop prompts, UI, G2 and prosody were not touched.
 
-**Applied:** all 9 patch files from `ultra-native/ondevice-brain/CLAUDE_CODE_BRIEF.md` with plain
+**Applied:** all 9 patch files from `jarvis-native/ondevice-brain/CLAUDE_CODE_BRIEF.md` with plain
 `git am`, in order, on `f7cbb91`: 13 commits, no conflicts, no edits. The bundle docs (README,
 BUILD_GUIDE, both native build scripts, the LoRA notebook, the brief) are in
-`ultra-native/ondevice-brain/`, one commit. Hosted in `arbloodhound/Jarvis` (upstream history kept).
+`jarvis-native/ondevice-brain/`, one commit. Hosted in `arbloodhound/Jarvis` (upstream history kept).
 
 **Status, per brief row:**
 - Patches apply cleanly on `f7cbb91`: **PROVEN** (this session).
@@ -1244,10 +1244,10 @@ r27c (27.2.12479018). Sources: llama.cpp `8345f33`, whisper.cpp `60c0be6` (HEAD 
 - `:app:testDebugUnitTest`: **PROVEN**, 482 tests, 0 failures, 0 errors, 0 skipped (counted from
   the JUnit XML results).
 - `:app:assembleDebug`: **PROVEN**, `app-debug.apk` 55,167,157 bytes.
-- 16 KB alignment: **PROVEN**. All 6 libs in `lib/arm64-v8a` (`libultra_llm`, `libultra_whisper`,
+- 16 KB alignment: **PROVEN**. All 6 libs in `lib/arm64-v8a` (`libjarvis_llm`, `libjarvis_whisper`,
   `libonnxruntime`, `libonnxruntime4j_jni`, `libandroidx.graphics.path`,
   `libdatastore_shared_counter`): every LOAD segment is `0x4000` (NDK `llvm-readelf -lW`).
-  `libultra_whisper.so` exports only its 3 `WhisperNative` JNI symbols.
+  `libjarvis_whisper.so` exports only its 3 `WhisperNative` JNI symbols.
 - On-device rows (brief Step 4) and the WakeGate Kotlin port: unchanged, **CANNOT VERIFY FROM
   CURRENT ARTIFACTS** / **SOURCE-FIXED BUT RUNTIME-UNPROVEN**. No phone. A build passing is not
   behavioural proof.
@@ -1258,7 +1258,7 @@ is what's used). Fixed in the follow-up docs commit (BUILD_GUIDE.md, CLAUDE_CODE
 
 ### 2026-10-05 (evening) — fixes from a read-only review of patches 0001–0009
 
-**Subsystems:** D (`listen/`), B (`cpp/ultra_llm.cpp`), A (`IntentRouter` only), plus one
+**Subsystems:** D (`listen/`), B (`cpp/jarvis_llm.cpp`), A (`IntentRouter` only), plus one
 VoiceActivity line (crossing: it owns the ambient command handler). Dafarus asked for every
 finding to be fixed off-device, so the build is ready before the Pixel is available.
 
@@ -1266,7 +1266,7 @@ finding to be fixed off-device, so the build is ready before the Pixel is availa
 1. `Segmenter.push` stored the capture loop's reused read buffer, so every utterance was N copies
    of the last 32 ms. Fix: copy on push. New `SegmenterTest` fails on the old code and passes now:
    **PROVEN** (JVM).
-2. `ultra_llm.cpp`: `n_batch` stayed at llama.cpp's default 2048 while the guard allowed prompts up
+2. `jarvis_llm.cpp`: `n_batch` stayed at llama.cpp's default 2048 while the guard allowed prompts up
    to ~ctxSize; llama.cpp's `GGML_ASSERT(n_tokens_all <= n_batch)` (llama-context.cpp:1787 at
    `8345f33`) aborts the process. Fix: `n_batch = ctxSize`. **SOURCE-FIXED BUT RUNTIME-UNPROVEN**.
 3. `AmbientMemory.since` bound `ts` as TEXT against INTEGER values in an FTS4 column, so it never
@@ -1291,19 +1291,19 @@ finding to be fixed off-device, so the build is ready before the Pixel is availa
    permission, passes the microphone type, and on failure logs + `stopSelf()`.
 10. A negative `AudioRecord.read` busy-spun with the wakelock held. Now the AudioRecord is rebuilt
     up to 3 times with backoff, then the service stops.
-11. `ultra_llm.cpp` passed split UTF-8 pieces to `NewStringUTF` (CheckJNI abort). Text now crosses
+11. `jarvis_llm.cpp` passed split UTF-8 pieces to `NewStringUTF` (CheckJNI abort). Text now crosses
     JNI as UTF-16 and a split character is held until complete, still one callback per token
     (ThinkBudget counts callbacks). The same conversion is used for the prompt and inject strings.
     A host harness (8 cases: split emoji, split CJK, invalid bytes) passes.
 
 **Build after fixes:** `testDebugUnitTest` **PROVEN** 488 tests (482 + 6 new), 0 failures;
-`assembleDebug` **PROVEN**; all 6 arm64 libs still `0x4000`; `ultra_llm.cpp` clean under
+`assembleDebug` **PROVEN**; all 6 arm64 libs still `0x4000`; `jarvis_llm.cpp` clean under
 `-Wall -Wextra`. The debug APK grew from 55.2 MB to 61.4 MB; the libs are not the cause, and the
 reason is **not established** (not investigated).
 
 **Wake word (Dafarus's call, same day):** text-match wake now needs the name at the START of
 the utterance, optionally after "hey"/"ok"/"okay" ("Hey Jarvis, …", "Jarvis, …"); a name inside a
-sentence is conversation. Default name changed "Ultra" → "Jarvis" (an already-saved name is kept).
+sentence is conversation. Default name changed "Jarvis" → "Jarvis" (an already-saved name is kept).
 `WakeFilterTest`: **PROVEN** (JVM), 490 tests pass.
 
 **Router + cooling (Dafarus's call):** a device-shaped *question* now needs the device word at
@@ -1317,7 +1317,7 @@ DEVICE. At CRITICAL, non-device offline answers start with `ThermalPolicy.COOLIN
 history can duplicate the user turn; `gate.reset()` while muted. The Settings toggle still shows "on"
 when the service stops itself for lack of mic permission.
 
-**Next on the Pixel:** brief Step 4 table, plus logcat `UltraAmbient`. Check: real transcripts in
+**Next on the Pixel:** brief Step 4 table, plus logcat `JarvisAmbient`. Check: real transcripts in
 `ambient.db`, overheard context in a wake command, "Hey Jarvis" + pause + command, turning
 ambient off mid-sentence, and an emoji reply on the debug build.
 
@@ -1330,7 +1330,7 @@ ambient off mid-sentence, and an emoji reply on the debug build.
   A release build with a throwaway key was checked with dexdump: `nativeLoad/Generate/Free`,
   `nativeInit/Transcribe/Free` and `onToken` all keep their names, it's signed, and all 6 libs are
   `0x4000`. **PROVEN** (build); release runtime **UNPROVEN**.
-- Thrash meter: each local generation logs `UltraLlm gen tokens= ms= tokPerSec= majfaults= availMB=`
+- Thrash meter: each local generation logs `JarvisLlm gen tokens= ms= tokPerSec= majfaults= availMB=`
   (`PageFaults`, /proc/self/stat field 12, tested). Steady `majfaults` near 0 after the first answer
   means the model is resident; a stream of them means thrashing.
 - New preset "Qwen3 1.7B (Q4_K_M)" (`qwen3-` prefix counts as a thinking model): it runs the
@@ -1344,24 +1344,24 @@ ambient off mid-sentence, and an emoji reply on the debug build.
   (native builds, unit tests, assembleDebug, alignment). **PROVEN**. The release workflow's signing
   step has not run yet.
 - Training notebook, from a read-only review (library sources at the notebook's pins + llama.cpp
-  master): output now `qwen3moe-ultra-iq2m/iq2s.gguf` (the stock file name would have kept phones on
+  master): output now `qwen3moe-jarvis-iq2m/iq2s.gguf` (the stock file name would have kept phones on
   the stock model); training checkpoints on Drive with resume, plus a 6b restore-from-adapter cell
   (**not run**); `max_length=MAXLEN` explicit (TRL default 1024); sanity check warns instead of
   asserting at 400 tokens (now 2048); converter deps in their own venv (llama.cpp's requirements pin an
   older torch/transformers); imatrix `--parse-special`; validator handles BOM/null/non-list (run
   locally on synthetic data: **PROVEN**); examples get the app's OFFLINE_RULES system turn; HF upload
   public by default, both sizes, token from a Colab secret; Drive copies are loud and GGUFs optional.
-  App presets "Ultra fine-tune (IQ2_M/IQ2_S)" point at the notebook's repo, so no code change after
+  App presets "Jarvis fine-tune (IQ2_M/IQ2_S)" point at the notebook's repo, so no code change after
   training. The notebook as a whole: **CANNOT VERIFY** here (no GPU; 80 GB fit and run time unknown).
 
 ## 2026-10-05 (night) — renamed to Jarvis; whole-app review with 7 parallel reviewers + 5 fixers
 
-**Subsystems:** all of ultra-native (A, B, C, D, E, F, G, H). Dafarus asked for the rename and a
+**Subsystems:** all of jarvis-native (A, B, C, D, E, F, G, H). Dafarus asked for the rename and a
 line-by-line review of everything; this is the explicit request CLAUDE.md requires for app-wide work.
 
 **Rename:** launcher label, notifications, UI text, gate prompt, alarm label, system prompts ("You are
 Jarvis"), the notebook's prompt copy, fine-tune file/repo names. Kept: applicationId `com.agent.jarvis`,
-class names, log tags, the `X-Ultra-Token` header. Version 2.5.0-native (16).
+class names, log tags, the `X-Jarvis-Token` header. Version 2.5.0-native (16).
 
 **Method:** 7 read-only reviewers (one per slice, each told to trace and try to disprove every finding);
 findings cross-checked (two reviewers independently found the voice "Working…" hang and the ungated
@@ -1399,7 +1399,7 @@ question was NOT reached on the phone (the run never got to a Delete tap) — em
 **Subsystems:** E (action gate: where the question is shown), A (navigator: route player, typing,
 scrolling), C (experience: routes as data), H (AndroidWorld adapter).
 
-**Why:** two findings from the night. (1) The action gate brought Ultra forward to ask "press
+**Why:** two findings from the night. (1) The action gate brought Jarvis forward to ask "press
 Delete?", Markor redrew when it came back and dropped its selection, so an approved delete could
 never happen — on a real phone too. Dafarus chose the fix: ask on an overlay. (2) A weak model given
 a written route kept falling off it in new ways each round; patching them one at a time was the
@@ -1407,7 +1407,7 @@ wrong level. Steps a check has passed are structure, and the engine owns structu
 
 **Built:**
 - `AgentAccessibilityService.showGateOverlay` + `ActionGate.approve`: the question is an
-  accessibility overlay (not focusable) over the app it is about; falls back to bringing Ultra
+  accessibility overlay (not focusable) over the app it is about; falls back to bringing Jarvis
   forward if it can't be drawn. The gate's rules, word list, 120 s timeout and "no answer is no"
   are unchanged. While it is asking, the agent's own coordinate touches are refused
   (`AgentController.tap/swipe`) — it never answers its own question. Seen on the emulator:
@@ -1425,8 +1425,8 @@ wrong level. Steps a check has passed are structure, and the engine owns structu
 - Adapter: answers the gate's overlay as the person who gave the task would — only when the button
   IS the verb the goal uses ("Delete", not "Delete lines") — and records every answer.
 
-**Measured (scored by AndroidWorld, predictions written first — `ultra-native/tools/androidworld-results.md`):**
-the six tasks that were 0/6 twice on 09-19. Teacher = claude-sonnet-5 through Ultra's hands, practising
+**Measured (scored by AndroidWorld, predictions written first — `jarvis-native/tools/androidworld-results.md`):**
+the six tasks that were 0/6 twice on 09-19. Teacher = claude-sonnet-5 through Jarvis's hands, practising
 on seeds 30 and 32. Student = llama-3.3-70b on seeds the practice never used, clean slate each arm.
 
 | | without routes | with routes |
@@ -1452,7 +1452,7 @@ timer, Markor delete, SMS reply, SMS reply-most-recent, Bluetooth off. Lost one:
 "new contact draft" alone, and with routes the engine played a 37-step route built from a flailing
 teacher run and wrecked it. Since then only a clean passing run is played (no wrong turns left in, no
 retries, at most 12 steps) — built, not yet re-measured. Time 3,576 s → 2,163 s; model-chosen steps
-616 → 291, plus 68 played by the engine. Cost $4.13. Rounds: `ultra-native/tools/androidworld-results.md`.
+616 → 291, plus 68 played by the engine. Cost $4.13. Rounds: `jarvis-native/tools/androidworld-results.md`.
 
 **First measurement, before the scored runs:** hand check with llama-3.3-70b on a timer value no run had used (3 h 7 m 9 s):
 the engine keyed 3-0-7-0-9, display `03h 07m 09s`, 28 s; the same model without a route took 2–3
@@ -1470,8 +1470,8 @@ RUNTIME-UNPROVEN — written after the scored build).
 **Subsystems:** C (experience: verdicts, routes), A (navigator: perception, actions, plan checks),
 B (brain: parser, repeat guard), D (app matching), H (AndroidWorld adapter).
 
-**Why:** Dafarus, 2026-09-20: Northstar and Ultra are both products and the loop is global —
-working on Ultra is how Northstar learns. Purpose, bar and predictions live in
+**Why:** Dafarus, 2026-09-20: Northstar and Jarvis are both products and the loop is global —
+working on Jarvis is how Northstar learns. Purpose, bar and predictions live in
 `~/vault/runtime/PURPOSE.md`, `THE-BAR.md`, `PREDICTIONS.md` (a prediction is written before each
 experiment and scored after).
 
@@ -1505,12 +1505,12 @@ whole reply is a call; the final answer is logged; two apps with one label are t
 package (Simple Calendar Pro vs Google Calendar).
 
 **The benchmark rig was lying, five ways** (all in `tools/androidworld.md`): the judge read 0
-screen elements at scoring time, then a stale screen; the forwarder's crash dialog covered Ultra's
+screen elements at scoring time, then a stale screen; the forwarder's crash dialog covered Jarvis's
 chat; the goal box kept the tail of the previous goal; `adb reverse` died mid-round; a surviving
 driver script ran a second experiment on the same emulator. Clock-task scores before 04:10 today
 are not evidence.
 
-**Measured:** teacher (claude-sonnet-5 through Ultra's hands) 2/6 then 3/6 on the six tasks that
+**Measured:** teacher (claude-sonnet-5 through Jarvis's hands) 2/6 then 3/6 on the six tasks that
 were 0/6 twice — first passes ever for timer, Markor create-note, and (single run) Markor
 delete-note. Student (llama-3.3-70b, unseen values): **1/6 without routes, 1/6 with** — the
 skeptic was right on the score. In the traces the routed student keyed the timer correctly
@@ -1519,7 +1519,7 @@ skeptic was right on the score. In the traces the routed student keyed the timer
 **Not proven:** that routes raise a weak model's score (P4 running at the time of writing); any
 of this on the real phone; long_press and scroll_to on a task that passes because of them.
 
-## 2026-09-19 (night) — Ultra on AndroidWorld; nine bugs the benchmark found
+## 2026-09-19 (night) — Jarvis on AndroidWorld; nine bugs the benchmark found
 
 **Subsystems:** D (perception, app matching), A (navigator plan, prompt rules), C (experience
 recall), E (ActionGate word list), H (x86_64 build switch).
@@ -1531,10 +1531,10 @@ re-run: `tools/androidworld.md`.
 **Built:**
 - `-Pbench` builds x86_64 without the llama.cpp JNI (CMake skips non-arm64, `LlmNative.available`
   reports it missing). The phone's arm64 release path is untouched.
-- `tools/androidworld_agent.py` + `bench_ultra.py`: AndroidWorld sets the task and scores it, the
-  adapter hands the goal to Ultra over adb and waits for RUN COMPLETE. No self-grading.
+- `tools/androidworld_agent.py` + `bench_jarvis.py`: AndroidWorld sets the task and scores it, the
+  adapter hands the goal to Jarvis over adb and waits for RUN COMPLETE. No self-grading.
 - The brain moved laptop-side (`vault/runtime/bridge/brain_proxy.py`): the emulator boots in 2023
-  so its TLS fails, and this also makes the brain a setting (`ULTRA_BRAIN=venice:MODEL|local:qwen`).
+  so its TLS fails, and this also makes the brain a setting (`JARVIS_BRAIN=venice:MODEL|local:qwen`).
 
 **What the benchmark found, all of it live on the phone too:**
 | Bug | Effect |
@@ -1542,8 +1542,8 @@ re-run: `tools/androidworld.md`.
 | empty text box has no label and was dropped from the screen list | a note editor read as "no interactive elements" |
 | menu rows put the tap on the parent, the words on a child | open menus read as empty (`ca` flag added) |
 | unlabelled buttons dropped | no "+" anywhere, so nothing could be created |
-| window package resolving late slipped past the self-read check | the navigator drove Ultra's own chat in a loop |
-| navigator fell back to the foreground app when a name didn't resolve | that app was Ultra |
+| window package resolving late slipped past the self-read check | the navigator drove Jarvis's own chat in a loop |
+| navigator fell back to the foreground app when a name didn't resolve | that app was Jarvis |
 | a plan whose last stage had nothing to check | "opened the Stopwatch tab" counted as done |
 | a run with no tool error stored as success | "run the stopwatch → app_launch" learned and replayed |
 | `allow` in ActionGate's commit words | every permission dialog blocked the run |
@@ -1552,20 +1552,20 @@ re-run: `tools/androidworld.md`.
 **Measured:** first scored run **3/12** (12 tasks, 9 apps). The AndroidWorld paper's GPT-4 agent
 reports ~30% on the full 116. Lessons with vs without on six failing tasks: **0/6 and 0/6**, served
 on 2 of 6 — knowledge lessons do not supply skill. Accessibility config narrowed from `typeAllMask`
-at 50 ms to the six events Ultra uses at 200 ms: the benchmark's own reader went from looping on
+at 50 ms to the six events Jarvis uses at 200 ms: the benchmark's own reader went from looping on
 "Could not get a11y tree" to 3 reads in 0.1 s. 426/426 JVM tests.
 
 **Not proven:** any score above 3/12; route-shaped lessons (idea filed, not built); the on-device
 model path in the emulator (there is none by design).
 
 **Next:** per Dafarus (2026-09-20) the question is what NORTHSTAR learns from this work that makes
-the next piece of work better, for any agent — not how to raise Ultra's score alone. See
+the next piece of work better, for any agent — not how to raise Jarvis's score alone. See
 `~/vault/runtime/NEXT-SESSION.md`.
 
 ## 2026-09-19 (later) — The phone learns, and asks Claude on the laptop
 
 **Subsystems:** C (memory — new lessons store), A (prompt rules), D (settings_open, app matching,
-ask_claude), E (ActionGate words). Direction from Dafarus: Ultra and Northstar are one system,
+ask_claude), E (ActionGate words). Direction from Dafarus: Jarvis and Northstar are one system,
 the link between him and AI; generate evidence now, never wait for it.
 
 **What changed:**
@@ -1575,7 +1575,7 @@ the link between him and AI; generate evidence now, never wait for it.
   no good run = benched. `experience.jsonl` out / `northstar_lessons.jsonl` in, in Northstar's
   import format — laptop side: `northstar phone pull|push|status`.
 - `ask_claude {question}`: the phone asks Claude Code on the laptop (vault/runtime/bridge/
-  ultra_bridge.py) through the USB cable (`adb reverse tcp:8787 tcp:8787`), token-checked,
+  jarvis_bridge.py) through the USB cable (`adb reverse tcp:8787 tcp:8787`), token-checked,
   read-only tools, vault/private and NO_CLAUDE_ENTRY denied by permission rules.
 - `settings_open {page}` (intents, no tapping); `system_info` reports Wi-Fi/Bluetooth/DND/dark
   mode/location/volume/storage; rules 11 (a question never changes anything) and 12 ("open X"
@@ -1604,7 +1604,7 @@ its code — which is the loop worth automating.
 Found and fixed along the way: "is bluetooth on right now" turned Bluetooth ON; "model number"
 created an unasked note; "open the weather app"/"open samsung notes" planned "Restart the phone".
 
-**Device-proven:** `ask_claude` end to end — "ask claude what the agent ultra devlog says is
+**Device-proven:** `ask_claude` end to end — "ask claude what the agent jarvis devlog says is
 still not proven" → correct answer on the phone in 51 s. **PROVEN.** `northstar phone pull`
 brought the phone's 2 lessons to the laptop store. **PROVEN.**
 
@@ -1630,7 +1630,7 @@ who a hands-free phone agent should be for.
 - `gate/ScamWatch.kt` — a flagged message's phones/hosts/emails/cashtags, in memory 72 h,
   never on disk. `Gate`: new rule `scam_followup` on egress/mutate tools (not web_search):
   confirmable, **never auto-approved**, model-facing text says to tell the user plainly.
-- `EventTrigger.ScamTrigger` + `UltraNotificationService`: high-importance "Careful — this
+- `EventTrigger.ScamTrigger` + `JarvisNotificationService`: high-importance "Careful — this
   looks like a scam" notification (toast if POST_NOTIFICATIONS is refused), spoken when
   speak-answers is on, notification-log line marked. Settings: "Scam warnings", on by default.
 - `Brain.run`: the same detector on the user's own request → a warning before anything runs.
@@ -1650,7 +1650,7 @@ who a hands-free phone agent should be for.
 **Device (Galaxy A15, release-signed, installed in place):**
 - Test scam notification (via `adb shell "cmd notification post ..."`) → "Careful — this looks
   like a scam" notification above the message. **PROVEN.**
-- Then "text 415-555-0142 that I am sending the 850 now" → `UltraGate: BLOCK sms_send:
+- Then "text 415-555-0142 that I am sending the 850 now" → `JarvisGate: BLOCK sms_send:
   4155550142 came from a message that looks like a scam (...)`, pause card shown, nothing
   sent. **PROVEN** end to end through the brain (llama-3.3-70b) with the new gate.
 - "now turn the flashlight off" → `flashlight_toggle {"on":false}`. **PROVEN.**
@@ -1663,7 +1663,7 @@ who a hands-free phone agent should be for.
   gate: `BLOCK react_navigate: $mike_torres88 came from a message that looks like a scam`,
   card shown with Confirm / Cancel. **PROVEN.** Confirm → `CONFIRMED react_navigate`, scam hold
   cleared, run continued (Cash App not installed, so nothing moved). **PROVEN.**
-- Speak-answers on, fake USPS fee text → `UltraSpeak: SPEAK START`. **PROVEN.** Switched back off.
+- Speak-answers on, fake USPS fee text → `JarvisSpeak: SPEAK START`. **PROVEN.** Switched back off.
 - The model itself refused "send 600 to $helpjake22" / "$mike_torres88" 3/3 — its own judgment,
   not the gate. Ordinary payments ("send 20 to $jamie_r", Venmo @amy-k, "text 555-201-3344
   happy birthday") still go through 3/3 with the new prompt: rule 10 did not cause over-refusal.
@@ -1733,7 +1733,7 @@ uninstalls the app afterwards. Play Protect holds a sideloaded install behind a 
 - **clearingai (r/AI_Agents, fraud ops background):** "The gate will hold. The operator won't." Every manual review queue in payments history decayed — month one you read the card, month six you tap on reflex. Evolve from review-everything to risk scoring. Gate already has the features: tool + args + request source. Hard part is calibrating without usage data.
 - **arthaudm (r/AI_Agents, builds mio):** Validated block-not-log and deterministic router. Asked how operator-tap scales with more tools. Still engaged — checked back Sep 7 asking about the tap flow.
 - **Alternative models (r/LocalLLM):** Bonsai-9B_Q1_0 on Motorola Edge 2024 (8GB, 3-4 tok/s decode). Needle2 as dedicated tool-calling model. PrismML 4B binary/ternary Qwen variant that might fit Galaxy A15.
-- **SMS pin → clipboard** concrete demand from r/LocalLLM. Ultra already has SMS + clipboard tools.
+- **SMS pin → clipboard** concrete demand from r/LocalLLM. Jarvis already has SMS + clipboard tools.
 
 **What was built:**
 
@@ -1778,11 +1778,11 @@ Implementation: `ObservationLog` gained `toolObservations()`, `hasHighToolObserv
 - **SMS verification code auto-extract** (`SmsCodeDetector.kt`) — deterministic regex, no LLM. Notification listener detects incoming SMS with 4-8 digit codes near verification keywords, copies to clipboard, shows a toast. Off by default, Settings toggle added. 19 unit tests. Total 332.
 - **Out-of-band verification for device toggles** — `verifyAction()` now covers WiFi (WifiManager.isWifiEnabled), Bluetooth (BluetoothAdapter.isEnabled), DND (NotificationManager.currentInterruptionFilter), and volume (AudioManager.getStreamVolume). Each queries the system API after the toggle and reports VERIFIED/UNVERIFIED. Caught a real bug on device: model sends `{"level": 0.5}` but tool expects `{"percent": 50}`.
 
-- **Event trigger framework** (`EventTrigger.kt`) — generic system for deterministic reactions to phone events. Triggers are pure functions: notification in, action out. SmsCodeTrigger refactored out of UltraNotificationService into this framework. Failing triggers don't break the chain. 7 unit tests. Total 339.
+- **Event trigger framework** (`EventTrigger.kt`) — generic system for deterministic reactions to phone events. Triggers are pure functions: notification in, action out. SmsCodeTrigger refactored out of JarvisNotificationService into this framework. Failing triggers don't break the chain. 7 unit tests. Total 339.
 - **Gemma 4 E2B added to local model presets** — 2.8B param, Q4_K_M quant (3.3GB). Newer architecture than Gemma 3 1B with better reasoning. Needs 6GB+ RAM so won't fit Galaxy A15 4GB, but available for higher-end devices. URL verified, file size confirmed.
 
 **Model research completed:**
-- Bonsai-1.7B Q1_0 (248 MB) and Bonsai-4B Q1_0 (572 MB) — incredible size-to-param ratio, but require PrismML's fork of llama.cpp. Ultra's JNI build uses standard llama.cpp. Not added to PRESETS — users would download weights that fail to load.
+- Bonsai-1.7B Q1_0 (248 MB) and Bonsai-4B Q1_0 (572 MB) — incredible size-to-param ratio, but require PrismML's fork of llama.cpp. Jarvis's JNI build uses standard llama.cpp. Not added to PRESETS — users would download weights that fail to load.
 - Gemma 4 E2B smallest quant (IQ2_M) is 2.29 GB — still too big for Galaxy A15 4GB target. Q4_K_M at 3.3 GB added for 6GB+ devices.
 - Bonsai models are the path forward for 4GB phones IF we switch to PrismML's llama.cpp fork. That's a JNI build change, not a preset change.
 
@@ -1806,7 +1806,7 @@ Implementation: `ObservationLog` gained `toolObservations()`, `hasHighToolObserv
   - `headphones` (HEADSET_PLUG) — toasts connect/disconnect
   - `app_install` (PACKAGE_ADDED/PACKAGE_REMOVED) — toasts app name
 
-  Receivers registered in `AgentBackgroundService`, cleaned up on destroy. Off by default — Settings toggle "System event triggers". Each trigger checks `UltraPrefs.systemTriggers()` before firing. Charger connect/disconnect RUNTIME-PROVEN on device. All 6 receivers confirmed registered via logcat. 12 tests. Total 369.
+  Receivers registered in `AgentBackgroundService`, cleaned up on destroy. Off by default — Settings toggle "System event triggers". Each trigger checks `JarvisPrefs.systemTriggers()` before firing. Charger connect/disconnect RUNTIME-PROVEN on device. All 6 receivers confirmed registered via logcat. 12 tests. Total 369.
 
 **PrismML llama.cpp fork evaluation (research, not code):**
 - Fork: `PrismML-Eng/llama.cpp`, branch `prism`. Tracks upstream with low-bit quant kernels added.
@@ -1815,17 +1815,17 @@ Implementation: `ObservationLog` gained `toolObservations()`, `hasHighToolObserv
 - Android NDK build documented in `docs/android.md`, same CMake shape as upstream.
 - C API unchanged — `LlmNative` JNI bindings should work without modification.
 - **Risk:** ggml binary incompatibility — fork's README warns against mixing with stock builds. Standard GGUF models (Gemma 3 1B) should still load since fork tracks upstream, but needs verification.
-- **Risk:** fork maintenance — if PrismML stops rebasing, Ultra is pinned to stale llama.cpp. Ternary support is partially landing in mainline already.
+- **Risk:** fork maintenance — if PrismML stops rebasing, Jarvis is pinned to stale llama.cpp. Ternary support is partially landing in mainline already.
 - **Recommendation:** side-branch build, verify both Gemma 3 1B Q4_K_M (regression) and Bonsai-4B Q1_0 (new), swap if both pass.
 
 - **Risk-based auto-approve** — when a gate decision is confirmable AND risk score ≤ 15, auto-approve instead of blocking. Addresses clearingai's feedback ("the gate will hold, the operator won't") and arthaudm's scaling question. Implementation:
   - `Gate.kt` — `Verdict` gained `autoApproved: Boolean`, `AUTO_APPROVE_THRESHOLD = 15`. `enforceCall()` returns auto-approved verdicts for low-risk confirmable violations.
   - `GateAuditLog.kt` — `AUTO_APPROVED` added to `Outcome` enum.
-  - `Brain.kt` — all 3 audit log call sites (recipe, local, cloud) emit `AUTO_APPROVED` outcome and `UltraGate` logcat line when auto-approve fires.
+  - `Brain.kt` — all 3 audit log call sites (recipe, local, cloud) emit `AUTO_APPROVED` outcome and `JarvisGate` logcat line when auto-approve fires.
   - Threshold of 15 covers READ (effect=0) and RESOLVE (effect=10) with small observation gap. Never covers EGRESS (effect=40+) or MUTATE+untraced (30+). Non-confirmable rules (taint_egress, undeclared_tool, spoof_check) can never auto-approve.
   - 7 new tests in GateTest.kt: low-risk READ auto-approves, MUTATE doesn't, EGRESS doesn't, taint never, undeclared never, boundary (risk=15 passes, risk=25 blocks), high obs lowers risk.
 
-  Total tests: 376. Status: SOURCE-FIXED, TEST-PROVEN. Runtime proof requires an agent conversation that triggers a low-risk confirmable gate decision — the logcat marker is `UltraGate: AUTO-APPROVE <tool> (risk=<n>)`.
+  Total tests: 376. Status: SOURCE-FIXED, TEST-PROVEN. Runtime proof requires an agent conversation that triggers a low-risk confirmable gate decision — the logcat marker is `JarvisGate: AUTO-APPROVE <tool> (risk=<n>)`.
 
 **Open:**
 - Auto-approve RUNTIME-UNPROVEN — needs agent conversation on device to hit a low-risk confirmable gate path
@@ -1879,7 +1879,7 @@ of increasingly specific feedback, the last one implementation-level.
    above tree-default. One more event type, not a rule exception.
 
 **User feature request (Odd_Cauliflower_8004, r/LocalLLM):**
-- **Automatic SMS trigger:** wants Ultra to auto-detect incoming SMS
+- **Automatic SMS trigger:** wants Jarvis to auto-detect incoming SMS
   verification codes and copy to clipboard without being asked. The
   accessibility service already sees notifications and SMS + clipboard
   tools exist. Missing piece: event-driven trigger layer with permission
@@ -1895,7 +1895,7 @@ of increasingly specific feedback, the last one implementation-level.
 - ActionGate operator-tap: new `Source.OPERATOR_CONFIRMATION` type → HIGH
   confidence, distinct from `Source.ACCESSIBILITY_TREE` → LOW
 - **Critical:** the high-confidence source for operator confirmation must be the
-  `onClick` callback in Ultra's own process — never the tree reporting the card
+  `onClick` callback in Jarvis's own process — never the tree reporting the card
   looks confirmed. If the tree read-back is the confidence source, verifier
   overlap is rebuilt one level deeper. (donk8r's closing note, 5th follow-up)
 
@@ -1922,9 +1922,9 @@ out-of-band (battery, flashlight). No code changes made.
 
 **Last updated:** 2026-09-07 (Confidence scoring + low_confidence_egress gate rule; 332 tests)
 
-**App status:** Agent Ultra is a native Kotlin / Jetpack Compose Android app in `ultra-native/`. Version `2.0.0-native`, minSdk 26, targetSdk 35, arm64-v8a only. Cloud brain runs on **Venice** (`llama-3.3-70b`); an on-device Gemma 3 1B model handles the offline and fast paths. 30 tools, all declared in the policy gate manifest. Hands-free assist sessions and named recipes ship as of Session 16. Device regression: **8/8 PASS**, unit tests **332/332**, including four real screen captures committed as fixtures (`amazon-search`, `hn-front`, `native-clock`, `native-settings`) so perception can be developed and regression-tested without a phone. Release builds are **R8-minified** (8,665,752 bytes); `proguard-rules.pro` keeps the JNI and service symbols, so it is not optional reading before touching either.
+**App status:** Jarvis is a native Kotlin / Jetpack Compose Android app in `jarvis-native/`. Version `2.0.0-native`, minSdk 26, targetSdk 35, arm64-v8a only. Cloud brain runs on **Venice** (`llama-3.3-70b`); an on-device Gemma 3 1B model handles the offline and fast paths. 30 tools, all declared in the policy gate manifest. Hands-free assist sessions and named recipes ship as of Session 16. Device regression: **8/8 PASS**, unit tests **332/332**, including four real screen captures committed as fixtures (`amazon-search`, `hn-front`, `native-clock`, `native-settings`) so perception can be developed and regression-tested without a phone. Release builds are **R8-minified** (8,665,752 bytes); `proguard-rules.pro` keeps the JNI and service symbols, so it is not optional reading before touching either.
 
-**Published:** source is private at `github.com/dafarusd/Ultra-Agent` (branch `native`). The public face is `github.com/dafarusd/Ultra-Agent-Release` — APK, README, and the site at `dafarusd.github.io/Ultra-Agent-Release`. Anything written there is public copy: read `~/vault/publishing/CLAUDE.md` first and log it after.
+**Published:** source is private at `github.com/dafarusd/Jarvis-Agent` (branch `native`). The public face is `github.com/dafarusd/Jarvis-Agent-Release` — APK, README, and the site at `dafarusd.github.io/Jarvis-Agent-Release`. Anything written there is public copy: read `~/vault/publishing/CLAUDE.md` first and log it after.
 
 **The Expo / React Native app at the repo root is superseded.** `src/`, `app/`, `components/`, `server/`, `android/`, `ios/`, `app.json`, and `eas.json` belong to the old build. Nothing on the active path reads them — do not fix bugs there. The "Local Build Reference" section at the bottom of this file documents the **old** EAS/Expo build and applies only to that dead tree. The `BRAIN_*`, `REPLIT_*`, and `*_PROOF.md` files in the repo root are from the same era.
 
@@ -1960,7 +1960,7 @@ out-of-band (battery, flashlight). No code changes made.
 - Conversations survive force-stop.
 - Streaming answers render live; tool-call turns retract the bubble.
 - Hands-free: spoken words → on-device transcription → tool call → spoken answer. Proven acoustically with no human in the loop, and **ear-verified by the owner on 2026-08-28** ("i heard it, it works").
-- Ultra is selectable as the device's Digital assistant app (Settings → Apps → Default apps → Digital assistant app → **Other apps** → Agent Ultra). Press-and-hold Side button opens a listening session, including from a dark screen.
+- Jarvis is selectable as the device's Digital assistant app (Settings → Apps → Default apps → Digital assistant app → **Other apps** → Jarvis). Press-and-hold Side button opens a listening session, including from a dark screen.
 - The answer is still spoken with the app in the background: backgrounded to the launcher after transcription, the tool still ran and `SPEAK START` still fired.
 - The on-device model is switchable in Settings — five verified presets plus a custom GGUF URL.
 - Recipes: a two-tool run saved by name and replayed from a fresh conversation, gate-approved.
@@ -1982,7 +1982,7 @@ out-of-band (battery, flashlight). No code changes made.
 ### Build, install, and test
 
 ```
-cd ~/projects/Audit-Discuss-Build/ultra-native
+cd ~/projects/Audit-Discuss-Build/jarvis-native
 ./gradlew assembleDebug
 tools/install.sh
 ```
@@ -1991,13 +1991,13 @@ The install script handles the Play Protect "Don't send" dialog, re-enables the 
 
 - Proof suite: `tools/suite.sh` — sends each task, waits for the brain's `RUN COMPLETE` marker, saves logcat and a screenshot per task.
 - Tap by visible text: `tools/uitap.sh "Send"`.
-- Logs: `adb logcat -s UltraBrain:* UltraGate:* UltraLlm:* AgentA11y:*`.
+- Logs: `adb logcat -s JarvisBrain:* JarvisGate:* JarvisLlm:* AgentA11y:*`.
 - Compose screens dump cleanly with `uiautomator`; the old RN screens did not.
 - `adb shell input text` needs `%s` for spaces.
 
 **Wireless ADB:** `<device-ip>`. `adb tcpip 5555` does not survive a phone reboot — re-pair through Android's Wireless debugging screen when `adb connect` is refused, then target with `-s <ip>:<port>` to dodge the mDNS ghost entry. Do not test `wifi_toggle` or `airplane_mode` over wireless ADB; it kills the connection.
 
-**Backup:** USB drive `agent-ultra` at `<backup-mount>`, bare repo `agent-ultra.git`, remote name `usb`. Both `main` and `native` are pushed and tracked. Plugging the drive in runs `<backup-script>` automatically; check `<backup-mount>/backup.log` for `exit: 0`.
+**Backup:** USB drive `jarvis` at `<backup-mount>`, bare repo `jarvis.git`, remote name `usb`. Both `main` and `native` are pushed and tracked. Plugging the drive in runs `<backup-script>` automatically; check `<backup-mount>/backup.log` for `exit: 0`.
 
 ### Privacy and safety, stated plainly
 
@@ -2020,12 +2020,12 @@ The install script handles the Play Protect "Don't send" dialog, re-enables the 
 
 Decisions that affect ongoing work. Update as decisions are made or reversed.
 
-- **`ultra-native/` is the app.** The React Native tree is dead. No work goes into it.
+- **`jarvis-native/` is the app.** The React Native tree is dead. No work goes into it.
 - **Gradle is the build.** `./gradlew assembleDebug` on the Framework laptop, about a minute. EAS is gone, and with it the stale-native-code problem that blocked Sessions 5 through 12.
 - **`Brain.kt` is the sole execution path**, ported from the proven `BrainExecutor.ts`: same prompt shape, first-balanced-JSON tool parsing, dynamic token budget (2000 / 1500 / 2500), push-once follow-through, same-tool-twice stuck stop, structured `[RESULT]` feedback.
 - **No RN bridge and no HeadlessJS.** `AgentController` calls the accessibility service in-process. The Activity-backgrounding problem that forced HeadlessJS does not exist in the native build; `AgentBackgroundService` is a sticky foreground service started at app create to survive Samsung's background kill on this 3.5 GB device.
 - **The gate is the enforcement layer.** `Gate.enforceCall` runs before every tool, deterministically, with no model judgment. The old "About to:" confirmation is UX only.
-- **The gate manifest is deny-by-default.** A tool not declared in `assets/ultra.manifest.json` cannot run. Completeness is mandatory — an incomplete manifest makes the gate vacuous.
+- **The gate manifest is deny-by-default.** A tool not declared in `assets/jarvis.manifest.json` cannot run. Completeness is mandatory — an incomplete manifest makes the gate vacuous.
 - **Blocks continue the episode.** A blocked call returns the gate's block message as the tool result and the loop keeps going. Traceability-class blocks are confirmable: the run pauses, the operator taps Confirm, and the target is minted user-attested for that episode. Taint, spoof, and undeclared blocks are never confirmable.
 - **Cloud drives the tool loop; the on-device model is the offline brain and the fast path.** Measured, not assumed: Gemma 3 1B Q4_K_M runs at 10.1 tok/s on this phone — enough for single decisions, not for a reliable multi-step loop.
 - **Local-first routing with a conservative classifier.** Simple device commands run on-device. Compound requests (`and`, `then`) and URL-like targets go straight to cloud — those were measured failures. A local miss escalates to cloud automatically.
@@ -2034,7 +2034,7 @@ Decisions that affect ongoing work. Update as decisions are made or reversed.
 - **Live window scan is ground truth.** The event-sourced package tracker goes stale on service rebind. `getForegroundPackage()` rescans windows, and `app_launch` / `open_url` verify against it.
 - **Duplicate calls are deduped.** The same tool with identical params right after a success gets "already done" feedback instead of re-firing.
 - **Task memory is Room-backed (DB v2).** Successful tool sequences per normalized request, plus per-tool reliability counters. Hints are injected as a system message on a repeat request.
-- **The provider is configured in Settings.** Base URL, key, and model are edited on the phone; saving bumps a `configVersion` key that rebuilds the Brain. A dev seed path still exists as a fallback: if no key is stored, `ProviderConfig` reads `Android/data/com.agent.jarvis/files/ultra_provider.json` once. It is never consulted after a key is saved.
+- **The provider is configured in Settings.** Base URL, key, and model are edited on the phone; saving bumps a `configVersion` key that rebuilds the Brain. A dev seed path still exists as a fallback: if no key is stored, `ProviderConfig` reads `Android/data/com.agent.jarvis/files/jarvis_provider.json` once. It is never consulted after a key is saved.
 - **Cloud provider is Venice** (`https://api.venice.ai/api/v1`, `llama-3.3-70b`). Venice prepends its own ~1000-token system prompt unless `venice_parameters.include_venice_system_prompt` is false. Measured on llama-3.3-70b: with it on, prompt_tokens goes 26 → 1081 and the chat template breaks. `OpenAiClient` sends the flag for venice.ai hosts only.
 - **Two-Claude workflow.** Chat Claude (claude.ai) = strategy, planning, architecture. Claude Code = execution, validation, commits. Solution files from Chat Claude are validated against the real codebase before applying.
 
@@ -2451,7 +2451,7 @@ Each step now reads the foreground package. When it is not the target, the histo
 
 **Reported, not corrected.** Some goals legitimately leave the app — a link in an email opens the browser — so the engine states the fact and the model decides. This is the same split as everywhere else: the model owns intent, the engine owns structure. After two consecutive steps away it escalates to an explicit note to press back until it returns.
 
-Ultra's own package is exempt. The action-gate card is the task waiting for a tap, not a detour.
+Jarvis's own package is exempt. The action-gate card is the task waiting for a tap, not a detour.
 
 This matters for the owner's stated worry about the phone taking a call mid-task: the agent now sees the dialer in the foreground and is told, in words, that it is not where it should be.
 
@@ -2573,11 +2573,11 @@ open https://news.ycombinator.com and list the top stories with their points
 
 The part worth keeping: **two entries genuinely have no score, and it reported "no points listed" rather than borrowing a nearby number.** That is the structured extraction from Session 16d doing its job — pairing comes from the tree, so an absent field reads as absent instead of drifting to the neighbour.
 
-Venice was seeded onto the test phone by writing `ultra_provider.json` into the app's files directory, so the key never appeared on a command line. **The seed file was deleted afterwards.**
+Venice was seeded onto the test phone by writing `jarvis_provider.json` into the app's files directory, so the key never appeared on a command line. **The seed file was deleted afterwards.**
 
 #### The release site
 
-`dafarusd.github.io/Ultra-Agent-Release` — one page, GitHub Pages off `main` at `/root`.
+`dafarusd.github.io/Jarvis-Agent-Release` — one page, GitHub Pages off `main` at `/root`.
 
 - Five screenshots, each with a written explanation: the Hacker News run, the model picker, the safety screen, the on-device engine, the model-fit banding.
 - Architecture as **four layers described by responsibility only** — perceive, decide, gate, act and verify. No file names, no algorithms, no thresholds. A reader learns what it does and not how to rebuild it.
@@ -2631,11 +2631,11 @@ Two download bugs surfaced doing it: progress never rendered because `onProgress
 
 #### Published
 
-- **Source private**: `github.com/dafarusd/Ultra-Agent`, branch `native`. Verified 404 unauthenticated.
-- **Public download**: `github.com/dafarusd/Ultra-Agent-Release` — README plus the APK, which pulls 15,014,327 bytes with no login.
+- **Source private**: `github.com/dafarusd/Jarvis-Agent`, branch `native`. Verified 404 unauthenticated.
+- **Public download**: `github.com/dafarusd/Jarvis-Agent-Release` — README plus the APK, which pulls 15,014,327 bytes with no login.
 - **Announcement posted** to @Dafarusd, opening "A local LLM running on Android. On the phone itself." Every number in it verified against a run from today, per the publishing rule. X moved the account into graduated access while posting.
 - A competitor found it within minutes: **@TonyZ278264 ("LocalLLM")**, building an on-device LLM app for iOS, asked how long 4.4 GB stays resident before Android reclaims it. Answered honestly with nothing proprietary — memory-mapped weights, 4.5 s cold load, and that footprint is why the app scores models against the device.
-- **Every public repo now links back to @Dafarusd**: `everyvoice`, `gate`, `mindmeld`, `sentinel-public`, `Ultra-Agent-Release`. Standing rule from this session.
+- **Every public repo now links back to @Dafarusd**: `everyvoice`, `gate`, `mindmeld`, `sentinel-public`, `Jarvis-Agent-Release`. Standing rule from this session.
 
 #### The video: recorded, not shipped
 
@@ -2644,7 +2644,7 @@ A 3:34 walkthrough was recorded and cut to 1:47 at 2x. **The owner reviewed it a
 1. **The conversation drawer shows the test queries** — "read my last text message", "open youtube" — which read badly out of context even though both were deliberate safety tests.
 2. **It does not show a real multi-step task.** The demo proves the app runs; it does not prove the agent *does* anything hard. That is a fair reading and it is a gap in the demo, not only in the film.
 
-He will record his own. Files kept at `~/Videos/agent-ultra-demo-2x.mp4` (1:47) and `agent-ultra-demo-full-3m34.mp4`.
+He will record his own. Files kept at `~/Videos/jarvis-demo-2x.mp4` (1:47) and `jarvis-demo-full-3m34.mp4`.
 
 **Harness limitation, now reproducible:** X's composer will not bind a video placed into its file input programmatically. Three attempts, two encodings, 1.7 MB and 5.6 MB, in both a post and a reply. The upload reports "Preparing media…" and completes, then the post publishes without it. **Attaching media to X is hand-only** — same class as the account-switch limitation already logged. Belongs in `vault/publishing/log.md`.
 
@@ -2659,7 +2659,7 @@ Checked every public repo for a description, a real README, and a link back to @
 | `gate` | description had a run of stray spaces ("LLM&nbsp;&nbsp;&nbsp;&nbsp;agents") | cleaned, wording unchanged |
 | `mindmeld` | fine | unchanged |
 | `sentinel-public` | no description, **no LICENSE at all** | description added, AGPL-3.0 + NOTICE added |
-| `Ultra-Agent-Release` | no description | description added |
+| `Jarvis-Agent-Release` | no description | description added |
 
 All five now end their README with `Built by Dafarus — @Dafarusd on X`. Standing rule from this session: every public README links the personal account.
 
@@ -2684,7 +2684,7 @@ Nothing is bundled. The APK is **15.0 MB** because it ships with no weights at a
 
 `fitFor(model, totalRam)` bands a model by its download size as a fraction of the device's total memory: ≤25% **fits comfortably**, ≤45% **tight — will run, may slow under load**, above that **too big for this phone**, and the download button is disabled. llama.cpp memory-maps the weights so a model does not have to fit in free memory to load, but it does have to stay resident to run at a usable speed, and it shares the phone with everything else.
 
-Every size below is the real content-length from the server, not a model card's claim. On the owner's S24 Ultra (11,084 MB):
+Every size below is the real content-length from the server, not a model card's claim. On the owner's S24 Jarvis (11,084 MB):
 
 | Model | Size | Verdict on this phone |
 |---|---|---|
@@ -2714,7 +2714,7 @@ Qwen2.5 7B downloaded (4466 MB), loaded in **4.46 s**, and answered `/local what
 
 ### Session 16g — allowlist by default, and installing on the owner's own phone (2026-08-28, branch `native`)
 
-Owner: "phone is connected. this is my phone, be careful" — a Galaxy S24 Ultra (SM-S928B), Android 16, 11.3 GB RAM, 204 third-party apps — followed by "this phone may receive a call, text, email… dont mess with them".
+Owner: "phone is connected. this is my phone, be careful" — a Galaxy S24 Jarvis (SM-S928B), Android 16, 11.3 GB RAM, 204 third-party apps — followed by "this phone may receive a call, text, email… dont mess with them".
 
 #### The blocklist was the wrong shape, and the owner's phone proved it
 
@@ -2738,13 +2738,13 @@ New `PERSONAL DATA` switch, off by default, checked ahead of dispatch. With it o
 
 - Installed, `2.0.0-native`. Launched once so the policy is written.
 - `allowlist_mode = true`, **allowed set empty** — the agent can reach nothing.
-- Ultra's accessibility service **not enabled**; CCleaner's untouched.
+- Jarvis's accessibility service **not enabled**; CCleaner's untouched.
 - No dangerous runtime permissions granted: no SMS, contacts, microphone, location, camera, phone or storage. Only install-time normals (network, wifi, bluetooth, foreground service).
 - Notification listener not enabled; notification capture off by default.
 
 Nothing runs until the owner chooses which apps the agent may enter.
 
-#### Live on the owner's S24 Ultra — four tests, all read-only
+#### Live on the owner's S24 Jarvis — four tests, all read-only
 
 Provider set to Venice (key written through a pushed file, never a command line). Accessibility appended alongside CCleaner's service, allowed list = Chrome, Maps, Calculator.
 
@@ -2777,21 +2777,21 @@ Two words were deliberately dropped after they failed their own tests: **"sign"*
 
 #### The hole found by testing it
 
-First live run: the gate fired and withheld the tap correctly — and **the confirmation card was invisible**. The navigator drives another app, so Ultra is in the background when the question appears. A card nobody can see is a gate that silently denies everything after its two-minute timeout: safe, and useless.
+First live run: the gate fired and withheld the tap correctly — and **the confirmation card was invisible**. The navigator drives another app, so Jarvis is in the background when the question appears. A card nobody can see is a gate that silently denies everything after its two-minute timeout: safe, and useless.
 
-Fixed both directions. The gate now brings Ultra to the front to ask, and on approval the navigator **puts the target app back before tapping** — otherwise the tap would land on Ultra's own UI at the target's coordinates.
+Fixed both directions. The gate now brings Jarvis to the front to ask, and on approval the navigator **puts the target app back before tapping** — otherwise the tap would land on Jarvis's own UI at the target's coordinates.
 
 #### Proven on device, against a page built for the purpose
 
 A local page served over `adb reverse` with a dead "Send" button — nothing real could fire.
 
 ```
-UltraActionGate: PAUSED:   tap_index(3) on "Send" in com.android.chrome (matched "send")
-UltraActionGate: RESOLVED: denied — "Send"
-UltraNav: action refused by operator: "Send"
+JarvisActionGate: PAUSED:   tap_index(3) on "Send" in com.android.chrome (matched "send")
+JarvisActionGate: RESOLVED: denied — "Send"
+JarvisNav: action refused by operator: "Send"
 
-UltraActionGate: PAUSED:   tap_index(3) on "Send" in com.android.chrome (matched "send")
-UltraActionGate: RESOLVED: approved — "Send"
+JarvisActionGate: PAUSED:   tap_index(3) on "Send" in com.android.chrome (matched "send")
+JarvisActionGate: RESOLVED: approved — "Send"
 ```
 
 The card names the exact label, the app, and the word that matched, and says plainly that ignoring it cancels the action. An unanswered prompt is a denial, never an approval.
@@ -2812,7 +2812,7 @@ Answering it properly meant reading the enforcement rather than trusting the des
 
 1. **The blocklist existed and was never populated.** `AgentAccessibilityService` had `blockPackage`, `isPackageBlocked`, `getBlockedPackages` and a `blockedPackages` set. Nothing anywhere called `blockPackage`. It was an in-memory static that was empty for the life of the process — a safety net with no rope in it.
 2. **Blocking only covered acting, not looking.** `isPackageBlocked` was consulted in exactly one place: `checkPackageAllowed`, which gates taps, typing, scrolling. `getScreenContentFlat` and `getScreenTree` never checked it. Worse the wrong way round, because **whatever the agent reads is sent to the cloud model as a tool result** — so "don't act in my bank" would still have shipped the bank's screen to Venice.
-3. **The notification listener was standing collection.** `UltraNotificationService` appended every notification's title and 120 characters of body to `files/notifications.log` continuously, whether or not a task was running — message previews and one-time codes included. 88 lines were already on the device. App-private, but collected by default and never asked for.
+3. **The notification listener was standing collection.** `JarvisNotificationService` appended every notification's title and 120 characters of body to `files/notifications.log` continuously, whether or not a task was running — message previews and one-time codes included. 88 lines were already on the device. App-private, but collected by default and never asked for.
 4. **The navigator does not gate individual actions.** The gate checks that `react_navigate`'s *goal* traces to the request. Once inside, `ReActNavigator` calls `controller.tap/typeInto/scroll` directly — no `enforceCall` anywhere in that file. Approving "book me a table" approves every tap that follows it. This one is **not fixed** and is the largest remaining risk.
 
 #### What was built
@@ -2911,9 +2911,9 @@ What changed:
 Same request, same page, after the change:
 
 ```
-UltraPerceive: deep scroll 1: +14 new (total 60)
+JarvisPerceive: deep scroll 1: +14 new (total 60)
 ...
-UltraPerceive: deep read: 126 labels, 10 scrolls, 4463 chars
+JarvisPerceive: deep read: 126 labels, 10 scrolls, 4463 chars
 ```
 
 > The prices of the first few results for wireless earbuds on Amazon are:
@@ -2965,10 +2965,10 @@ Owner: "i heard it, it works." The hands-free chain is now proven end to end by 
 
 #### Assistant role — confirmed selectable, and proven
 
-Ultra does not implement a `VoiceInteractionService`, so it registers as a legacy assist app. It **is** listed in Samsung's Digital assistant picker, but under a collapsed **"Other apps"** heading — not in the top-level list, which is why it looks absent. Selected it and proved the path:
+Jarvis does not implement a `VoiceInteractionService`, so it registers as a legacy assist app. It **is** listed in Samsung's Digital assistant picker, but under a collapsed **"Other apps"** heading — not in the top-level list, which is why it looks absent. Selected it and proved the path:
 
 - `secure assistant` → `com.agent.jarvis/.VoiceActivity`
-- `KEYCODE_ASSIST` from the home screen → VoiceActivity focused, `UltraVoice: LISTENING`
+- `KEYCODE_ASSIST` from the home screen → VoiceActivity focused, `JarvisVoice: LISTENING`
 - `KEYCODE_ASSIST` from a dozing screen → phone woke, VoiceActivity focused, listening. `setShowWhenLocked` + `setTurnScreenOn` doing their job.
 - Backgrounded mid-task (Home pressed right after `HEARD`): launcher took focus, the tool still ran and the answer was still spoken.
 
@@ -3007,18 +3007,18 @@ Key found at `~/.config/opencode/.env` (`VENICE_API_KEY`), base URL `https://api
 #### M7.1 — the ear (PROVEN end to end, acoustically)
 
 - `VoiceActivity` registered for `ACTION_ASSIST` / `VOICE_COMMAND`, shows over the lock screen, opens the mic on entry. `onNewIntent` restarts listening — `singleTask` means a repeat assist gesture never reaches `onCreate`, so without it the mic opened exactly once per process.
-- `Speaker`: on-device `TextToSpeech`, queue/start/done logged under `UltraSpeak` so speak-back is verifiable from a machine that cannot hear the phone. Speech text is stripped of emoji, code fences, raw tool JSON, and URLs are read as domains.
+- `Speaker`: on-device `TextToSpeech`, queue/start/done logged under `JarvisSpeak` so speak-back is verifiable from a machine that cannot hear the phone. Speech text is stripped of emoji, code fences, raw tool JSON, and URLs are read as domains.
 - `VoiceInput` gained state and error callbacks, prefers the offline recognizer, and names every recognizer error code.
-- Hands-free is reachable from the quick-action row (🎧) before the user has made Ultra their assistant app; Settings has a "Choose assistant app" shortcut and a speak-answers toggle for typed use.
+- Hands-free is reachable from the quick-action row (🎧) before the user has made Jarvis their assistant app; Settings has a "Choose assistant app" shortcut and a speak-answers toggle for typed use.
 
 **The acoustic test (the plan from the opencode session, carried out):** laptop speaks through its own speaker, phone listens through the air, no human involved.
 
 ```
-UltraVoice: LISTENING
-UltraVoice: HEARD: "What is the battery level"
-UltraBrain: LOCAL turn 0: {"tool":"battery_status","params":{}}
-UltraBrain: RUN COMPLETE (local, tool=battery_status, ok=true)
-UltraSpeak: SPEAK QUEUE (36 chars) → SPEAK START
+JarvisVoice: LISTENING
+JarvisVoice: HEARD: "What is the battery level"
+JarvisBrain: LOCAL turn 0: {"tool":"battery_status","params":{}}
+JarvisBrain: RUN COMPLETE (local, tool=battery_status, ok=true)
+JarvisSpeak: SPEAK QUEUE (36 chars) → SPEAK START
 ```
 
 Spoken words → on-device transcription → tool call → real device state → spoken answer. Reproduced twice. The error path was proven too: a phrase it could not catch spoke "I didn't catch that" and logged the full QUEUE → START → DONE lifecycle.
@@ -3090,7 +3090,7 @@ Owner directive mid-session: "make this the leading and most capable AI agent." 
 
 #### Shell parity (M6.1, M6.2 — both PROVEN on device)
 
-- **Settings screen** (`ui/SettingsScreen.kt`): provider editor (base URL/API key/model) — kills the adb-seeded `ultra_provider.json` dev backdoor; on-device model panel (status, 806MB download with progress bar, unload); About with version + gate + a11y status. Provider save bumps a `configVersion` key that rebuilds the Brain with the new config. Verified: save → back → tool loop answers from real device state.
+- **Settings screen** (`ui/SettingsScreen.kt`): provider editor (base URL/API key/model) — kills the adb-seeded `jarvis_provider.json` dev backdoor; on-device model panel (status, 806MB download with progress bar, unload); About with version + gate + a11y status. Provider save bumps a `configVersion` key that rebuilds the Brain with the new config. Verified: save → back → tool loop answers from real device state.
 - **Conversations** (`data/` Room layer + `ui/ChatStore.kt` rework): conversations + messages tables; drawer (☰) with auto-titled list, new-chat, delete; persistence survives force-stop (verified: relaunch restored the full conversation). Header shows the current conversation title.
 
 #### Capability advances (the "leading agent" work)
@@ -3128,7 +3128,7 @@ Owner directive mid-session: "make this the leading and most capable AI agent." 
 1. **Text entry into unfocused fields (the old IME-class bug, native root cause).** Navigator symptom: `TEXT: result=false` ×9 with healthy perception. Two-part fix:
    - `ReActNavigator.focusFirstEditable()` — bare `type("…")` now taps the first editable node before typing (nothing can receive text without focus).
    - `AgentAccessibilityService.performText` gained the **multi-window scan** `performImeAction` already had: once the keyboard opens, `getRootInActiveWindow()` is the IME window, not the target app. After: `TEXT: result=true` in Chrome's omnibox + `IME_ENTER result=true`.
-2. **Perception dropouts when the app backgrounds** (t03 first run: "accessibility service not running" mid-task). Fixes: `AgentController.serviceOrWait()` polls 3s across bind races; `UltraApplication` now starts `AgentBackgroundService` (ported foreground service, sticky) at app create to resist Samsung's background kill on this 3.5GB device.
+2. **Perception dropouts when the app backgrounds** (t03 first run: "accessibility service not running" mid-task). Fixes: `AgentController.serviceOrWait()` polls 3s across bind races; `JarvisApplication` now starts `AgentBackgroundService` (ported foreground service, sticky) at app create to resist Samsung's background kill on this 3.5GB device.
 
 #### Unplanned live gate evidence
 
@@ -3155,14 +3155,14 @@ Cross-compiled llama.cpp's `llama-bench` for arm64 (NDK 27.1, `GGML_OPENMP=OFF` 
 
 #### Integration
 
-- `app/src/main/cpp/ultra_llm.cpp` + CMake — JNI shim against llama.cpp static libs (staged at `~/llama-android/{lib,include}`, build recipe: clone llama.cpp, cmake with the NDK android toolchain for arm64, `-DGGML_OPENMP=OFF`, copy `libllama.a`/`libggml*.a` + headers). API: load(path, threads, ctx) → handle; generate(handle, prompt, maxTokens, temp, tokenCallback) streams pieces; free.
+- `app/src/main/cpp/jarvis_llm.cpp` + CMake — JNI shim against llama.cpp static libs (staged at `~/llama-android/{lib,include}`, build recipe: clone llama.cpp, cmake with the NDK android toolchain for arm64, `-DGGML_OPENMP=OFF`, copy `libllama.a`/`libggml*.a` + headers). API: load(path, threads, ctx) → handle; generate(handle, prompt, maxTokens, temp, tokenCallback) streams pieces; free.
 - `local/LlmNative.kt` + `local/LocalModelEngine.kt` — model at `files/models/gemma3-1b-q4km.gguf` (adb-staged via run-as), `ensureLoaded()` memory guard (ActivityManager availMem ≥ 500MB — **mmap'd weights are pageable; the first guard used `_SC_AVPHYS_PAGES` and refused wrongly**; logging shows avail/need), 4 threads, 4K ctx.
 - Hybrid routing in Brain: no provider → local; cloud call fails → "(cloud unreachable — answering on-device)" → local. `/local <text>` forces on-device from the chat box.
 - Model delivery for dev: `adb push` to /data/local/tmp, then `run-as com.agent.jarvis cp` into app storage. A first-run download flow is the product path (noted, not built).
 
 #### Verification (PROVEN on device, screenshots)
 
-- Load: 2.9s, ctx 4096, 4 threads (logcat UltraLlm).
+- Load: 2.9s, ctx 4096, 4 threads (logcat JarvisLlm).
 - `/local what is the capital of france` → "The capital of France is Paris." — on-device, streamed.
 - **Full offline test: airplane mode ON + `svc wifi disable` + no SIM** → "what color is the sky today" → cloud call fails → fallback notice → "**Blue.**" The app carried its brain through a dead network.
 
@@ -3177,7 +3177,7 @@ Cross-compiled llama.cpp's `llama-bench` for arm64 (NDK 27.1, `GGML_OPENMP=OFF` 
 #### What was done
 
 - **`gate/` package — a faithful Kotlin port of gatellml's measured runtime** (origins/contracts/manifest/runtime, one file each, semantics identical to the Python): origins mint by substring-membership against the user's request; deny-by-default for undeclared tools; taint-egress; the 8 contract kinds; structured block-and-continue messages.
-- `assets/ultra.manifest.json` — every brain tool declared with effects and contracts (the vacuity lesson: completeness is mandatory). sms_send = egress + recipient_traceable(to) + not_tainted(message) + spoof_check; open_url = egress + domain_in_request(url); web_search = egress + not_tainted(query) + spoof_check; reads uncontracted; device toggles mutate-uncontracted.
+- `assets/jarvis.manifest.json` — every brain tool declared with effects and contracts (the vacuity lesson: completeness is mandatory). sms_send = egress + recipient_traceable(to) + not_tainted(message) + spoof_check; open_url = egress + domain_in_request(url); web_search = egress + not_tainted(query) + spoof_check; reads uncontracted; device toggles mutate-uncontracted.
 - Brain wiring: one `Gate.Episode` per user request; `enforceCall` before execution; blocks return the research's BLOCK message as the tool result and the episode continues; secrets from tool results accumulate per-episode (`observeSecrets`).
 - **Unit tests: 12/12 pass** — the 11 cases from gatellml's `test_lang.py` ported verdict-for-verdict, plus one regression test from the live device finding below.
 
@@ -3198,7 +3198,7 @@ Cross-compiled llama.cpp's `llama-bench` for arm64 (NDK 27.1, `GGML_OPENMP=OFF` 
 
 #### What was done
 
-- `provider/ProviderConfig.kt` — SharedPreferences-backed, dev-seeds once from `Android/data/.../files/ultra_provider.json` (adb-pushable; keeps key entry automatable with zero UI taps).
+- `provider/ProviderConfig.kt` — SharedPreferences-backed, dev-seeds once from `Android/data/.../files/jarvis_provider.json` (adb-pushable; keeps key entry automatable with zero UI taps).
 - `provider/OpenAiClient.kt` — minimal OpenAI-compatible `/chat/completions` client (OkHttp). Proven against OpenRouter `meta-llama/llama-3.3-70b-instruct` (same model family as the Venice-proven Build 29 brain).
 - `agent/AgentController.kt` — in-process device layer replacing the RN bridge: a11y service calls (screenFlat/tap/swipe/type/scroll/ime/back/home), app launch + fuzzy package find, flashlight, Wi-Fi, Bluetooth, DND (notification-policy path with zen_mode fallback), volume, SMS, battery/device info.
 - `agent/Tools.kt` — the dispatcher: read_text_on_screen, describe_screen, app_launch, open_url, react_navigate, web_search (DuckDuckGo scrape ported verbatim), device_info, battery_status, system_info, flashlight/wifi/bluetooth/dnd toggles, volume_set, sms_send. Failures start with `Error:` per the brain's success heuristic.
@@ -3221,17 +3221,17 @@ Cross-compiled llama.cpp's `llama-bench` for arm64 (NDK 27.1, `GGML_OPENMP=OFF` 
 ### Session 14 — M1: native Kotlin skeleton lives on device (2026-08-27, branch `native`)
 
 - **Subsystems:** D (Actions/Device Control), H (Build/Release)
-- **Strategic context:** Owner direction — Ultra becomes the AI, not an API client (the Mind Meld pattern: deterministic spine + shipped model + validation gate). Native Kotlin rewrite begun; Expo app stays on `main` at Build 30.
+- **Strategic context:** Owner direction — Jarvis becomes the AI, not an API client (the Mind Meld pattern: deterministic spine + shipped model + validation gate). Native Kotlin rewrite begun; Expo app stays on `main` at Build 30.
 
 #### What was done
 
-- New `ultra-native/` Gradle project (AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, JDK 17 — Aundrea's proven versions). Package `com.agent.jarvis`, versionCode 6 / `2.0.0-native`.
+- New `jarvis-native/` Gradle project (AGP 8.7.3, Kotlin 2.0.21, Compose BOM 2024.12.01, JDK 17 — Aundrea's proven versions). Package `com.agent.jarvis`, versionCode 6 / `2.0.0-native`.
 - **Ported the two proven Java services out of the Expo plugin into plain Android sources:**
   - `AgentAccessibilityService.java` (57KB) — 4-point surgery only: removed 3 RN imports + the one `DeviceEventEmitter` emit site, replaced with a `UiTreeListener` interface. Everything else byte-identical.
   - `AgentBackgroundService.java` — verbatim (zero RN coupling).
   - The RN bridge classes (`AccessibilityBridgeModule`, `AgentNativePackage`, `AgentHeadlessTaskService`) are intentionally NOT ported — Kotlin code will call the service directly in-process. On-device APK build chain (ApkPackager/Signer) also not ported; its role in the native architecture is an open decision, documented not deleted (still in the plugin on `main`).
 - Compose chat shell: `MainActivity` + `ChatScreen` (message list, input, send) + dark-only theme (matches the app's established identity) + live a11y status line. Brain stub returns a marker line; real wiring is M2.
-- Signing: Expo project's debug keystore copied to `ultra-native/app/debug.keystore` and used for all build types — install-over continuity confirmed on device (v1.3.1 → v2.0.0-native with no uninstall).
+- Signing: Expo project's debug keystore copied to `jarvis-native/app/debug.keystore` and used for all build types — install-over continuity confirmed on device (v1.3.1 → v2.0.0-native with no uninstall).
 
 #### Device findings that cost time (so they never cost it again)
 
@@ -3241,7 +3241,7 @@ Cross-compiled llama.cpp's `llama-bench` for arm64 (NDK 27.1, `GGML_OPENMP=OFF` 
 3. **Force-stop still reverts the a11y enable on this device.** Workflow rule: after any `am force-stop`, re-run the two `settings put` lines. Fully scriptable; no manual step ever again:
 
 ```
-adb install -r -i com.android.vending ultra-native/app/build/outputs/apk/debug/app-debug.apk
+adb install -r -i com.android.vending jarvis-native/app/build/outputs/apk/debug/app-debug.apk
 adb shell settings put secure enabled_accessibility_services com.agent.jarvis/com.agent.jarvis.AgentAccessibilityService
 adb shell settings put secure accessibility_enabled 1
 ```
@@ -3500,7 +3500,7 @@ Build 15 installed and tested. **isServiceEnabled false positive FIXED** — no 
 
 **Build 21 (DEPLOYED):** **Inference-first strategy** — on turn 0, deterministic inference OVERRIDES the model's JSON tool choice. The model consistently picks wrong tools (e.g. `web_search` for "open calculator", `flashlight_toggle` for "set volume to 40"). Inference corrects every one. On follow-up turns (after tool result), model's choice is trusted.
 
-**Key insight:** `inferToolFromText` is now the primary tool router. The LLM is relegated to handling ambiguous/complex requests that inference can't pattern-match, and providing natural language responses after tool execution. This makes Agent Ultra model-agnostic — works regardless of model quality.
+**Key insight:** `inferToolFromText` is now the primary tool router. The LLM is relegated to handling ambiguous/complex requests that inference can't pattern-match, and providing natural language responses after tool execution. This makes Jarvis model-agnostic — works regardless of model quality.
 
 #### Session 11 End — Builds 24-26
 
@@ -3591,7 +3591,7 @@ Need to test on Build 21 (no rebuild needed):
 25. voice input
 
 Build 17 compiling. When complete:
-1. Copy: `wsl -e bash -c 'cp /home/<user>/agent-ultra/build-*.apk /mnt/c/Users/<user>/Downloads/Audit-Discuss-Build/Audit-Discuss-Build/build-latest.apk'` (use the latest timestamped file)
+1. Copy: `wsl -e bash -c 'cp /home/<user>/jarvis/build-*.apk /mnt/c/Users/<user>/Downloads/Audit-Discuss-Build/Audit-Discuss-Build/build-latest.apk'` (use the latest timestamped file)
 2. Install: `adb -s <device-ip>:5555 install -r build-latest.apk`
 3. Tap "Allow permission" on file access dialog if it appears
 4. Continue testing
@@ -3695,10 +3695,10 @@ After all tools pass testing:
 #### Build 2 Runtime Test — Chrome Search (Partial)
 
 **react_navigate selected correctly in 2.1s.** Chrome launched. HeadlessJS fired. But:
-- Iteration 1 read Agent Ultra's UI (38 nodes) — moveTaskToBack hadn't completed yet
+- Iteration 1 read Jarvis's UI (38 nodes) — moveTaskToBack hadn't completed yet
 - Iteration 2 saw Chrome's tab groups tooltip (1 node: "You can now easily add tabs to groups here")
 - Sparse screen triggered expensive vision API call instead of dismissing the dialog
-- Chrome was visible briefly with "Search Google or type URL" on iteration 1 but the agent was still on Agent Ultra's window
+- Chrome was visible briefly with "Search Google or type URL" on iteration 1 but the agent was still on Jarvis's window
 
 #### Additional fixes for Build 4 (in progress)
 
@@ -3816,14 +3816,14 @@ Full autonomous pipeline:
 - Inline image rendering in chat (generated images show in bubbles)
 - Image path propagation through BrainExecutor to ChatMessage
 - Personality polish: "Done — Wi-Fi toggled." not verbose engineer-speak
-- Brain identity: "Ultra — capable, concise, sharp assistant"
+- Brain identity: "Jarvis — capable, concise, sharp assistant"
 - Auth regex fixed (word boundary, catches "Sign in to Google")
 - Dialog dismiss tightened (≤10 nodes, skip first iteration)
 - 48 tools total
 
 #### Build 13 Live Testing Issues
 
-**Self-interaction persists:** HeadlessJS react_navigate reads Agent Ultra's own chat screen when it returns to foreground. The `screenContent` field contained the agent's own response text. The GATE blocks taps but not reads.
+**Self-interaction persists:** HeadlessJS react_navigate reads Jarvis's own chat screen when it returns to foreground. The `screenContent` field contained the agent's own response text. The GATE blocks taps but not reads.
 
 **Payload bloat:** Brain messages reached 19-20KB (msg_count=9-11) causing 11-23 second LLM responses. The environment model + knowledge + screen content + conversation history inflates the prompt.
 
@@ -4021,7 +4021,7 @@ ReActLoop path:
 
 **Investigation:** `checkPackageAllowed()` in AgentAccessibilityService auto-allows ANY package that isn't user-blocked, including `com.agent.jarvis`. The JS-side wrong-app detection (Session 8 Bug 3) catches this at iteration boundaries but cannot prevent the GATE from passing at the native level.
 
-**Fix:** Added `"com.agent.jarvis".equals(currentPackage)` check as the FIRST line of `checkPackageAllowed()`. Returns false with `GATE: BLOCKED_SELF` log. This is a hard block at the Java accessibility layer — no tap, text, scroll, or swipe can ever execute against Agent Ultra's own UI, regardless of JS-side state.
+**Fix:** Added `"com.agent.jarvis".equals(currentPackage)` check as the FIRST line of `checkPackageAllowed()`. Returns false with `GATE: BLOCKED_SELF` log. This is a hard block at the Java accessibility layer — no tap, text, scroll, or swipe can ever execute against Jarvis's own UI, regardless of JS-side state.
 
 #### Problem 3 — goalAchieved=true Without Verification
 
@@ -4062,7 +4062,7 @@ The agent typed into its own chat and declared success because none of these pat
   3. If `fetch_done` is fast but `aiCall` is slow → overhead is in JS/bridge layers
   4. If `fetch_done` is slow → same endpoint as chat? check URL/model
   5. If `vision_context` is slow → it's making an extra API call, disable it
-  6. Verify GATE: `BLOCKED_SELF` when on Agent Ultra
+  6. Verify GATE: `BLOCKED_SELF` when on Jarvis
   7. Verify goalAchieved rejected on wrong app
 
 ### Session 8 — Brain-Layer Bug Fixes — All 5 PROVEN on Device
@@ -4123,7 +4123,7 @@ Session 7 proved the infrastructure works (HeadlessJS, accessibility, screen rea
 - **(F)** Dormant code cleanup pending: TaskBuilder, Genome, SelfImprover, AppBuilder → src/dormant/
 
 - **TypeScript:** 0 errors
-- **Status:** PROVEN. All 5 fixes verified on device. Infrastructure + brain layer both working. Bottleneck is now LLM latency (30-50s/call) and LLM decision quality (Settings menu navigation), not Agent Ultra's code.
+- **Status:** PROVEN. All 5 fixes verified on device. Infrastructure + brain layer both working. Bottleneck is now LLM latency (30-50s/call) and LLM decision quality (Settings menu navigation), not Jarvis's code.
 - **Next:**
   1. Investigate faster model options (Claude Haiku, Gemini Flash, local model) for ReActLoop calls
   2. Fix issues A-C (SmartCapture ignore, wrong-app re-launch, abort on no-match)
@@ -4136,15 +4136,15 @@ Session 7 proved the infrastructure works (HeadlessJS, accessibility, screen rea
 - **Date:** 2026-04-04 through 2026-04-05
 - **Subsystems:** D (Actions/Native/Device Control), H (Build/Release), A (Brain/Cognition)
 - **Duration:** Extended session across two days, 6+ build cycles (~70-80 min each)
-- **Milestone:** Agent Ultra autonomously controlled another app's UI for the first time in the project's history.
+- **Milestone:** Jarvis autonomously controlled another app's UI for the first time in the project's history.
 
 #### Root Cause Discovery
 
-The fundamental blocker across Sessions 1-6 was identified: **React Native's JS thread suspends when the Activity goes to background.** When Agent Ultra launches YouTube via `react_navigate`, the Activity loses foreground status. React Native suspends the JS thread entirely — `setTimeout` never fires, the ReActLoop never starts, LLM calls never happen. The Java-side accessibility service keeps running (PKG_CHANGE events flow), creating the illusion something should work.
+The fundamental blocker across Sessions 1-6 was identified: **React Native's JS thread suspends when the Activity goes to background.** When Jarvis launches YouTube via `react_navigate`, the Activity loses foreground status. React Native suspends the JS thread entirely — `setTimeout` never fires, the ReActLoop never starts, LLM calls never happen. The Java-side accessibility service keeps running (PKG_CHANGE events flow), creating the illusion something should work.
 
 **Evidence that proved this:**
 - Logcat with accessibility service properly bound showed YouTube opening, then 39 seconds of total JS silence — no moveTaskToBack, no SCREEN_FLAT, no LLM calls.
-- In ALL previous tests, moveTaskToBack only fired because the user manually returned to Ultra (waking the JS thread).
+- In ALL previous tests, moveTaskToBack only fired because the user manually returned to Jarvis (waking the JS thread).
 - PKG_CHANGE events continued throughout, proving the Java accessibility service was alive while JS was frozen.
 - This explains every Session 1-6 failure: the agent's brain (JS) was asleep the moment another app took foreground.
 
@@ -4153,8 +4153,8 @@ The fundamental blocker across Sessions 1-6 was identified: **React Native's JS 
 EAS cloud builds cached stale native code (Sessions 5-6 blocker). Local Windows Gradle builds crashed with `useState` null error (Session 6 blocker). Solution: WSL-based local EAS builds.
 
 **Build steps (from WSL):**
-1. `rsync -av --delete /mnt/c/au/ ~/agent-ultra/ --exclude node_modules --exclude .git --exclude android --exclude ios`
-2. `cd ~/agent-ultra && npm install`
+1. `rsync -av --delete /mnt/c/au/ ~/jarvis/ --exclude node_modules --exclude .git --exclude android --exclude ios`
+2. `cd ~/jarvis && npm install`
 3. `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 npx eas build --local --profile preview --platform android`
 4. `cp` the APK back to Windows, `adb install -r`
 
@@ -4185,16 +4185,16 @@ EAS cloud builds cached stale native code (Sessions 5-6 blocker). Local Windows 
 **Logcat evidence:**
 - `[HEADLESS] received: {"taskType":"react_navigate","goal":"...","appHint":"youtube"}`
 - `[HEADLESS] starting ReActLoop for goal: ...`
-- `SCREEN_FLAT: root_pkg=com.google.android.youtube` — Agent Ultra read YouTube's UI, NOT its own
+- `SCREEN_FLAT: root_pkg=com.google.android.youtube` — Jarvis read YouTube's UI, NOT its own
 - Tap actions landed on YouTube's Shorts tab
 - UI change detected after tap
-- ReActLoop continued iterating while Agent Ultra was backgrounded
+- ReActLoop continued iterating while Jarvis was backgrounded
 - Zero self-interaction. Zero crashes.
 
 **What this proves:**
 - HeadlessJS keeps the JS thread alive when the Activity is backgrounded
-- The accessibility service reads the correct app's UI tree (YouTube, not Agent Ultra)
-- moveTaskToBack from native Java works — Agent Ultra stays backgrounded
+- The accessibility service reads the correct app's UI tree (YouTube, not Jarvis)
+- moveTaskToBack from native Java works — Jarvis stays backgrounded
 - The full perceive→think→act→verify loop runs autonomously against another app
 
 - **Architecture change:** react_navigate is now fire-and-forget from BrainExecutor's perspective. It returns immediately. The ReActLoop runs asynchronously in the HeadlessJS task. Results are emitted via DeviceEventEmitter and logged to adb logcat.
@@ -4214,7 +4214,7 @@ EAS cloud builds cached stale native code (Sessions 5-6 blocker). Local Windows 
   - **Diagnosed config plugin mystery:** withAgentNative.js IS registered in app.json (line 111), file exists, code is correct. Ran `expo prebuild --clean` locally — generated Java in AgentAccessibilityService.java line 336 has `pkg == null || !"com.agent.jarvis".contentEquals(pkg)` and all SCREEN_FLAT logs. Config plugin was never broken. EAS cloud was caching generated native code.
   - **Established local build pipeline:** `expo prebuild --clean` then `./gradlew assembleRelease` from `C:\au` (Windows junction symlink to project root — required because ninja has 260-char path limit). Symlink created with `cmd /c mklink /J C:\au "C:\Users\<user>\Downloads\Audit-Discuss-Build\Audit-Discuss-Build"`.
   - **Installed JDK 17** (Adoptium Temurin 17.0.17.10-hotspot) — system Java 26 too new for Android. Set `$env:JAVA_HOME` per-session.
-  - **Created release signing keystore:** `[local path]`, alias agent-ultra, password [removed]. Never lose this file.
+  - **Created release signing keystore:** `[local path]`, alias jarvis, password [removed]. Never lose this file.
   - **Enabled Windows long paths registry key** — did NOT fix ninja's limit, symlink still required.
   - **Gradle auto-installed** Android SDK Build-Tools 35 & 36, Platform 36, NDK 27.1.12297006, CMake 3.22.1 to `C:\Android`.
   - **Changed `reactCompiler` from true to false** in app.json line 125.
@@ -4240,13 +4240,13 @@ EAS cloud builds cached stale native code (Sessions 5-6 blocker). Local Windows 
   - Added diagnostic console.warn breadcrumbs at: BrainExecutor tool selection, TaskExecutor case entry, app launch result, moveTaskToBack call site, AppController native bridge (typeof/resolved/rejected).
   - Discovered react_navigate IS being selected by BrainExecutor (5 times in one capture). Session 3 tool selection fix (21167b2) works. **Earlier TOOL_NOT_SELECTED diagnosis was wrong** — masked by downstream failures.
   - Discovered moveTaskToBack DOES fire and resolves true (typeof=function, resolved=true). **Earlier METHOD_MISSING diagnosis was wrong.**
-  - Discovered moveTaskToBack fires too late: 4-12 seconds after launch instead of immediately. Agent Ultra reclaims foreground before moveTaskToBack fires, pushing behind launcher not YouTube.
+  - Discovered moveTaskToBack fires too late: 4-12 seconds after launch instead of immediately. Jarvis reclaims foreground before moveTaskToBack fires, pushing behind launcher not YouTube.
   - Reordered moveTaskToBack to fire 500ms after launch intent, before 2000ms delay and allowPackage (commit 736b3a4). Applied to all 3 app_launch paths.
   - Discovered getScreenContentFlat window scan rejects null-package TYPE_APPLICATION windows (line 1746: `pkg != null && ...`). YouTube may report null package during transitions on Samsung. Changed to `pkg == null || ...` (commit 59cb635).
   - Added `"prebuildCommand": "npx expo prebuild --clean"` to eas.json preview profile to force config plugin regeneration (commit 7d28ac4).
 - **What is NOT working — every runtime test failed:**
   - Every SCREEN_FLAT shows root_pkg=com.agent.jarvis. YouTube has NEVER appeared in a SCREEN_FLAT read across all tests this session.
-  - YouTube NEVER appears in any WINDOWS dump. Only systemui, launcher, honeyboard, agent.ultra.
+  - YouTube NEVER appears in any WINDOWS dump. Only systemui, launcher, honeyboard, agent.jarvis.
   - All TAP/TEXT/SCROLL actions hit com.agent.jarvis, honeyboard, or systemui. Zero actions against YouTube.
   - Agent types "shorts" into its own text box, taps its own UI, scrolls its own UI. Same failure as Sessions 1-4.
 - **EAS build caching problem (unresolved):**
@@ -4277,14 +4277,14 @@ EAS cloud builds cached stale native code (Sessions 5-6 blocker). Local Windows 
   - Added comprehensive logcat observability to: checkPackageAllowed (GATE), performTap (TAP), performText (TEXT), performScroll (SCROLL), performSwipe (SWIPE), performClick (CLICK), performBack (BACK), performHome (HOME), moveTaskToBack (MOVE_TO_BACK), getScreenContentFlat (SCREEN_FLAT with root_pkg and first node labels), getActivePackage (GET_PKG), waitForUiChange (WAIT_UI), onAccessibilityEvent (PKG_CHANGE)
   - Added `dumpWindowStack()` method — logs all accessibility windows with layer order, type, package, focused state. Called from getScreenContentFlat.
   - Added import for `AccessibilityWindowInfo`
-  - Removed self-check from checkPackageAllowed (was unreliable — currentPackage flips to com.agent.jarvis whenever JS thread fires accessibility events even when Agent Ultra is visually in background, proven via adb)
+  - Removed self-check from checkPackageAllowed (was unreliable — currentPackage flips to com.agent.jarvis whenever JS thread fires accessibility events even when Jarvis is visually in background, proven via adb)
   - Added auto-allow to checkPackageAllowed — any non-blocked package is automatically allowed
   - Added moveTaskToBack native method to AccessibilityBridgeModule + AppController.ts interface + TaskExecutor.ts call before ReActLoop.execute()
   - **Fixed getScreenContentFlat** to scan all accessibility windows via `getWindows()`, pick the first `TYPE_APPLICATION` window that isn't com.agent.jarvis, and read its tree. Falls back to `getRootInActiveWindow()` only if no other app window found.
 - **ROOT CAUSES DISCOVERED (all proven via adb logcat):**
-  1. **CRITICAL: getScreenContentFlat() always returned Agent Ultra's own window.** `getRootInActiveWindow()` returns the accessibility service host's window — always com.agent.jarvis. The agent has NEVER seen another app's UI tree. Every plan, tap target, and text input has been against its own elements.
+  1. **CRITICAL: getScreenContentFlat() always returned Jarvis's own window.** `getRootInActiveWindow()` returns the accessibility service host's window — always com.agent.jarvis. The agent has NEVER seen another app's UI tree. Every plan, tap target, and text input has been against its own elements.
   2. **CRITICAL: moveTaskToBack never fires.** Zero MOVE_TO_BACK log entries in any adb capture. The call path in TaskExecutor.ts is not being reached. Need to inspect lines 1625-1645 to find why.
-  3. **CRITICAL: Agent Ultra's activity stays in foreground** because moveTaskToBack never fires. Target app (YouTube) never gets an accessibility window in the stack. Window dumps show only: systemui, launcher, honeyboard, and Agent Ultra.
+  3. **CRITICAL: Jarvis's activity stays in foreground** because moveTaskToBack never fires. Target app (YouTube) never gets an accessibility window in the stack. Window dumps show only: systemui, launcher, honeyboard, and Jarvis.
   4. **CONFIRMED: currentPackage is unreliable** — flips between com.agent.jarvis, com.android.systemui, com.samsung.android.honeyboard, and target app dozens of times per second. Self-check using currentPackage was correctly removed.
   - **Evidence:** Full adb logcat captures showing `SCREEN_FLAT: root_pkg=com.agent.jarvis` on every call, WINDOWS dumps with no YouTube window, `TEXT: text=short pkg=com.agent.jarvis` (typing into own text box), zero MOVE_TO_BACK entries.
 - **Committed:** c6a4c0c, b4e703f, f9c3139, 770eac0, cea84fd, fd5ff9e, 252f654, bf4f139, 33f66ed, 839bced, a4b1787
@@ -4298,9 +4298,9 @@ EAS cloud builds cached stale native code (Sessions 5-6 blocker). Local Windows 
   - Analyzed runtime logs from session mngc4pfq (8931 entries) and live test session
   - Found and fixed three runtime-proven bugs:
   1. **BrainExecutor tool selection** (21167b2): LLM picked app_launch/web_search instead of react_navigate for "open X and do Y" tasks. Fixed tool descriptions and added TOOL SELECTION routing rules to system prompt.
-  2. **ReActLoop foreground gate** (c4e6970): planSteps() ran while Agent Ultra was still in foreground, producing plans targeting its own UI elements ("tap Agent Ultra", "tap Ask Agent Ultra..."). Added foreground polling gate — waits up to 6s for target app, re-observes, returns clear error if timeout.
+  2. **ReActLoop foreground gate** (c4e6970): planSteps() ran while Jarvis was still in foreground, producing plans targeting its own UI elements ("tap Jarvis", "tap Ask Jarvis..."). Added foreground polling gate — waits up to 6s for target app, re-observes, returns clear error if timeout.
   3. **Native checkPackageAllowed keyboard bug** (e240eba): Every performTap/performText/performScroll was silently returning false whenever Samsung keyboard (honeyboard) was visible. checkPackageAllowed() used currentPackage which flips to keyboard on every keystroke. Fixed to use getRootInActiveWindow().getPackageName() — the actual app, not the keyboard overlay. THIS WAS THE ROOT CAUSE of all "result=false" failures in the ReActLoop.
-  - **Evidence chain:** seq 658-702 (browser opens, Agent Ultra returns to foreground, planner sees own UI), seq 9267-9449 (LLM chose app_launch then web_search, never tried react_navigate), runtime observation of taps returning false with keyboard visible.
+  - **Evidence chain:** seq 658-702 (browser opens, Jarvis returns to foreground, planner sees own UI), seq 9267-9449 (LLM chose app_launch then web_search, never tried react_navigate), runtime observation of taps returning false with keyboard visible.
 - **Committed:** 21167b2, c4e6970, e240eba
 - **Status:** SOURCE-FIXED, COMPILE-VERIFIED, RUNTIME-UNPROVEN (needs new build + device test)
 - **Next:** Build and test all three fixes together. If taps land reliably, react_navigate becomes functional.
@@ -4327,13 +4327,13 @@ EAS cloud builds cached stale native code (Sessions 5-6 blocker). Local Windows 
 - **Subsystems:** All (type-level fixes across the board)
 - **Work done:**
   - Fixed 165 TypeScript errors → 0 across the codebase
-  - Expanded UltraLogCat type with ~167 missing log categories
-  - Added missing properties to UltraExecutionResult (success), Mode union (system, vision), PricingInfo (inputPer1k/outputPer1k aliases), ChatMessage.meta (requiresApproval), Genome types (config, permissions, enabled, MutationRecord/MutationResult fields)
+  - Expanded JarvisLogCat type with ~167 missing log categories
+  - Added missing properties to JarvisExecutionResult (success), Mode union (system, vision), PricingInfo (inputPer1k/outputPer1k aliases), ChatMessage.meta (requiresApproval), Genome types (config, permissions, enabled, MutationRecord/MutationResult fields)
   - Created src/types/expo-intent-launcher.d.ts to augment ActivityAction with VIEW, DEVICE_ADMIN_SETTINGS, PERMISSION_USAGE_SETTINGS
   - Fixed call sites in ~15 files: ModelRouter, TaskExecutor, AgentCore, Cortex, DeviceContext, BuildSystem, SettingsDirectory, GroupRouter, RouteHistoryStore, CostTracker, VisionPipeline, GenomeMutator, GenomeValidator, GenomeFitness, SelfImprover, app/index.tsx, app/settings.tsx
-  - Fixed UltraDevLog method signatures to match actual callers (modelSetDefault, modelDiscoveryStart, modelApiResponse, etc.)
+  - Fixed JarvisDevLog method signatures to match actual callers (modelSetDefault, modelDiscoveryStart, modelApiResponse, etc.)
   - Confirmed architecture: AgentCore.execute() → BrainExecutor.execute() (line 587). BrainExecutor has tool loop with MAX_TOOL_TURNS=12, DESTRUCTIVE_TOOLS safety gate, parseToolCall()
-  - Git configured: user Dafarus, email dafarus@agentultra.local
+  - Git configured: user Dafarus, email dafarus@agentjarvis.local
 - **Committed:** 88f29c1 — "checkpoint: clean TypeScript baseline, 0 errors"
 - **Status:** SOURCE-FIXED BUT RUNTIME-UNPROVEN
 - **Next:** Verify Replit prompt 12/13/14 application status in live source
@@ -4402,7 +4402,7 @@ Historical note: previous environment was WSL Ubuntu on a Windows laptop. Build 
    - Then read the main "IP address & Port" from the Wireless Debugging screen and `adb connect <ip>:<port>`
 
 4. **Re-enable accessibility service** (required after every reinstall):
-   Settings → Accessibility → Installed apps → Agent Ultra → toggle ON
+   Settings → Accessibility → Installed apps → Jarvis → toggle ON
 
 5. **Capture logs:**
    ```
@@ -4447,7 +4447,7 @@ COLD-REVIEW.md under "Replay: remembering the way".
 
 The two that mattered most, because neither was visible from the code:
 
-- The screen recorder saved Agent Ultra's own screens, so **every route ever
+- The screen recorder saved Jarvis's own screens, so **every route ever
   taught began with the agent itself**. The step recorder had excluded them for
   months; the screen recorder is a different path and never learned.
 - The recorder fingerprinted a screen the instant it appeared, replay judged it
@@ -4550,7 +4550,7 @@ invisible; four currencies.
 ## 2026-08-31 — 2.2.0 published
 
 Version bumped to `2.2.0-native` (versionCode 11) and published to
-`Ultra-Agent-Release`: APK, README and the site all point at it, all serving
+`Jarvis-Agent-Release`: APK, README and the site all point at it, all serving
 200, 8,719,220 bytes, signed with the real release key. 2.1.3 stays in the repo
 so no existing link dies.
 
@@ -4611,7 +4611,7 @@ rather than trusting the click.
 **Vault backed up for the first time.** It had no second copy anywhere; `QC.md`
 and `qc/` were untracked, so the gate everything passes before going public
 existed as loose files in one working tree. Now committed, and
-`<backup-script>` pushes both Agent Ultra and the vault when the drive is
+`<backup-script>` pushes both Jarvis and the vault when the drive is
 plugged in. Verified: `vault.git` created on the drive, 284 MiB, containing
 `QC.md`, `qc/prepublish.sh` and `publishing/log.md`.
 
@@ -4620,7 +4620,7 @@ plugged in. Verified: `vault.git` created on the drive, 284 MiB, containing
 versionCode 14, `2.3.2-native`. Carries the gate fix from `a745936`: targets
 match the user's request as whole tokens, not substrings.
 
-Signed with the release key (`CN=Dafarus, OU=Agent Ultra`, SHA-256
+Signed with the release key (`CN=Dafarus, OU=Jarvis`, SHA-256
 `0d04510d…ca241f`, v2 scheme). No test code, fixtures or key strings in the APK;
 `qc/prepublish.sh` passed. APK SHA-256 `726e9fbd…68f8f52f`.
 
@@ -4647,7 +4647,7 @@ byte-identical to the build; the app launches, no crash in the crash buffer.
 
 ## 2026-10-18 — Floating live diagnostic (real app)
 - Owner wants a floating button IN the real Jarvis app (not the test app): tap → glows green with a 5-min countdown → captures everything the running app actually does → hands over a file to download + send.
-- diag/LiveDiagnostic.kt: process-wide capture on its own SupervisorJob scope (survives screen switches). Polls `logcat -d -T <since>` every 8 s over ALL 35 Ultra* tags + AndroidRuntime (own-process lines, no READ_LOGS needed), plus a memory/disk snapshot each poll, for 300 s. Writes a header (app/phone/crash-in-window via KitReport.hasCrash) + the capture to cacheDir/exports (FileProvider-shared) AND a copy to Downloads (MediaStore, API 29+). stop() cancels but the finally still writes what was captured. share() opens the ACTION_SEND chooser.
+- diag/LiveDiagnostic.kt: process-wide capture on its own SupervisorJob scope (survives screen switches). Polls `logcat -d -T <since>` every 8 s over ALL 35 Jarvis* tags + AndroidRuntime (own-process lines, no READ_LOGS needed), plus a memory/disk snapshot each poll, for 300 s. Writes a header (app/phone/crash-in-window via KitReport.hasCrash) + the capture to cacheDir/exports (FileProvider-shared) AND a copy to Downloads (MediaStore, API 29+). stop() cancels but the finally still writes what was captured. share() opens the ACTION_SEND chooser.
 - ui/DiagnosticFab.kt: draggable floating button over every screen. States: DIAG (idle) → REC + mm:ss with a green pulse while capturing (tap to stop early) → SEND (file ready; tap opens the share sheet). Reads LiveDiagnostic state only.
 - MainActivity: wrapped the `when(screen)` in a Box; FAB aligned bottom-end. No manifest/permission/xml changes (FileProvider authority + cache-path already declared).
 - This captures the REAL app running — it's how we'll root-cause the late speech and Tor-not-connecting instead of guessing. Honesty status: SOURCE-FIXED BUT RUNTIME-UNPROVEN until a phone capture.
@@ -4664,9 +4664,9 @@ byte-identical to the build; the app launches, no crash in the crash buffer.
 - Finding: MemoryClaims.writeVerified (two-lens ClaimVerifier + LlmNliHead NLI gate, supersede, decay, embeddings) had NO producer and NO reader — the whole Muse-grade claim memory was built but dormant; live memory was the flat ambient-notes path only.
 - Producer: the librarian now promotes durable new notes to verified claims. LibrarianRun.file() returns the newly-inserted durable drafts (Filed.promoted); LibrarianRun.run() takes a suspend `promote` sink (default no-op) and calls it per promoted draft, cancellation-safe, failures logged (never breaks note filing). Librarian.passes() builds the sink once: MemoryClaims(db.claims()) + LlmNliHead(LocalModelEngine.librarian) + SentenceEmbedder.shared + db.embeddings(), and calls writeVerified(text, kind, speaker=who, emb, modelName=MiniLM). Only the main pass promotes (not reread).
 - Mapper: listen/ClaimKind.kt (pure, tested) — FACT→"fact", PERSON→"world"; PLAN/TODO/OBSERVATION/SUMMARY not promoted. file() stays pure; the side-effecting write lives in the suspend layer.
-- Reader: UltraApplication.wireMemory registers a second recall source "memory" over MemoryClaims.searchScored (active() only, so a superseded claim never surfaces beside its replacement), on the same scoring scale as notes/heard.
+- Reader: JarvisApplication.wireMemory registers a second recall source "memory" over MemoryClaims.searchScored (active() only, so a superseded claim never surfaces beside its replacement), on the same scoring scale as notes/heard.
 - Categories: MemoryClaimScoring.KINDS extended with Muse's four — experience, opinion, reflection, world (kept alongside fact/preference/…). Available to the claim system now; the librarian currently emits fact/world (the note kinds it has); experience/opinion/reflection are available for chat-driven/future producers.
-- No DB migration (ClaimEntity + MemoryEmbeddingEntity + BanditArmEntity already registered in UltraDatabase).
+- No DB migration (ClaimEntity + MemoryEmbeddingEntity + BanditArmEntity already registered in JarvisDatabase).
 - Tests: listen/ClaimKindTest (mapping + the four categories present). Full suite green.
 - Not a parallel path: one producer (librarian), one reader (recall); notes = raw dated log, claims = verified durable layer on top.
 - Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN — NLI label quality on-device and end-to-end supersede unproven until a phone check (speak a fact then a contradicting correction; ask recall).
@@ -4685,9 +4685,9 @@ byte-identical to the build; the app launches, no crash in the crash buffer.
 - UI-only + one-line Brain change. Full suite green. Honesty: SOURCE-FIXED BUT RUNTIME-UNPROVEN (visual, needs a glance on the phone).
 
 ## 2026-10-18 — Batch C: KV-cache prefix reuse — ALREADY IMPLEMENTED (verified, no code)
-- PROVEN by reading source: native cpp/ultra_llm.cpp nativeGenerate already reuses the KV of the longest common token prefix with the previous call (keeps engine->cached, seq_rm from the divergence point, full-clear fallback; logs "reused=N of M prompt tokens"). agent/LocalEnvelope.kt already fixes fragment order (core_persona → user_profile → loaded_tool_schemas → covered_history) with the volatile Now/memory block + user turn placed last, so the reusable prefix is maximized. reusableFragments() gives a fragment-level estimate.
+- PROVEN by reading source: native cpp/jarvis_llm.cpp nativeGenerate already reuses the KV of the longest common token prefix with the previous call (keeps engine->cached, seq_rm from the divergence point, full-clear fallback; logs "reused=N of M prompt tokens"). agent/LocalEnvelope.kt already fixes fragment order (core_persona → user_profile → loaded_tool_schemas → covered_history) with the volatile Now/memory block + user turn placed last, so the reusable prefix is maximized. reusableFragments() gives a fragment-level estimate.
 - Conclusion: Batch C's target exists end-to-end; writing more would be speculative/theater. No commit.
-- So "speech/actions act late" is NOT missing prefix reuse. Real candidates (UNPROVEN, need the phone trace): the <think> trace length on the 4B thinking model before the first visible token; cold model load; thermal thread throttling; prefix invalidation when an early block changes. The floating live diagnostic captures UltraLlm ("gen tokens … tokPerSec …", "reused=…"), UltraRoute (thinkTokens/budget) and UltraThermal — one capture will point to the real bottleneck.
+- So "speech/actions act late" is NOT missing prefix reuse. Real candidates (UNPROVEN, need the phone trace): the <think> trace length on the 4B thinking model before the first visible token; cold model load; thermal thread throttling; prefix invalidation when an early block changes. The floating live diagnostic captures JarvisLlm ("gen tokens … tokPerSec …", "reused=…"), JarvisRoute (thinkTokens/budget) and JarvisThermal — one capture will point to the real bottleneck.
 
 ## 2026-10-18 — Memory: retire the duplicate note write (finishes the memory-bank plan)
 - The earlier memory batch (0b97712) already did: librarian → writeVerified, recall reads claims alongside notes, and the four Muse categories. The one remaining clause was "retire the duplicate note write" — durable facts were being stored as BOTH a note and a claim.
@@ -4705,7 +4705,7 @@ byte-identical to the build; the app launches, no crash in the crash buffer.
 - New `call_phone` tool so the agent can place a real call. Mirrors the proven `sms_send` path end to end, no new mechanism:
   - AgentController.placeCall(number): Intent.ACTION_CALL on `tel:` + NEW_TASK; returns Boolean like sendSms. CALL_PHONE was already in AndroidManifest.
   - Tools.kt dispatch "call_phone" (Communication section): needs `to` (falls back to `number`); contacts-first for a name. Added to DESTRUCTIVE and PERSONAL_TOOLS.
-  - Gate manifest (assets/ultra.manifest.json): call_phone = {effects:[egress], requires:[recipient_traceable(to), spoof_check]}. Same contracts as sms_send minus the message rule. ToolWiringTest proves dispatch⇄manifest parity.
+  - Gate manifest (assets/jarvis.manifest.json): call_phone = {effects:[egress], requires:[recipient_traceable(to), spoof_check]}. Same contracts as sms_send minus the message rule. ToolWiringTest proves dispatch⇄manifest parity.
   - Brain: catalog line under COMMUNICATION ("DIALS IMMEDIATELY") + describeAction confirm-line ("Call X").
   - Settings: new "Phone" capability to grant CALL_PHONE from the app. CloudBrainReport NEEDS map ("Phone call"→call_phone). Experience comms family includes call_phone.
 - Safety: call_phone is EGRESS (risk 40+), above AUTO_APPROVE_THRESHOLD (15). recipient_traceable is a CONFIRMABLE rule, so "call mom" (number resolved via contacts_read, not literally in the request) surfaces an "About to: Call mom" confirmation card instead of firing silently; a number the user actually spoke can auto-approve. Same gate behaviour as sms_send.
@@ -4731,7 +4731,7 @@ What the logs showed (app 3.0.56):
 - TTS works: every SPEAK has a SPEAK DONE and there are no errors. But Piper made a 169-char first sentence in one piece before anything was heard. The battery was at 1%.
 
 Fixes:
-- `ultra_whisper.cpp`: `audio_ctx` sized to the clip (50 frames/s + 128, min 512, else the full 1500). The encoder no longer pays for 30 s of padding.
+- `jarvis_whisper.cpp`: `audio_ctx` sized to the clip (50 frames/s + 128, min 512, else the full 1500). The encoder no longer pays for 30 s of padding.
 - `AmbientThrottle.placement(command=)`: speech inside a wake window always gets the fast cores.
 - `WaitBudget`: unknown speed assumes 3 tok/s (`UNKNOWN_TOK_PER_SEC`), capped at the tier budget.
 - `LocalVoice.chunks(firstMax=)` / `Speaker`: the first spoken piece is at most 80 chars.
@@ -4819,7 +4819,7 @@ Not done on purpose: unlocking the phone, or relaxing LockedPolicy for private t
 
 ## 2026-10-19 — Jarvis Desktop (new project, `desktop/`)
 Owner: "branch the existing work to a new project, a Jarvis client on the computer, like OpenClaw but better."
-- New, separate project in `desktop/` (Node 22+, TypeScript). Shares ideas with the phone app, not code; `ultra-native/` untouched.
+- New, separate project in `desktop/` (Node 22+, TypeScript). Shares ideas with the phone app, not code; `jarvis-native/` untouched.
 - Local gateway on 127.0.0.1 (token + Host/Origin checks) serving a browser chat page; terminal `chat`/`ask` too.
 - Two brains: local (any OpenAI-compatible server, e.g. Ollama; default) and cloud (Claude via the official SDK, streaming, adaptive thinking, refusal fallback). Offline-only blocks cloud and web tools. Native tool calls on both, no text parsing.
 - Gate ported and extended for a computer: targets must trace to the owner's words, private file/shell text can't leave without a card, secrets/one-time codes never leave, scam follow-ups (ScamSignals port) need the owner, commands need a card except a read-only allowlist, writes stay in ~/.jarvis/workspace, sensitive paths (~/.ssh, browser profiles, .env) need a card. Web tools can't reach localhost/LAN.

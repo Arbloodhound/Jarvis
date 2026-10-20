@@ -44,10 +44,10 @@ preserved, implementation-status claims corrected by a superseding section).
 
 | Document | Old → New (bytes) | Archive | What changed |
 |---|---|---|---|
-| `README.md` | 6,084 → 11,889 | `archive/2026-10-19/README.md` | Expo-as-history framing replaced with the post-merge three-tree map (ultra-native + harness, desktop/, src/); consolidation state, audit totals, resolved DB critical, checked-clean properties, open issues; unverified claims dropped/flagged. |
+| `README.md` | 6,084 → 11,889 | `archive/2026-10-19/README.md` | Expo-as-history framing replaced with the post-merge three-tree map (jarvis-native + harness, desktop/, src/); consolidation state, audit totals, resolved DB critical, checked-clean properties, open issues; unverified claims dropped/flagged. |
 | `START_HERE.md` | 8,836 → 12,304 | `archive/2026-10-19/START_HERE.md` | Stale branch refs → `main`; unverified model/size/timing specifics genericised; step flow kept; CI-not-compiled stop condition and audit cautions added. |
-| `APP_OVERVIEW.md` | 7,371 → 13,402 | `archive/2026-10-19/APP_OVERVIEW.md` | Rebuilt on the audited subsystem map, harness + UltraDatabase v9, verified safety properties, open highs, per-subsystem verdicts; unverified counts removed. |
-| `ARCHITECTURE.md` | 30,792 → 15,764 | `archive/2026-10-19/ARCHITECTURE.md` | Un-re-verified file-level map replaced with the audited package-level map (Kotlin app, harness, desktop 8-check gate, src/ live path + orphaned server); storage corrected to UltraDatabase v9. |
+| `APP_OVERVIEW.md` | 7,371 → 13,402 | `archive/2026-10-19/APP_OVERVIEW.md` | Rebuilt on the audited subsystem map, harness + JarvisDatabase v9, verified safety properties, open highs, per-subsystem verdicts; unverified counts removed. |
+| `ARCHITECTURE.md` | 30,792 → 15,764 | `archive/2026-10-19/ARCHITECTURE.md` | Un-re-verified file-level map replaced with the audited package-level map (Kotlin app, harness, desktop 8-check gate, src/ live path + orphaned server); storage corrected to JarvisDatabase v9. |
 | `CLAUDE.md` | 7,739 → 13,791 | `archive/2026-10-19/CLAUDE.md` | Project identity corrected from "built on Expo/EAS" to the consolidated three-tree repo; operating rules and two-Claude workflow preserved; audited subsystem map + standing behaviour rules added. |
 | `CONTRIBUTING.md` | 1,587 → 5,815 | `archive/2026-10-19/CONTRIBUTING.md` | Target branch → `main`; known-breakage block (2 broken test files, 2 unregistered manifest components, CI caveat); gate/shopping/Tor/vault invariants for PRs. |
 | `.github/pull_request_template.md` | 914 → 2,526 | `archive/2026-10-19/.github/pull_request_template.md` | Structure/evidence labels kept; tree + `main` targeting, CI-not-compiled warning, known-breakage alternative to "tests green", manifest-gap checklist items added. |
@@ -58,7 +58,7 @@ preserved, implementation-status claims corrected by a superseding section).
 
 | Document | Old → New (bytes) | Archive | What changed |
 |---|---|---|---|
-| `AGENT-ULTRA-BUG-REPORT.md` | 24,469 → 26,663 | `archive/2026-10-19/AGENT-ULTRA-BUG-REPORT.md` | Status section: the audits do not speak to Bugs 1–8 individually (not re-verified); TS lineage and orphaned `server/` state noted. Body verbatim. |
+| `AGENT-JARVIS-BUG-REPORT.md` | 24,469 → 26,663 | `archive/2026-10-19/AGENT-JARVIS-BUG-REPORT.md` | Status section: the audits do not speak to Bugs 1–8 individually (not re-verified); TS lineage and orphaned `server/` state noted. Body verbatim. |
 | `COLD-REVIEW.md` | 46,668 → 49,124 | `archive/2026-10-19/COLD-REVIEW.md` | Status section: Gate checked clean in the merged view; related Gate highs still open; claim-promotion supersede defect; device-proven claims not re-verified. Body verbatim. |
 | `JARVIS_BUILD_REPORT.md` | 27,893 → 30,409 | `archive/2026-10-19/JARVIS_BUILD_REPORT.md` | Status section: merged-tree verdicts; GGUF size-only verification, plaintext key, voiceprint-default highs still open; hardware claims not covered. Body verbatim. |
 | `LOG-FILE-PROLIFERATION-REPORT.md` | 13,873 → 16,183 | `archive/2026-10-19/LOG-FILE-PROLIFERATION-REPORT.md` | Status section: the proliferation topic and its documented fix were not covered by the audits. Body verbatim. |
@@ -85,7 +85,7 @@ preserved, implementation-status claims corrected by a superseding section).
 
 | Document | Class | Old → New (bytes) | Archive | What changed |
 |---|---|---|---|---|
-| `SKILLS_REFERENCE.md` | A2 | 85,618 → 89,783 | `archive/2026-10-19/SKILLS_REFERENCE.md` | Front matter replaced (what this reference is + audited repo state; Expo/EAS framing remapped to the `src/` lineage, shipping app = Kotlin ultra-native + harness); skill-by-skill body preserved verbatim. |
+| `SKILLS_REFERENCE.md` | A2 | 85,618 → 89,783 | `archive/2026-10-19/SKILLS_REFERENCE.md` | Front matter replaced (what this reference is + audited repo state; Expo/EAS framing remapped to the `src/` lineage, shipping app = Kotlin jarvis-native + harness); skill-by-skill body preserved verbatim. |
 | `GUIDE.md` | A2 | 117,508 → 128,045 | `archive/2026-10-19/GUIDE.md` | Intro/§1 rewritten to the audited state; new §11e (claims memory, approvals, scheduler, skills, trash, forget, subagents, feed, ideas, artifacts, proactivity, connectors + still-open manifest items); §13 audited approval rules; §14 corrected (connectors exist; memory deletion no longer all-or-nothing); unaudited detail flagged. |
 | `CHANGELOG.md` | C | 28,819 → 31,168 | `archive/2026-10-19/CHANGELOG.md` | New top entry dated 2026-10-19: consolidation (58 branches → main; merges 4cff5d07/adbd9e84/ae030b9f), audits (119 + 87 findings, 0 critical post-merge), DB wiring resolved, still-open items, this doc replacement. History preserved verbatim. |
 | `DEVLOG.md` | C | 407,612 → 409,307 | `archive/2026-10-19/DEVLOG.md` | Framing section prepended by script (consolidation + doc replacement; pre-2026-10-19 entries are the historical record, branch refs predate consolidation). Body byte-identical. |
@@ -100,29 +100,29 @@ preserved, implementation-status claims corrected by a superseding section).
 | `desktop/HANDOFF_PROMPT.md` | B | 2,365 → 4,361 | `archive/2026-10-19/desktop/HANDOFF_PROMPT.md` | Status section (branch/PR instructions historical; gate strong; 3 highs; no fallback; tests sound) + prompt body verbatim. |
 | `desktop/REVIEW.md` | B | 8,406 → 10,669 | `archive/2026-10-19/desktop/REVIEW.md` | Status section (point-in-time record; supplement audit; 0 known criticals post-merge; 3 highs qualifying the fix picture) + review body verbatim. |
 
-### ultra-native/
+### jarvis-native/
 
 | Document | Class | Old → New (bytes) | Archive | What changed |
 |---|---|---|---|---|
-| `ultra-native/README.md` | A | 5,099 → 7,836 | `archive/2026-10-19/ultra-native/README.md` | Full rewrite to the post-merge state of the shipping Kotlin app (packages, harness, audit verdicts, CI caveat). |
-| `ultra-native/ci/README.md` | A | 688 → 1,473 | `archive/2026-10-19/ultra-native/ci/README.md` | Full rewrite; notes CI has not yet compiled the merged tree. |
-| `ultra-native/ondevice-brain/README.md` | A | 5,983 → 6,371 | `archive/2026-10-19/ultra-native/ondevice-brain/README.md` | Full rewrite to audited state; runtime claims flagged as not re-verified by the static audits. |
-| `ultra-native/tools/host-harness/README.md` | A | 1,508 → 2,402 | `archive/2026-10-19/ultra-native/tools/host-harness/README.md` | Full rewrite to post-merge state. |
-| `ultra-native/ondevice-brain/BUILD_GUIDE.md` | A2 | 9,078 → 10,724 | `archive/2026-10-19/ultra-native/ondevice-brain/BUILD_GUIDE.md` | Targeted refresh: header + current repo state; build procedures preserved; stale state claims corrected. |
-| `ultra-native/ondevice-brain/G15_TEST_GUIDE.md` | A2 | 8,501 → 9,375 | `archive/2026-10-19/ultra-native/ondevice-brain/G15_TEST_GUIDE.md` | Targeted refresh; test procedures preserved; device/runtime results marked not re-verified by the code-only audits. |
-| `ultra-native/ondevice-brain/PIXEL_TEST_GUIDE.md` | A2 | 7,364 → 8,513 | `archive/2026-10-19/ultra-native/ondevice-brain/PIXEL_TEST_GUIDE.md` | Targeted refresh; procedures preserved; runtime claims flagged as not re-verified. |
-| `ultra-native/ondevice-brain/RELEASE_SIGNING.md` | A2 | 3,213 → 4,181 | `archive/2026-10-19/ultra-native/ondevice-brain/RELEASE_SIGNING.md` | Targeted refresh; signing procedure preserved (audits do not cover signing — marked as such). |
-| `ultra-native/tools/BRAINBENCH.md` | A2 | 4,049 → 4,964 | `archive/2026-10-19/ultra-native/tools/BRAINBENCH.md` | Targeted refresh to post-merge state; benchmark claims not re-verified by the audits. |
-| `ultra-native/tools/REAL_TASKS.md` | A2 | 2,211 → 2,934 | `archive/2026-10-19/ultra-native/tools/REAL_TASKS.md` | Targeted refresh to post-merge state. |
-| `ultra-native/tools/androidworld.md` | A2 | 7,558 → 8,643 | `archive/2026-10-19/ultra-native/tools/androidworld.md` | Targeted refresh to post-merge state. |
-| `ultra-native/ondevice-brain/CLAUDE_CODE_BRIEF.md` | B | 5,299 → 7,040 | `archive/2026-10-19/ultra-native/ondevice-brain/CLAUDE_CODE_BRIEF.md` | Status section + original brief body verbatim. |
-| `ultra-native/tools/androidworld-results.md` | B | 3,469 → 4,848 | `archive/2026-10-19/ultra-native/tools/androidworld-results.md` | Status section (results record; not re-run or re-verified by the audits) + original body verbatim. |
-| `ultra-native/ondevice-brain/evidence/2026-10-06-pixel10pro-anr.md` | E | 40,157 → 41,235 | `archive/2026-10-19/ultra-native/ondevice-brain/evidence/2026-10-06-pixel10pro-anr.md` | Header + short status note only (predates the consolidation; audits were static, no on-device re-verification). Evidence body byte-identical. |
-| `ultra-native/app/src/main/assets/connectors/gmail.md` | F | 1,542 → 2,281 | `archive/2026-10-19/ultra-native/app/src/main/assets/connectors/gmail.md` | Asset refreshed: the Gmail connector now exists in the harness (vault-held credentials, opaque handles, sends stop at confirmation); format preserved. |
-| `ultra-native/app/src/main/assets/connectors/google_calendar.md` | F | 1,506 → 2,255 | `archive/2026-10-19/ultra-native/app/src/main/assets/connectors/google_calendar.md` | Asset refreshed to the implemented connector flow; format preserved. **Process note:** this file's archive verification initially failed and its replacement was pushed first; the archive was then re-created from the preserved original and verified byte-identical (1,506). End state verified correct; the ordering deviation is recorded here deliberately. |
-| `ultra-native/app/src/main/assets/connectors/google_docs.md` | F | 1,373 → 2,118 | `archive/2026-10-19/ultra-native/app/src/main/assets/connectors/google_docs.md` | Asset refreshed to the implemented connector flow; format preserved. |
-| `ultra-native/app/src/main/assets/connectors/google_drive.md` | F | 1,349 → 2,095 | `archive/2026-10-19/ultra-native/app/src/main/assets/connectors/google_drive.md` | Asset refreshed to the implemented connector flow; format preserved. |
-| `ultra-native/app/src/main/assets/guide.md` | A2 (asset) | 117,508 → 128,106 | `archive/2026-10-19/ultra-native/app/src/main/assets/guide.md` | In-app copy synced to the new `GUIDE.md`; the replacement header is an HTML comment so it does not render in-app (the only intentional divergence from `GUIDE.md`). Archive verified byte-identical (blob 8426a563, same as `GUIDE.md`'s original). |
+| `jarvis-native/README.md` | A | 5,099 → 7,836 | `archive/2026-10-19/jarvis-native/README.md` | Full rewrite to the post-merge state of the shipping Kotlin app (packages, harness, audit verdicts, CI caveat). |
+| `jarvis-native/ci/README.md` | A | 688 → 1,473 | `archive/2026-10-19/jarvis-native/ci/README.md` | Full rewrite; notes CI has not yet compiled the merged tree. |
+| `jarvis-native/ondevice-brain/README.md` | A | 5,983 → 6,371 | `archive/2026-10-19/jarvis-native/ondevice-brain/README.md` | Full rewrite to audited state; runtime claims flagged as not re-verified by the static audits. |
+| `jarvis-native/tools/host-harness/README.md` | A | 1,508 → 2,402 | `archive/2026-10-19/jarvis-native/tools/host-harness/README.md` | Full rewrite to post-merge state. |
+| `jarvis-native/ondevice-brain/BUILD_GUIDE.md` | A2 | 9,078 → 10,724 | `archive/2026-10-19/jarvis-native/ondevice-brain/BUILD_GUIDE.md` | Targeted refresh: header + current repo state; build procedures preserved; stale state claims corrected. |
+| `jarvis-native/ondevice-brain/G15_TEST_GUIDE.md` | A2 | 8,501 → 9,375 | `archive/2026-10-19/jarvis-native/ondevice-brain/G15_TEST_GUIDE.md` | Targeted refresh; test procedures preserved; device/runtime results marked not re-verified by the code-only audits. |
+| `jarvis-native/ondevice-brain/PIXEL_TEST_GUIDE.md` | A2 | 7,364 → 8,513 | `archive/2026-10-19/jarvis-native/ondevice-brain/PIXEL_TEST_GUIDE.md` | Targeted refresh; procedures preserved; runtime claims flagged as not re-verified. |
+| `jarvis-native/ondevice-brain/RELEASE_SIGNING.md` | A2 | 3,213 → 4,181 | `archive/2026-10-19/jarvis-native/ondevice-brain/RELEASE_SIGNING.md` | Targeted refresh; signing procedure preserved (audits do not cover signing — marked as such). |
+| `jarvis-native/tools/BRAINBENCH.md` | A2 | 4,049 → 4,964 | `archive/2026-10-19/jarvis-native/tools/BRAINBENCH.md` | Targeted refresh to post-merge state; benchmark claims not re-verified by the audits. |
+| `jarvis-native/tools/REAL_TASKS.md` | A2 | 2,211 → 2,934 | `archive/2026-10-19/jarvis-native/tools/REAL_TASKS.md` | Targeted refresh to post-merge state. |
+| `jarvis-native/tools/androidworld.md` | A2 | 7,558 → 8,643 | `archive/2026-10-19/jarvis-native/tools/androidworld.md` | Targeted refresh to post-merge state. |
+| `jarvis-native/ondevice-brain/CLAUDE_CODE_BRIEF.md` | B | 5,299 → 7,040 | `archive/2026-10-19/jarvis-native/ondevice-brain/CLAUDE_CODE_BRIEF.md` | Status section + original brief body verbatim. |
+| `jarvis-native/tools/androidworld-results.md` | B | 3,469 → 4,848 | `archive/2026-10-19/jarvis-native/tools/androidworld-results.md` | Status section (results record; not re-run or re-verified by the audits) + original body verbatim. |
+| `jarvis-native/ondevice-brain/evidence/2026-10-06-pixel10pro-anr.md` | E | 40,157 → 41,235 | `archive/2026-10-19/jarvis-native/ondevice-brain/evidence/2026-10-06-pixel10pro-anr.md` | Header + short status note only (predates the consolidation; audits were static, no on-device re-verification). Evidence body byte-identical. |
+| `jarvis-native/app/src/main/assets/connectors/gmail.md` | F | 1,542 → 2,281 | `archive/2026-10-19/jarvis-native/app/src/main/assets/connectors/gmail.md` | Asset refreshed: the Gmail connector now exists in the harness (vault-held credentials, opaque handles, sends stop at confirmation); format preserved. |
+| `jarvis-native/app/src/main/assets/connectors/google_calendar.md` | F | 1,506 → 2,255 | `archive/2026-10-19/jarvis-native/app/src/main/assets/connectors/google_calendar.md` | Asset refreshed to the implemented connector flow; format preserved. **Process note:** this file's archive verification initially failed and its replacement was pushed first; the archive was then re-created from the preserved original and verified byte-identical (1,506). End state verified correct; the ordering deviation is recorded here deliberately. |
+| `jarvis-native/app/src/main/assets/connectors/google_docs.md` | F | 1,373 → 2,118 | `archive/2026-10-19/jarvis-native/app/src/main/assets/connectors/google_docs.md` | Asset refreshed to the implemented connector flow; format preserved. |
+| `jarvis-native/app/src/main/assets/connectors/google_drive.md` | F | 1,349 → 2,095 | `archive/2026-10-19/jarvis-native/app/src/main/assets/connectors/google_drive.md` | Asset refreshed to the implemented connector flow; format preserved. |
+| `jarvis-native/app/src/main/assets/guide.md` | A2 (asset) | 117,508 → 128,106 | `archive/2026-10-19/jarvis-native/app/src/main/assets/guide.md` | In-app copy synced to the new `GUIDE.md`; the replacement header is an HTML comment so it does not render in-app (the only intentional divergence from `GUIDE.md`). Archive verified byte-identical (blob 8426a563, same as `GUIDE.md`'s original). |
 
 ## Notes
 

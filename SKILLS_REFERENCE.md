@@ -2,19 +2,19 @@
 
 # SKILLS_REFERENCE.md — Full Unmodified Chat Claude Skills
 
-This file is a process reference: exact copies of the Chat Claude skills used for Agent Ultra / Jarvis development. Read the relevant section when doing deep work in a specific area, as directed by CLAUDE.md. The skill texts below are preserved verbatim from the previous version — this 2026-10-19 replacement refreshes only this front matter and corrects the framing where the audited state of the code has moved on. If a skill itself is updated, replace the entire relevant section; do not edit a skill in place.
+This file is a process reference: exact copies of the Chat Claude skills used for Jarvis / Jarvis development. Read the relevant section when doing deep work in a specific area, as directed by CLAUDE.md. The skill texts below are preserved verbatim from the previous version — this 2026-10-19 replacement refreshes only this front matter and corrects the framing where the audited state of the code has moved on. If a skill itself is updated, replace the entire relevant section; do not edit a skill in place.
 
 ## Repo state (2026-10-19, post-consolidation)
 
 - All work is consolidated on `main` (tip c8043e1c). 58 branches were swept: 51 were already contained, 2 were merged during consolidation (`muse/v5-delta-port` → `claude/shopping-integration`, 4cff5d07; `ccr-c9b6f798-uako9v` → `claude/shopping-integration`, adbd9e84; then `claude/shopping-integration` → `main`, ae030b9f), and 4 remain unmerged by design (`claude/broken-fixes`, `claude/download-all`, `claude/fast-reasoning` — empty tip commits; `claude/offline-navigation-wip` — superseded WIP snapshot). No branch was deleted; no history was rewritten.
-- The merged tree has three codebases: `ultra-native/` — the Kotlin Android app, which is the shipping app, including the harness package `com.agent.jarvis.harness`; `desktop/` — a TypeScript app; and `src/` — the TypeScript app of Expo / React Native lineage.
+- The merged tree has three codebases: `jarvis-native/` — the Kotlin Android app, which is the shipping app, including the harness package `com.agent.jarvis.harness`; `desktop/` — a TypeScript app; and `src/` — the TypeScript app of Expo / React Native lineage.
 - The harness package is present in the merged tree: MemoryClaims (claims with kind / salience / confidence, provenance, supersede chains, hybrid search and query-time temporal decay), ApprovalGrants, Scheduler, SkillStore (lazy skills), NotificationForwardingPolicy, ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, an NLI head, a bandit (ForYou), and connectors (Gmail, Google Calendar / Docs / Drive, Spotify) with a Keystore AES-GCM credential vault and SecretScrubber.
-- Two code-only audits were completed on 2026-10-19: pass 2 (main lineage + harness delta) found 119 defects (1 critical, 16 high, 41 medium, 61 low); the supplement (ccr branch) found 87 findings (0 critical, 12 high, 31 medium, 44 low). Combined framing: 206 findings across two audits of different snapshots, not a deduplicated count of the merged tree. The pass-2 critical — harness DB wiring — is resolved in the merged tree (UltraDatabase is v9 and wires the harness entities, DAO accessors and migrations), so post-merge there are 0 known criticals.
+- Two code-only audits were completed on 2026-10-19: pass 2 (main lineage + harness delta) found 119 defects (1 critical, 16 high, 41 medium, 61 low); the supplement (ccr branch) found 87 findings (0 critical, 12 high, 31 medium, 44 low). Combined framing: 206 findings across two audits of different snapshots, not a deduplicated count of the merged tree. The pass-2 critical — harness DB wiring — is resolved in the merged tree (JarvisDatabase is v9 and wires the harness entities, DAO accessors and migrations), so post-merge there are 0 known criticals.
 - Still open: `SchedulerReceiver` and `SpotifyRedirectActivity` are not registered in AndroidManifest.xml; two Kotlin unit tests (`HistoryPolicyTest.kt`, `MemoryBriefTest.kt`) are broken because they import a debug-only class; the TypeScript `server/` under `src/` is orphaned; CI has not yet compiled the merged tree, so Kotlin status is source-only until CI runs. Audit verification was grep-level (definitions / call sites / imports), not compilation.
 
 ## How to read the skills against the current code
 
-- The skills were written for an Expo / EAS application patched through Replit. That framing now describes the `src/` Expo / React Native lineage (and, for TypeScript work, `desktop/`). It no longer describes the shipping app: phone, brain, gate and harness work today lives in the Kotlin `ultra-native/` tree. Read Expo-, EAS- and Replit-specific routing, build and worker instructions as applying to the TypeScript trees, and map subsystem names onto the audited Kotlin layout (`agent/`, `gate/`, `listen/`, `ui/` + `data/`, `local/`, `net/`, `provider/`, `research/`, plus the harness package) when working in `ultra-native/`.
+- The skills were written for an Expo / EAS application patched through Replit. That framing now describes the `src/` Expo / React Native lineage (and, for TypeScript work, `desktop/`). It no longer describes the shipping app: phone, brain, gate and harness work today lives in the Kotlin `jarvis-native/` tree. Read Expo-, EAS- and Replit-specific routing, build and worker instructions as applying to the TypeScript trees, and map subsystem names onto the audited Kotlin layout (`agent/`, `gate/`, `listen/`, `ui/` + `data/`, `local/`, `net/`, `provider/`, `research/`, plus the harness package) when working in `jarvis-native/`.
 - The process discipline in the skills — evidence discipline, subsystem routing, proof-gated output, no-drift handling — is unchanged and still applies to every tree.
 - Nothing in the skill bodies should be read as a claim that a feature is absent from the current code. In particular, claims memory, approvals, scheduling, lazy skills, trash, forget, subagents, feed, ideas, artifacts, proactivity and connectors all exist in the harness package per the 2026-10-19 audits, with the still-open items listed above.
 
@@ -178,7 +178,7 @@ Likely paths include:
 
 F. DIAGNOSTICS / FORENSICS / LOGGING
 Likely paths include:
-- UltraDevLog
+- JarvisDevLog
 - DebugLog
 - Logger
 - DeviceDiagnostics
@@ -1473,7 +1473,7 @@ When presenting evidence, always include the exact command and its exact output.
 - "Compiling native code" — native module linking failures surface here
 - Final error summary — but always trace back to the first error, not the last
 
-**Runtime logs (console.log, UltraDevLog)**: When analyzing runtime logs:
+**Runtime logs (console.log, JarvisDevLog)**: When analyzing runtime logs:
 - Look for the temporal sequence, not just individual log lines
 - Check for missing log lines that should appear (instrumentation gap signal)
 - Compare logged state values against what the UI claims to show
@@ -1672,7 +1672,7 @@ description: "Strategic pushback, architecture challenge, and priority correctio
 
 ## What This Skill Is
 
-You are the strategic engineering advisor for a non-programmer building Agent Ultra — an ambitious Android AI assistant on Expo/EAS, patched through Replit. The user is technically capable but not a trained engineer, which means they sometimes propose directions that sound reasonable but are architecturally unsound, premature, wasteful, or aimed at the wrong layer.
+You are the strategic engineering advisor for a non-programmer building Jarvis — an ambitious Android AI assistant on Expo/EAS, patched through Replit. The user is technically capable but not a trained engineer, which means they sometimes propose directions that sound reasonable but are architecturally unsound, premature, wasteful, or aimed at the wrong layer.
 
 Your job is to be loyal to the user's *actual objective*, not their current instruction. When those diverge, you say so directly and redirect.
 
@@ -1688,7 +1688,7 @@ Once direction is validated, hand off to the appropriate closed-loop skill for e
 
 When the user proposes something, your first move is to pressure-test it — not execute it. Ask yourself:
 
-- Does this actually move Agent Ultra toward its real goal (a capable, reliable phone AI agent)?
+- Does this actually move Jarvis toward its real goal (a capable, reliable phone AI agent)?
 - Is this the highest-leverage thing to work on right now?
 - Is the user solving the root problem or a symptom?
 - Does this require what the user thinks it requires, or is there a simpler path?
@@ -1745,7 +1745,7 @@ Do not recommend or enable work that only makes the codebase bigger without maki
 When evaluating any proposal, direction, or priority:
 
 **Step 1 — What is the real end goal?**
-Ground every decision in Agent Ultra's actual mission: become a capable, reliable, intelligent phone AI agent.
+Ground every decision in Jarvis's actual mission: become a capable, reliable, intelligent phone AI agent.
 
 **Step 2 — What is the current highest-leverage blocker?**
 Identify what's actually preventing the most progress right now. The user's proposed work may not target this.

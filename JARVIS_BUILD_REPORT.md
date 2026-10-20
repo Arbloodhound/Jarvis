@@ -4,11 +4,11 @@
 
 This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
 The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
-Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — JarvisDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
 CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
 This report (2026-10-08, branch `claude/new-session-t3cy17`, v2.6.34-test) describes the Kotlin phone app, its models, phone measurements, hardware limits, and safety design.
-The merged tree still centres on `ultra-native/` (the shipping Kotlin app, with the harness package `com.agent.jarvis.harness` inside it), plus the `desktop/` TS app and the `src/` TS app.
-Per-subsystem audit verdicts: `net/` Tor and `data/` UltraDatabase work as designed (defects at the margins only for Tor); `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, and `bench/`/tools work with defects.
+The merged tree still centres on `jarvis-native/` (the shipping Kotlin app, with the harness package `com.agent.jarvis.harness` inside it), plus the `desktop/` TS app and the `src/` TS app.
+Per-subsystem audit verdicts: `net/` Tor and `data/` JarvisDatabase work as designed (defects at the margins only for Tor); `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, and `bench/`/tools work with defects.
 Checked clean and consistent with the safety design described here: Tor fail-closed (three guards, no clearnet fallback), Gate deny-by-default, and purchases never grant-coverable at either layer.
 Still open and relevant to the build described here: GGUF downloads verified by size only with no integrity check before native load; the cloud API key in plaintext SharedPreferences; and voiceprint speaker tags defaulting ON against their own doc comment.
 The audits do not re-verify this report's phone measurements, model speeds, or hardware-acceleration claims: they were code-only and grep-level, with no device testing. Those numbers are not covered.
@@ -50,7 +50,7 @@ could not check any of your claims; we treated them as design intent.
 ## 2. How Jarvis is built
 
 ### Stack
-- **App:** native Android, Kotlin + Jetpack Compose, package `com.agent.jarvis`. minSdk 26, targetSdk 35. The app code lives in `ultra-native/` in the GitHub repo Arbloodhound/Jarvis, which is private.
+- **App:** native Android, Kotlin + Jetpack Compose, package `com.agent.jarvis`. minSdk 26, targetSdk 35. The app code lives in `jarvis-native/` in the GitHub repo Arbloodhound/Jarvis, which is private.
 - **Native, via C++ JNI:**
   - llama.cpp, pinned at commit 8345f33, built with libmtmd for vision.
   - whisper.cpp, pinned at 60c0be6.
@@ -58,7 +58,7 @@ could not check any of your claims; we treated them as design intent.
   - ONNX Runtime 1.30 for the wake word, embeddings and voiceprints.
 - **Three CPU builds of each native library:** armv8-a, dotprod and i8mm. The right one is chosen at runtime (`CpuVariant`), and a script checks that each build really contains those instructions. All native libraries are 16 KB page-aligned, which Android 15 and later require.
 - **Storage:** Room/SQLite.
-  - `ultra.db`: chat history.
+  - `jarvis.db`: chat history.
   - `ambient.db`: heard lines, FTS4 search, int8 vectors, tags and voices.
   - `memory_notes.db`: notes, with provenance back to the heard lines they came from.
   - JSONL audit log.
@@ -251,7 +251,7 @@ There is no KVM in our build container, so no emulator. The owner has no adb, so
    - `ScreensTest` renders the real Compose screens and taps them.
    - `BrainLoopTest` drives the **real Brain** against a scripted local SSE server. Covered: plain answer, tool call → result, confirm / cancel / resume, HTTP 500, re-ask after a truncated tool call, undeclared tool blocked, and offline-only sending zero requests.
    - `ToolWiringTest` checks all 40 tools against the manifest in both directions.
-2. **Host harnesses** (`ultra-native/tools/host-harness/`): the JNI C++ shims run on Linux against the same llama.cpp and whisper.cpp commits, with tiny random models.
+2. **Host harnesses** (`jarvis-native/tools/host-harness/`): the JNI C++ shims run on Linux against the same llama.cpp and whisper.cpp commits, with tiny random models.
    - The vision output is token-for-token identical to `llama-mtmd-cli`.
    - AddressSanitizer is clean, and there was no leak over 995 runs.
    - Prefix reuse equals a fresh engine.
@@ -310,7 +310,7 @@ Every conclusion is labelled PROVEN / PARTIALLY PROVEN / SOURCE-FIXED BUT RUNTIM
 2. **Label every claim:** measured / tested / designed only. Say on what hardware.
 3. **Design for the constraints in §1.** That means one APK, CPU-only, ~8 GB available memory, thermal throttling, no Google services, no server. Anything server-side should be clearly optional, a companion the owner may never run.
 4. **Most useful from your side:**
-   - A **policy matrix** as data: data classes × destinations → allow / deny / ask. Jarvis has the per-tool effects and contracts (`assets/ultra.manifest.json`) but no written data-class policy.
+   - A **policy matrix** as data: data classes × destinations → allow / deny / ask. Jarvis has the per-tool effects and contracts (`assets/jarvis.manifest.json`) but no written data-class policy.
    - A **replayable trace / eval set** for the brain: inputs and the expected tool calls.
    - **Durable checkpoints**, so a paused confirmation survives the app process being killed.
    - **Better search quality:** query planning, source cross-checking, product and seller trust scoring. This is the owner's top priority. Jarvis's current version: 2–4 queries with search operators, DuckDuckGo HTML, ranking by consensus + site trust, top 3 pages read, prices extracted, a cited brief.
@@ -323,11 +323,11 @@ Every conclusion is labelled PROVEN / PARTIALLY PROVEN / SOURCE-FIXED BUT RUNTIM
 - `ARCHITECTURE.md`: diagrams + verification tree.
 - `DEVLOG.md`: every session, with its evidence.
 - `HANDOFF.md`: the current state.
-- `ultra-native/app/src/main/java/com/agent/jarvis/`, by area:
+- `jarvis-native/app/src/main/java/com/agent/jarvis/`, by area:
   - **Brain and actions:** `agent/Brain.kt`, `agent/Tools.kt`.
-  - **Gate:** `gate/Gate.kt`, `gate/Manifest.kt`, `assets/ultra.manifest.json`.
+  - **Gate:** `gate/Gate.kt`, `gate/Manifest.kt`, `assets/jarvis.manifest.json`.
   - **Models:** `local/LocalModelEngine.kt`.
   - **Memory:** `listen/MemoryRecall.kt`, `listen/AmbientMemory.kt`, `listen/Librarian.kt`.
   - **Search:** `agent/WebResearch.kt`.
-- `ultra-native/app/src/main/cpp/`: the JNI shims (`ultra_llm.cpp`, `ultra_vlm.cpp`, `ultra_whisper.cpp`).
-- `ultra-native/tools/host-harness/`: the native tests that run on a Linux host.
+- `jarvis-native/app/src/main/cpp/`: the JNI shims (`jarvis_llm.cpp`, `jarvis_vlm.cpp`, `jarvis_whisper.cpp`).
+- `jarvis-native/tools/host-harness/`: the native tests that run on a Linux host.

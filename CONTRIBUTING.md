@@ -1,6 +1,6 @@
 > **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/CONTRIBUTING.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
-# Contributing to Jarvis (Agent Ultra)
+# Contributing to Jarvis (Jarvis)
 
 *Last updated: 2026-10-19.*
 
@@ -11,7 +11,7 @@ Bug reports and design pushback are the most useful things you can send. All wor
 ## Reporting
 
 - Use the issue templates. Phone model, Android version, and app version matter more than anything else.
-- Say which tree your report is about: `ultra-native/` (Kotlin Android app), the harness (`com.agent.jarvis.harness`), `desktop/` (TypeScript), or `src/` (TypeScript lineage app). Reports that don't say are hard to act on.
+- Say which tree your report is about: `jarvis-native/` (Kotlin Android app), the harness (`com.agent.jarvis.harness`), `desktop/` (TypeScript), or `src/` (TypeScript lineage app). Reports that don't say are hard to act on.
 - **Never paste an API key, a password, or a screenshot that shows messages, contacts, or notifications.** Issues are public. One-time codes, reset links, and credentials must never appear in a report — in the app itself they only ever travel as opaque placeholder references, and reports must follow the same rule.
 - Version-specific advice from older versions of this file (including withdrawn-build instructions) was not re-verified in the 2026-10-19 audits and has been removed. If in doubt, report against a build from current `main` and give its exact build identifier.
 
@@ -21,7 +21,7 @@ Follow **Build it** in the README. The native library needs llama.cpp built for 
 
 The repo has three buildable trees; say which one you built:
 
-- `ultra-native/` — Gradle / Android build (the shipping app, plus the harness).
+- `jarvis-native/` — Gradle / Android build (the shipping app, plus the harness).
 - `desktop/` — TypeScript desktop app; tests in `desktop/test` (7 files).
 - `src/` — TypeScript lineage app. Its `server/` directory is orphaned (nothing calls it, no routes, crashes at startup) — do not build contributions on it.
 
@@ -30,7 +30,7 @@ The repo has three buildable trees; say which one you built:
 Run the unit tests before sending a change:
 
 ```
-cd ultra-native
+cd jarvis-native
 ./gradlew :app:testDebugUnitTest
 ```
 

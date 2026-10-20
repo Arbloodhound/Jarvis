@@ -6,9 +6,9 @@
 
 ## Project Identity
 
-Jarvis (Agent Ultra) is an Android AI assistant. The consolidated repository (`Arbloodhound/Jarvis`, all work on `main` since the 2026-10-19 full-branch consolidation) contains:
+Jarvis (Jarvis) is an Android AI assistant. The consolidated repository (`Arbloodhound/Jarvis`, all work on `main` since the 2026-10-19 full-branch consolidation) contains:
 
-- `ultra-native/` — the shipping app: native Kotlin Android app, including the harness package `com.agent.jarvis.harness`.
+- `jarvis-native/` — the shipping app: native Kotlin Android app, including the harness package `com.agent.jarvis.harness`.
 - `desktop/` — a TypeScript desktop app (agent loop, gate, providers, memory, tools, gateway server + CLI).
 - `src/` — the TypeScript app of the Expo / React Native lineage. Its live path is `AgentCore` / `BrainExecutor` / `TaskExecutor`; its `server/` directory is orphaned.
 
@@ -58,21 +58,21 @@ Applied to the merged tree today (2026-10-19): the whole tree is at best SOURCE-
 
 Treat the repo as these primary subsystems, following the audited code map. Always identify which is in scope before doing any work:
 
-- **A. Brain / Cognition (Kotlin)** — `ultra-native` `agent/` (Brain 12-turn loop, Tools, navigation)
-- **B. Gate / Policy (Kotlin)** — `ultra-native` `gate/` (Gate, Manifest, contracts, taint — deny-by-default)
-- **C. Memory / Listening (Kotlin)** — `ultra-native` `listen/` (ambient listening, speech, notes, Librarian, claim promotion) + `ui/` / `data/` (Room, `UltraDatabase` v9)
-- **D. Device / Models / Network (Kotlin)** — `ultra-native` `local/` (on-device models via llama.cpp JNI, downloads), `provider/` (`OpenAiClient`, `ProviderConfig`), `net/` (`TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard`)
-- **E. Research (Kotlin)** — `ultra-native` `research/` (browse, shopping, investigate) + `bench/`
-- **F. Harness** — `com.agent.jarvis.harness` inside `ultra-native`: MemoryClaims, ApprovalGrants, Scheduler (+ runtime / receiver), SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, NLI head, bandit (ForYou), `connectors/` (Gmail, Google Calendar / Docs / Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber)
+- **A. Brain / Cognition (Kotlin)** — `jarvis-native` `agent/` (Brain 12-turn loop, Tools, navigation)
+- **B. Gate / Policy (Kotlin)** — `jarvis-native` `gate/` (Gate, Manifest, contracts, taint — deny-by-default)
+- **C. Memory / Listening (Kotlin)** — `jarvis-native` `listen/` (ambient listening, speech, notes, Librarian, claim promotion) + `ui/` / `data/` (Room, `JarvisDatabase` v9)
+- **D. Device / Models / Network (Kotlin)** — `jarvis-native` `local/` (on-device models via llama.cpp JNI, downloads), `provider/` (`OpenAiClient`, `ProviderConfig`), `net/` (`TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard`)
+- **E. Research (Kotlin)** — `jarvis-native` `research/` (browse, shopping, investigate) + `bench/`
+- **F. Harness** — `com.agent.jarvis.harness` inside `jarvis-native`: MemoryClaims, ApprovalGrants, Scheduler (+ runtime / receiver), SkillStore (lazy skills), NotificationForwardingPolicy (3-gate), ScreenGuard, Trash, Forget, Subagents (depth-1 by construction), Feed, Ideas, Artifacts, Proactivity, ClaimVerifier, NLI head, bandit (ForYou), `connectors/` (Gmail, Google Calendar / Docs / Drive, Spotify; CredentialVault Keystore AES-GCM; SecretScrubber)
 - **G. Desktop (TypeScript)** — `desktop/`: agent loop, gate (8 ordered checks), providers (Claude cloud + local; no cross-provider fallback), memory (embeddings store / recall; forget → 500-cap trash), tools, gateway server + CLI; tests in `desktop/test` (7 files)
 - **H. TS lineage app** — `src/`: live path `AgentCore` / `BrainExecutor` / `TaskExecutor`; `server/` is orphaned — do not build on it
-- **I. Build / Release** — Gradle build for `ultra-native`, desktop build, GitHub Actions, signing (release builds fail without `keystore.properties`, by design)
+- **I. Build / Release** — Gradle build for `jarvis-native`, desktop build, GitHub Actions, signing (release builds fail without `keystore.properties`, by design)
 
-The previous version's subsystem list (Expo-era names such as Cortex, ReActLoop, ProviderManager, BiometricGate, UltraDevLog as the primary map) is superseded by the list above. Some of those names survive inside the `src/` lineage; they are not the map for the Kotlin app or the harness.
+The previous version's subsystem list (Expo-era names such as Cortex, ReActLoop, ProviderManager, BiometricGate, JarvisDevLog as the primary map) is superseded by the list above. Some of those names survive inside the `src/` lineage; they are not the map for the Kotlin app or the harness.
 
 If work crosses subsystems, state the crossing explicitly and define the dependency order.
 
-Known cross-subsystem state to respect (2026-10-19): harness DB wiring is resolved in the merged tree (`UltraDatabase` v9; entities `ClaimEntity` / `GrantEntity` / `MemoryEmbeddingEntity` / `BanditArmEntity`; accessors `claims()` / `claimForget()` / `grants()` / `embeddings()` / `banditArms()`; `MIGRATION_7_8` + `MIGRATION_8_9` registered) — but `SchedulerReceiver` and `SpotifyRedirectActivity` are still **not** registered in `AndroidManifest.xml`, and two Kotlin unit-test files are broken (see `ARCHITECTURE.md` §F). Do not "fix" adjacent wiring speculatively; each fix needs its own root-cause proof.
+Known cross-subsystem state to respect (2026-10-19): harness DB wiring is resolved in the merged tree (`JarvisDatabase` v9; entities `ClaimEntity` / `GrantEntity` / `MemoryEmbeddingEntity` / `BanditArmEntity`; accessors `claims()` / `claimForget()` / `grants()` / `embeddings()` / `banditArms()`; `MIGRATION_7_8` + `MIGRATION_8_9` registered) — but `SchedulerReceiver` and `SpotifyRedirectActivity` are still **not** registered in `AndroidManifest.xml`, and two Kotlin unit-test files are broken (see `ARCHITECTURE.md` §F). Do not "fix" adjacent wiring speculatively; each fix needs its own root-cause proof.
 
 ## Standing Behaviour Rules
 

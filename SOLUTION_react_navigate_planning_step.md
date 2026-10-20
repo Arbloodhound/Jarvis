@@ -4,7 +4,7 @@
 
 This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
 The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
-Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — JarvisDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
 CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
 This document proposes a planning-step overhaul for `react_navigate`: a `planSteps()` method and plan-aware prompts in `src/core/ReActLoop.ts`, with no change to BrainExecutor.
 In the merged tree the `src/` TS app's live path is AgentCore / BrainExecutor / TaskExecutor, and its verdict is 'works with defects'; its `server/` is orphaned.

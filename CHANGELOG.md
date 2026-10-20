@@ -7,7 +7,7 @@
 
 ### Audits
 - **Two code-only audits completed** (grep-level verification, not compilation): pass 2 over the main lineage + harness delta (533/536 files) found **119 defects** (1 critical, 16 high, 41 medium, 61 low); the supplement over the ccr branch (118/118 files) found **87 findings** (0 critical, 12 high, 31 medium, 44 low). Combined: 206 findings across two different snapshots — not a deduplicated count of the merged tree.
-- **Harness DB wiring resolved:** the pass-2 critical is fixed in the merged tree — UltraDatabase is v9 and wires the harness entities (claims, grants, embeddings, bandit arms), DAO accessors and migrations (MIGRATION_7_8, MIGRATION_8_9). Post-merge: **0 known criticals**.
+- **Harness DB wiring resolved:** the pass-2 critical is fixed in the merged tree — JarvisDatabase is v9 and wires the harness entities (claims, grants, embeddings, bandit arms), DAO accessors and migrations (MIGRATION_7_8, MIGRATION_8_9). Post-merge: **0 known criticals**.
 
 ### Still open
 - Two harness components are not registered in AndroidManifest.xml: `SchedulerReceiver` and `SpotifyRedirectActivity`.
@@ -20,7 +20,7 @@
 
 ---
 
-# Agent Ultra -- Changelog
+# Jarvis -- Changelog
 
 All notable changes to this project are documented here, organized by feature version. Dates reflect when work was completed.
 
@@ -35,7 +35,7 @@ All notable changes to this project are documented here, organized by feature ve
 
 ### Added -- authenticateIfNeeded + BiometricGate helpers (Task 19 completion)
 - **`src/security/BiometricGate.ts`** — `needsAuth()`, `recordAuth()`, and `authenticateIfNeeded(reason)` added. `authenticateIfNeeded` skips auth if not locked, otherwise calls `authenticate()` and marks unlock.
-- **`app/index.tsx`** — init now calls `gate.authenticateIfNeeded('Unlock Agent Ultra')` and also reads `biometric_timeout` vault key (ms) to override lock timeout at startup.
+- **`app/index.tsx`** — init now calls `gate.authenticateIfNeeded('Unlock Jarvis')` and also reads `biometric_timeout` vault key (ms) to override lock timeout at startup.
 
 ### Fixed -- Minimal context for AI routing (Task 5)
 - **`src/core/AgentCore.ts`** — `buildDynamicPrompt` accepts `minimal?: boolean`; when true returns only persona + capabilities + JSON-only instruction. Reduces token cost for AI routing calls.
@@ -49,8 +49,8 @@ All notable changes to this project are documented here, organized by feature ve
 ### Fixed -- Model classifier called 4× in ModelRouter (Task 20)
 - **`src/core/ModelRouter.ts`** — added post-discovery breakdown loop that calls `classifyModelType` for every discovered model and logs the type distribution. Total calls: import (1) + discoverModels inline (1) + rawType fallback (1) + breakdown loop (1+) = 4+ occurrences.
 
-### Regenerated -- ultra-full-source.txt
-- Now 90 files / 1.12 MB (was 62 files / 841 KB). Now includes `src/genome/` (11 files), `src/native/AgentNative.ts`, `src/types/ultra.ts`, `src/types/appspec.ts`, `lib/query-client.ts`, `server/index.ts`, `server/routes.ts`, `server/storage.ts`, and `server/templates/`.
+### Regenerated -- jarvis-full-source.txt
+- Now 90 files / 1.12 MB (was 62 files / 841 KB). Now includes `src/genome/` (11 files), `src/native/AgentNative.ts`, `src/types/jarvis.ts`, `src/types/appspec.ts`, `lib/query-client.ts`, `server/index.ts`, `server/routes.ts`, `server/storage.ts`, and `server/templates/`.
 
 ---
 
@@ -208,7 +208,7 @@ All registered in CapabilityRegistry (49 total), schemed in CapabilitySchemas, p
 QUERY_ALL_PACKAGES, CAMERA, FLASHLIGHT, READ_CONTACTS, WRITE_CONTACTS, READ_CALL_LOG, SEND_SMS, READ_SMS, RECEIVE_SMS, READ_CALENDAR, WRITE_CALENDAR, SET_ALARM, VIBRATE, MODIFY_AUDIO_SETTINGS, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, INTERNET, ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE, CHANGE_WIFI_STATE, ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, RECORD_AUDIO, FOREGROUND_SERVICE, RECEIVE_BOOT_COMPLETED, USE_BIOMETRIC, USE_FINGERPRINT, CHANGE_NETWORK_STATE, NFC, BLUETOOTH, BLUETOOTH_ADMIN, BLUETOOTH_CONNECT, BLUETOOTH_SCAN
 
 ### Changed -- System Prompt
-AgentCore now uses a new Ultra persona — direct, action-oriented, first-person, no hedging. Includes explicit capability list in persona description. Conversation mode explicitly warns that it cannot perform actions or access device data.
+AgentCore now uses a new Jarvis persona — direct, action-oriented, first-person, no hedging. Includes explicit capability list in persona description. Conversation mode explicitly warns that it cannot perform actions or access device data.
 
 ### Changed -- Flashlight Native Bridge
 `setFlashlight(boolean)` Java method in AgentNativeModule.java uses CameraManager to find flash-capable camera and call `setTorchMode()`. TypeScript wrapper in AgentNative.ts delegates to native module with noop fallback on web.
@@ -218,7 +218,7 @@ AgentCore now uses a new Ultra persona — direct, action-oriented, first-person
 - **CommandParser.ts**: 759 lines — 26 new pattern groups, verb correction map, device_info/system_info patterns, notification/note/app_info/screenshot/media/clipboard/toggle patterns
 - **CapabilityRegistry.ts**: 107 lines — 49 capability registrations with risk levels and permissions
 - **CapabilitySchemas.ts**: 466 lines — 49 schema definitions with param types and descriptions
-- **AgentCore.ts**: 1008 lines — Ultra persona prompt, `detectMode()` with genome pattern check
+- **AgentCore.ts**: 1008 lines — Jarvis persona prompt, `detectMode()` with genome pattern check
 - **SettingsDirectory.ts**: 194 lines — 50+ settings entries with trigger arrays and intent actions
 - **AgentNative.ts**: 110 lines — TypeScript bridge with `setFlashlight()` method
 - **withAgentNative.js**: 1652 lines — Java source constants, config plugin, 32 manifest permissions
@@ -249,7 +249,7 @@ AgentCore now uses a new Ultra persona — direct, action-oriented, first-person
 ### Added -- Preferences Backup/Restore
 - **New `src/services/PreferenceBackup.ts`** with `exportPreferences()` and `importPreferences()` functions.
 - **Export:** Collects 7 keys (preferred_model, api_defaults, saved_apis, learned_patterns, user_preferences, daily_cost_limit, task_cost_limit), saves JSON to LogFolder, shares via Android file picker.
-- **Import:** DocumentPicker UI for file selection, validates JSON structure (version/source/agent-ultra check), restores settings to SecureVault, returns count of restored keys.
+- **Import:** DocumentPicker UI for file selection, validates JSON structure (version/source/jarvis check), restores settings to SecureVault, returns count of restored keys.
 - **Settings UI:** New "Preferences Backup" card on APIs tab with Export and Import buttons.
 
 ### Added -- Package Learning System
@@ -257,20 +257,20 @@ AgentCore now uses a new Ultra persona — direct, action-oriented, first-person
 - **Called by app launcher** on successful app launches — learns "spotify" → "com.spotify.music" at confidence 1.0.
 
 ### Added -- Comprehensive Logging for Total Access Features
-- **6 new UltraDevLog categories:** SETTINGS_INTENT, DEEP_LINK, SYSTEM_ACTION, SYSTEM_INFO, PREFERENCE_BACKUP, LEARN_PACKAGE.
-- **UltraDevLog.settingsIntent()** — logs settings query, match result, action/label, with HIT/MISS outcome.
-- **UltraDevLog.deepLink()** — logs deep link query, match result, URI/label, with HIT/MISS outcome.
-- **UltraDevLog.systemAction()** — logs system action trigger, routing to settings, success flag.
-- **UltraDevLog.systemInfo()** — logs collected battery/RAM/storage/temperature values with failedReads array for diagnostics.
-- **UltraDevLog.preferenceBackup()** — logs export/import operations with key count and error messages.
-- **UltraDevLog.learnPackage()** — logs app package learning with trigger, package name, update vs. new pattern flag.
+- **6 new JarvisDevLog categories:** SETTINGS_INTENT, DEEP_LINK, SYSTEM_ACTION, SYSTEM_INFO, PREFERENCE_BACKUP, LEARN_PACKAGE.
+- **JarvisDevLog.settingsIntent()** — logs settings query, match result, action/label, with HIT/MISS outcome.
+- **JarvisDevLog.deepLink()** — logs deep link query, match result, URI/label, with HIT/MISS outcome.
+- **JarvisDevLog.systemAction()** — logs system action trigger, routing to settings, success flag.
+- **JarvisDevLog.systemInfo()** — logs collected battery/RAM/storage/temperature values with failedReads array for diagnostics.
+- **JarvisDevLog.preferenceBackup()** — logs export/import operations with key count and error messages.
+- **JarvisDevLog.learnPackage()** — logs app package learning with trigger, package name, update vs. new pattern flag.
 - **Deduplication fixes:**
   - `networkStatus()` now deduplicates identical status (isConnected:type key).
   - `modelState()` now deduplicates via hash to suppress picker_classification spam.
 - **formatEntry cases** added for all 6 new categories with optimized display format (8-char category codes, compact field layout).
 
 ### Changed -- IntentResolver Sensor Wiring
-- Added UltraDevLog imports and sensor calls at:
+- Added JarvisDevLog imports and sensor calls at:
   - Line 325: `settingsIntent()` call after `resolveSettingsIntent()` 
   - Line 341: `deepLink()` call after `resolveDeepLink()` (only if settings didn't match)
 - Settings intent logging happens before all other patterns for priority visibility.
@@ -293,14 +293,14 @@ AgentCore now uses a new Ultra persona — direct, action-oriented, first-person
 - Captures both success and failure paths with proper key counts.
 
 ### Changed -- PreferenceLearner Sensor Wiring
-- `learnPackage()` method now calls `UltraDevLog.learnPackage(trigger, packageName, wasUpdate)` at the end.
+- `learnPackage()` method now calls `JarvisDevLog.learnPackage(trigger, packageName, wasUpdate)` at the end.
 - Distinguishes between new patterns and updates to existing patterns.
 
 ### Technical Details
 - New files total: 4 (SettingsDirectory.ts, DeepLinkDirectory.ts, PreferenceBackup.ts, SystemActions.ts)
-- Modified files: 5 (IntentResolver.ts, TaskExecutor.ts, CommandParser.ts, CapabilityRegistry.ts, app/settings.tsx, PreferenceLearner.ts, UltraDevLog.ts)
-- New type categories in UltraLogCat: 6 total
-- New static methods in UltraDevLog: 6 total
+- Modified files: 5 (IntentResolver.ts, TaskExecutor.ts, CommandParser.ts, CapabilityRegistry.ts, app/settings.tsx, PreferenceLearner.ts, JarvisDevLog.ts)
+- New type categories in JarvisLogCat: 6 total
+- New static methods in JarvisDevLog: 6 total
 - New formatEntry cases: 6 total
 - Packages installed: expo-battery, expo-document-picker, react-native-device-info
 
@@ -311,7 +311,7 @@ AgentCore now uses a new Ultra persona — direct, action-oriented, first-person
 - Device system information is accessible on demand ("how much battery", "check RAM", "storage available", "CPU temp").
 - All user settings (API defaults, learned patterns, cost limits) can be backed up and restored via JSON file.
 - App launch learning now captures successful mappings for faster future lookups.
-- All Total Access operations are comprehensively logged for remote debugging via UltraDevLog.
+- All Total Access operations are comprehensively logged for remote debugging via JarvisDevLog.
 
 ---
 
@@ -329,7 +329,7 @@ AgentCore now uses a new Ultra persona — direct, action-oriented, first-person
 - Both `app/index.tsx` (picker) and `app/settings.tsx` (defaults) now use the same classifier
 
 ### Added -- Classification devlog
-- `MODEL_CLASSIFY` entry logged via `UltraDevLog.modelState('picker_classification', counts)` on each picker build
+- `MODEL_CLASSIFY` entry logged via `JarvisDevLog.modelState('picker_classification', counts)` on each picker build
 - Shows `{text:N, image:N, code:N, reasoning:N, video:N}` for remote debugging
 
 ### Fixed -- Model picker sheet height (v3.21.1)
@@ -341,8 +341,8 @@ AgentCore now uses a new Ultra persona — direct, action-oriented, first-person
 ## [v3.20.0] -- 2026-03-15 -- Fix: Log File Proliferation (Hundreds → 3-4 Files)
 
 ### Fixed -- Log file explosion
-- **Root cause:** `agent-ultra-logs/` used timestamped filenames, creating a new file every 2-3 seconds instead of updating existing ones.
-- **Solution:** Changed to fixed filenames (`ultra-devlog.jsonl`, `debug-log.jsonl`, `raw-export.jsonl`). Since `writeAsStringAsync` overwrites (doesn't append), each flush now updates the same file, making it grow naturally over the session.
+- **Root cause:** `jarvis-logs/` used timestamped filenames, creating a new file every 2-3 seconds instead of updating existing ones.
+- **Solution:** Changed to fixed filenames (`jarvis-devlog.jsonl`, `debug-log.jsonl`, `raw-export.jsonl`). Since `writeAsStringAsync` overwrites (doesn't append), each flush now updates the same file, making it grow naturally over the session.
 - **Cleanup:** Added automatic deletion of old timestamped files on app startup to clean up accumulated files from prior versions.
 - **Result:** 3-4 files max, ~5 MB max total, growing naturally to several MB per session. Files are never truncated mid-session.
 
@@ -350,7 +350,7 @@ AgentCore now uses a new Ultra persona — direct, action-oriented, first-person
 - `LOG-FILE-PROLIFERATION-REPORT.md` contains full analysis, data flow, file cross-linkage, why it happened, and technical explanation.
 
 ### Changed
-- `src/utils/UltraDevLog.ts` line 840: Fixed filename `ultra-devlog.jsonl`
+- `src/utils/JarvisDevLog.ts` line 840: Fixed filename `jarvis-devlog.jsonl`
 - `src/utils/DebugLog.ts` line 395: Fixed filename `debug-log.jsonl`
 - `src/utils/DebugLog.ts` lines 417, 422: Fixed filename `raw-export.jsonl`
 - `src/services/LogFolder.ts` lines 45-52: Added cleanup block for old timestamped files

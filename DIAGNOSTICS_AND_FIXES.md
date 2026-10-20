@@ -4,7 +4,7 @@
 
 This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
 The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
-Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — JarvisDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
 CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
 This document is itself dated 2026-10-19: a setup checklist, a speed-boost threshold change, chains continuing after Confirm, retained thinking, 20 real tasks, and speed findings from v3.0.73 phone logs.
 The audits were code-only and grep-level, with no device testing: they do not re-verify the phone speed measurements, the DIAG capture procedure, the background-listening diagnosis, or the 20-task routing/phone results recorded here — those are not covered.
@@ -24,7 +24,7 @@ Whether the individual 'built, tests pass' items in the body survive the merge i
 | 2 | **Speed boost can load now.** It needed 3 GB free beyond the model, which your phone never had (log: 3659 MB free). It now needs 2 GB. Speed boost is still **off** by default, as before. | Built, tests pass. Not yet tried on the phone. |
 | 3 | **Chains keep going after Confirm.** "Call mom and then text Sam" used to stop at the call's Confirm card. Now tapping OK makes the call and then goes on to the text. | Built, tests pass. Not yet tried on the phone. |
 | 4 | **Thinking stays with the answer.** It used to vanish when the answer came. Now "Thought ▸" sits above each answer; tap it to read all of it. It lasts until the app closes (it isn't saved with the chat). | Built, tests pass. Not yet tried on the phone. |
-| 5 | **20 real tasks.** The app sends all 20 down the right path (20/20, `RealTasksTest`). The phone checklist is `ultra-native/tools/REAL_TASKS.md`. | Routing is proven by tests. Phone pass rate is waiting on your run. |
+| 5 | **20 real tasks.** The app sends all 20 down the right path (20/20, `RealTasksTest`). The phone checklist is `jarvis-native/tools/REAL_TASKS.md`. | Routing is proven by tests. Phone pass rate is waiting on your run. |
 
 ## Bugs the 20-task check found (fixed)
 - **"Make a note: buy milk" went to chat** instead of saving a note. Only the words "note this" were recognised. Fixed.

@@ -1,7 +1,7 @@
 > **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/.github/pull_request_template.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
 
 ## What changed
-<!-- One or two lines per change, in plain words. Say which tree: ultra-native/ (Kotlin),
+<!-- One or two lines per change, in plain words. Say which tree: jarvis-native/ (Kotlin),
      harness (com.agent.jarvis.harness), desktop/ (TypeScript), or src/ (TypeScript lineage).
      Target branch must be main. -->
 

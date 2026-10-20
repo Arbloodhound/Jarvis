@@ -12,28 +12,28 @@ All work is consolidated on `main` (tip `c8043e1c` — merge commits `ae030b9f` 
 
 - 58 branches swept: 51 already contained; 2 merged during consolidation (`muse/v5-delta-port` → `claude/shopping-integration`, `4cff5d07`; `ccr-c9b6f798-uako9v` → `claude/shopping-integration`, `adbd9e84`; then `claude/shopping-integration` → `main`, `ae030b9f`); 4 remain unmerged by design: `claude/broken-fixes`, `claude/download-all`, `claude/fast-reasoning` (empty tip commits), `claude/offline-navigation-wip` (superseded WIP snapshot). No branch was deleted; no history was rewritten.
 - Post-merge tree:
-  - `ultra-native/` — Kotlin Android app (the shipping app), containing the harness package `com.agent.jarvis.harness`.
+  - `jarvis-native/` — Kotlin Android app (the shipping app), containing the harness package `com.agent.jarvis.harness`.
   - `desktop/` — TypeScript desktop app.
   - `src/` — TypeScript app (Expo / React Native lineage).
 
 ```mermaid
 flowchart LR
   subgraph REPO["Arbloodhound/Jarvis — main"]
-    UN["ultra-native/ Kotlin Android app<br/>(shipping app)"]
+    UN["jarvis-native/ Kotlin Android app<br/>(shipping app)"]
     DT["desktop/ TypeScript app"]
     TS["src/ TypeScript app<br/>(Expo / RN lineage)"]
   end
-  UN --> HARNESS["com.agent.jarvis.harness<br/>(inside ultra-native)"]
+  UN --> HARNESS["com.agent.jarvis.harness<br/>(inside jarvis-native)"]
 ```
 
-## A · ultra-native Kotlin app (audited map)
+## A · jarvis-native Kotlin app (audited map)
 
 | Package | Role (as audited) | Verdict (merged view) |
 |---|---|---|
 | `agent/` | Brain (12-turn loop), Tools, navigation | works with defects |
 | `gate/` | Gate, Manifest, contracts, taint — deny-by-default | works with defects |
 | `listen/` | Ambient listening, speech, notes, Librarian, claim promotion | works with defects |
-| `ui/` + `data/` | Screens; Room, `UltraDatabase` | works as designed within old main alone; `data/` / `UltraDatabase` works as designed post-merge (see §D) |
+| `ui/` + `data/` | Screens; Room, `JarvisDatabase` | works as designed within old main alone; `data/` / `JarvisDatabase` works as designed post-merge (see §D) |
 | `local/` | On-device models via llama.cpp JNI, downloads | works with defects |
 | `net/` | `TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard` | works as designed (Tor property; defects at margins only) |
 | `provider/` | `OpenAiClient`, `ProviderConfig` | works with defects |
@@ -62,12 +62,12 @@ flowchart TD
   BRAIN --> LOCAL["local/ on-device models<br/>llama.cpp JNI"]
   BRAIN --> PROV["provider/ cloud<br/>OpenAiClient"]
   BRAIN --> LISTEN["listen/ notes · Librarian · claims"]
-  LISTEN --> DATA["data/ Room · UltraDatabase v9"]
+  LISTEN --> DATA["data/ Room · JarvisDatabase v9"]
 ```
 
 ## B · Harness package `com.agent.jarvis.harness`
 
-The harness lives inside `ultra-native`. Audited contents:
+The harness lives inside `jarvis-native`. Audited contents:
 
 | Component | Role (as audited) |
 |---|---|
@@ -102,7 +102,7 @@ flowchart LR
   H --> SK["SkillStore (lazy)"]
   H --> CONN["connectors/<br/>Gmail · Calendar · Docs · Drive · Spotify"]
   CONN --> VAULT["CredentialVault<br/>Keystore AES-GCM"]
-  MC --> DB2["UltraDatabase v9<br/>claims / grants / embeddings / bandit"]
+  MC --> DB2["JarvisDatabase v9<br/>claims / grants / embeddings / bandit"]
   AG --> DB2
 ```
 
@@ -119,11 +119,11 @@ Audited shape:
 
 Verdict: desktop app **works with defects**.
 
-## D · Storage: `UltraDatabase` v9 (post-merge)
+## D · Storage: `JarvisDatabase` v9 (post-merge)
 
 The pass-2 critical defect — harness database wiring missing — is **resolved in the merged tree**. Field-verified by the supplement audit against the harness entities:
 
-- `UltraDatabase` is **v9** (the previous version of this document said v7; that is superseded).
+- `JarvisDatabase` is **v9** (the previous version of this document said v7; that is superseded).
 - Entities include `ClaimEntity` / `GrantEntity` / `MemoryEmbeddingEntity` / `BanditArmEntity`.
 - DAO accessors include `claims()` / `claimForget()` / `grants()` / `embeddings()` / `banditArms()`.
 - `MIGRATION_7_8` + `MIGRATION_8_9` are defined and registered.
@@ -163,7 +163,7 @@ Any other database, preference-file, or model-file inventory from the previous v
 
 ### Per-subsystem verdicts (merged view)
 
-- **Works as designed:** `net/` Tor property (defects at margins only), `data/` UltraDatabase (post-merge), desktop tests (1 low), `ui/` + `data/` within old main alone.
+- **Works as designed:** `net/` Tor property (defects at margins only), `data/` JarvisDatabase (post-merge), desktop tests (1 low), `ui/` + `data/` within old main alone.
 - **Works with defects:** `agent/`, `gate/`, `listen/`, `local/`, `provider/`, `research/`, `bench/` + tools, harness internal logic, desktop app, TS live path.
 - **Broken:** Kotlin unit tests (2 files), TS `server/` (orphaned), harness manifest wiring (2 unregistered components).
 

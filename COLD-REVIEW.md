@@ -4,7 +4,7 @@
 
 This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
 The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
-Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — JarvisDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
 CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
 This review's order of work was safety first (the gate hole F1 and the concurrency bug F2), then learn-by-watching (L1) and provenance (L3).
 On the Gate, the audits checked clean in the merged view: Gate is deny-by-default, taint blocks can neither be auto-approved nor operator-overridden, manifest load failure is deny-all, and screen reads/actions fail closed on protected apps.
@@ -76,7 +76,7 @@ the keyboard's Enter key (`:1180`), entirely outside the gate.
 (`local/LocalModelEngine.kt:10`). The lock wraps only `ensureLoaded` (`:152`) and
 `unload` (`:184`). **`generate()` (`:166`) calls `nativeGenerate` with no lock.**
 
-The JNI side uses process-global `gVm/gCallback/gOnToken` (`cpp/ultra_llm.cpp:22-24`)
+The JNI side uses process-global `gVm/gCallback/gOnToken` (`cpp/jarvis_llm.cpp:22-24`)
 with no mutex. Two independent scopes drive the shared engine — chat
 (`ChatScreen.kt:206,385`) and voice (`VoiceActivity.kt:109`). One voice command
 during a chat reply stomps the global callback refs and re-enters a non-reentrant
@@ -84,7 +84,7 @@ during a chat reply stomps the global callback refs and re-enters a non-reentran
 
 - `unload()` frees the context with no coordination against an in-flight
   `nativeGenerate` → use-after-free.
-- **JNI global ref leak:** minted at `ultra_llm.cpp:102`, but the prompt-decode
+- **JNI global ref leak:** minted at `jarvis_llm.cpp:102`, but the prompt-decode
   failure returns `-4` at `:110`, *before* the `DeleteGlobalRef` at `:133` — leaks
   the ref and leaves `gCallback` dangling non-null for the next call.
 
@@ -468,7 +468,7 @@ screen memory and the accessibility binding. The signing key is stable now, so
 uninstalling out of habit.
 
 **A setup file, seeded the same way the provider already was.**
-`ultra_setup.json` in the app's external files directory sets allow-list mode
+`jarvis_setup.json` in the app's external files directory sets allow-list mode
 and allowed apps, then deletes itself. Applied on app start rather than on
 service connect: forcing a reconnect by toggling the binding is unreliable —
 Android frequently leaves the service listed but unbound, a worse state than the
@@ -536,7 +536,7 @@ Eight taps and two recoveries became two taps. Both walks ended on
    inside a search.
 5. **The recorder saved the agent's own screens.** `OWN_PACKAGE` was checked in
    the step recorder and not in the screen recorder. Every route began with Agent
-   Ultra, because the user must open Agent Ultra to say "stop watching". Replay
+   Jarvis, because the user must open Jarvis to say "stop watching". Replay
    then tried to launch the agent from inside the agent and reported reaching a
    step it had not taken.
 6. **Recording and replay fingerprinted screens at different moments.** The

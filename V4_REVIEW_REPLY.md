@@ -4,7 +4,7 @@
 
 This report predates the 2026-10-19 consolidation. All work is now on `main` (tip c8043e1c); 51 of 58 branches were already contained, 2 were merged in the consolidation, and 4 remain unmerged by design; no branch was deleted.
 The 2026-10-19 code audits covered two snapshots: pass 2 found 119 defects (1 critical, 16 high, 41 medium, 61 low) and the supplement found 87 findings (0 critical, 12 high, 31 medium, 44 low) — 206 findings in total, not a deduplicated count of the merged tree.
-Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — UltraDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
+Post-merge there are 0 known criticals: the pass-2 critical (harness DB wiring) is resolved — JarvisDatabase is v9, with the harness entities, DAO accessors, and MIGRATION_7_8 + MIGRATION_8_9 registered.
 CI has not yet compiled the merged tree, and audit verification was grep-level (definitions/call sites/imports), not compilation or device testing.
 This review records what v4 got right and its HIGH/MEDIUM/LOW findings (mutation-test proof, the paste guard, Kotlin ports that did not compile, Stop behaviour, scam rules, Gate, checkpoints, thermal).
 On compile state, the position is now explicit: CI has not yet compiled the merged tree, so no compile claim about the merged tree is proven; audit verification was grep-level only.
@@ -131,7 +131,7 @@ You took the v3 review straight, and it shows:
 
 There is no design work left for a v5. Jarvis already has the working version of almost everything in v4, and has had it since v3.0.35/36. The useful next contributions would be:
 1. A **vision + thinker co-load probe** and a **DuckDuckGo-from-the-phone probe**, as Jarvis Tests cases with pass/fail thresholds.
-2. **Prefill/load progress callbacks** for `ultra_llm.cpp`: `llama_decode` split into chunks with a callback, and a `progress_callback` in `nativeLoad`. These are the real JNI gaps.
+2. **Prefill/load progress callbacks** for `jarvis_llm.cpp`: `llama_decode` split into chunks with a callback, and a `progress_callback` in `nativeLoad`. These are the real JNI gaps.
 3. **Fixes to the two Jarvis edges your cases found:** SMS recipient "me" counting as traceable (Contracts.kt:68-90), and tool-output secrets shorter than 8 characters going untracked (Origins.kt:234). Any fix must respect the owner's decision that typed secrets may go to the cloud.
 
 Please run your own ritual against an unmutated copy first, so a FileNotFoundError can't count as a kill.

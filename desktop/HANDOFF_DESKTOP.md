@@ -9,14 +9,14 @@ This is a current-state handoff, rewritten after the 2026-10-19 full-branch cons
 - Repo `Arbloodhound/Jarvis` (private). **All work is now on `main`** (tip `c8043e1c` — merge commits `ae030b9f` + merge log on top). `claude/shopping-integration` (`adbd9e84`) is also current.
 - `desktop/` arrived via the `ccr-c9b6f798-uako9v` → shopping-integration merge (`adbd9e84`), then shopping-integration → `main` (`ae030b9f`). Do not develop on the old ccr branch or on `muse/v5-delta-port` for desktop; branch fresh from `main`.
 - 58 branches were swept: 51 already contained, 2 merged during consolidation, 4 remain unmerged by design (`claude/broken-fixes`, `claude/download-all`, `claude/fast-reasoning` — empty tip commits; `claude/offline-navigation-wip` — superseded WIP snapshot). No branch was deleted; no history was rewritten.
-- The whole desktop project is under `desktop/`. The Android app under `ultra-native/` is a separate project (shares ideas, not code) and stays untouched by desktop work.
+- The whole desktop project is under `desktop/`. The Android app under `jarvis-native/` is a separate project (shares ideas, not code) and stays untouched by desktop work.
 - Old PR/branch/commit details from the previous handoff (draft PR, head commits, CI run numbers) are historical only and are **not re-verified in the 2026-10-19 audits** — check GitHub for current PR state before acting on any of them.
 
 ## What this is
 
 A native desktop AI agent (Electron + Node/TypeScript), local-first, OpenClaw-style local gateway plus the Jarvis safety gate. Runs on Windows/macOS/Linux with installers. Chat page in a window, plus a `serve` web mode and terminal `chat`/`ask` modes. Two brains: any OpenAI-compatible local server (Ollama default) or Claude cloud. See `desktop/README.md` for the user-facing description.
 
-Tor is not part of desktop. Tor is in the Kotlin app (`ultra-native/`).
+Tor is not part of desktop. Tor is in the Kotlin app (`jarvis-native/`).
 
 ## Audited state
 

@@ -2,7 +2,7 @@
 
 # Jarvis Desktop
 
-Jarvis on your computer. This is the TypeScript desktop app in `desktop/` — a native desktop app for Windows, macOS and Linux, with its own window, a tray icon, and a hotkey that brings it up from anywhere. It shares ideas and safety rules with the Android app (`ultra-native/`), not code.
+Jarvis on your computer. This is the TypeScript desktop app in `desktop/` — a native desktop app for Windows, macOS and Linux, with its own window, a tray icon, and a hotkey that brings it up from anywhere. It shares ideas and safety rules with the Android app (`jarvis-native/`), not code.
 
 It follows OpenClaw's design (a local gateway that clients connect to) and adds the safety gate the phone app already had.
 
@@ -28,7 +28,7 @@ It follows OpenClaw's design (a local gateway that clients connect to) and adds 
 
 Provider selection is per run. There is **no fallback between providers**: if the selected provider fails a turn, the run ends — the desktop app does not silently retry the turn on the other provider. That behaviour was confirmed in the 2026-10-19 supplement audit.
 
-Tor is **not** part of the desktop app. Tor belongs to the Kotlin Android app (`ultra-native/`); do not describe desktop as having Tor.
+Tor is **not** part of the desktop app. Tor belongs to the Kotlin Android app (`jarvis-native/`); do not describe desktop as having Tor.
 
 ## How it works
 

@@ -3,9 +3,9 @@ generated = []
 
 [[outputs]]
 id = "DNW0xVohHT1UCg_7rlG5N"
-uri = "file://AGENT-ULTRA-BUG-REPORT.md"
+uri = "file://AGENT-JARVIS-BUG-REPORT.md"
 type = "text"
-title = "Agent Ultra — Comprehensive Bug Report"
+title = "Jarvis — Comprehensive Bug Report"
 
 [[outputs]]
 id = "nqmYpsrzWipWTu4pIfmDR"
@@ -27,15 +27,15 @@ title = "Implementation Reference — Raw Source Code for Claude"
 
 [[outputs]]
 id = "XZ1SyTRTCoUzA-bedVzlb"
-uri = "file://ultra-full-source.txt"
+uri = "file://jarvis-full-source.txt"
 type = "text"
-title = "ultra-full-source.txt"
+title = "jarvis-full-source.txt"
 
 [[outputs]]
 id = "r5n-RII6NZ3bHJPw5bbX-"
-uri = "file://ultra-full-source-dump.txt"
+uri = "file://jarvis-full-source-dump.txt"
 type = "text"
-title = "Agent Ultra — Full Source Dump"
+title = "Jarvis — Full Source Dump"
 
 [[outputs]]
 id = "wSaV-MxwVQahf_RBCZBmB"

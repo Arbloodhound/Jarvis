@@ -26,7 +26,7 @@ Earlier framings of these as "proposed", "awaiting approval", or "not yet built"
 
 ## 3. Resolved
 
-- **Harness DB wiring (was the pass-2 critical):** UltraDatabase is v9; entities include ClaimEntity/GrantEntity/MemoryEmbeddingEntity/BanditArmEntity; DAO accessors `claims()`/`claimForget()`/`grants()`/`embeddings()`/`banditArms()`; MIGRATION_7_8 + MIGRATION_8_9 defined and registered. Field-verified by the supplement audit.
+- **Harness DB wiring (was the pass-2 critical):** JarvisDatabase is v9; entities include ClaimEntity/GrantEntity/MemoryEmbeddingEntity/BanditArmEntity; DAO accessors `claims()`/`claimForget()`/`grants()`/`embeddings()`/`banditArms()`; MIGRATION_7_8 + MIGRATION_8_9 defined and registered. Field-verified by the supplement audit.
 - Audits: pass 2 found 119 defects (1 critical / 16 high / 41 medium / 61 low); supplement found 87 findings (0 critical / 12 high / 31 medium / 44 low). Post-merge: **0 known criticals**.
 
 ## 4. Still open
