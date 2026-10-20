@@ -1214,7 +1214,7 @@ export default function ChatScreen() {
   const getMessageStyle = (msg: ChatMessage) => {
     if (msg.role === "user") return "user" as const;
     if (msg.role === "system") return "system" as const;
-    if (msg.source === "jarvis") {
+    if (msg.source === "jarvis" || (msg.source as string) === "ultra") { // "ultra" = source key stored by pre-rename builds
       if (msg.meta?.isBuildLog) return "buildLog" as const;
       const risk = msg.meta?.risk;
       if (risk === "dangerous" || risk === "blocked") return "blocked" as const;

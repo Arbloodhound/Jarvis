@@ -158,7 +158,9 @@ export async function importPreferences(): Promise<{ success: boolean; message: 
       return { success: false, message: 'Invalid file — could not parse JSON.' };
     }
 
-    if (!rawData.version || !rawData.source || rawData.source !== EXPORT_SOURCE) {
+    // 'agent-ultra' is the EXPORT_SOURCE value written by pre-rename builds; it stays
+    // accepted forever so backups exported before the rename remain importable.
+    if (!rawData.version || !rawData.source || (rawData.source !== EXPORT_SOURCE && rawData.source !== 'agent-ultra')) {
       return { success: false, message: 'Invalid backup file — not a Jarvis preferences backup.' };
     }
 

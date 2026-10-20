@@ -103,7 +103,7 @@ export function getQuickReplies(msg: ChatMessage): QuickReply[] {
     return replies;
   }
 
-  if (source === "model" || source === "jarvis" || !source) {
+  if (source === "model" || source === "jarvis" || (source as string) === "ultra" || !source) { // "ultra" = pre-rename stored source key
     if (content.length > 400) {
       replies.push({ id: "summarize", label: "Summarize", icon: "contract-outline", iconFamily: "ionicons", prompt: "Summarize that more concisely" });
     }
