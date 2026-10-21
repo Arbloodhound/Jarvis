@@ -16,6 +16,7 @@ import type { Vision } from "../vision.js";
 import { speak as speakVoice, type Transcriber } from "../voice.js";
 import * as os from "./platform.js";
 import { shoppingTools } from "./shopping.js";
+import { BROWSE_DEFAULT_STEPS, BROWSE_MAX_STEPS, renderBrowseReport, runBrowseTask } from "./browse.js";
 
 export {
   excludeOnion, extractListings, extractNavLinks, extractPrices, extractReputation, extractReviews,
@@ -576,6 +577,33 @@ const webSearchTool = tool({
   },
 });
 
+const browseTaskTool = tool({
+  name: "browse_task",
+  description:
+    "Browse autonomously for a goal: starting from a search (or a start URL), fetch pages in full and follow their outbound links within a step budget, then return a structured report. Every fact in the report comes from a page actually fetched in full and carries that page's URL and content hash; search snippets are labelled as snippets and are never page content or evidence. A page that cannot be fetched is reported as FAILED — say so, never fill the gap from a snippet. Reading only: no forms, no clicks, no purchases. .onion links are refused (no Tor transport in this build).",
+  schema: z.object({
+    goal: z.string().min(1).max(2000).describe("What to find out by browsing"),
+    start_url: z.string().url().optional().describe("Start here instead of searching"),
+    search_query: z.string().min(1).max(500).optional().describe("Search query to seed the task (defaults to the goal)"),
+    max_steps: z.number().int().min(1).max(BROWSE_MAX_STEPS).optional().describe(`Page-fetch budget (default ${BROWSE_DEFAULT_STEPS}, hard cap ${BROWSE_MAX_STEPS})`),
+  }),
+  policy: { effects: ["egress"], egressArgs: ["goal", "search_query"], targetArgs: ["start_url"] },
+  outside: true,
+  network: true,
+  async run({ goal, start_url, search_query, max_steps }, ctx) {
+    const report = await runBrowseTask(
+      { goal, startUrl: start_url, searchQuery: search_query, maxSteps: max_steps },
+      {
+        fetchFn: safeFetch,
+        searchFn: async (q, signal) => runWebSearch(q, signal),
+        htmlToText,
+        signal: ctx.signal,
+      },
+    );
+    return renderBrowseReport(report);
+  },
+});
+
 // ---------- desktop ----------
 
 const openUrlTool = tool({
@@ -811,7 +839,7 @@ const forgetTool = tool({
 
 export const ALL_TOOLS: Tool[] = [
   readFileTool, listDirTool, findFilesTool, writeFileTool, runCommandTool,
-  webSearchTool, webFetchTool, openUrlTool, openAppTool,
+  webSearchTool, webFetchTool, browseTaskTool, openUrlTool, openAppTool,
   clipboardReadTool, clipboardWriteTool, notifyTool, screenshotTool, seeScreenTool, seeImageTool, controlScreenTool, systemInfoTool,
   transcribeAudioTool, speakTool,
   rememberTool, recallTool, forgetTool,
