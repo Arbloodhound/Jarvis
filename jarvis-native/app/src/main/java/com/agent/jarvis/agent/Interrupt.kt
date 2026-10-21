@@ -1,9 +1,7 @@
 package com.agent.jarvis.agent
 
 /**
- * What new words do to a run already in progress (owner, 2026-10-07: "stop doing something when
- * I tell it to stop, or if I tell it to do something else mid-action, add on to its current
- * action or modify its current task or stop"). Pure, JVM-tested.
+ * What new words do to a run already in progress.
  *
  * - [Decision.Stop]: "stop", "cancel that", "never mind", "shut up"… on their own. Everything
  *   running stops, speech included.

@@ -46,9 +46,7 @@ import kotlin.math.roundToInt
  * The floating diagnostic button drawn over every app screen (MainActivity). Tap to run the live
  * diagnostic: it glows green with a countdown while it captures the real app for 15 minutes
  * ([LiveDiagnostic]), tap again to stop early. When it finishes it shows two separate buttons:
- * SEND (share sheet) and RESET (back to DIAG for a new capture), so neither is hit by accident
- * (owner, 2026-10-20: it used to stay on SEND with no way to start over).
- * Draggable so it never sits on top of what the owner needs.
+ * SEND (share sheet) and RESET (back to DIAG for a new capture). Draggable.
  */
 @Composable
 fun DiagnosticFab(modifier: Modifier = Modifier) {
@@ -76,8 +74,7 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
         modifier = modifier
             .offset { IntOffset(dx.roundToInt(), dy.roundToInt()) }
             .diagGestures(
-                // In the finished state the surface is drag-only: SEND/RESET own their taps, and
-                // a stray press between them must not start a new capture over the unsent file.
+                // In the finished state the surface is drag-only: SEND/RESET own their taps.
                 tapEnabled = running || file == null,
                 onTap = { LiveDiagnostic.toggle(ctx) },
                 onDrag = { mx, my -> dx += mx; dy += my },
@@ -86,7 +83,7 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
     ) {
         val done = file
         if (!running && done != null) {
-            // Finished: SEND and RESET as two buttons, apart, so one is never hit for the other.
+            // Finished: SEND and RESET as two buttons, apart.
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Chip("SEND", green) { LiveDiagnostic.share(ctx, done) }
                 Chip("RESET", Color(0xFFF59E0B)) { LiveDiagnostic.lastFile.value = null }
@@ -117,14 +114,11 @@ fun DiagnosticFab(modifier: Modifier = Modifier) {
 /**
  * Tap + drag for the whole button in ONE gesture detector.
  *
- * The old arrangement — detectDragGestures on this outer box, detectTapGestures on the circle
- * inside it, in two competing pointerInputs — let a drag eat a tap: any finger drift past the
- * touch slop made the parent start consuming moves, which cancelled the child's wait-for-up, so
- * the press silently did nothing but nudge the button. Here one detector decides: a release that
- * never passed the slop is a tap; past the slop it is a drag and no tap fires. The callbacks are
- * read through rememberUpdatedState and the detector is keyed on Unit, so it is never torn down
- * mid-gesture (the old tap detector was keyed on running/file and restarted on every state flip).
- * An up that a child (a SEND/RESET chip) already consumed is the child's press, never ours.
+ * One detector decides: a release that never passed the slop is a tap; past
+ * the slop it is a drag and no tap fires. The callbacks are read through
+ * rememberUpdatedState and the detector is keyed on Unit, so it is never torn
+ * down mid-gesture. An up that a child (a SEND/RESET chip) already consumed is
+ * the child's press, never ours.
  */
 @Composable
 private fun Modifier.diagGestures(

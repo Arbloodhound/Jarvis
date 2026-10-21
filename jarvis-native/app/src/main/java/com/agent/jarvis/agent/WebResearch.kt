@@ -57,8 +57,8 @@ object WebResearch {
 
     /**
      * What the owner explicitly asked for. Only these phrases, at the start of the request, start
-     * the bigger runs — never anything inferred: "deep research …" (the Tor discovery crawl, also
-     * needs Settings → "Deep research over Tor"), "investigate …" (a case file), "verify this
+     * the bigger runs — never anything inferred: "deep research …" (the Tor discovery crawl),
+     * "investigate …" (a case file), "verify this
      * product …" / "check this company …" (the clearnet + onion product check).
      */
     enum class Mode { NORMAL, DEEP, INVESTIGATE, VERIFY_PRODUCT }
@@ -262,7 +262,7 @@ object WebResearch {
         listOf(title, snippet, url).flatMap { f -> YEAR.findAll(f).map { it.groupValues[1].toInt() }.toList() }
             .filter { it in 2000..now }.maxOrNull()
 
-    /** What a research run may do with a .onion link (Settings → "Onion research via Tor"). */
+    /** The route a research run takes for a .onion link. */
     enum class OnionRoute { TOR, OFF, PROXY_DOWN, OFFLINE }
 
     /**

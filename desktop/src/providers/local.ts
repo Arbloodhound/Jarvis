@@ -4,8 +4,7 @@ import type { Provider, ToolCall, Turn, TurnRequest, TurnResult } from "./types.
  * The local brain: any OpenAI-compatible model server on this computer
  * (Ollama, llama.cpp `llama-server`, LM Studio, vLLM). Nothing leaves the
  * machine. Tools go in the request's native `tools` field, never parsed out of
- * free text (the Android app's text-parsed tool calls were its most fragile
- * part).
+ * free text.
  *
  * Thinking models send their reasoning either as `reasoning_content` deltas or
  * inline between <think> tags; both are routed to onThinking.

@@ -114,7 +114,7 @@ fun ChatScreen(
 
     /**
      * One request from this screen, typed or spoken ([spoken]: answered out loud): shown, then run.
-     * While a run is going it changes that run instead (owner: "stop … or modify its current task"):
+     * While a run is going it changes that run instead:
      * "stop" stops it and any speech, "also …" runs after it, anything else stops it and runs in its
      * place ([com.agent.jarvis.agent.Interrupt]).
      */
@@ -150,9 +150,7 @@ fun ChatScreen(
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val listState = rememberLazyListState()
     var a11yRunning by remember { mutableStateOf(AgentAccessibilityService.isRunning()) }
-    // Enabled in Android's settings, yet not bound. The switch looks on and
-    // nothing works; only turning it off and on again fixes it, and nobody
-    // would guess that from a switch that is already in the right position.
+    // Enabled in Android's settings, yet not bound; only turning it off and on again fixes it.
     var a11yStuck by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
 
@@ -271,7 +269,7 @@ fun ChatScreen(
                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 else MaterialTheme.colorScheme.error,
                 modifier = if (a11yRunning || thinking) Modifier else Modifier.clickable {
-                    // Off means every screen-touching tool fails. One tap to the fix.
+                    // Off means every screen-touching tool fails.
                     try {
                         context.startActivity(
                             android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
@@ -339,8 +337,7 @@ fun ChatScreen(
             TextButton(onClick = onOpenInsights) { Text("💡") }   // conversation insights
             TextButton(onClick = onOpenForYou) { Text("✨") }     // For you: feed + ideas
             TextButton(onClick = onOpenGuide) { Text("📖") }   // the complete guide
-            // Hands-free session. Reachable here too, so it works before the
-            // user has made Jarvis their assistant app.
+            // Hands-free session.
             TextButton(onClick = {
                 try {
                     context.startActivity(
@@ -367,7 +364,7 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = if (msg.fromUser) Alignment.End else Alignment.Start,
                 ) {
-                    // The thinking that led to this answer stays with it (DeepSeek-style): tap to read it all.
+                    // The thinking that led to this answer stays with it: tap to read it all.
                     ChatStore.thoughts[msg.id]?.let { thought ->
                         var open by remember(msg.id) { mutableStateOf(false) }
                         Text(
@@ -422,7 +419,7 @@ fun ChatScreen(
                     val preview = if (s.phase == ChatStatus.Phase.THINKING)
                         s.detail.removePrefix("💭").trim().trimStart('…', ' ') else ""
                     if (preview.isNotBlank()) {
-                        // Expandable thinking line (like Claude / Gemini): one-line preview, tap for more.
+                        // Expandable thinking line: one-line preview, tap for more.
                         var expanded by remember { mutableStateOf(false) }
                         Column(
                             Modifier
@@ -435,8 +432,7 @@ fun ChatScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            // Collapsed: the latest words. Expanded: the whole trace, every line
-                            // (owner, 2026-10-18: "all its thoughts, like DeepSeek").
+                            // Collapsed: the latest words. Expanded: the whole trace, every line.
                             Text(
                                 text = if (expanded) preview else "…" + preview.takeLast(160).replace('\n', ' '),
                                 style = MaterialTheme.typography.bodySmall,
@@ -620,7 +616,7 @@ fun ChatScreen(
                         if (st == "listening") input = listOf(preVoice, "🎙 …").filter { it.isNotBlank() }.joinToString(" ")
                     },
                     onPartial = { words ->
-                        // Live words appear in the box while you're still talking (like Claude / Gemini).
+                        // Live words appear in the box while you're still talking.
                         input = listOf(preVoice, words).filter { it.isNotBlank() }.joinToString(" ")
                     },
                 ) { spoken ->

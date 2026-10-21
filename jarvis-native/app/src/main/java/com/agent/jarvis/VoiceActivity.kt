@@ -106,8 +106,7 @@ class VoiceActivity : ComponentActivity() {
                 }
                 val brain = remember {
                     Brain(applicationContext, engine).also { b ->
-                        // Spoken: no "Answer now" button, so keep thinking short; every answer is
-                        // said out loud, sentence by sentence as it is written.
+                        // Spoken: every answer is said out loud, sentence by sentence as it is written.
                         b.maxThinkingDepth = com.agent.jarvis.agent.WaitBudget.Depth.QUICK
                         b.spokenAlways = true
                         b.onAnswer = { text -> reply = text }
@@ -136,9 +135,7 @@ class VoiceActivity : ComponentActivity() {
                             } catch (e: kotlinx.coroutines.CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                // Never "…: null"; trimmed for speech; no detail on a locked
-                                // phone (the run may outlast the unlock, and the detail can
-                                // carry private content).
+                                // Never "…: null"; trimmed for speech; no detail on a locked phone.
                                 val km = getSystemService(android.app.KeyguardManager::class.java)
                                 say(com.agent.jarvis.listen.CommandFailure.reply(e, withDetail = km?.isKeyguardLocked != true))
                             } finally {
@@ -209,15 +206,13 @@ class VoiceActivity : ComponentActivity() {
 
                 fun listen() {
                     heard = ""; reply = ""
-                    // Jarvis stops talking when you go to speak (the mic must not hear it); a run
-                    // goes on quietly, and what you say next can stop or change it.
+                    // Stop speaking when the user goes to speak, so the mic doesn't hear it.
                     com.agent.jarvis.agent.Brain.hushAll()
                     com.agent.jarvis.ui.SpeechQueue.stopAll()
                     state = if (listener.start()) "listening" else "error"
                 }
 
-                // Open the mic the moment the session appears — the whole point
-                // is that the user never taps anything.
+                // Open the mic the moment the session appears.
                 androidx.compose.runtime.LaunchedEffect(micPermission, sessionTick) {
                     ChatStore.init(applicationContext)
                     if (micPermission) listen()

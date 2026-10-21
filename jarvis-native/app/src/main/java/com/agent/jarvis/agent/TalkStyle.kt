@@ -2,7 +2,7 @@ package com.agent.jarvis.agent
 
 /**
  * Settings → HOW JARVIS TALKS: personality and answer length as lines for the system prompt, and
- * the think time for spoken requests. Pure, JVM-tested.
+ * the think time for spoken requests.
  */
 object TalkStyle {
 

@@ -1,11 +1,8 @@
 package com.agent.jarvis.listen
 
 /**
- * A copy of up to [total] samples of mic audio read by someone else: while ambient listening
- * holds the microphone, the owner's voice enrolment takes its 10 s from ambient capture through
- * this instead of opening a second recorder (Android may give one of two concurrent recorders
- * silence). [offer] is called from the capture thread, [full] / [take] from the enrolment.
- * Pure, JVM-tested.
+ * A copy of up to [total] samples of mic audio. [offer] is called from the capture thread,
+ * [full] / [take] from the enrolment.
  */
 class PcmTap(private val total: Int) {
     private val buf = ShortArray(total)
@@ -22,7 +19,7 @@ class PcmTap(private val total: Int) {
 
     val full: Boolean @Synchronized get() = got >= total
 
-    /** What was collected; null when less than half of [total] arrived (the mic wasn't really there). */
+    /** What was collected; null when less than half of [total] arrived. */
     @Synchronized
     fun take(): ShortArray? = if (got < total / 2 || got == 0) null else buf.copyOf(got)
 }

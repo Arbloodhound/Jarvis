@@ -7,14 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * What the agent is allowed to claim about itself.
- *
- * Every case here is written from the reader's side: the question is not
- * whether the number is right but whether a person who read the sentence would
- * be misled. An agent that overstates what it knows is worse than one that says
- * nothing, because the confident sentence is the one people act on.
- */
+/** What the agent is allowed to claim about itself. */
 class CompetenceTest {
 
     private fun route(vararg vias: String) =
@@ -51,11 +44,6 @@ class CompetenceTest {
         )
     }
 
-    /**
-     * The case the whole proposal exists for: it worked, and then the app
-     * changed. Silence here is what makes an agent feel unreliable for reasons
-     * the user cannot name.
-     */
     @Test
     fun `a door that moved is reported as the app having changed`() {
         val c = Competence.of(
@@ -81,11 +69,6 @@ class CompetenceTest {
         assertTrue(c.describe(), "not worked out any" in c.describe())
     }
 
-    /**
-     * Routines taught before walks were counted hold doors but no history.
-     * Claiming "never walked this" while holding both doors contradicts the
-     * only way a door can be found.
-     */
     @Test
     fun `knowing the doors is never reported as never having walked it`() {
         val c = Competence.of(

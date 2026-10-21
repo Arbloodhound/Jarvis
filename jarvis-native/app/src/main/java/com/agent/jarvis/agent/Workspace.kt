@@ -8,7 +8,7 @@ import java.io.File
 /**
  * The agent's files (HANDOFF_V5 §2 and §5): artifacts it makes live under filesDir/workspace, and
  * nothing it deletes is gone — it goes to the trash (filesDir/trash) until the owner empties it in
- * Settings. The agent can list and restore trash, never empty it.
+ * Settings.
  */
 object Workspace {
     @Volatile private var trash: Trash? = null

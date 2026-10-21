@@ -5,11 +5,8 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 
 /**
- * Before the agent drives Tor Browser on screen: Tor Browser carries its own Tor. With a VPN on —
- * Orbot's VPN mode above all — its traffic would go Tor over Tor (slower, and the Tor Project
- * advises against it). The agent informs and asks: the call returns [VPN_NOTE] instead of acting,
- * and goes ahead once the owner says so ("vpnOk": true). Jarvis's own Tor (EmbeddedTor) is a
- * local proxy for its research only and never touches Tor Browser.
+ * Returns [VPN_NOTE] before driving Tor Browser on screen while a VPN is active, unless vpnOk.
+ * EmbeddedTor is a local proxy for research only and never touches Tor Browser.
  */
 object TorBrowserGuard {
     private val NAMES = Regex("\\btor\\s*browser|\\btorbrowser|org\\.torproject\\.torbrowser", RegexOption.IGNORE_CASE)
@@ -26,7 +23,7 @@ object TorBrowserGuard {
         "Tor Browser would run Tor over Tor (slower, and the Tor Project advises against it) — ask the owner to switch " +
         "Orbot's VPN off first. If it's another VPN, it's the owner's call; when they say go ahead, call again with \"vpnOk\": true."
 
-    /** [VPN_NOTE] when the call names Tor Browser, a VPN is on and the owner hasn't said go ahead; else null. */
+    /** [VPN_NOTE] when the call names Tor Browser, a VPN is on and vpnOk is false; else null. */
     fun check(ctx: Context, text: String, vpnOk: Boolean): String? =
         if (!vpnOk && mentionsTorBrowser(text) && vpnActive(ctx)) VPN_NOTE else null
 }

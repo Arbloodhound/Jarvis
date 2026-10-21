@@ -15,7 +15,6 @@ object TakeoverPass {
     /**
      * Next frame (up to 16.7 ms at 60 Hz) + relayout + the window server's input update + the
      * compositor's next frame is about 50 ms; more than twice that for a busy phone.
-     * Not measured on a device.
      */
     const val SETTLE_MS = 120L
 

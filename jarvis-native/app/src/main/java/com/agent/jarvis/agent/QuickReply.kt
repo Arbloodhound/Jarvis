@@ -5,10 +5,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Pure, JVM-tested. Answers a few whole utterances with no model at all: a greeting, thanks, a
- * goodbye, the time, the date. Before this, "hi" offline ran the on-device thinker, and a typed
- * "what time is it" routed NORMAL ([IntentRouter]) and could think for tens of seconds just to
- * read the clock.
+ * Answers a few whole utterances with no model at all: a greeting, thanks, a goodbye, the time,
+ * the date.
  *
  * Only the WHOLE utterance matches (after [IntentRouter.requestPart], trim, lowercase, dropping
  * punctuation, and dropping a leading or trailing "jarvis" / "hey jarvis"). Anything with more

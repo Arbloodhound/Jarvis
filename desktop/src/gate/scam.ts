@@ -1,12 +1,11 @@
 /**
  * Does this text look like a scam, and why, in words a person can act on.
  *
- * Port of the Android app's ScamSignals. Deterministic, no model. A scam pairs
+ * Deterministic, no model. A scam pairs
  * an ask nobody legitimate makes (gift cards as payment, share a code, double
  * your crypto) or any ask together with heavy pressure (threats, authority,
  * "new number", prizes, secrecy). Either half alone is ordinary, so this flags
- * only the combinations: a warning that fires on every delivery email gets
- * ignored, and then it protects nobody.
+ * only the combinations.
  *
  * On the desktop it runs on what the agent reads (emails, pages, files). The
  * hosts, emails and numbers in a flagged text become scam targets: the gate

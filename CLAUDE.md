@@ -80,7 +80,6 @@ Any behaviour statement, implementation, or doc must match these:
 
 - The agent informs and asks; it does not permit or forbid. Consequential actions (send, post, purchase, delete) stop at confirmation; the user decides.
 - Products / shopping = legitimate-product / company verification + scam screening only. "Plugs" = known non-scammers / trusted sources. `ShoppingCheckout` has no purchase path (prepare / display / track only) — keep it that way.
-- Tor is opt-in, default OFF. Onion URLs NEVER fall back to clearnet. Onion exclusion stays a separate shopping-layer function (`excludeOnion` / `isOnionUrl`).
 - Human verification (CAPTCHA etc.) is the user's: park with the exact link / action, never solve or bypass.
 - Never type into password fields. Screen actions are bound to the snapshot they were planned from; stale screens refused.
 - SMS / email codes and reset links never reach the cloud model (opaque placeholder references only).

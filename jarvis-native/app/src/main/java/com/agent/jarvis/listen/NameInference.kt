@@ -1,9 +1,8 @@
 package com.agent.jarvis.listen
 
 /**
- * Works out who an unnamed voice ("Speaker 2") is from what is said (owner, 2026-10-07: "infer
- * people's names based on what it hears and what I tell it"). No model, only the transcript and
- * the voices: Pure, JVM-tested.
+ * Works out who an unnamed voice ("Speaker 2") is from what is said. No model, only the
+ * transcript and the voices.
  *
  * Evidence for voice V being NAME:
  *  - V introduces itself: "I'm Sam", "my name is Sam", "this is Sam", "it's Sam here" ([SELF], 3 points);
@@ -100,7 +99,7 @@ object NameInference {
         RegexOption.IGNORE_CASE,
     )
 
-    /** "Speaker 2 is Sam", "the person I was just talking to is Sam": who and the name. Pure. */
+    /** "Speaker 2 is Sam", "the person I was just talking to is Sam": who and the name. */
     fun told(request: String): Pair<Who, String>? {
         val m = TELL.find(request.trim().trimEnd('.', '!')) ?: return null
         val raw = m.groupValues[2].trim()

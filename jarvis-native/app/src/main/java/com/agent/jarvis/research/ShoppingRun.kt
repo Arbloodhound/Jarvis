@@ -7,16 +7,13 @@ import com.agent.jarvis.agent.WebResearchRun
 /**
  * The shopping brief for the brain: candidate pages fetched on the ordinary web path, one row per
  * seller-offer ([ShoppingListings]), seller reputation merged and ranked ([SellerReputation]), laid
- * out as a sortable table. It informs and asks; it never picks a seller or says buy.
+ * out as a sortable table.
  *
- * ## The onion carve-out (owner's design)
- * Shopping is the ONE place the onion-marketplace exclusion applies: every run calls
- * [ShoppingListings.excludeOnion], so an .onion row (by its source or its link) is dropped and only
- * counted. The exclusion lives in [ShoppingListings] and is applied here, explicitly — extraction
- * itself never branches on realm. Product/company verification and the deep crawl do NOT exclude
- * onion; this does.
+ * ## Onion rows
+ * Every run calls [ShoppingListings.excludeOnion], so an .onion row (by its source or its link)
+ * is dropped and counted.
  *
- * [build] and [render] are pure (JVM-tested); [run] is the thin network wiring over [WebResearchRun].
+ * [run] is the thin network wiring over [WebResearchRun].
  */
 object ShoppingRun {
 
@@ -31,14 +28,14 @@ object ShoppingRun {
 
     /**
      * The listings and reputation from [pages] (url → raw HTML the caller already fetched). Rows on
-     * onion URLs are excluded here (the shopping-only carve-out) and counted, never ranked. Pure.
+     * onion URLs are excluded here and counted, never ranked.
      */
     fun build(pages: List<Pair<String, String>>, fetchedAt: String, sort: String = SORT_PRICE): Built {
         val raw = pages.flatMap { (url, html) -> ShoppingListings.extractListings(html, url, fetchedAt).rows }
-        // The shopping-only carve-out: onion marketplace rows are dropped before anything is shown.
+        // Onion rows are dropped before anything is shown.
         val filtered = ShoppingListings.excludeOnion(raw)
         val offers = ShoppingListings.compareTable(filtered.rows, sort)
-        // Same carve-out for reputation: an onion page never becomes a cited source either.
+        // An onion page never becomes a cited source either.
         val repPages = pages.filterNot { ShoppingListings.isOnionUrl(it.first) }
             .map { SellerReputation.Page(it.first, it.second) }
         val entries = offers.rows.map { it.seller }.filter { it.isNotBlank() }.distinct().map { s ->
@@ -51,7 +48,7 @@ object ShoppingRun {
         return Built(offers, filtered.excluded.size, ranked, merges)
     }
 
-    /** The table for the brain: offers in the labelled order, seller reputation with its source, no pick. Pure. */
+    /** The table for the brain: offers in the labelled order, seller reputation with its source. */
     fun render(query: String, built: Built): String = buildString {
         append("Shopping — ").append(query).append(". ")
         append("${built.offers.count} offers from ${built.ranked.count} sellers")

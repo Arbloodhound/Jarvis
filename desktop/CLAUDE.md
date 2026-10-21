@@ -10,11 +10,9 @@ The rules in the repo root `CLAUDE.md` apply here too: no hallucination, no drif
 
 `desktop/` is a separate project: a Node.js (22+) TypeScript agent with a local gateway and a browser chat page. It shares ideas with the Android app, not code. Do not edit `jarvis-native/` as part of desktop work.
 
-Tor is not part of desktop. Tor lives in the Kotlin app (`jarvis-native/`). Do not add Tor claims or Tor work to desktop docs or code on the basis of the Android app's Tor stack.
-
 ## Hard scope rule (same as the phone)
 
-Do not build drug sourcing or "find me X to buy" tooling for controlled or illicit substances, safety-classifier evasion, carding / wallet sweeps / payment-gateway tooling, or onion/Tor/crypto work tied to those. Shopping help means inform and confirm, never auto-buy. The agent informs and asks; consequential actions (send, post, purchase, delete) stop at confirmation and the user decides. Purchases always need fresh approval; no lasting grant covers a purchase.
+Shopping help means inform and confirm, never auto-buy. The agent informs and asks; consequential actions (send, post, purchase, delete) stop at confirmation and the user decides. Purchases always need fresh approval; no lasting grant covers a purchase.
 
 ## Map
 

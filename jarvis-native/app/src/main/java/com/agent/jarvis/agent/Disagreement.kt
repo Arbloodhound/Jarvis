@@ -3,47 +3,19 @@ package com.agent.jarvis.agent
 /**
  * The moment the agent's idea of the job and the screen in front of it differ.
  *
- * Everything else in this codebase asks *may I*. This asks *is this right*, and
- * it is a different question. The gate already stops an irreversible action and
- * puts a card in front of the user; what it cannot do is tell them anything
- * useful, because it does not know what the job was. So the card says "about to
- * press Pay" whether the screen reads £240 or £2,400, and a person tapping
- * through a confirmation they have seen fifty times will approve both.
+ * Refuses to speak unless three things are true at once: the user named an amount, the screen shows
+ * an amount, and **none** of the amounts on screen match what they said. One amount matching (a
+ * subtotal, tax and a total screen) stays quiet.
  *
- * ## Why only money, and only sometimes
- *
- * A guard that fires often gets switched off, and a guard that is off protects
- * nobody — the same reason [ScreenSecrets] refuses to treat every six-digit
- * number as a code. So this refuses to speak unless three things are true at
- * once: the user named an amount, the screen shows an amount, and **none** of
- * the amounts on screen match what they said.
- *
- * A screen showing a subtotal, tax and a total is the normal case, and one of
- * those matching is enough to stay quiet. Silence is the expected behaviour.
- * This exists for the case where nothing on the screen is the number the person
- * asked for, which is not a rounding difference — it is the wrong transaction.
- *
- * ## Comparison is arithmetic, never text
- *
- * `240` is a substring of `2400`. The house rule earned four times over in this
- * file's review — never let containment alone decide a match — is why both
- * sides are parsed to minor units and compared as integers. A near-miss here is
- * the exact failure the whole mechanism exists to catch.
+ * Comparison is arithmetic, never text: both sides are parsed to minor units and compared as
+ * integers (`240` is a substring of `2400`).
  */
 object Disagreement {
 
     /** An amount, normalised to minor units so 240 and 240.00 are one number. */
     data class Money(val minor: Long, val raw: String)
 
-    /**
-     * Currency markers.
-     *
-     * Deliberately short. Requiring a marker is what stops a house number, a
-     * quantity or a year being read as a price, and an unmarked number is the
-     * conservative thing to ignore: a missed comparison leaves the user exactly
-     * where they were before this file existed, while a false one interrupts a
-     * task they asked for.
-     */
+    /** Currency markers. */
     private const val SYMBOLS = "£$€¥"
     private val CODES = setOf("GBP", "USD", "EUR", "JPY")
 
@@ -76,11 +48,8 @@ object Disagreement {
     }
 
     /**
-     * Amounts the user actually named.
-     *
-     * Accepts a bare number straight after a payment verb — "pay 240 to the
-     * gas people" is someone naming an amount, and refusing to understand it
-     * would make this fire only for people who type currency symbols.
+     * Amounts the user actually named. Accepts a bare number straight after a payment verb ("pay
+     * 240 to the gas people").
      */
     fun statedByUser(request: String): List<Money> {
         val out = onScreen(request).toMutableList()
@@ -95,18 +64,13 @@ object Disagreement {
     }
 
     /**
-     * Why the agent should stop, or null to carry on.
-     *
-     * Names the largest amount on screen, because on a payment screen that is
-     * usually the total and always the one worth arguing about.
+     * Why the agent should stop, or null to carry on. Names the largest amount on screen.
      */
     fun contradiction(request: String, screenText: String): String? {
         val stated = statedByUser(request)
         if (stated.isEmpty()) return null
         val (shown, unsure) = scan(screenText)
         if (shown.isEmpty()) return null
-        // An amount on screen that could be read two ways might be the one that matches;
-        // a false "this is the wrong transaction" is worse than staying quiet.
         if (unsure) return null
         if (shown.any { s -> stated.any { it.minor == s.minor } }) return null
         val worst = shown.maxByOrNull { it.minor } ?: return null

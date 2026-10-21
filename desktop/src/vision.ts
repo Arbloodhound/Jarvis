@@ -10,9 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
  * - **Cloud**: Claude, which reads images natively.
  *
  * The choice follows the current brain, so "offline only" keeps vision local
- * too. Sending a screenshot to the cloud brain means the screen's contents
- * leave the computer — the same trade as any cloud use, and the gate still
- * blocks a screenshot that a scam or private-data rule catches.
+ * too.
  */
 
 export interface VisionConfig {

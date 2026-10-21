@@ -24,20 +24,15 @@ class Manifest(private val specs: Map<String, ToolSpec>) {
 
     fun tool(name: String): ToolSpec? = specs[name]
 
-    /** How many tools are declared. The About screen states this number, and
-     * a literal there has gone stale twice (24 → 30 → 31) because adding a
-     * tool never reminded anyone to update it. Ask the manifest instead. */
+    /** How many tools are declared. */
     val size: Int get() = specs.size
 
     val names: List<String> get() = specs.keys.sorted()
 
     companion object {
         /**
-         * Read the manifest that ships in the APK.
-         *
-         * An unreadable manifest is not survivable — the gate denies every
-         * tool, so returning an empty one is the correct failure. Callers that
-         * only want the count get 0, which reads as broken, which it is.
+         * Read the manifest that ships in the APK. An unreadable manifest returns an empty
+         * one, so the gate denies every tool.
          */
         fun fromAssets(context: android.content.Context): Manifest = try {
             context.assets.open("jarvis.manifest.json").bufferedReader().use { r ->

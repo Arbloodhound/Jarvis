@@ -1,10 +1,6 @@
 /**
  * Secret-shaped material: verification codes, API keys, private keys, tokens.
- *
- * Deterministic, no model. Ported from the Android app's SmsCodeDetector and
- * ScreenSecrets: anything found here during a run may never leave the computer
- * through an egress tool, and is masked before a tool result reaches a cloud
- * model.
+ * Deterministic, no model.
  */
 
 const KEYWORD =

@@ -4,13 +4,7 @@ import org.json.JSONObject
 
 /**
  * Computes a 0–100 risk score for a gate decision. Higher = riskier.
- *
- * The score doesn't block anything yet — existing rules do that. The score
- * is logged to the audit file so real usage data can calibrate thresholds
- * before the score becomes enforcement.
- *
- * Signals and their weights are conservative defaults. The whole point of
- * the audit log export is to collect the data that replaces these guesses.
+ * The score is logged to the audit file; it does not block.
  */
 object RiskScorer {
 

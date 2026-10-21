@@ -11,8 +11,7 @@ import androidx.room.Query
 /**
  * What actually worked for a request, recorded only when the whole task
  * succeeded — not when the individual tool calls happened to return without
- * an error. `stepsJson` holds the full calls with their arguments, so a hint
- * can name the approach rather than just the tool.
+ * an error. `stepsJson` holds the full calls with their arguments.
  */
 @Entity(tableName = "task_shortcuts")
 data class TaskShortcutEntity(

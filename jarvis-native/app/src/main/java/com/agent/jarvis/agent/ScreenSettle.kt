@@ -3,14 +3,11 @@ package com.agent.jarvis.agent
 import kotlinx.coroutines.delay
 
 /**
- * Waiting after a tap or an app launch until the screen has changed and gone quiet, instead of a
- * fixed sleep (the navigator slept 0.9 s after every step and 2.5 s after every launch). Settled =
+ * Waiting after a tap or an app launch until the screen has changed and gone quiet. Settled =
  * an accessibility event from the app arrived after the action, then none for [quietMs] (events are
- * batched every 200 ms, accessibility_service_config notificationTimeout). Never longer than the old
- * fixed wait ([maxMs]): a screen that doesn't change costs exactly what it did before.
+ * batched every 200 ms, accessibility_service_config notificationTimeout). Never longer than [maxMs].
  */
 object ScreenSettle {
-    /** Pure. */
     fun settled(nowMs: Long, sinceMs: Long, lastEventMs: Long, quietMs: Long, minMs: Long): Boolean =
         lastEventMs > sinceMs && nowMs - lastEventMs >= quietMs && nowMs - sinceMs >= minMs
 

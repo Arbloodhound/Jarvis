@@ -31,9 +31,7 @@ abstract class JarvisDatabase : RoomDatabase() {
     companion object {
         @Volatile private var instance: JarvisDatabase? = null
 
-        /** v2 → v3 adds the recipes table. Written as a real migration rather
-         * than a destructive fallback: conversations and task memory are the
-         * user's data now, not dev scratch. */
+        /** v2 → v3 adds the recipes table. */
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -152,9 +150,7 @@ abstract class JarvisDatabase : RoomDatabase() {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, JarvisDatabase::class.java, "jarvis.db"
             ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
-            // Only the pre-migration dev schema (v1) may be wiped. A future version
-            // bump without its migration now fails loudly instead of silently
-            // deleting every lesson, task and screen the user built up.
+            // Only the pre-migration dev schema (v1) may be wiped.
             .fallbackToDestructiveMigrationFrom(1)
             .fallbackToDestructiveMigrationOnDowngrade()  // adb install -d of an older build
             .build().also { instance = it }

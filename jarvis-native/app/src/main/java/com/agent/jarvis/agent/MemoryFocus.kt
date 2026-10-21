@@ -4,8 +4,8 @@ package com.agent.jarvis.agent
  * The memory tool and the notes tool: a question answered by reasoning over the owner's memory
  * (what Jarvis heard) and/or notes (what the memory model and the owner wrote down). Chosen from
  * the chat's Focus menu, or by the words of a request, typed or spoken ("search my notes for
- * Lisbon", "what's in my memory about Sam", "read my to-dos"). Pure parts JVM-tested; the search
- * itself is [provider], set by the app (JarvisApplication), like [MemoryBrief.provider].
+ * Lisbon", "what's in my memory about Sam", "read my to-dos"). The search itself is [provider],
+ * set by the app (JarvisApplication), like [MemoryBrief.provider].
  */
 object MemoryFocus {
 
@@ -19,7 +19,7 @@ object MemoryFocus {
     /** Found text for [Ask] (lines with times), or null/blank for nothing. */
     @Volatile var provider: (suspend (ask: Ask, nowMs: Long) -> String?)? = null
 
-    /** A focused brief may be longer than [MemoryBrief.MAX_CHARS]: reasoning over the notes is the job. */
+    /** A focused brief may be longer than [MemoryBrief.MAX_CHARS]. */
     const val MAX_CHARS = 1800
 
     private val NOTES_WORDS = "notes?|note book|notebook"
@@ -37,7 +37,6 @@ object MemoryFocus {
     /**
      * The focused question in [request], or null for an ordinary one. Its query is the request
      * without the "search my notes for" part, so the search looks for "Lisbon", not "notes".
-     * Pure.
      */
     fun detect(request: String): Ask? {
         val t = IntentRouter.requestPart(request).trim()
@@ -54,11 +53,11 @@ object MemoryFocus {
     private val STRIP = rx("\\b(?:$LOOK|search|find|tell me|show me|what does|what do|what did|is there|are there|anything|" +
         "my|your|the|for|about|on|say|said|says|$NOTES_WORDS|$MEMORY_WORDS|and|to-?dos?|to do list|todo list|tasks|list|please|jarvis)\\b")
 
-    /** The words left to search for once the focus words are gone ("" = just show the newest). Pure. */
+    /** The words left to search for once the focus words are gone ("" = just show the newest). */
     fun query(request: String): String =
         STRIP.replace(request, " ").replace(Regex("[^\\p{L}\\p{N}' ]+"), " ").replace(Regex("\\s+"), " ").trim()
 
-    /** "open my notes", "show me my memory": a screen to open, or null. Pure. */
+    /** "open my notes", "show me my memory": a screen to open, or null. */
     fun screen(request: String): String? {
         val t = IntentRouter.requestPart(request).trim().lowercase().trimEnd('.', '!', '?')
         val m = Regex("^(?:please )?(?:open|show(?: me)?|go to|bring up|pull up|display)(?: up)? (?:my |the |your )?" +

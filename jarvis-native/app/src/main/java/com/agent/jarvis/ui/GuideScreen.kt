@@ -32,9 +32,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * The complete guide inside the app (owner, 2026-10-07: "add that into the app itself"): every
- * feature, setting, how it works, what it can't do, and "How do I…?" recipes. Read from
- * assets/guide.md; Contents jumps to a section, Search keeps only the sections that match.
+ * The complete guide inside the app: every feature, setting, how it works, what it can't do, and
+ * "How do I…?" recipes. Read from assets/guide.md; Contents jumps to a section, Search keeps only
+ * the sections that match.
  */
 @Composable
 fun GuideScreen(onBack: () -> Unit) {

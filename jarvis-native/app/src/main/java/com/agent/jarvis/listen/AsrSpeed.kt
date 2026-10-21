@@ -1,11 +1,10 @@
 package com.agent.jarvis.listen
 
 /**
- * Which speech model to run, and whether the larger one keeps up on this phone. Pure, JVM-tested.
+ * Which speech model to run, and whether the larger one keeps up on this phone.
  *
  * small.en hears quiet and distant speech better than base.en but costs about three times the
- * compute. If it falls behind, speech queues up and is dropped untranscribed, which is worse than
- * a weaker model. So it is timed while it has the fast cores (the brain idle): when most of the
+ * compute. It is timed while it has the fast cores (the brain idle): when most of the
  * last [WINDOW] utterances took longer to transcribe than they lasted, base takes over.
  */
 class AsrSpeed(private val window: Int = WINDOW) {

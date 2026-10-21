@@ -7,14 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * What an agent may touch while guessing its way through an app.
- *
- * Replaying a recorded route means searching, and searching means tapping
- * things to see what they do — on someone's real phone, in an app they allowed
- * it into. "Delete account" and "Confirm payment" are controls like any other
- * and a search does not know the difference. These tests are that difference.
- */
+/** What an agent may touch while guessing its way through an app. */
 class RouteWalkerTest {
 
     private fun node(
@@ -53,8 +46,7 @@ class RouteWalkerTest {
 
     @Test
     fun `a risky word inside another word does not trip it`() {
-        // "payment history" is a page; "pay" is a button. The difference is the
-        // whole word, which is the same rule four other bugs today needed.
+        // "payment history" is a page; "pay" is a button. The difference is the whole word.
         assertFalse(RouteWalker.tooRiskyToGuess("Payment history"))
         assertFalse(RouteWalker.tooRiskyToGuess("Shareholder report"))
         assertFalse(RouteWalker.tooRiskyToGuess("Bookmarks"))

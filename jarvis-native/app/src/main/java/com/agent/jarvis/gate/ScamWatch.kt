@@ -5,16 +5,12 @@ import com.agent.jarvis.agent.ScamSignals
 /**
  * What recently arrived that looked like a scam, and what it pointed at.
  *
- * The gate trusts the user: a number the user names traces, and the send goes
- * through. That is exactly the hole a scam text uses — it gets the *person* to
- * name the scammer's number, link or cashtag. So when a flagged message arrives,
- * its targets are held here for [TTL_MS], and the gate treats any of them in an
- * outbound action as needing the user's explicit, informed confirmation
- * (`scam_followup`), never an auto-approve.
+ * When a flagged message arrives, its targets are held here for [TTL_MS], and the gate
+ * treats any of them in an outbound action as needing the user's explicit, informed
+ * confirmation (`scam_followup`), never an auto-approve.
  *
- * Process memory only. Nothing about the message is written to disk: the
- * targets live as long as the app process, which is the right lifetime for "a
- * text that arrived in the last few days" and leaves no record of anyone's inbox.
+ * Process memory only. Nothing about the message is written to disk: the targets live
+ * as long as the app process.
  */
 object ScamWatch {
 

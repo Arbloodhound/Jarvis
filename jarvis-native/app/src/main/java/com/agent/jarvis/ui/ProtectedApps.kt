@@ -6,24 +6,17 @@ import android.content.pm.PackageManager
 import com.agent.jarvis.AgentAccessibilityService
 
 /**
- * Apps the agent must never read or touch.
- *
- * The accessibility service already had a blocklist; nothing ever put anything
- * in it. This is the list, and the reason it matters: an accessibility service
- * can read whatever is on screen, and whatever it reads is sent to the cloud
- * model as a tool result. "Don't act in my bank" is not enough — "don't look"
- * is the actual requirement.
+ * Apps the agent must never read or touch. The accessibility service reads
+ * whatever is on screen, and whatever it reads is sent to the cloud model as a
+ * tool result.
  */
 object ProtectedApps {
 
     /**
      * Package-name fragments that suggest an app holds money, identity, or
-     * credentials. Used only to pre-tick the list on first run — a guess the
-     * user can see and change, never a silent decision.
+     * credentials. Used only to pre-tick the list on first run.
      */
     private val SENSITIVE_HINTS = listOf(
-        // Learned by reading a real phone's 204 apps rather than guessing:
-        // the first list caught 20 and missed at least 40 that mattered.
         "discover", "experian", "equifax", "transunion", "creditkarma",
         "affirm", "klarna", "afterpay", "lendmark", "sofi", "chime",
         "stripe", "square", "quickbooks", "paychex", "adp", "gusto",
@@ -146,9 +139,7 @@ object ProtectedApps {
     /**
      * Guess whether a package holds money, identity or credentials.
      *
-     * Substring matching alone is too blunt: "tor" flagged Calculator and
-     * Avatar Editor, because calcula-tor and edi-tor contain it. Short hints
-     * must sit on a token boundary — package names are dotted and
+     * Short hints must sit on a token boundary — package names are dotted and
      * lowercase, so the separators are '.', '_' and '-'.
      */
     fun looksSensitive(pkg: String): Boolean {
@@ -162,8 +153,7 @@ object ProtectedApps {
 
     /**
      * On first run, pre-tick the apps that look sensitive. Returns true when
-     * it wrote something, so the UI can say what it did rather than leaving
-     * the user to discover it.
+     * it wrote something.
      */
     fun seedIfUnset(context: Context): Boolean {
         val prefs = context.getSharedPreferences(
@@ -176,9 +166,7 @@ object ProtectedApps {
             .map { it.packageName }
             .filter { looksSensitive(it) }
             .toSet()
-        // Safe by default on a fresh install: the agent can reach nothing
-        // until the user picks. Seeding the protected list still runs, so the
-        // guesses are there if they switch to a block list later.
+        // Fresh install: allowlist mode on; protected list still seeded.
         prefs.edit().putBoolean("seeded", true)
             .putBoolean(AgentAccessibilityService.MODE_KEY, true).apply()
         if (guesses.isNotEmpty()) setBlocked(context, blocked(context) + guesses)

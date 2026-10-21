@@ -15,10 +15,10 @@ object NetPolicy {
     const val OFFLINE_RESULT =
         "OFFLINE: offline-only mode is on — web search is off. Answer from what you know and say so."
 
-    /** Pure, JVM-tested. The cloud brain may run only with a client and offline-only off. */
+    /** The cloud brain may run only with a client and offline-only off. */
     fun cloudAllowed(offlineOnly: Boolean, hasClient: Boolean): Boolean = !offlineOnly && hasClient
 
-    /** Pure, JVM-tested. Web search may run only with offline-only off. */
+    /** Web search may run only with offline-only off. */
     fun webAllowed(offlineOnly: Boolean): Boolean = !offlineOnly
 
     /** The cloud brain answers: chosen in the model picker (default: on-device) and offline-only off. */

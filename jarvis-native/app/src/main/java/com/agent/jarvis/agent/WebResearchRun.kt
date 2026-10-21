@@ -20,14 +20,9 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
- * What research may do with .onion links, from Settings: [enabled] = "Onion research via Tor",
- * [deep] = "Deep research over Tor" (both off by default; offline only turns both off). The onion
- * fetcher is the Tor proxy's and nothing else's. [dir] is app-private storage for the link pool,
- * the red-flag log and investigation cases.
- *
- * Scope (owner, 2026-10-09): reading hidden wikis and forums through Tor with scam screening, and
- * product/company verification. OUT of scope: marketplace navigation, vendor/seller vetting, any
- * purchasing.
+ * The research onion access: [enabled] = "Onion research via Tor", [deep] = "Deep research over
+ * Tor". The onion fetcher is the Tor proxy's and nothing else's. [dir] is app-private storage for
+ * the link pool, the red-flag log and investigation cases.
  */
 class OnionAccess(
     val enabled: Boolean,

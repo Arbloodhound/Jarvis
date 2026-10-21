@@ -1,21 +1,11 @@
 package com.agent.jarvis.research
 
 /**
- * Gated checkout preparation — port of the TESTED Python reference
- * (jarvis-v4/shopping/checkout.py).
+ * Gated checkout preparation. Builds the order plan; stops at confirmation.
+ * No purchase-execution path in this file: no cart APIs, no payment sending.
  *
- * GATED PREPARATION ONLY. This builds the order plan and STOPS at
- * the owner's confirmation. There is NO purchase-execution path in
- * this file: no cart APIs, no payment sending. Approval hands the
- * plan to the existing gated tool flow (their 120s confirm card) —
- * a SEPARATE step, never implied here.
- *
- * cryptoPrep is display-only {amount, address} for the confirm
- * card. Keys and seed phrases are NEVER handled — not here, not
- * anywhere in this module.
- *
- * SOURCE ONLY: not compiled in this sandbox. Pure logic — no
- * Android deps. The confirm-card wiring itself is repo-side.
+ * cryptoPrep is display-only {amount, address} for the confirm card; keys and
+ * seed phrases are never handled.
  */
 object ShoppingCheckout {
 
@@ -39,7 +29,7 @@ object ShoppingCheckout {
         val reminder: String,
     )
 
-    /** Build an order plan from a listing row. Preparation only. */
+    /** Build an order plan from a listing row. */
     fun prepareOrder(row: ShoppingListings.Row, qty: Int = 1): OrderPlan {
         val q = maxOf(1, qty)
         val unit = row.price?.amount ?: 0.0
@@ -55,18 +45,11 @@ object ShoppingCheckout {
         )
     }
 
-    /**
-     * Display-only crypto payment details for the confirm card.
-     * The repo side deep-links the wallet app with these; the
-     * module never sees keys or seed phrases.
-     */
+    /** Display-only crypto payment details for the confirm card; keys and seed phrases are never seen. */
     fun cryptoPrep(amount: Double, address: String): CryptoPrep =
         CryptoPrep(amount, address.trim())
 
-    /**
-     * Save an order as a note + reminder structure. Persistence
-     * itself is repo-side (notes store); this builds the record.
-     */
+    /** Build an order as a note + reminder structure. */
     fun trackOrder(orderNo: String, seller: String, expectedDate: String): OrderNote =
         OrderNote(
             orderNo = orderNo.trim(),
@@ -75,11 +58,7 @@ object ShoppingCheckout {
             reminder = "Order $orderNo from $seller expected $expectedDate",
         )
 
-    /**
-     * The question the agent asks after presenting listings or
-     * reputation — inform and ask, never permit/forbid. Wording
-     * must stay free of buy recommendations.
-     */
+    /** The question the agent asks after presenting listings or reputation. */
     const val DIRECTION_QUESTION =
         "What do you want next — details on a listing, check a seller further, " +
             "prepare an order, or drop it?"

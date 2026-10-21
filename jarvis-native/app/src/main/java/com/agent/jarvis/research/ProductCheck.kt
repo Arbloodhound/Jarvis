@@ -7,29 +7,19 @@ import com.agent.jarvis.agent.WebResearch
 
 /**
  * "Verify this product …": is the product real, is the company real, do its onion and clearnet
- * identities match, what's the price evidence, any scam signals — across clearnet and onion. It
- * lays the evidence out and asks; it never says buy, never permits or forbids.
- *
- * ## Scope (owner, 2026-10-09; reconciled with shopping module 2026-10-09)
- * Product and company verification across clearnet and onion (owner's example: headphones), and
- * reading wikis and forums through Tor with scam screening. Explicitly OUT of scope here
- * ("I don't need special skills for the dark net", "I don't wanna find illegal items"):
- * marketplace navigation and any purchasing. Seller reputation is a GENERAL capability and
- * lives in the shopping module (research/ShoppingListings.kt, SellerReputation.kt,
- * ShoppingCheckout.kt) — not in this verification leg. There is no seller rating here and
- * no recommendation field; rows are evidence with their source.
+ * identities match, what's the price evidence, any scam signals — across clearnet and onion.
  *
  * Legs: clearnet (the normal research run: pages, prices, sites) and onion ([onionLeg]: the onion
  * pages and forum threads the owner gave, read through Tor — known-good addresses labelled, every
  * unlisted onion screened before any of its words count, phishing and scam pages blocked and never
  * quoted). [companyCheck]: clearnet presence, whether a claimed onion address is published on the
  * company's own site, lookalikes of known addresses, scam signals on the pages. [compare]: one
- * table sorted mechanically with the key labelled, then a question. Pure apart from [onionLeg],
- * which reads through the function it's given (Tor only). JVM-tested.
+ * table sorted mechanically with the key labelled, then a question. [onionLeg] reads through the
+ * function it's given (Tor only).
  */
 object ProductCheck {
 
-    /** Trust tiers for the mechanical sort. An order, not a judgement of any seller. */
+    /** Trust tiers for the mechanical sort. */
     enum class Tier(val words: String, val rank: Int) {
         KNOWN_GOOD_ONION("known-good onion", 4),
         LISTED_SITE("known site", 3),
@@ -104,7 +94,7 @@ object ProductCheck {
     /**
      * The company check over the clearnet pages read ([pages]: url → raw HTML) and the onion
      * address claimed ([claimed], from the request or a page). "Own site" = a domain containing
-     * the company's first name word. Pure, JVM-tested.
+     * the company's first name word.
      */
     fun companyCheck(name: String, pages: Map<String, String>, claimed: String?, known: Map<String, String>): Company {
         val brand = brandToken(name)
@@ -158,8 +148,7 @@ object ProductCheck {
 
     /**
      * The comparison for the brain: the table sorted by [SORT_KEY] (labelled), blocked sources
-     * named (never as links), the company check, and [QUESTION] at the end. No pick, no
-     * recommendation, no purchase advice. Pure, JVM-tested.
+     * named (never as links), the company check, and [QUESTION] at the end.
      */
     fun compare(product: String, rows: List<Row>, leg: OnionLeg?, company: Company?): String = buildString {
         append("Product check — ").append(product).append(" (clearnet")

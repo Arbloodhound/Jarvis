@@ -3,7 +3,7 @@ package com.agent.jarvis.agent
 /**
  * A request to drive another app on the screen ("use the phone screen to search", "go on Google and
  * search ..."). Only the cloud brain can do that (ReActNavigator); the on-device model has no tool for
- * it, and left alone it narrates screen actions it never took (Pixel 2026-10-18). Pure, JVM-tested.
+ * it.
  */
 object ScreenAsk {
     private val RE = Regex(

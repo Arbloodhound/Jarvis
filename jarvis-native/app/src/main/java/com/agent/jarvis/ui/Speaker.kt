@@ -36,8 +36,7 @@ import java.util.Locale
  * unfinished one (QUEUE_FLUSH) and drops the old whenDone, as the platform engine always has:
  * firing it would end the echo guard of the speech now starting.
  *
- * Start and finish are logged (`JarvisSpeak`) — that is how speak-back gets verified on a
- * machine that cannot hear the phone.
+ * Start and finish are logged (`JarvisSpeak`).
  */
 class Speaker(
     context: Context,
@@ -84,8 +83,8 @@ class Speaker(
     private var shut = false
 
     init {
-        // Without the own voice, warm the platform engine now (it starts asynchronously), as
-        // before; with it, the engine is only created if a fallback ever needs it.
+        // Without the own voice, warm the platform engine now (it starts asynchronously);
+        // with it, the engine is only created if a fallback ever needs it.
         if (!JarvisPrefs.ownVoice(app)) {
             synchronized(lock) { creating = true }
             main.post { createEngine() }
@@ -142,11 +141,7 @@ class Speaker(
 
     // ── Audio output ─────────────────────────────────────────────────────
 
-    /**
-     * Media volume, the one the volume buttons set (owner, 2026-10-07: "I never heard it talk";
-     * logs showed speech playing). USAGE_ASSISTANT before: on a Pixel that can be its own volume, or
-     * silent while the app isn't the phone's assistant.
-     */
+    /** Media volume, the one the volume buttons set. */
     private val ATTRS: AudioAttributes = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_MEDIA)
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -187,7 +182,7 @@ class Speaker(
             return
         }
         // The memory model gives way while Jarvis talks: synthesis is slower than speech when they share
-        // the fast cores (Real-use check, Pixel 2026-10-07: Kokoro 1.4-1.5x real time beside it).
+        // the fast cores.
         com.agent.jarvis.listen.Librarian.yieldNow()
         val parts = LocalVoice.chunks(clean, firstMax = FIRST_PART_CHARS)
         Log.i(TAG, "SPEAK OWN (${clean.length} chars, ${parts.size} parts) id=jarvis-$g")
@@ -408,9 +403,7 @@ class Speaker(
 
         /**
          * Jarvis is talking somewhere in the app (chat, voice screen, ambient, a test), or just
-         * stopped: the ambient listener must not take it as someone speaking. Before, only the
-         * ambient service's own speech muted it, so a chat answer that said "Jarvis" could wake it
-         * and Jarvis answered itself.
+         * stopped: the ambient listener must not take it as someone speaking.
          */
         fun mutesListener(now: Long = System.currentTimeMillis()): Boolean =
             talkingCount.get() > 0 || now - lastTalkEndAt < ECHO_TAIL_MS
@@ -418,8 +411,7 @@ class Speaker(
         /** "Hey Jarvis" over Jarvis's speech: listen at once, no echo tail. */
         fun clearEchoTail() { lastTalkEndAt = 0L }
         private const val TAG = "JarvisSpeak"
-        /** The first piece synthesised: Piper made a 169-char sentence in one go before a word was
-         *  heard (Pixel 2026-10-17 22:47). ~80 chars is a few seconds of speech. */
+        /** The first piece synthesised: ~80 chars is a few seconds of speech. */
         private const val FIRST_PART_CHARS = 80
         private const val WRITE_SLICE = 2048   // samples, ~93 ms at 22 kHz
 

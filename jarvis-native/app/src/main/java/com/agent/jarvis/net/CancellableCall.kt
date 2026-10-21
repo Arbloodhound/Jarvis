@@ -13,9 +13,8 @@ import java.io.IOException
 /**
  * Runs [block] (the blocking execute and body read of [call]) and cancels [call] if the calling
  * coroutine is cancelled meanwhile (Stop, or a timeout around it). A blocking OkHttp call ignores
- * coroutine cancellation, so Stop kept the request (and the run) going until it ended by itself.
- * The cancelled call's IOException comes out as the caller's CancellationException, so Stop is
- * never mistaken for a network failure; a call that fails by itself throws as before.
+ * coroutine cancellation. The cancelled call's IOException comes out as the caller's
+ * CancellationException; a call that fails by itself throws as before.
  */
 internal suspend fun <T> cancelOnStop(call: Call, block: () -> T): T {
     try {

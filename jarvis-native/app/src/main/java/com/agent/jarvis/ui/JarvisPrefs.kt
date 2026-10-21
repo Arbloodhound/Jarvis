@@ -8,7 +8,7 @@ object JarvisPrefs {
 
     private const val K_OWNER_NAME = "owner_name"
     private const val K_INSTRUCTIONS = "custom_instructions"
-    /** Longest custom instructions kept: they go into every prompt, and prompt tokens are prefill time. */
+    /** Longest custom instructions kept: they go into every prompt. */
     const val MAX_INSTRUCTIONS = 1500
 
     /** The owner's name (Settings → PEOPLE): Jarvis is told it, and "[Me]" in transcripts is them. Blank = not set. */
@@ -31,8 +31,7 @@ object JarvisPrefs {
     private const val K_SPEAK = "speak_answers"
 
     /** Speak answers aloud in the chat screen. The voice session always
-     * speaks — that is the point of it — so this covers typed use only. On by default since
-     * 2026-10-07 (the owner had never heard Jarvis speak). */
+     * speaks, so this covers typed use only. On by default. */
     fun speakAnswers(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(K_SPEAK, true)
@@ -65,8 +64,7 @@ object JarvisPrefs {
     private const val K_CLOUD_BRAIN = "cloud_brain"
 
     /** Offline only: no cloud brain, no web search (model downloads still work). Off by default,
-     * and only the Settings switch changes it (the model picker used to flip it, which looked like
-     * a toggle resetting itself: owner, 2026-10-19). Read through agent.NetPolicy. */
+     * and only the Settings switch changes it. Read through agent.NetPolicy. */
     fun offlineOnly(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_OFFLINE_ONLY, false)
 
@@ -75,9 +73,8 @@ object JarvisPrefs {
     fun cloudBrain(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_CLOUD_BRAIN, false)
 
-    /** The small memory model picks tools and drives screens, the main model thinks and answers
-     *  (owner, 2026-10-19: "a model that does all the actions"). On by default; falls back to the
-     *  main model when the small one is not downloaded. */
+    /** The small memory model picks tools and drives screens, the main model thinks and answers.
+     *  On by default; falls back to the main model when the small one is not downloaded. */
     fun actionModel(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("action_model", true)
 
@@ -105,7 +102,7 @@ object JarvisPrefs {
     private const val K_PROSODY = "prosody_experimental"
 
     /** Experimental prosody: pitch measured per heard line and tagged [higher]/[lower] against the
-     * speaker's own usual (only with speaker tags on). Measurements, never verdicts. Off by default. */
+     * speaker's own usual (only with speaker tags on). Off by default. */
     fun prosody(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_PROSODY, false)
 
@@ -140,8 +137,8 @@ object JarvisPrefs {
     private const val K_ONION = "onion_research"
 
     /** Onion research via Tor: .onion links in research are read through Orbot's SOCKS proxy
-     * (net.TorProxy), with phishing/scam screening (agent.OnionSafety). Off by default; off means
-     * onion links are skipped with one line. Offline only wins over it. */
+     * (net.TorProxy), with phishing/scam screening (agent.OnionSafety); when off, onion links are
+     * skipped with one line, and offline-only wins over it. */
     fun onionResearch(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_ONION, false)
 
@@ -151,9 +148,7 @@ object JarvisPrefs {
 
     private const val K_DEEP = "deep_research_tor"
 
-    /** Deep research over Tor: the bounded onion discovery crawl (research.Discovery), run only
-     * when the owner says "deep research …" or "investigate …", and only with onion research on.
-     * Off by default. */
+    /** Deep research over Tor: the bounded onion discovery crawl (research.Discovery). */
     fun deepResearch(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_DEEP, false)
 
@@ -177,8 +172,8 @@ object JarvisPrefs {
 
     private const val K_PRELOAD = "preload_brain"
 
-    /** Load the on-device brain in the background when Jarvis opens / ambient listening starts,
-     * so the first answer doesn't wait for the model to load. On by default. */
+    /** Load the on-device brain in the background when Jarvis opens / ambient listening starts.
+     * On by default. */
     fun preloadBrain(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_PRELOAD, true)
 
@@ -203,7 +198,7 @@ object JarvisPrefs {
      * beside the brain. Off by default; when on, it only takes effect once the draft is downloaded, and
      * the engine skips it when memory is short. Same answers either way. */
     fun speedBoost(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_SPEED_BOOST, false)   // off: on the Pixel it made decoding slower (6.3 vs 9.3 tok/s) and an answer came back cut short (Real-use check 2.6.28)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(K_SPEED_BOOST, false)
 
     fun setSpeedBoost(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(K_SPEED_BOOST, on).apply()
@@ -241,8 +236,7 @@ object JarvisPrefs {
      * Off by default. These tools reach Android's own providers directly, so
      * the app-access list does not cover them — that list gates what the
      * accessibility service can see on screen, and reading the SMS database
-     * never goes near a screen. On a phone that takes real calls and texts,
-     * the default has to be no.
+     * never goes near a screen.
      */
     fun allowPersonalData(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -254,9 +248,7 @@ object JarvisPrefs {
     }
 
     /** Whether the notification listener keeps a rolling log on disk. Off by
-     * default: it runs whether or not a task is active, so it is collection
-     * rather than perception, and it catches message previews and one-time
-     * codes. notification_read simply returns nothing when this is off. */
+     * default. notification_read simply returns nothing when this is off. */
     fun captureNotifications(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(K_NOTIF, false)
@@ -285,8 +277,7 @@ object JarvisPrefs {
     private const val K_SMS_CODE = "auto_extract_sms_code"
 
     /** Auto-copy verification codes from incoming SMS to the clipboard. Off
-     *  by default: this reads message content as it arrives, which is
-     *  standing collection. Requires the notification listener. */
+     *  by default. Requires the notification listener. */
     fun autoExtractSmsCode(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(K_SMS_CODE, false)
@@ -299,10 +290,8 @@ object JarvisPrefs {
     private const val K_SCAM = "scam_shield"
 
     /** Warn when an incoming message looks like a scam, and hold its numbers and
-     *  links behind a confirm. ON by default, unlike the code auto-copy: it keeps
-     *  nothing on disk (the flagged targets live in memory for 72 h) and the people
-     *  it protects most are the least likely to find a switch. Needs the
-     *  notification listener. */
+     *  links behind a confirm. ON by default. Keeps nothing on disk (the flagged
+     *  targets live in memory for 72 h). Needs the notification listener. */
     fun scamShield(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(K_SCAM, true)

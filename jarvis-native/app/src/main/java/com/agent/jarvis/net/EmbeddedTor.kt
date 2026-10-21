@@ -8,13 +8,9 @@ import android.os.IBinder
 import org.torproject.jni.TorService
 
 /**
- * Tor inside the app: the Guardian Project's tor-android (BSD-3; the same Tor library Orbot is
- * built on). Binding [TorService] starts tor in this process; unbinding stops it. Its SOCKS port is
- * 9050 when that is free, else one tor picks — [socksPort] says which. Nothing outside the app can
- * use it, and only [TorProxy] sends traffic through it (.onion only).
- *
- * Started only by the owner's "Connect to Tor" tap or the tor_connect tool (which checks the opt-in
- * setting first); never at app start.
+ * Tor inside the app: the Guardian Project's tor-android (BSD-3). Binding [TorService] starts tor
+ * in this process; unbinding stops it. Its SOCKS port is 9050 when that is free, else one tor
+ * picks — [socksPort] says which. Only [TorProxy] sends traffic through it (.onion only).
  */
 object EmbeddedTor {
     @Volatile private var service: TorService? = null
@@ -39,7 +35,7 @@ object EmbeddedTor {
         return bound
     }
 
-    /** Stops the in-app tor (onion research falls back to Orbot, if that runs). */
+    /** Stops the in-app tor. */
     @Synchronized fun stop(ctx: Context) {
         if (!bound) return
         runCatching { ctx.applicationContext.unbindService(conn) }

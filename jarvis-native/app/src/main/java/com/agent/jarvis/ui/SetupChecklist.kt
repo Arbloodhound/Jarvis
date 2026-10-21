@@ -28,9 +28,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 /**
- * One place to finish setting the phone up (owner, 2026-10-19: "setup checklist screen"): every
- * switch Jarvis needs, each with one button, and how many are done. A slim line in the chat while
- * something required is missing; the list opens from it.
+ * One place to finish setting the phone up: every switch Jarvis needs, each with one button, and
+ * how many are done. A slim line in the chat while something required is missing; the list opens
+ * from it.
  */
 object SetupSteps {
     data class Step(val id: String, val label: String, val why: String, val done: Boolean, val required: Boolean = true)

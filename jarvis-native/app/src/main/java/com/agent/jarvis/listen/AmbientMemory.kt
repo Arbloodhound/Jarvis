@@ -6,10 +6,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 /**
- * Ambient transcript store. Its OWN SQLite file, deliberately not the Room
- * JarvisDatabase: this is high-churn, capped, and purgeable, and must never
- * complicate the agent's schema migrations. FTS4 so the agent can search it
- * as a tool; a capacity trigger so it can never grow without bound.
+ * Ambient transcript store. Its own SQLite file, not the Room JarvisDatabase. FTS4 so the agent
+ * can search it as a tool; a capacity trigger so it can never grow without bound.
  */
 class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db") :
     SQLiteOpenHelper(ctx.applicationContext, name, null, 4) {
@@ -223,8 +221,7 @@ class AmbientMemory private constructor(ctx: Context, name: String = "ambient.db
         } finally { db.endTransaction() }
     }
 
-    /** Verbatim lines in a time window, oldest first, char-budgeted from the NEWEST end:
-     * what was said just before the wake word matters most. */
+    /** Verbatim lines in a time window, oldest first, char-budgeted from the NEWEST end. */
     fun since(sinceTs: Long, budgetChars: Int): String {
         val lines = ArrayList<String>()
         var used = 0

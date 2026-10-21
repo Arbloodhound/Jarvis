@@ -235,8 +235,7 @@ fun SettingsScreen(
                 checked = onion,
                 onCheckedChange = { on -> onion = on; JarvisPrefs.setOnionResearch(context, on) },
             )
-            // Manual Tor start (the in-app Tor). The owner's own tap, so it works with onion research
-            // off too; the tor_connect tool only works with it on.
+            // Manual Tor start (the in-app Tor).
             run {
                 val scope = rememberCoroutineScope()
                 var torLine by remember { mutableStateOf<String?>(null) }

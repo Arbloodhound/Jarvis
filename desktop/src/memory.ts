@@ -12,8 +12,7 @@ import { dot, type Embedder } from "./embeddings.js";
  * fact's vector is stored beside it (`vec`, tagged with the embedder `emb` that
  * produced it) and recall ranks by meaning instead. The two never mix: a vector
  * made by a different model is ignored, and when no vector is available for the
- * query the search falls back to word overlap. So turning embeddings on or off,
- * or switching models, degrades gracefully and never loses a fact.
+ * query the search falls back to word overlap.
  */
 
 export interface Fact {

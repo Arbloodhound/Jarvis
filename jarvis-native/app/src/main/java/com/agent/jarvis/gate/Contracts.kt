@@ -3,8 +3,7 @@ package com.agent.jarvis.gate
 import org.json.JSONObject
 
 /**
- * Contracts (port of gatellml lang/contracts.py): the deliberately tiny,
- * decidable check fragment. Every check is O(size of argument); each returns
+ * Contracts (port of gatellml lang/contracts.py). Every check is O(size of argument); each returns
  * null on pass or a human-readable hint on violation.
  */
 
@@ -89,8 +88,7 @@ data class RecipientTraceable(override val arg: String) : Contract {
 }
 
 /** Mutation rule: at least one declared argument must trace to the request.
- * Atom-level extension (same spirit as the research's display-name fix): a
- * paraphrased value also traces when an email/URL/domain token inside it
+ * A paraphrased value also traces when an email/URL/domain token inside it
  * appears in the request. */
 data class AnyArgTraceable(val args: List<String>) : Contract {
     override val name = "any_arg_traceable"
@@ -111,9 +109,8 @@ data class AnyArgTraceable(val args: List<String>) : Contract {
     }
 }
 
-/** The NAMED argument is the target and must itself trace. AnyArgTraceable lets
- * any one argument vouch for the call, so a date the user typed licenses a hotel
- * the attacker chose. Use where the policy author knows which argument is the target. */
+/** The NAMED argument is the target and must itself trace.
+ * Use where the policy author knows which argument is the target. */
 data class TargetTraceable(override val arg: String) : Contract {
     override val name = "target_traceable"
     override fun check(bindings: Map<String, TrackedArg>, requestNorm: String): String? {
@@ -125,8 +122,7 @@ data class TargetTraceable(override val arg: String) : Contract {
     }
 }
 
-/** Confirmation-spoof layer (parity with the regex gate): no argument may
- * claim prior user approval. */
+/** Confirmation-spoof layer: no argument may claim prior user approval. */
 class SpoofCheck : Contract {
     override val name = "spoof_check"
     override val arg: String? = null
@@ -142,8 +138,8 @@ class SpoofCheck : Contract {
 }
 
 /** Every domain-shaped token in the argument (scheme-less included) must
- * appear in the request. Closes the scheme-less-payload gap. A leading
- * "www." is normalized away on both sides (www.google.com ≡ google.com). */
+ * appear in the request. A leading "www." is normalized away on both sides
+ * (www.google.com ≡ google.com). */
 data class DomainInRequest(override val arg: String, val urlishOnly: Boolean = false) : Contract {
     override val name = "domain_in_request"
     override fun check(bindings: Map<String, TrackedArg>, requestNorm: String): String? {
@@ -163,9 +159,7 @@ data class DomainInRequest(override val arg: String, val urlishOnly: Boolean = f
 internal fun stripWww(d: String): String = d.removePrefix("www.")
 
 /**
- * Whole-token domain trace. Containment let "bank.com" pass against a request
- * naming "mybank.com", and "mybank.co" against "mybank.com" — a different site
- * each time. The domain (or email/URL atom) must equal a request token, be the
+ * Whole-token domain trace. The domain (or email/URL atom) must equal a request token, be the
  * host part of an address the user typed (alice@example.com names example.com),
  * or be the host of a URL the user typed.
  */

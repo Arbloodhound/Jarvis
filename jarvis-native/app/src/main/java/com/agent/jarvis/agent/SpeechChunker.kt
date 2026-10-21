@@ -2,14 +2,11 @@ package com.agent.jarvis.agent
 
 /**
  * Cuts an answer being written into sentences that can be spoken while the rest is still being
- * written (owner, 2026-10-07: "answer right away … vocally"). Before, nothing was said until the
- * whole answer was done. Pure, JVM-tested.
+ * written.
  *
  * A sentence ends at . ! ? or : followed by a space, or at a line break. The first piece waits for
  * [firstChars] and later ones for [minChars]: each piece is a separate synthesis, and the next is
- * only made once the last has been said, so short pieces (a lone "Sure.") left a gap after every
- * one or two words (owner, 2026-10-07: "it says one word … then again a bit afterwards"). "3.5" and "e.g." without a following space
- * don't end one.
+ * only made once the last has been said. "3.5" and "e.g." without a following space don't end one.
  */
 class SpeechChunker(private val minChars: Int = MIN_CHARS, private val firstChars: Int = FIRST_CHARS) {
     private val buf = StringBuilder()

@@ -29,13 +29,8 @@ alongside the `desktop/` TypeScript app and the older `src/` TypeScript app
 - **Researches, shops, and investigates.** `research/` covers browsing,
   shopping (legitimate-product and company verification and scam screening
   only), and investigation.
-- **Tor, opt-in.** `net/` (`TorProxy`, `EmbeddedTor`, `TorConnect`,
-  `TorBrowserGuard`) routes through Tor only when enabled — Tor is off by
-  default. Tor is fail-closed, verified in both 2026-10-19 audits by three
-  independent guards in `TorProxy`: there is no clearnet fallback anywhere;
-  the only fallback is in-app Tor → Orbot. Onion URLs never fall back to
-  clearnet, and onion exclusion in shopping is a separate shopping-layer
-  function.
+- **`net/`** (`TorProxy`, `EmbeddedTor`, `TorConnect`, `TorBrowserGuard`)
+  routes `.onion` traffic through the Tor SOCKS proxy.
 
 ## The gate
 
@@ -90,8 +85,7 @@ so post-merge there are **0 known criticals**.
 
 Per-subsystem verdicts (merged view):
 
-- **Works as designed:** `net/` Tor property (defects at the margins only),
-  `data/` JarvisDatabase (post-merge).
+- **Works as designed:** `data/` JarvisDatabase (post-merge).
 - **Works with defects:** `agent/`, `gate/`, `listen/`, `local/`,
   `provider/`, `research/`, `bench/` and tools, and the harness's internal
   logic.
