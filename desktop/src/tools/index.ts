@@ -730,13 +730,25 @@ const browseTaskTool = tool({
 
 // ---------- desktop ----------
 
+/**
+ * The system browser is not Jarvis's transport: with Tor off an .onion would be
+ * looked up over the regular internet (a DNS leak), and with Tor on the browser
+ * still isn't routed through Tor. So open_url never opens one.
+ */
+const ONION_NOT_IN_BROWSER =
+  "That is a .onion address. Jarvis can't route the system browser through Tor, so it won't open .onion links there. Turn Tor on and use the web tools (web_fetch, browse_task) instead; they fetch .onion only through Tor.";
+
 const openUrlTool = tool({
   name: "open_url",
-  description: "Open a link in the owner's default browser.",
+  description: "Open a link in the owner's default browser. Never .onion: the browser isn't routed through Tor (use web_fetch / browse_task with Tor on).",
   schema: z.object({ url: z.string().url() }),
   policy: { effects: ["mutate", "egress"], targetArgs: ["url"] },
   network: true,
   async run({ url }) {
+    let u: URL | null = null;
+    try { u = new URL(url); } catch { /* the platform layer refuses it */ }
+    // A trailing dot ("x.onion.") names the same host, so it is refused too.
+    if (u && /\.onion$/.test(u.hostname.toLowerCase().replace(/\.+$/, ""))) throw new Error(ONION_NOT_IN_BROWSER);
     await os.openUrl(url);
     return `Opened ${url}.`;
   },
@@ -805,6 +817,9 @@ const readNotificationsTool = tool({
     "Read new inbound notifications that passed the notification filter (allowed apps only, outside quiet hours, under the per-app burst limit) and have not been delivered yet. Each is shown once. Use it to answer \"what did I miss?\".",
   schema: z.object({}),
   policy: { effects: ["read"] },
+  // Notification text is written by other people and apps, not the owner: it is
+  // outside text, so a fact or link it plants gets the same cards as a web page's.
+  outside: true,
   parallelSafe: true,
   async run() {
     return "No notification inbox is set up on this computer.";
@@ -815,6 +830,7 @@ const readNotificationsTool = tool({
 export function bindReadNotifications(inbox: NotificationInbox): Tool {
   return {
     ...readNotificationsTool,
+    outside: true,
     run: async () => formatPending(inbox.takePending()),
   } as Tool;
 }
