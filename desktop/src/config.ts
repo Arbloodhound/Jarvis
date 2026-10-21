@@ -100,6 +100,12 @@ export interface Config {
     /** Extra skill roots, scanned after the app-home and workspace skills dirs, in listed order. */
     roots: string[];
   };
+  /**
+   * Subagents: how many delegated agents (spawn_agent) may run at once.
+   * They share this app's one model endpoint — each is a conversation, not
+   * another model load — so the cap is about attention, not memory.
+   */
+  subagents: { maxConcurrent: number };
   port: number;
   writableRoots: string[];
   /**
@@ -162,6 +168,7 @@ export function defaults(p: Paths): Config {
     memory: { verifyBeforeStore: false },
     notifications: { allowedApps: [], quietStart: 22, quietEnd: 7, maxPerMinutePerApp: 5 },
     skills: { allow: [], roots: [] },
+    subagents: { maxConcurrent: 3 },
     port: 7337,
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
@@ -207,6 +214,7 @@ export function loadConfig(p: Paths = paths()): Config {
       allow: Array.isArray(raw.skills?.allow) ? raw.skills.allow.filter((s): s is string => typeof s === "string") : base.skills.allow,
       roots: Array.isArray(raw.skills?.roots) ? raw.skills.roots.filter((s): s is string => typeof s === "string") : base.skills.roots,
     },
+    subagents: { ...base.subagents, ...(raw.subagents ?? {}) },
   };
 }
 

@@ -69,6 +69,15 @@ export interface AgentDeps {
    * off entirely. `modelCheck` is the optional model-backed escalator.
    */
   nli?: { enabled: boolean; modelCheck?: ModelChecker | null };
+  /**
+   * Labeled messages that arrived for this agent from outside the current
+   * request — a subagent's hand-off for the coordinator, steering for a
+   * subagent. Drained into the conversation when a run starts and again
+   * between steps, each string as its own block. Absent for a plain agent.
+   */
+  inbox?: () => string[];
+  /** Appended to the system prompt (a subagent's standing orders). */
+  systemSuffix?: string;
 }
 
 export interface RunHooks {
@@ -107,6 +116,9 @@ export class Agent {
       const provider = this.deps.provider();
       const ep = new Episode(request);
       this.trim();
+      // Hand-offs and steering that arrived while this agent was idle ride
+      // this run's request, so the model sees them with the new request.
+      const arrived = this.deps.inbox?.() ?? [];
       const fast = fastCommand(request);
       // The router labels every run — fast commands included (tier=fast,
       // and they still short-circuit below). No model call: router.ts is
@@ -115,7 +127,7 @@ export class Agent {
       // third argument (both call conventions exist: context features pass
       // an extraContext string there, voice passes { channel }).
       const channel = (typeof extraContext === "object" ? extraContext.channel : undefined) ?? opts.channel ?? "chat";
-      const extra = typeof extraContext === "string" ? extraContext : "";
+      const extra = [typeof extraContext === "string" ? extraContext : "", ...arrived].filter(Boolean).join("\n\n");
       const route = routeRequest(request, { channel, fastCommand: fast !== null });
       this.lastRoute = route;
       hooks.emit({ type: "run_start", runId, brain: provider.label, route });
@@ -205,7 +217,7 @@ export class Agent {
     const tools = this.deps.tools();
     const specs = tools.map((t) => ({ name: t.name, description: t.description, inputSchema: jsonSchema(t) }));
     const skills = this.deps.skills?.() ?? null;
-    const system = systemPrompt(this.deps.home, platform(), skills?.directory() ?? "");
+    const system = systemPrompt(this.deps.home, platform(), skills?.directory() ?? "") + (this.deps.systemSuffix ?? "");
     const embedder = this.deps.embedder();
     const withContext = await requestContext(request, this.deps.memory, embedder);
     this.turns.push({ role: "user", text: extraContext ? `${withContext}\n\n${extraContext}` : withContext });
@@ -249,6 +261,10 @@ export class Agent {
       for (const r of results) if (!r.isError) evidence.push(r.content);
       this.turns.push({ role: "tool", results });
       if (signal.aborted) throw new Error("stopped");
+      // A hand-off or steering message that landed mid-run joins the
+      // conversation here, so the next step can act on it.
+      const arrived = this.deps.inbox?.() ?? [];
+      if (arrived.length) this.turns.push({ role: "user", text: arrived.join("\n\n") });
       if (turn === this.deps.maxTurns - 1) {
         hooks.emit({ type: "warning", runId, text: `Stopped after ${this.deps.maxTurns} steps without a final answer.` });
       }
