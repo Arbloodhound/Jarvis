@@ -20,8 +20,10 @@ import type { Tool } from "../tools/index.js";
  *   hands off too, labeled stopped — never silence. (The phone also has an
  *   interrupt/resume pair; the desktop tool surface has only stop, so
  *   stop is terminal here.)
- * - Steering is an inbox the child's loop drains between steps; steering
- *   a child that is not running goes nowhere and says so.
+ * - Steering is an inbox the child's loop drains between steps (and once
+ *   more before it finishes); steering a child that is not running goes
+ *   nowhere and says so, and a message that still arrived too late to be
+ *   read is named in the hand-off.
  * - Hand-offs are unverified by default and say so, like the phone's: the
  *   coordinator reads and judges the result itself.
  *
@@ -54,6 +56,8 @@ export interface Handoff {
    * does yet, so this is false and the note says so, as the phone's does. */
   verified: boolean;
   verifyNote: string;
+  /** Steering messages that arrived too late for the child to read. */
+  unread?: string[];
 }
 
 /** The child's side of the orchestrator: its steering inbox and a progress tap. */
@@ -69,7 +73,7 @@ export interface ChildHandle {
 
 /** A running child, as the runtime's starter returns it. */
 export interface ChildRun {
-  /** Resolves with the child's final answer (its hand-off text). */
+  /** Resolves with the child's final answer (its hand-off text); rejects when its run failed. */
   done: Promise<string>;
   /** Ask the child's loop to stop (its abort signal). */
   stop(): void;
@@ -89,6 +93,8 @@ interface ChildRec {
   stopRequested: boolean;
   handedOff: boolean;
   run?: ChildRun;
+  /** Resolves once the child has settled and handed off. */
+  settled?: Promise<void>;
 }
 
 function tool<S extends z.ZodType>(t: Tool<S>): Tool {
@@ -150,7 +156,7 @@ export class Orchestrator {
       return id;
     }
     rec.run = run;
-    run.done.then(
+    rec.settled = run.done.then(
       (text) => this.settle(rec, rec.stopRequested ? "stopped" : "done", text, undefined),
       (err) => this.settle(rec, rec.stopRequested ? "stopped" : "failed", undefined, err instanceof Error ? err.message : String(err)),
     );
@@ -189,6 +195,11 @@ export class Orchestrator {
     }
   }
 
+  /** Resolves once every child running now has settled (and so handed off). */
+  async idle(): Promise<void> {
+    await Promise.all([...this.children.values()].filter((c) => c.state === "running").map((c) => c.settled));
+  }
+
   /** Every child, oldest first — finished ones stay listed with their state. */
   list(): ChildInfo[] {
     return [...this.children.values()]
@@ -207,10 +218,12 @@ export class Orchestrator {
   private settle(rec: ChildRec, state: HandoffState, result: string | undefined, error: string | undefined): void {
     if (rec.handedOff) return;
     rec.handedOff = true;
+    const unread = rec.inbox.splice(0);
     const h: Handoff = {
       id: rec.id, name: rec.name, task: rec.task, state,
       result, error,
       verified: false, verifyNote: "not verified",
+      ...(unread.length ? { unread } : {}),
     };
     // The hand-off exists before the state flips: a child listed as done,
     // failed or stopped has always handed its result over (phone semantics).
@@ -241,9 +254,12 @@ export class Orchestrator {
 /** A hand-off as it enters the parent's conversation: labeled, with its task and verdict. */
 export function formatHandoff(h: Handoff): string {
   const head = `[Hand-off from subagent "${h.name}" (${h.id}) — task: "${h.task}" — ${h.state.toUpperCase()} (${h.verifyNote})]`;
-  if (h.state === "done") return `${head}\n${h.result ?? ""}`;
-  if (h.state === "failed") return `${head}\nIt failed: ${h.error ?? "unknown error"}`;
-  return `${head}\nIt was stopped before finishing.${h.result && h.result !== "Stopped." ? ` Its last answer was: ${h.result}` : ""}`;
+  const late = h.unread?.length
+    ? `\n(It finished before reading ${h.unread.length} steering message(s): ${h.unread.map((m) => JSON.stringify(m)).join("; ")})`
+    : "";
+  if (h.state === "done") return `${head}\n${h.result ?? ""}${late}`;
+  if (h.state === "failed") return `${head}\nIt failed: ${h.error ?? "unknown error"}${late}`;
+  return `${head}\nIt was stopped before finishing.${h.result && h.result !== "Stopped." ? ` Its last answer was: ${h.result}` : ""}${late}`;
 }
 
 function ago(ms: number): string {
