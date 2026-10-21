@@ -24,7 +24,7 @@ import { BROWSE_DEFAULT_STEPS, BROWSE_MAX_STEPS, renderBrowseReport, runBrowseTa
 import { seeActVerifyTool } from "./screenact.js";
 
 export {
-  excludeOnion, extractListings, extractNavLinks, extractPrices, extractReputation, extractReviews,
+  extractListings, extractNavLinks, extractPrices, extractReputation, extractReviews,
   fetchMarketplace, fetchProductCheck, fetchProductReviews, fetchSellerCheck, parseEbayResults,
   parseListingPage, runMarketplaceNav, scanScamSignals, sortRowsMechanically,
   type ListingRow, type NavSession,

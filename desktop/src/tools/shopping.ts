@@ -20,10 +20,15 @@ import { htmlToText, MAX_IMAGE_BYTES, runWebSearch, safeFetch, safeFetchBytes } 
  * - "Plugs" (the owner's word for known non-scammers) live in the app's
  *   memory: the check tools consult remembered facts about a seller and
  *   surface a match labeled as memory, never as page evidence.
- * - Onion exclusion lives in exactly ONE function — excludeOnion,
- *   below — applied at exactly ONE call site, admitRows. Extraction,
- *   navigation and reputation code never branch on realm; they stay
- *   URL-agnostic like the phone package's extraction does.
+ * - The shopping layer never branches on realm: extraction, navigation,
+ *   search and the check tools are URL-agnostic, like the phone package's
+ *   extraction. Owner reversal (2026-10-20, on the owner's explicit
+ *   order): the former onion exclusion — excludeOnion / admitRows, and the
+ *   pre-fetch refusal of onion targets in navigation and the check tools —
+ *   was removed. Onion listings appear in results like any other; whether
+ *   an onion page can be OPENED is the transport's decision alone (the
+ *   fetch funnel refuses .onion unless Tor is on, and never falls back to
+ *   clearnet).
  *
  * Transport is the app's own: every fetch goes through safeFetch, so the
  * search-fallback chain (DuckDuckGo → Bing → Brave) and any Tor routing
@@ -162,52 +167,6 @@ function totalOf(price: Money | null, shipping: Money | null, freeShipping: bool
   }
   return null; // shipping unknown or another currency: no invented total
 }
-
-// ---------- the onion exclusion: ONE function, ONE call site ----------
-
-/** Hostname parsing, not a naive suffix check on the full URL. */
-function isOnionUrl(url: string): boolean {
-  try {
-    const host = (new URL(url || "").hostname || "").toLowerCase();
-    return host.endsWith(".onion") && host.length > ".onion".length;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * THE onion exclusion — the only place in the shopping layer that knows
- * what an onion address is. Drops rows whose source page OR listing link
- * is an onion URL. Shopping targets are legitimate clearnet products and
- * companies; generic web_fetch is a different layer with its own rules.
- */
-export function excludeOnion(rows: ListingRow[]): { rows: ListingRow[]; excluded: ListingRow[] } {
-  const kept: ListingRow[] = [];
-  const excluded: ListingRow[] = [];
-  for (const r of rows || []) {
-    if ([r.sourceUrl, r.link].some((u) => isOnionUrl(u))) excluded.push(r);
-    else kept.push(r);
-  }
-  return { rows: kept, excluded };
-}
-
-/**
- * The single choke point: every row the shopping tools work on — search
- * candidates, extracted listings, navigation hop targets, and the target
- * of a page-check tool (wrapped as a row before any fetch) — passes
- * through here, and the excludeOnion call inside admitRows is the only
- * one in the shopping layer.
- */
-function admitRows(rows: ListingRow[]): ListingRow[] {
-  return excludeOnion(rows).rows;
-}
-
-function admitRow(row: ListingRow): ListingRow | null {
-  return admitRows([row])[0] ?? null;
-}
-
-const ONION_REFUSAL =
-  "That is an onion address. The shopping tools only work with clearnet products and companies, so it was not fetched.";
 
 // ---------- text helpers ----------
 
@@ -828,8 +787,6 @@ export async function runMarketplaceNav(
   sessions.set(sessionId, sess);
 
   const fetchInto = async (target: string, pushCurrent: boolean): Promise<string> => {
-    const gate = admitRow(blankRow({ sourceUrl: sess.currentUrl || target, link: target }));
-    if (!gate) return ONION_REFUSAL;
     let res: { status: number; type: string; body: string; url: string };
     try {
       res = await fetchFn(target, signal);
@@ -847,7 +804,7 @@ export async function runMarketplaceNav(
     const ebayRows = parseEbayResults(res.body, finalUrl);
     // A row that links back to this very page is the page's own product,
     // not a navigable result — what remains decides results vs listing.
-    const rows = admitRows(ebayRows.length ? ebayRows : extractListings(res.body, finalUrl))
+    const rows = (ebayRows.length ? ebayRows : extractListings(res.body, finalUrl))
       .filter((r) => r.link !== finalUrl);
     if (rows.length) {
       sess.rows = rows;
@@ -1191,13 +1148,10 @@ function shopSearchTool(): Tool {
     const outcome = await runWebSearch(`${query} buy price`, ctx.signal);
     if (!outcome.results.length) return outcome.text;
     const candidates = outcome.results.map((r) => blankRow({ title: r.title, link: r.url, sourceUrl: r.url, note: r.snippet }));
-    const admitted = admitRows(candidates);
-    const excluded = candidates.length - admitted.length;
     const lines = [
       `Candidate listings for "${query}" (via ${outcome.provider ?? "web search"}) — candidates only: the snippets below are NOT verified facts. Run product_check on a listing before trusting any price.`,
     ];
-    admitted.forEach((r, i) => lines.push(`${i + 1}. ${r.title}\n   ${r.link}${r.note ? `\n   ${r.note}` : ""}`));
-    if (excluded) lines.push(`(${excluded} onion result(s) excluded — the shopping tools work with clearnet products and companies only.)`);
+    candidates.forEach((r, i) => lines.push(`${i + 1}. ${r.title}\n   ${r.link}${r.note ? `\n   ${r.note}` : ""}`));
     return lines.join("\n");
   },
   });
@@ -1216,14 +1170,12 @@ export async function fetchMarketplace(query: string, marketplace: string, sort:
   const { res, refusal } = await fetchPage(url, signal, fetchFn);
   if (refusal) return refusal;
   const ebayRows = parseEbayResults(res!.body, url);
-  const extracted = ebayRows.length ? ebayRows : extractListings(res!.body, url);
-  const rows = admitRows(extracted);
+  const rows = ebayRows.length ? ebayRows : extractListings(res!.body, url);
   if (!rows.length) {
     return `Fetched ${url} (HTTP ${res!.status}) but no listings could be extracted — the site may require JavaScript or a login from this network. Nothing is claimed. shop_search can still find candidate pages to check one by one.`;
   }
   const { rows: sorted, label } = sortRowsMechanically(rows, sort);
-  const excludedNote = extracted.length - rows.length ? `\n(${extracted.length - rows.length} onion listing(s) excluded — shopping is clearnet-only.)` : "";
-  return `${renderRows(sorted, `Marketplace results for "${query}" on ${marketplace}`)}\nSorted by ${label}.${excludedNote}\nSource page: ${url}. Prices are as the page states them — verify a listing with product_check before trusting it.`;
+  return `${renderRows(sorted, `Marketplace results for "${query}" on ${marketplace}`)}\nSorted by ${label}.\nSource page: ${url}. Prices are as the page states them — verify a listing with product_check before trusting it.`;
 }
 
 function marketplaceSearchTool(): Tool {
@@ -1266,7 +1218,6 @@ function marketplaceNavigateTool(): Tool {
 }
 
 export async function runProductCheck(url: string, seenPrices: Money[], ctx: ToolContext, fetchFn: FetchFn = safeFetch, bytesFn: WebFetchBytesFn = safeFetchBytes): Promise<string> {
-  if (!admitRow(blankRow({ sourceUrl: url, link: url }))) return ONION_REFUSAL;
   const { detail, signals, refusal } = await fetchProductCheck(url, seenPrices, ctx.signal, fetchFn);
   if (refusal) return refusal;
   const notes = await memoryNotes(ctx, detail!.seller);
@@ -1295,9 +1246,6 @@ function productCheckTool(): Tool {
 }
 
 export async function runSellerCheck(urls: string[], seller: string, ctx: ToolContext, fetchFn: FetchFn = safeFetch, bytesFn: WebFetchBytesFn = safeFetchBytes): Promise<string> {
-  for (const u of urls) {
-    if (!admitRow(blankRow({ sourceUrl: u, link: u }))) return ONION_REFUSAL;
-  }
   const { rep, signals, refusal } = await fetchSellerCheck(urls, ctx.signal, fetchFn);
   if (refusal) return refusal;
   rep!.seller = seller || rep!.seller || "";
@@ -1343,9 +1291,6 @@ function productReviewsTool(): Tool {
   parallelSafe: true,
   async run({ url, extra_urls = [] }, ctx) {
     const urls = [url, ...extra_urls];
-    for (const u of urls) {
-      if (!admitRow(blankRow({ sourceUrl: u, link: u }))) return ONION_REFUSAL;
-    }
     const { set, refusal } = await fetchProductReviews(urls, ctx.signal);
     if (refusal) return refusal;
     return reviewsTable(set!, urls);
