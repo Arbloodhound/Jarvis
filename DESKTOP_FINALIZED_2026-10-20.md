@@ -1,4 +1,4 @@
-# DESKTOP_FINALIZED_2026-10-20 — **PARTIAL (2 open items: vision-shopping not built; branch deletion not permitted)**
+# DESKTOP_FINALIZED_2026-10-20 — **PARTIAL (1 open item: vision-shopping, unpushed on the owner's other machine)**
 
 Written 2026-10-21 by a Claude Code cloud session (record branch `claude/jarvis-desktop-finalize-3ifkur`, PR #23).
 The plan was `handoff/FINISH_DESKTOP_2026-10-20.md` (on `claude/handoff-docs-2026-10-20`), executed in the owner's order.
@@ -79,6 +79,20 @@ humaninput and synergy are not git ancestors of main. Their content arrived thro
 DESKTOP_VISION_SHOP report exists. The FINISH doc's only spec is one line: "vision on/off setting + vision-read
 evidence in shopping; built off c60f6e06". It was not built from that line, because that would be guessing at the
 design. It needs a build brief, or a restart of its build agent.
+
+**Update 2026-10-21:** the build agent on the owner's other machine was shut down before pushing. Its unfinished
+work exists only on that machine's disk, at `~/workspace/jarvis-rebuild/desktop-vision-shop/`. It is not in the repo
+and not reachable from cloud sessions. Owner's design rule for finishing it: vision ON means vision is always part of
+the model (deterministic enrichment in the shopping checks, with no per-call bypass); the settings toggle is the only
+off switch.
+
+To land it: push `claude/desktop-vision-shopping-2026-10-20` based on main `bde1dbb`, along with
+`DESKTOP_VISION_SHOP_2026-10-20.md`. Then verify the report, merge, run the full gate (expect 325 + delta), delete
+the branch, and flip this record to FINAL.
+
+## Branch cleanup (done)
+All 12 merged branches were deleted by the owner. This was verified on 2026-10-21: the remote heads are main,
+handoff-docs, this record branch, and two unrelated older branches.
 
 ## PARKED (not started, per owner)
 
