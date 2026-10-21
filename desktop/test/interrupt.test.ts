@@ -110,7 +110,7 @@ test("gateway: send with interrupt stops the working run and runs the new messag
     assert.ok(!asked.some((u) => u.includes("plain send")), "the refused send never ran");
   } finally {
     ws.close();
-    await gw.close();
+    gw.server.close();
   }
 });
 
@@ -124,6 +124,7 @@ test("chat: a line typed while a run works interrupts it and becomes the next re
     let body = "";
     req.on("data", (d) => (body += d));
     req.on("end", () => {
+      if (req.method !== "POST") { res.writeHead(404).end(); return; }
       const msgs = (JSON.parse(body) as { messages: Array<{ role: string; content?: unknown }> }).messages;
       const last = [...msgs].reverse().find((m) => m.role === "user");
       const u = typeof last?.content === "string" ? last.content : JSON.stringify(last?.content ?? "");
