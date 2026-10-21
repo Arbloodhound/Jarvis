@@ -121,6 +121,12 @@ export interface Config {
    */
   extraAllowedCommands: string[];
   maxTurns: number;
+  /**
+   * Terminal chat only: allow every confirm card without asking (each still
+   * printed). Purchases (prepare_order) and scam follow-ups always ask.
+   * Off by default; `jarvis chat --yes` turns it on for one chat.
+   */
+  autoApprove: boolean;
 }
 
 export interface Paths {
@@ -180,6 +186,7 @@ export function defaults(p: Paths): Config {
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
     maxTurns: 16,
+    autoApprove: false,
   };
 }
 
