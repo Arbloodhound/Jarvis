@@ -24,8 +24,11 @@ import * as os from "./platform.js";
  *    expected pattern. The report always shows the comparison (expected
  *    vs what the verify read actually said), never just "it worked".
  *
- * On a verify mismatch the loop re-grounds and retries the action ONCE,
- * then reports failure with both reads if it still does not match.
+ * The action runs AT MOST ONCE per call, because one call is one confirm
+ * card and the owner approved one action. On a verify mismatch nothing is
+ * clicked, typed or pressed again (a repeat could send a message twice, or
+ * click a point the owner never saw): the screen is re-read once after a
+ * further settle, and the report says honestly what it shows.
  */
 
 function tool<S extends z.ZodType>(t: Tool<S>): Tool {
@@ -113,18 +116,22 @@ export interface ScreenActDeps {
 
 export interface SeeActVerifyReport {
   outcome: "verified" | "failed" | "not-grounded";
-  /** Action attempts made (1 = first try, 2 = the single allowed retry was used). */
+  /** Times the action ran: 0 (never grounded) or 1. It never repeats under one card. */
   attempts: number;
   target: string;
   expected: string;
   groundings: Array<{ attempt: number; read: string; point: GroundedPoint | null }>;
   actions: string[];
-  verifies: Array<{ attempt: number; read: string; matched: boolean }>;
+  /** Read 1 is right after the action; read 2 (only on a mismatch) re-observes, with no input repeated. */
+  verifies: Array<{ read: number; matched: boolean; text: string }>;
   /** The comparison, stated plainly: expected vs what the final verify read said. */
   comparison: string;
 }
 
-const MAX_ATTEMPTS = 2; // first try + exactly one re-ground-and-retry
+/** Grounding reads before giving up. A re-ground acts on nothing; only the action is once-only. */
+const MAX_GROUNDINGS = 2;
+/** Verify reads after the single action: the first, plus one re-observe on a mismatch. */
+const MAX_VERIFY_READS = 2;
 
 /**
  * Short-form reads, capped so a slow local VLM stays inside the model
@@ -154,8 +161,9 @@ export async function runSeeActVerify(spec: ScreenActSpec, deps: ScreenActDeps):
     comparison: "",
   };
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    // SEE + GROUND
+  // SEE + GROUND (a re-ground is a second look only; nothing has been acted on yet)
+  let point: GroundedPoint | null = null;
+  for (let attempt = 1; attempt <= MAX_GROUNDINGS && !point; attempt++) {
     const shot = await deps.screenshot();
     const size = pngSize(shot) ?? { width: 1000, height: 1000 };
     const read = await vision.describe(
@@ -164,27 +172,33 @@ export async function runSeeActVerify(spec: ScreenActSpec, deps: ScreenActDeps):
       deps.signal,
       GROUND_MAX_TOKENS,
     );
-    const point = parseGrounding(read, size.width, size.height);
+    point = parseGrounding(read, size.width, size.height);
     report.groundings.push({ attempt, read, point });
-    if (!point) continue; // re-ground once; still nothing = not-grounded, and nothing was acted on
+  }
+  if (!point) {
+    report.comparison = `Expected: "${spec.expected}" | No verify read: the target was never grounded, so no action was taken. | Match: NO`;
+    return report;
+  }
 
-    // ACT at the grounded location
-    report.attempts = attempt;
-    if (spec.clickTarget) {
-      await deps.click(point.x, point.y);
-      report.actions.push(`attempt ${attempt}: click at ${point.x}, ${point.y} (grounded X=${point.relX}, Y=${point.relY})`);
-    }
-    if (spec.typeText) {
-      await deps.type(spec.typeText);
-      report.actions.push(`attempt ${attempt}: typed ${spec.typeText.length} characters`);
-    }
-    if (spec.keys) {
-      await deps.key(spec.keys);
-      report.actions.push(`attempt ${attempt}: pressed ${spec.keys}`);
-    }
+  // ACT at the grounded location — once. The owner's card covers one action.
+  report.attempts = 1;
+  if (spec.clickTarget) {
+    await deps.click(point.x, point.y);
+    report.actions.push(`click at ${point.x}, ${point.y} (grounded X=${point.relX}, Y=${point.relY})`);
+  }
+  if (spec.typeText) {
+    await deps.type(spec.typeText);
+    report.actions.push(`typed ${spec.typeText.length} characters`);
+  }
+  if (spec.keys) {
+    await deps.key(spec.keys);
+    report.actions.push(`pressed ${spec.keys}`);
+  }
+
+  // VERIFY against the named expected pattern; on a mismatch, look again (the screen
+  // may still be updating) but repeat no input.
+  for (let n = 1; n <= MAX_VERIFY_READS; n++) {
     if (settle > 0) await new Promise((r) => setTimeout(r, settle));
-
-    // VERIFY against the named expected pattern
     const vshot = await deps.screenshot();
     const vread = await vision.describe(
       [{ data: vshot.toString("base64"), mediaType: "image/png" }],
@@ -193,20 +207,15 @@ export async function runSeeActVerify(spec: ScreenActSpec, deps: ScreenActDeps):
       VERIFY_MAX_TOKENS,
     );
     const matched = verifyMatch(vread, spec.expected);
-    report.verifies.push({ attempt, read: vread, matched });
+    report.verifies.push({ read: n, matched, text: vread });
     report.comparison =
-      `Expected: "${spec.expected}" | Verify read (attempt ${attempt}): "${vread.replace(/\s+/g, " ").trim().slice(0, 400)}" | Match: ${matched ? "YES" : "NO"}`;
+      `Expected: "${spec.expected}" | Verify read ${n}${n > 1 ? " (re-observed, no input repeated)" : ""}: "${vread.replace(/\s+/g, " ").trim().slice(0, 400)}" | Match: ${matched ? "YES" : "NO"}`;
     if (matched) {
       report.outcome = "verified";
       return report;
     }
-    // Mismatch: loop re-grounds and retries ONCE, then reports failure honestly.
   }
-
-  report.outcome = report.groundings.every((g) => !g.point) ? "not-grounded" : "failed";
-  if (!report.comparison) {
-    report.comparison = `Expected: "${spec.expected}" | No verify read: the target was never grounded, so no action was taken. | Match: NO`;
-  }
+  report.outcome = "failed";
   return report;
 }
 
@@ -218,14 +227,16 @@ export function formatReport(r: SeeActVerifyReport): string {
     lines.push(g.point ? `  → grounded point: ${g.point.x}, ${g.point.y} px (X=${g.point.relX}, Y=${g.point.relY} on the 0-1000 scale)` : "  → no coordinates in the read: NOT GROUNDED");
   }
   lines.push(r.actions.length ? `Actions:\n${r.actions.map((a) => `  - ${a}`).join("\n")}` : "Actions: none");
-  for (const v of r.verifies) lines.push(`Verify (attempt ${v.attempt}): ${v.matched ? "MATCH" : "NO MATCH"} — read: ${v.read.replace(/\s+/g, " ").trim()}`);
+  for (const v of r.verifies) {
+    lines.push(`Verify read ${v.read}${v.read > 1 ? " (re-observed, no input repeated)" : ""}: ${v.matched ? "MATCH" : "NO MATCH"} — read: ${v.text.replace(/\s+/g, " ").trim()}`);
+  }
   lines.push(`Comparison: ${r.comparison}`);
   lines.push(
     r.outcome === "verified"
-      ? `Outcome: VERIFIED on attempt ${r.attempts}.`
+      ? `Outcome: VERIFIED on attempt ${r.attempts} (verify read ${r.verifies.length}; the action ran once).`
       : r.outcome === "not-grounded"
         ? "Outcome: NOT GROUNDED — the vision read gave no usable coordinates, so no action was taken."
-        : `Outcome: FAILED — the expected pattern was not seen after ${r.attempts} attempt(s) (one re-ground + retry used). Reported as failed, not retried further.`,
+        : `Outcome: FAILED — the expected pattern was not seen. The action ran once and was NOT repeated (one action per OK); the screen was re-read and shows what the last verify read says. Ask the owner before trying again.`,
   );
   return lines.join("\n");
 }
@@ -235,7 +246,7 @@ export function formatReport(r: SeeActVerifyReport): string {
 export const seeActVerifyTool = tool({
   name: "see_act_verify",
   description:
-    "Ground a named on-screen target with the vision model, act at the grounded location (click it, then optionally type text and/or press keys), then re-read the screen and verify the result against an expected pattern. Reports the grounding, the actions, and the expected-vs-read comparison; retries once after re-grounding if verification fails. Experimental; off unless the owner turned screen control on. Every use asks the owner first.",
+    "Ground a named on-screen target with the vision model, act at the grounded location (click it, then optionally type text and/or press keys), then re-read the screen and verify the result against an expected pattern. The action runs at most once per call (one OK, one action): on a verify mismatch it re-reads the screen once and reports what it shows, never repeating the click, typing or keys. Reports the grounding, the actions, and the expected-vs-read comparison. Experimental; off unless the owner turned screen control on. Every use asks the owner first.",
   schema: z.object({
     target: z.string().min(1).max(300).describe("what to find on screen, in words (the vision model grounds it)"),
     click_target: z.boolean().optional().describe("click at the grounded point first (e.g. to focus a window)"),

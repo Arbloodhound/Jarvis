@@ -379,15 +379,28 @@ export class Gate {
 
   check(ep: Episode, tool: string, policy: ToolPolicy, args: Record<string, unknown>): Verdict {
     const str = (k: string) => (typeof args[k] === "string" ? (args[k] as string) : "");
+    // Target and egress args may be lists (extra_urls): every string in the list is
+    // checked like a lone string would be. An empty list checks as one empty string.
+    const vals = (k: string): string[] => {
+      const v = args[k];
+      if (typeof v === "string") return [v];
+      if (Array.isArray(v)) {
+        const all = v.filter((x): x is string => typeof x === "string");
+        return all.length ? all : [""];
+      }
+      return [""];
+    };
     const outArgs = [...(policy.egressArgs ?? []), ...(policy.targetArgs ?? [])];
 
     // 1. Secrets never leave, whatever the owner says on a card.
     if (policy.effects.includes("egress") || policy.effects.includes("exec")) {
       for (const k of outArgs) {
-        const variants = egressVariants(str(k));
-        for (const s of ep.secrets) {
-          if (s.length >= 4 && variants.some((x) => x.includes(s))) {
-            return { allowed: false, blocked: { rule: "secret_egress", reason: `"${k}" carries a secret seen this run (key or one-time code); it never leaves this computer.` } };
+        for (const v of vals(k)) {
+          const variants = egressVariants(v);
+          for (const s of ep.secrets) {
+            if (s.length >= 4 && variants.some((x) => x.includes(s))) {
+              return { allowed: false, blocked: { rule: "secret_egress", reason: `"${k}" carries a secret seen this run (key or one-time code); it never leaves this computer.` } };
+            }
           }
         }
       }
@@ -399,7 +412,7 @@ export class Gate {
 
     // 2. Scam follow-ups: never automatic.
     for (const k of outArgs) {
-      const hit = [...targetsIn(str(k))].find((t) => ep.scamTargets.has(t));
+      const hit = vals(k).flatMap((v) => [...targetsIn(v)]).find((t) => ep.scamTargets.has(t));
       if (hit) return ask("scam_followup", `${hit.replace(":", " ")} came from something that looks like a scam (${ep.scamReasons.join("; ")}).`);
     }
 
@@ -432,8 +445,7 @@ export class Gate {
 
     // 5. Where a side effect lands must come from the owner (or be confirmed).
     const fetchOnly = policy.effects.includes("egress") && !policy.effects.includes("mutate");
-    for (const k of policy.targetArgs ?? []) {
-      const v = str(k);
+    for (const k of policy.targetArgs ?? []) for (const v of vals(k)) {
       if (!v) continue;
       const isUrl = /^https?:\/\//i.test(v) || normHost(v) !== null;
       const fromOwner = isUrl ? hostTracesTo(v, ep.request) : tracesTo(v, ep.request);
@@ -447,15 +459,14 @@ export class Gate {
     if (policy.effects.includes("egress")) {
       // 6. Private text leaving in an egress argument.
       for (const k of outArgs) {
-        for (const variant of egressVariants(str(k))) {
+        for (const variant of vals(k).flatMap((v) => egressVariants(v))) {
           const leak = ep.leakedPrivate(variant);
           if (leak) return ask("private_data_egress", `"${k}" contains text read from this computer ("${leak}").`);
         }
       }
       // 7. The lethal trifecta: private text + outside text + something leaving that the owner didn't type.
       if (ep.hasPrivate() && ep.hasOutside()) {
-        for (const k of outArgs) {
-          const v = str(k);
+        for (const k of outArgs) for (const v of vals(k)) {
           if (!v || tracesTo(v, ep.request) || hostTracesTo(v, ep.request) || ep.sawOutside(v)) continue;
           return ask("private_and_untrusted", `This request read your files and the web; sending "${v.slice(0, 120)}" out needs your OK.`);
         }

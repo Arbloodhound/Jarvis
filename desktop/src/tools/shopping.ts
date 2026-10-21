@@ -1267,7 +1267,8 @@ function sellerCheckTool(): Tool {
     extra_urls: z.array(z.string().url()).max(4).optional().describe("more fetched pages about the same seller"),
     seller: z.string().optional().describe("the seller's name, if known (used for the memory lookup)"),
   }),
-  policy: { effects: ["egress"], targetArgs: ["url"] },
+  // extra_urls are fetched too: the gate checks each one like url.
+  policy: { effects: ["egress"], targetArgs: ["url", "extra_urls"] },
   outside: true,
   network: true,
   parallelSafe: true,
@@ -1285,7 +1286,8 @@ function productReviewsTool(): Tool {
     url: z.string().url().describe("a product page with reviews, or a reviews page"),
     extra_urls: z.array(z.string().url()).max(4).optional(),
   }),
-  policy: { effects: ["egress"], targetArgs: ["url"] },
+  // extra_urls are fetched too: the gate checks each one like url.
+  policy: { effects: ["egress"], targetArgs: ["url", "extra_urls"] },
   outside: true,
   network: true,
   parallelSafe: true,

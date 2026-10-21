@@ -86,7 +86,7 @@ test("verified on the first attempt: action executes AT the grounded point", asy
   assert.match(formatReport(r), /Outcome: VERIFIED on attempt 1/);
 });
 
-test("verify mismatch re-grounds and retries ONCE, then verifies", async () => {
+test("verify mismatch: the action is NOT repeated; a re-observe that shows it landed late counts", async () => {
   const { deps, actions } = scripted(
     [GROUND_OK, GROUND_OK],
     ["MARKER: NONE. NO", "Now it shows MARKER: ZEBRAQUANTUM7398. YES"],
@@ -95,25 +95,50 @@ test("verify mismatch re-grounds and retries ONCE, then verifies", async () => {
     { target: "the terminal prompt line", clickTarget: true, typeText: "echo x", keys: "Return", expected: "ZEBRAQUANTUM7398" },
     deps,
   );
-  assert.equal(r.outcome, "verified");
-  assert.equal(r.attempts, 2);
-  assert.equal(actions.filter((a) => a.startsWith("click")).length, 2);
+  // One card, one action: exactly one click, one typing, one key press.
+  assert.deepEqual(actions, ["click 250,50", "type echo x", "key Return"]);
+  assert.equal(r.attempts, 1);
+  assert.equal(r.groundings.length, 1);
   assert.equal(r.verifies.length, 2);
   assert.equal(r.verifies[0]!.matched, false);
   assert.equal(r.verifies[1]!.matched, true);
+  assert.equal(r.outcome, "verified");
+  assert.match(formatReport(r), /re-observed, no input repeated/);
 });
 
-test("verify mismatch twice reports FAILED with the comparison — no third attempt", async () => {
-  const { deps, actions } = scripted([GROUND_OK], ["MARKER: NONE. NO"]);
+test("verify mismatch twice: FAILED, the action ran exactly once, and the report says what the screen shows", async () => {
+  const { deps, actions } = scripted([GROUND_OK], ["MARKER: NONE. NO", "The screen shows a login dialog. NO"]);
+  const r = await runSeeActVerify(
+    { target: "the terminal prompt line", clickTarget: true, typeText: "echo x", keys: "Return", expected: "ZEBRAQUANTUM7398" },
+    deps,
+  );
+  assert.equal(r.outcome, "failed");
+  assert.deepEqual(actions, ["click 250,50", "type echo x", "key Return"]); // never repeated
+  assert.equal(r.attempts, 1);
+  assert.equal(r.verifies.length, 2); // the first read + one re-observe, no third
+  assert.match(r.comparison, /Match: NO/);
+  assert.match(r.comparison, /login dialog/);
+  const out = formatReport(r);
+  assert.match(out, /Outcome: FAILED/);
+  assert.match(out, /NOT repeated/);
+});
+
+test("a first grounding miss re-grounds without acting; the action still runs once", async () => {
+  const { deps, actions } = scripted(["TARGET NOT VISIBLE", GROUND_OK], ["MARKER: NONE. NO"]);
   const r = await runSeeActVerify(
     { target: "the terminal prompt line", clickTarget: true, typeText: "echo x", expected: "ZEBRAQUANTUM7398" },
     deps,
   );
+  assert.equal(r.groundings.length, 2);
+  assert.deepEqual(actions, ["click 250,50", "type echo x"]);
   assert.equal(r.outcome, "failed");
-  assert.equal(r.attempts, 2);
-  assert.equal(actions.filter((a) => a.startsWith("click")).length, 2); // exactly one retry
-  assert.match(r.comparison, /Match: NO/);
-  assert.match(formatReport(r), /Outcome: FAILED/);
+});
+
+test("see_act_verify's description promises one action per call, not a retry", async () => {
+  const { ALL_TOOLS } = await import("../src/tools/index.ts");
+  const d = ALL_TOOLS.find((t) => t.name === "see_act_verify")!.description;
+  assert.doesNotMatch(d, /retries/);
+  assert.match(d, /at most once/);
 });
 
 test("no grounding coordinates: NOT GROUNDED and zero actions executed", async () => {

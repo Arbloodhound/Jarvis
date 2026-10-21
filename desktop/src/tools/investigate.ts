@@ -43,7 +43,9 @@ export const investigateNewTool = tool({
     target: z.string().min(1).max(300),
     kind: z.enum(["person", "company", "domain", "other"]).optional(),
   }),
-  policy: { effects: ["mutate"], lastsBeyondRequest: true },
+  // The target is stored now and sent to search engines later by investigate_run,
+  // which only reads it back from disk; so the gate checks it here, as egress.
+  policy: { effects: ["mutate", "egress"], egressArgs: ["target"], lastsBeyondRequest: true },
   async run({ target, kind }, ctx) {
     const c = store(ctx.home).create(target, kind ?? "other");
     return `Created investigation case ${c.slug} for "${c.target}" (${c.targetKind}).\nLegs: ${LEGS.map((l) => `${l} (${LEG_LABELS[l]})`).join("; ")} — none run yet.\nAdd evidence with investigate_evidence, gather with investigate_run, compile with investigate_report.`;
