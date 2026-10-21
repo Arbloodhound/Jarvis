@@ -22,6 +22,30 @@ test("slugify: target becomes a safe folder name", () => {
   assert.equal(slugify("!!!"), "case");
 });
 
+test("slugify: accented targets fold to ASCII, so the case can be created and reopened", async () => {
+  assert.equal(slugify("Müller GmbH"), "muller-gmbh");
+  assert.match(slugify("Ærøskøbing Café"), /^[a-z0-9][a-z0-9-]*$/);
+  const h = home();
+  const c = new CaseStore(h).create("Müller GmbH", "company");
+  assert.equal(c.slug, "muller-gmbh");
+  assert.equal(new CaseStore(h).load(c.slug).target, "Müller GmbH");
+  const tool = ALL_TOOLS.find((t) => t.name === "investigate_new")!;
+  const out = await tool.run({ target: "Zoë Ångström", kind: "person" }, ctxFor(h));
+  assert.match(out, /Created investigation case zoe-angstrom /);
+});
+
+test("slugify: a target with no ASCII letters gets a stable short hash slug", () => {
+  const s = slugify("東京電力");
+  assert.match(s, /^case-[0-9a-f]{8}$/);
+  assert.equal(slugify("東京電力"), s, "stable");
+  assert.notEqual(slugify("大阪ガス"), s, "distinct targets get distinct slugs");
+  const h = home();
+  const c = new CaseStore(h).create("東京電力", "company");
+  assert.equal(c.slug, s);
+  assert.equal(new CaseStore(h).load(s).target, "東京電力");
+  assert.throws(() => new CaseStore(h).load("東京電力"), /No case named/, "assertSlug still refuses non-ASCII names");
+});
+
 test("case create/open/list round-trips through cases/<slug>/case.json", () => {
   const h = home();
   const s = new CaseStore(h);
