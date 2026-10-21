@@ -128,7 +128,7 @@ export class Runtime {
 
   /** The tools every agent here shares (the coordinator's four are added only at the top level). */
   private baseTools(): Tool[] {
-    return toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, vision: this.cfg.vision.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }, ttsEnabled: this.cfg.voice.ttsEnabled, notifications: this.notifications });
+    return toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, vision: this.cfg.vision.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort, auto: this.cfg.tor.auto }, ttsEnabled: this.cfg.voice.ttsEnabled, notifications: this.notifications });
   }
 
   /**
@@ -258,7 +258,7 @@ export class Runtime {
     return ownerContext(text, attachments, {
       cwd: this.cwd,
       vision: this.vision(),
-      webFetch: this.cfg.offlineOnly ? null : makeWebFetch({ enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }),
+      webFetch: this.cfg.offlineOnly ? null : makeWebFetch({ enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort, auto: this.cfg.tor.auto }),
       signal: AbortSignal.timeout(60_000),
     });
   }
