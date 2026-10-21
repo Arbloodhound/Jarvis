@@ -75,6 +75,11 @@ const ASK_SUBAGENT_WAIT_MS = 120_000;
  */
 function terminalHooks(term: TerminalPrompt, input: { closed: boolean }): OwnerChannel {
   let thinking = false;
+  // Tools the owner answered "a" (always) for: their later cards in this
+  // chat are allowed without asking. Never purchases (they need fresh
+  // approval every time) and never scam follow-ups.
+  const alwaysAllowed = new Set<string>();
+  const neverAuto = (card: { tool: string; rule: string }) => card.tool === "prepare_order" || card.rule === "scam_followup";
   return {
     emit(e: AgentEvent) {
       if (e.type === "confirm_resolved") {
@@ -114,12 +119,21 @@ function terminalHooks(term: TerminalPrompt, input: { closed: boolean }): OwnerC
         process.stdout.write(yellow("  Confirmation unavailable — the input is closed, so this is treated as declined.\n"));
         return false;
       }
-      const a = await term.card(card.cardId, text, "  Allow? [y/N] ");
+      if (alwaysAllowed.has(card.tool) && !neverAuto(card)) {
+        process.stdout.write(dim(`\n✓ ${card.tool} ${JSON.stringify(card.args).slice(0, 160)} (allowed: you said "always" for ${card.tool} in this chat)\n`));
+        return true;
+      }
+      const offerAlways = !neverAuto(card);
+      const a = await term.card(card.cardId, text, offerAlways ? `  Allow? [y/N] (or a = always for ${card.tool} in this chat) ` : "  Allow? [y/N] ");
       if (a === null) {
         if (term.closed) process.stdout.write(yellow("\n  Confirmation unavailable — the input closed, so this is treated as declined.\n"));
         return false;
       }
       const v = a.trim().toLowerCase();
+      if (offerAlways && (v === "a" || v === "always")) {
+        alwaysAllowed.add(card.tool);
+        return true;
+      }
       return v === "y" || v === "yes";
     },
     handoff(h) {
