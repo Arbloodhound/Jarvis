@@ -1,5 +1,7 @@
 import { Agent } from "./agent/loop.js";
 import { type Config, type Paths, saveConfig } from "./config.js";
+import { Conversations } from "./conversations.js";
+import { ownerContext, type Attachment } from "./context.js";
 import { AuditLog } from "./gate/audit.js";
 import { Gate } from "./gate/gate.js";
 import { Embedder } from "./embeddings.js";
@@ -8,7 +10,7 @@ import { Memory } from "./memory.js";
 import { ClaudeProvider } from "./providers/claude.js";
 import { LocalProvider } from "./providers/local.js";
 import type { Provider } from "./providers/types.js";
-import { probeTorProxy, toolsFor } from "./tools/index.js";
+import { makeWebFetch, probeTorProxy, toolsFor } from "./tools/index.js";
 
 /**
  * Wires config, memory, gate, brains and tools into one Agent. Shared by the
@@ -18,8 +20,12 @@ import { probeTorProxy, toolsFor } from "./tools/index.js";
 export class Runtime {
   readonly agent: Agent;
   readonly memory: Memory;
+  /** Conversation branches; the agent's live turns are the active branch's working copy. */
+  readonly conversations: Conversations;
+  private readonly cwd: string;
 
   constructor(readonly cfg: Config, readonly p: Paths, cwd = process.cwd()) {
+    this.cwd = cwd;
     this.memory = new Memory(p.memory);
     this.agent = new Agent({
       provider: () => this.provider(),
@@ -33,6 +39,31 @@ export class Runtime {
       workspace: p.workspace,
       cwd,
       maxTurns: cfg.maxTurns,
+    });
+    // Resume the active conversation branch, so a restart (or the CLI after
+    // the gateway) continues the same conversation the owner left.
+    this.conversations = new Conversations(p.conversations);
+    const saved = this.conversations.activeTurns();
+    if (saved.length) this.agent.loadTurns(saved);
+  }
+
+  /** Save the agent's live turns back into the active branch. Call after every run and edit. */
+  syncConversation(): void {
+    this.conversations.setActiveTurns(this.agent.turns);
+  }
+
+  /**
+   * The owner-provided context for one message — @-references resolved and
+   * attachments read — as a block that rides the turn ("" when the message
+   * carries neither). Fetches go through the web tools' own transport, so
+   * Tor routing applies and offline-only refuses.
+   */
+  async ownerContext(text: string, attachments: Attachment[] = []): Promise<string> {
+    return ownerContext(text, attachments, {
+      cwd: this.cwd,
+      vision: this.vision(),
+      webFetch: this.cfg.offlineOnly ? null : makeWebFetch({ enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }),
+      signal: AbortSignal.timeout(60_000),
     });
   }
 
