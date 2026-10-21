@@ -321,7 +321,7 @@ export class EcholaliaStore {
   private promote(entry: PendingEntry, why: string): PendingEntry {
     const fact = this.memory.remember(
       entry.claim,
-      `echolalia: ${why}; source: ${entry.source}; echoes: ${entry.echoes}; pending id ${entry.id}`,
+      { provenance: `echolalia: ${why}; source: ${entry.source}; echoes: ${entry.echoes}; pending id ${entry.id}` },
     );
     entry.factId = fact.id;
     entry.status = "promoted";

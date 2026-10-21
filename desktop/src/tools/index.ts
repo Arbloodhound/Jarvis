@@ -12,7 +12,7 @@ import type { ToolPolicy } from "../gate/gate.js";
 import { resolvePath } from "../gate/gate.js";
 import type { Embedder } from "../embeddings.js";
 import { formatEntry, type EcholaliaStore } from "../echolalia.js";
-import type { Memory } from "../memory.js";
+import { CLAIM_KINDS, type Memory } from "../memory.js";
 import type { SkillStore } from "../skills.js";
 import type { Vision } from "../vision.js";
 import { speak as speakVoice, type Transcriber } from "../voice.js";
@@ -859,20 +859,23 @@ const systemInfoTool = tool({
 const rememberTool = tool({
   name: "remember",
   description:
-    "Save a short fact about the owner or their world for later (one fact per call). When verify-before-store is on, the fact is held UNVERIFIED in the pending store instead: give source and source_text (the text the fact came from) so it can be checked; it becomes a real memory only after the source check passes and it is echoed or the owner confirms it.",
+    "Save a short fact about the owner or their world for later (one fact per call). Optionally tag its kind and salience, and pass `supersedes` with the id of an older fact this one replaces (the old fact is kept as history, not recalled). When verify-before-store is on, the fact is held UNVERIFIED in the pending store instead: give source and source_text (the text the fact came from) so it can be checked; it becomes a real memory only after the source check passes and it is echoed or the owner confirms it. Kind, salience and supersedes apply only when the fact is written directly (verify-before-store off).",
   schema: z.object({
     fact: z.string().min(2).max(500),
+    kind: z.enum(CLAIM_KINDS).optional(),
+    salience: z.enum(["low", "medium", "high"]).optional(),
+    supersedes: z.string().optional(),
     source: z.string().max(200).optional().describe("Where the fact came from (a message, tool, page or person)"),
     source_text: z.string().max(2000).optional().describe("The source text the fact was read from, for verification"),
   }),
   policy: { effects: ["mutate"], lastsBeyondRequest: true },
-  async run({ fact, source, source_text }, ctx) {
+  async run({ fact, kind, salience, supersedes, source, source_text }, ctx) {
     if (ctx.echolalia) {
       const out = await ctx.echolalia.submit(fact, { source, sourceText: source_text }, ctx.embedder);
       return out.message;
     }
-    const f = ctx.memory.remember(fact);
-    return `Remembered (${f.id}): ${f.text}`;
+    const f = ctx.memory.remember(fact, { kind, salience, supersedes });
+    return `Remembered (${f.id}): ${f.text}${f.supersedes ? ` (supersedes ${f.supersedes})` : ""}`;
   },
 });
 
@@ -908,13 +911,17 @@ const memoryDecideTool = tool({
 
 const recallTool = tool({
   name: "recall",
-  description: "Search what you remember about the owner. Empty query lists recent facts.",
-  schema: z.object({ query: z.string() }),
+  description: "Search what you remember about the owner. Empty query lists recent facts. Superseded facts are hidden unless `includeSuperseded` is set. Recalled facts are reinforced: they decay slower afterwards.",
+  schema: z.object({ query: z.string(), includeSuperseded: z.boolean().optional() }),
   policy: { effects: ["read"] },
   parallelSafe: true,
-  async run({ query }, ctx) {
-    const hits = await ctx.memory.search(query, ctx.embedder);
-    return hits.length ? hits.map((f) => `(${f.id}) ${f.text}`).join("\n") : "Nothing remembered about that.";
+  async run({ query, includeSuperseded }, ctx) {
+    const hits = await ctx.memory.search(query, ctx.embedder, 8, { includeSuperseded });
+    // Recall-and-use reinforces: decay resets and salience can climb.
+    for (const f of hits) ctx.memory.reinforce(f.id);
+    return hits.length
+      ? hits.map((f) => `(${f.id}) [${f.kind}] ${f.text}${f.supersedes ? ` (supersedes ${f.supersedes})` : ""}${f.supersededBy ? ` (superseded by ${f.supersededBy})` : ""}`).join("\n")
+      : "Nothing remembered about that.";
   },
 });
 
