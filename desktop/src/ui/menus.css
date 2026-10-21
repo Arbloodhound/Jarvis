@@ -1,0 +1,28 @@
+/* Skills and Agents menus (menus.js). Uses index.html's color tokens. */
+.menu-panel { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 11; }
+.menu-panel.open { display: flex; }
+.menu-panel .box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: min(720px, 94vw); max-height: 86vh; overflow: auto; padding: 14px 16px; }
+.menu-panel .head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.menu-panel .head h3 { margin: 0; font-size: 15px; flex: 1; }
+.menu-panel .muted { color: var(--muted); font-size: 13px; }
+.menu-panel .items { display: flex; flex-direction: column; gap: 6px; }
+.menu-panel .item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.menu-panel .item .txt { flex: 1; min-width: 0; }
+.menu-panel .item .nm { font-weight: 600; font-size: 14px; }
+.menu-panel .item .ds { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.menu-panel .item .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.menu-panel .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; margin-left: 6px; font-weight: 400; }
+.menu-panel form.edit { display: flex; flex-direction: column; gap: 10px; }
+.menu-panel form.edit label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.menu-panel form.edit input[type="text"], .menu-panel form.edit textarea, .menu-panel .runbox textarea { font: inherit; font-size: 14px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
+.menu-panel form.edit textarea { min-height: 200px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; flex: none; max-height: none; }
+.menu-panel .tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 2px 10px; max-height: 200px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.menu-panel .tools label { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.menu-panel .tools label.unknown { color: var(--bad); }
+.menu-panel .row-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.menu-panel button.primary { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text); cursor: pointer; }
+.menu-panel button.danger { color: var(--bad); }
+.menu-panel .menu-err { color: var(--bad); font-size: 13px; white-space: pre-wrap; }
+.menu-panel .menu-err:empty { display: none; }
+.menu-panel .runbox { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.menu-panel .runbox textarea { min-height: 70px; resize: vertical; flex: none; }
