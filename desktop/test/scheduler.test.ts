@@ -249,6 +249,43 @@ test("a run that needed a confirmation is reported declined-confirm and audit-lo
   assert.equal(store.get(job.id)!.enabled, false); // still marked run: no retry loop
 });
 
+/** A promise the test releases by hand: stands in for a slow job run, no real sleep. */
+function deferred(): { p: Promise<void>; release: () => void } {
+  let release!: () => void;
+  const p = new Promise<void>((r) => { release = r; });
+  return { p, release };
+}
+
+test("overlapping ticks never fire a job twice: a tick blocked on a slow job does not re-fire one another tick ran", async () => {
+  const fired: string[] = [];
+  const gate = deferred();
+  const { store, sched } = makeScheduler(async (j) => { fired.push(j.task); if (j.task === "a") await gate.p; return { detail: "x" }; });
+  store.add({ owner: "me", kind: "once", schedule: new Date(T0 + 1000).toISOString(), task: "a" }, T0);
+  const b = store.add({ owner: "me", kind: "once", schedule: new Date(T0 + 1000).toISOString(), task: "b" }, T0);
+  const first = sched.tick(T0 + 2000); // blocks inside job a
+  const second = await sched.tick(T0 + 3000); // the next timer tick, while the first is still running
+  gate.release();
+  await first;
+  assert.deepEqual(fired, ["a", "b"]); // b once, never a,b,b
+  assert.deepEqual(second, []); // skipped: a tick never overlaps another
+  assert.equal(store.get(b.id)!.enabled, false);
+});
+
+test("a tick re-reads each job before firing it: a job disabled while an earlier job ran is not fired from a stale copy", async () => {
+  const fired: string[] = [];
+  const gate = deferred();
+  const { store, sched } = makeScheduler(async (j) => { fired.push(j.task); if (j.task === "a") await gate.p; return { detail: "x" }; });
+  store.add({ owner: "me", kind: "once", schedule: new Date(T0 + 1000).toISOString(), task: "a" }, T0);
+  const b = store.add({ owner: "me", kind: "cron", schedule: "every 1s", task: "b" }, T0);
+  const first = sched.tick(T0 + 2000);
+  store.setEnabled(b.id, false, T0 + 2000); // e.g. `jarvis jobs disable` from another process
+  gate.release();
+  await first;
+  assert.deepEqual(fired, ["a"]);
+  assert.equal(store.get(b.id)!.enabled, false);
+  assert.equal(store.get(b.id)!.lastRun, null);
+});
+
 // ------------------------------------------------------------------ hooks ---
 
 test("hook job fires when its watched file changes, and not before", { timeout: 30_000 }, async () => {

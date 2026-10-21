@@ -374,6 +374,7 @@ interface AuditLike { write(entry: Record<string, unknown>): void }
 
 export class Scheduler {
   private timer: NodeJS.Timeout | null = null;
+  private ticking = false;
   private readonly firing = new Set<string>();
   private readonly watchers = new Map<string, FSWatcher>();
   private readonly watchedSig = new Map<string, string>();
@@ -417,13 +418,31 @@ export class Scheduler {
     this.debounce.clear();
   }
 
-  /** One evaluation pass. Returns what fired (or was skipped) this pass. */
+  /**
+   * One evaluation pass. Returns what fired (or was skipped) this pass.
+   * Ticks never overlap: start() runs one every tickMs without awaiting it,
+   * and a tick blocked on a slow job must not race a newer tick over the
+   * jobs after it. A tick that finds one already running is skipped ([]).
+   */
   async tick(nowMs: number = this.now(), opts: { catchUp?: boolean } = {}): Promise<FireOutcome[]> {
+    if (this.ticking) return [];
+    this.ticking = true;
+    try {
+      return await this.evaluate(nowMs, opts);
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async evaluate(nowMs: number, opts: { catchUp?: boolean }): Promise<FireOutcome[]> {
     const outcomes: FireOutcome[] = [];
     const grace = this.deps.graceMs ?? MISSED_GRACE_MS;
-    const jobs = this.deps.store.load();
-    for (const job of jobs) {
-      if (!job.enabled || job.kind === "hook") continue;
+    for (const { id } of this.deps.store.load()) {
+      // Re-read each job right before acting on it: an earlier job in this
+      // pass may have run for minutes, and another process (`jarvis jobs`)
+      // may have disabled, moved or removed this one meanwhile.
+      const job = this.deps.store.get(id);
+      if (!job || !job.enabled || job.kind === "hook") continue;
       if (job.nextRun === null) {
         // A time job with no next run (hand-edited file, re-enabled once job):
         // give a once job its time back; re-base a cron job on now. Never fire blind.
