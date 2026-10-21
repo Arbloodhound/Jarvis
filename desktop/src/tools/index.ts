@@ -12,6 +12,7 @@ import type { ToolPolicy } from "../gate/gate.js";
 import { resolvePath } from "../gate/gate.js";
 import type { Embedder } from "../embeddings.js";
 import type { Memory } from "../memory.js";
+import type { SkillStore } from "../skills.js";
 import type { Vision } from "../vision.js";
 import { speak as speakVoice, type Transcriber } from "../voice.js";
 import { INVESTIGATE_TOOLS } from "./investigate.js";
@@ -42,6 +43,8 @@ export interface ToolContext {
   vision: Vision | null;
   /** Speech-to-text backend, or null when not set up / withheld offline. */
   transcriber: Transcriber | null;
+  /** The run's discovered skills, or null when the host wired none in. */
+  skills: SkillStore | null;
   signal: AbortSignal;
   /** How web tools fetch. Set per run by toolsFor (Tor transport when on); direct safeFetch otherwise. */
   webFetch?: WebFetchFn;
@@ -812,6 +815,66 @@ const forgetTool = tool({
   },
 });
 
+// ---------- skills ----------
+
+/**
+ * Skills are local files under the discovered skill roots, so all three
+ * tools are read-class for the gate: no egress, no mutation, no exec.
+ * skill_read takes a skill NAME, never a path — the body comes only from a
+ * discovered entry whose path the store re-checks against the roots, so
+ * there is no path argument an escape could be smuggled through.
+ */
+
+function requireSkills(ctx: ToolContext): SkillStore {
+  if (!ctx.skills) throw new Error("No skills are wired into this session.");
+  return ctx.skills;
+}
+
+const skillListTool = tool({
+  name: "skill_list",
+  description: "List the skills available in this session (name, description and where each lives). Metadata only — use skill_read to load a skill's full text.",
+  schema: z.object({}),
+  policy: { effects: ["read"] },
+  parallelSafe: true,
+  async run(_a, ctx) {
+    const entries = requireSkills(ctx).list();
+    return entries.length
+      ? entries.map((e) => `- ${e.name}: ${e.description} [${e.location}]`).join("\n")
+      : "No skills are available in this session.";
+  },
+});
+
+const skillSearchTool = tool({
+  name: "skill_search",
+  description: "Search the available skills by words in their names and descriptions. Returns matching skills' metadata only — use skill_read to load a skill's full text.",
+  schema: z.object({ query: z.string().min(1) }),
+  policy: { effects: ["read"] },
+  parallelSafe: true,
+  async run({ query }, ctx) {
+    const hits = requireSkills(ctx).searchEntries(query);
+    return hits.length
+      ? hits.map((e) => `- ${e.name}: ${e.description} [${e.location}]`).join("\n")
+      : `No skill matches "${query}".`;
+  },
+});
+
+const skillReadTool = tool({
+  name: "skill_read",
+  description: "Load one skill's full SKILL.md text by name (capped at 256 KB), so you can follow its procedure. The result names the file it came from.",
+  schema: z.object({ name: z.string().min(1) }),
+  policy: { effects: ["read"] },
+  parallelSafe: true,
+  async run({ name }, ctx) {
+    const store = requireSkills(ctx);
+    const found = store.readResult(name);
+    if (!found) {
+      const known = store.list().map((e) => e.name);
+      throw new Error(`No skill named "${name}" is available in this session.${known.length ? ` Available: ${known.join(", ")}.` : ""}`);
+    }
+    return `Skill: ${found.name}\nSource: ${found.location}\n\n${found.body}${found.truncated ? "\n[… cut at 256 KB]" : ""}`;
+  },
+});
+
 export const ALL_TOOLS: Tool[] = [
   readFileTool, listDirTool, findFilesTool, writeFileTool, runCommandTool,
   webSearchTool, webFetchTool, openUrlTool, openAppTool,
@@ -820,7 +883,7 @@ export const ALL_TOOLS: Tool[] = [
   rememberTool, recallTool, forgetTool,
   ...shoppingTools(),
   ...INVESTIGATE_TOOLS,
-];
+  skillListTool, skillSearchTool, skillReadTool,
 ];
 
 export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean }): Tool[] {

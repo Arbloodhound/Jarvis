@@ -7,6 +7,7 @@ import { redactSecrets } from "../gate/secrets.js";
 import type { Memory } from "../memory.js";
 import type { Provider, ToolCall, ToolResult, Turn } from "../providers/types.js";
 import type { Embedder } from "../embeddings.js";
+import type { SkillStore } from "../skills.js";
 import type { Vision } from "../vision.js";
 import type { Transcriber } from "../voice.js";
 import { jsonSchema, type Tool, type ToolContext } from "../tools/index.js";
@@ -43,6 +44,14 @@ export interface AgentDeps {
   vision: () => Vision | null;
   /** Speech-to-text backend for transcribe_audio; absent = not set up. */
   transcriber?: () => Transcriber | null;
+  /**
+   * The session's skill store, discovered fresh per model run: its bounded
+   * directory goes into that run's system prompt and the same store backs
+   * the skill tools for the whole run, so prompt and tools never disagree.
+   * Optional — hosts that wire none get no directory and skill tools that
+   * say so.
+   */
+  skills?: () => SkillStore | null;
   tools: () => Tool[];
   gate: Gate;
   memory: Memory;
@@ -192,7 +201,8 @@ export class Agent {
   private async runModel(runId: string, request: string, provider: Provider, ep: Episode, hooks: RunHooks, signal: AbortSignal, extraContext: string, route: Route): Promise<string> {
     const tools = this.deps.tools();
     const specs = tools.map((t) => ({ name: t.name, description: t.description, inputSchema: jsonSchema(t) }));
-    const system = systemPrompt(this.deps.home, platform());
+    const skills = this.deps.skills?.() ?? null;
+    const system = systemPrompt(this.deps.home, platform(), skills?.directory() ?? "");
     const embedder = this.deps.embedder();
     const withContext = await requestContext(request, this.deps.memory, embedder);
     this.turns.push({ role: "user", text: extraContext ? `${withContext}\n\n${extraContext}` : withContext });
@@ -232,7 +242,7 @@ export class Agent {
         continue;
       }
 
-      const results = await this.execute(runId, res.toolCalls, ep, hooks, signal, cloud);
+      const results = await this.execute(runId, res.toolCalls, ep, hooks, signal, cloud, skills);
       for (const r of results) if (!r.isError) evidence.push(r.content);
       this.turns.push({ role: "tool", results });
       if (signal.aborted) throw new Error("stopped");
@@ -326,14 +336,14 @@ export class Agent {
   }
 
   /** Run a model turn's tool calls through the gate. Results come back in call order. */
-  private async execute(runId: string, calls: ToolCall[], ep: Episode, hooks: RunHooks, signal: AbortSignal, cloud: boolean): Promise<ToolResult[]> {
+  private async execute(runId: string, calls: ToolCall[], ep: Episode, hooks: RunHooks, signal: AbortSignal, cloud: boolean, skills: SkillStore | null = null): Promise<ToolResult[]> {
     const byName = new Map(this.deps.tools().map((t) => [t.name, t]));
     const results = new Array<ToolResult>(calls.length);
     const parallel: Array<Promise<void>> = [];
     for (let i = 0; i < calls.length; i++) {
       const call = calls[i]!;
       const t = byName.get(call.name);
-      const job = async () => { results[i] = await this.one(runId, call, t, ep, hooks, signal, cloud); };
+      const job = async () => { results[i] = await this.one(runId, call, t, ep, hooks, signal, cloud, skills); };
       if (t?.parallelSafe) parallel.push(job());
       else { await Promise.all(parallel.splice(0)); await job(); }
     }
@@ -341,7 +351,7 @@ export class Agent {
     return results;
   }
 
-  private async one(runId: string, call: ToolCall, t: Tool | undefined, ep: Episode, hooks: RunHooks, signal: AbortSignal, cloud: boolean): Promise<ToolResult> {
+  private async one(runId: string, call: ToolCall, t: Tool | undefined, ep: Episode, hooks: RunHooks, signal: AbortSignal, cloud: boolean, skills: SkillStore | null = null): Promise<ToolResult> {
     const fail = (content: string): ToolResult => {
       hooks.emit({ type: "tool_end", runId, id: call.id, name: call.name, ok: false, summary: content.slice(0, SUMMARY) });
       return { id: call.id, name: call.name, content, isError: true };
@@ -377,7 +387,7 @@ export class Agent {
       ep.confirm(t.name, args);
     }
 
-    const ctx: ToolContext = { cwd: this.deps.cwd, home: this.deps.home, workspace: this.deps.workspace, memory: this.deps.memory, embedder: this.deps.embedder(), vision: this.deps.vision(), transcriber: this.deps.transcriber?.() ?? null, signal };
+    const ctx: ToolContext = { cwd: this.deps.cwd, home: this.deps.home, workspace: this.deps.workspace, memory: this.deps.memory, embedder: this.deps.embedder(), vision: this.deps.vision(), transcriber: this.deps.transcriber?.() ?? null, skills, signal };
     try {
       const out = await t.run(args, ctx);
       const scam = ep.observe(t.name, t.policy.effects, out, !!t.outside);

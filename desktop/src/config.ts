@@ -73,6 +73,16 @@ export interface Config {
      */
     modelCheck: boolean;
   };
+  skills: {
+    /**
+     * Allowlist of skill names a session may see. Empty (the default) means
+     * every discovered skill is eligible — the Python SkillStore semantics
+     * (`set(allowlist) if allowlist else None`).
+     */
+    allow: string[];
+    /** Extra skill roots, scanned after the app-home and workspace skills dirs, in listed order. */
+    roots: string[];
+  };
   port: number;
   writableRoots: string[];
   /**
@@ -85,6 +95,7 @@ export interface Config {
 
 export interface Paths {
   home: string;
+  skills: string;
   config: string;
   token: string;
   memory: string;
@@ -100,6 +111,7 @@ export const startupWarnings: string[] = [];
 export function paths(home = process.env.JARVIS_HOME || path.join(homedir(), ".jarvis")): Paths {
   return {
     home,
+    skills: path.join(home, "skills"),
     config: path.join(home, "config.json"),
     token: path.join(home, "token"),
     memory: path.join(home, "memory.json"),
@@ -122,6 +134,7 @@ export function defaults(p: Paths): Config {
     screenControl: { enabled: false },
     tor: { enabled: false, socksPort: 9050 },
     nli: { enabled: true, modelCheck: false },
+    skills: { allow: [], roots: [] },
     port: 7337,
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
@@ -161,6 +174,10 @@ export function loadConfig(p: Paths = paths()): Config {
     screenControl: { ...base.screenControl, ...(raw.screenControl ?? {}) },
     tor: { ...base.tor, ...(raw.tor ?? {}) },
     nli: { ...base.nli, ...(raw.nli ?? {}) },
+    skills: {
+      allow: Array.isArray(raw.skills?.allow) ? raw.skills.allow.filter((s): s is string => typeof s === "string") : base.skills.allow,
+      roots: Array.isArray(raw.skills?.roots) ? raw.skills.roots.filter((s): s is string => typeof s === "string") : base.skills.roots,
+    },
   };
 }
 

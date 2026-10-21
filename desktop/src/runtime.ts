@@ -9,6 +9,7 @@ import { Embedder } from "./embeddings.js";
 import { Vision } from "./vision.js";
 import { isLoopbackUrl, Transcriber } from "./voice.js";
 import { Memory } from "./memory.js";
+import { SkillStore, skillRoots } from "./skills.js";
 import { ClaudeProvider } from "./providers/claude.js";
 import { LocalProvider } from "./providers/local.js";
 import type { Provider } from "./providers/types.js";
@@ -34,6 +35,7 @@ export class Runtime {
       embedder: () => this.embedder(),
       vision: () => this.vision(),
       transcriber: () => this.transcriber(),
+      skills: () => this.skillStore(),
       tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }, ttsEnabled: this.cfg.voice.ttsEnabled }),
       gate: new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd),
       memory: this.memory,
@@ -74,6 +76,19 @@ export class Runtime {
       webFetch: this.cfg.offlineOnly ? null : makeWebFetch({ enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }),
       signal: AbortSignal.timeout(60_000),
     });
+  }
+
+  /**
+   * The session's skills, discovered fresh: roots in precedence order —
+   * the app-home skills dir, the workspace skills dir, then config-listed
+   * extra roots. The config allowlist governs eligibility; empty means all
+   * (Python SkillStore semantics). Discovery is metadata-only; bodies load
+   * on demand through the skill tools.
+   */
+  skillStore(): SkillStore {
+    const store = new SkillStore(this.cfg.skills.allow);
+    store.discover(skillRoots(this.p.home, this.p.workspace, this.cfg.skills.roots));
+    return store;
   }
 
   /** Cloud answers only when chosen AND offline-only is off (same rule as the phone's NetPolicy). */
@@ -200,6 +215,7 @@ export class Runtime {
       torReachable: this.torReachable,
       nli: this.cfg.nli.enabled,
       nliModelCheck: this.cfg.nli.enabled && this.cfg.nli.modelCheck,
+      skills: this.skillStore().list().length,
     };
   }
 }
