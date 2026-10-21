@@ -46,6 +46,15 @@ export interface AgentDeps {
   workspace: string;
   cwd: string;
   maxTurns: number;
+  /**
+   * Labeled messages that arrived for this agent from outside the current
+   * request — a subagent's hand-off for the coordinator, steering for a
+   * subagent. Drained into the conversation when a run starts and again
+   * between steps, each string as its own block. Absent for a plain agent.
+   */
+  inbox?: () => string[];
+  /** Appended to the system prompt (a subagent's standing orders). */
+  systemSuffix?: string;
 }
 
 export interface RunHooks {
@@ -83,9 +92,13 @@ export class Agent {
       const ep = new Episode(request);
       hooks.emit({ type: "run_start", runId, brain: provider.label });
       this.trim();
+      // Hand-offs and steering that arrived while this agent was idle ride
+      // this run's request, so the model sees them with the new request.
+      const arrived = this.deps.inbox?.() ?? [];
+      const extra = [extraContext, ...arrived].filter(Boolean).join("\n\n");
       const fast = fastCommand(request);
-      if (fast) return await this.runFast(runId, fast, ep, hooks, ac.signal, request, extraContext);
-      return await this.runModel(runId, request, provider, ep, hooks, ac.signal, extraContext);
+      if (fast) return await this.runFast(runId, fast, ep, hooks, ac.signal, request, extra);
+      return await this.runModel(runId, request, provider, ep, hooks, ac.signal, extra);
     } catch (err) {
       if (ac.signal.aborted) {
         hooks.emit({ type: "done", runId, text: "Stopped.", stopped: true });
@@ -169,7 +182,7 @@ export class Agent {
   private async runModel(runId: string, request: string, provider: Provider, ep: Episode, hooks: RunHooks, signal: AbortSignal, extraContext = ""): Promise<string> {
     const tools = this.deps.tools();
     const specs = tools.map((t) => ({ name: t.name, description: t.description, inputSchema: jsonSchema(t) }));
-    const system = systemPrompt(this.deps.home, platform());
+    const system = systemPrompt(this.deps.home, platform()) + (this.deps.systemSuffix ?? "");
     const embedder = this.deps.embedder();
     const withContext = await requestContext(request, this.deps.memory, embedder);
     this.turns.push({ role: "user", text: extraContext ? `${withContext}\n\n${extraContext}` : withContext });
@@ -209,6 +222,10 @@ export class Agent {
       const results = await this.execute(runId, res.toolCalls, ep, hooks, signal, cloud);
       this.turns.push({ role: "tool", results });
       if (signal.aborted) throw new Error("stopped");
+      // A hand-off or steering message that landed mid-run joins the
+      // conversation here, so the next step can act on it.
+      const arrived = this.deps.inbox?.() ?? [];
+      if (arrived.length) this.turns.push({ role: "user", text: arrived.join("\n\n") });
       if (turn === this.deps.maxTurns - 1) {
         hooks.emit({ type: "warning", runId, text: `Stopped after ${this.deps.maxTurns} steps without a final answer.` });
       }

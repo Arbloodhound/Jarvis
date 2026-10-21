@@ -50,6 +50,12 @@ export interface Config {
    * open only while this is on, and only through the proxy.
    */
   tor: { enabled: boolean; socksPort: number };
+  /**
+   * Subagents: how many delegated agents (spawn_agent) may run at once.
+   * They share this app's one model endpoint — each is a conversation, not
+   * another model load — so the cap is about attention, not memory.
+   */
+  subagents: { maxConcurrent: number };
   port: number;
   writableRoots: string[];
   /**
@@ -97,6 +103,7 @@ export function defaults(p: Paths): Config {
     vision: { baseUrl: "", model: "qwen3-vl" },
     screenControl: { enabled: false },
     tor: { enabled: false, socksPort: 9050 },
+    subagents: { maxConcurrent: 3 },
     port: 7337,
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
@@ -134,6 +141,7 @@ export function loadConfig(p: Paths = paths()): Config {
     vision: { ...base.vision, ...(raw.vision ?? {}) },
     screenControl: { ...base.screenControl, ...(raw.screenControl ?? {}) },
     tor: { ...base.tor, ...(raw.tor ?? {}) },
+    subagents: { ...base.subagents, ...(raw.subagents ?? {}) },
   };
 }
 

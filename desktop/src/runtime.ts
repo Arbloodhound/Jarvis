@@ -1,4 +1,5 @@
-import { Agent } from "./agent/loop.js";
+import { Agent, type AgentDeps, type RunHooks } from "./agent/loop.js";
+import { Orchestrator, formatHandoff, subagentTools, type ChildHandle, type ChildRun } from "./agent/orchestrator.js";
 import { type Config, type Paths, saveConfig } from "./config.js";
 import { Conversations } from "./conversations.js";
 import { ownerContext, type Attachment } from "./context.js";
@@ -10,7 +11,7 @@ import { Memory } from "./memory.js";
 import { ClaudeProvider } from "./providers/claude.js";
 import { LocalProvider } from "./providers/local.js";
 import type { Provider } from "./providers/types.js";
-import { makeWebFetch, probeTorProxy, toolsFor } from "./tools/index.js";
+import { makeWebFetch, probeTorProxy, toolsFor, type Tool } from "./tools/index.js";
 
 /**
  * Wires config, memory, gate, brains and tools into one Agent. Shared by the
@@ -19,32 +20,105 @@ import { makeWebFetch, probeTorProxy, toolsFor } from "./tools/index.js";
  */
 export class Runtime {
   readonly agent: Agent;
+  /** The subagent coordinator. Children are separate Agent instances built
+   * from the same deps — same brain endpoint, gate, memory and vision. */
+  readonly orchestrator: Orchestrator;
   readonly memory: Memory;
   /** Conversation branches; the agent's live turns are the active branch's working copy. */
   readonly conversations: Conversations;
   private readonly cwd: string;
+  private readonly gate: Gate;
+  private readonly audit: AuditLog;
+  /**
+   * The owner's live channel — the gateway's broadcast + card machinery, or
+   * the terminal's — registered by whichever front-end is running. Subagents
+   * report and ask through it; with none registered, a subagent's card is
+   * declined, the same answer an unanswered card gets.
+   */
+  private channel: RunHooks | null = null;
 
   constructor(readonly cfg: Config, readonly p: Paths, cwd = process.cwd()) {
     this.cwd = cwd;
     this.memory = new Memory(p.memory);
-    this.agent = new Agent({
-      provider: () => this.provider(),
-      embedder: () => this.embedder(),
-      vision: () => this.vision(),
-      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort } }),
-      gate: new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd),
-      memory: this.memory,
-      audit: new AuditLog(p.audit),
-      home: p.home,
-      workspace: p.workspace,
-      cwd,
-      maxTurns: cfg.maxTurns,
+    this.gate = new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd);
+    this.audit = new AuditLog(p.audit);
+    this.orchestrator = new Orchestrator({
+      maxConcurrent: () => this.cfg.subagents.maxConcurrent,
+      start: (h) => this.startChild(h),
     });
+    this.agent = new Agent(this.agentDeps(
+      () => [...this.baseTools(), ...subagentTools(this.orchestrator)],
+      // Finished subagents hand their results into this conversation.
+      { inbox: () => this.orchestrator.drainHandoffs().map(formatHandoff) },
+    ));
     // Resume the active conversation branch, so a restart (or the CLI after
     // the gateway) continues the same conversation the owner left.
     this.conversations = new Conversations(p.conversations);
     const saved = this.conversations.activeTurns();
     if (saved.length) this.agent.loadTurns(saved);
+  }
+
+  /** The tools every agent here shares (the coordinator's four are added only at the top level). */
+  private baseTools(): Tool[] {
+    return toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort } });
+  }
+
+  /** One deps bundle; the top agent and every subagent differ only in tools, inbox and standing orders. */
+  private agentDeps(tools: () => Tool[], extra: Partial<AgentDeps> = {}): AgentDeps {
+    return {
+      provider: () => this.provider(),
+      embedder: () => this.embedder(),
+      vision: () => this.vision(),
+      tools,
+      gate: this.gate,
+      memory: this.memory,
+      audit: this.audit,
+      home: this.p.home,
+      workspace: this.p.workspace,
+      cwd: this.cwd,
+      maxTurns: this.cfg.maxTurns,
+      ...extra,
+    };
+  }
+
+  /**
+   * Run one subagent: its own Agent (no orchestration tools — depth stops
+   * at 1), the orchestrator's inbox as its steering channel, and the
+   * owner's live channel for its events and cards. A card a subagent raises
+   * keeps its own text and gains "(via subagent …)", so the owner always
+   * knows whose action they are approving.
+   */
+  private startChild(h: ChildHandle): ChildRun {
+    const agent = new Agent(this.agentDeps(() => this.baseTools(), {
+      inbox: () => h.drainInbox().map((m) => `[Message from your coordinator]\n${m}`),
+      systemSuffix: "\n\nYou are a subagent working for the main Jarvis agent, which delegated this task to you. Do only this task. " +
+        "You share the owner's gate, tools and memory, but you cannot spawn subagents. " +
+        "Your final answer is your hand-off: make it complete, concrete and self-contained, because the main agent gets only that.",
+    }));
+    const hooks: RunHooks = {
+      emit: (e) => {
+        if (e.type === "tool_start") h.report(`running ${e.name}`);
+        else if (e.type === "done") h.report("finished");
+        this.channel?.emit(e);
+      },
+      confirm: async (card) => {
+        if (!this.channel) return false;
+        return this.channel.confirm({ ...card, reason: `${card.reason} (via subagent "${h.name}")` });
+      },
+    };
+    const done = agent.run(h.task, hooks);
+    return { done, stop: () => agent.stop() };
+  }
+
+  /** Register (or clear) the owner's live channel — see the field note. */
+  setChannel(channel: RunHooks | null): void {
+    this.channel = channel;
+  }
+
+  /** The owner's Stop: the current run and every running subagent. */
+  stopAll(): void {
+    this.agent.stop();
+    this.orchestrator.stopAll();
   }
 
   /** Save the agent's live turns back into the active branch. Call after every run and edit. */
@@ -161,6 +235,7 @@ export class Runtime {
       offlineOnly: this.cfg.offlineOnly,
       answering: this.provider().label,
       busy: this.agent.busy,
+      agents: this.orchestrator.list(),
       cloudModel: this.cfg.cloud.model,
       /** Where the cloud key comes from — never the key itself. */
       cloudKeySource: this.cfg.cloud.apiKey ? "config" : process.env.ANTHROPIC_API_KEY ? "env" : "none",

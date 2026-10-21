@@ -177,7 +177,7 @@ function refreshTray(): void {
       ? { label: "Show Jarvis (Ctrl+Shift+J)", click: show }
       : { label: "Show Jarvis", accelerator: HOTKEY, click: show },
     { type: "separator" },
-    { label: s.busy ? "Working… (Stop)" : "Idle", enabled: s.busy, click: () => rt?.agent.stop() },
+    { label: s.busy ? "Working… (Stop)" : "Idle", enabled: s.busy, click: () => rt?.stopAll() },
     { type: "separator" },
     { label: "On this computer", type: "radio", checked: s.brain === "local", click: () => set({ brain: "local" }) },
     { label: "Cloud", type: "radio", checked: s.brain === "cloud", click: () => set({ brain: "cloud" }) },

@@ -33,6 +33,9 @@ terminal keeps working on whichever branch is active.
 Brain: set "brain" in config.json to "local" (default; any OpenAI-compatible
 server such as Ollama) or "cloud" (Claude; needs ANTHROPIC_API_KEY or
 cloud.apiKey). "offlineOnly": true keeps everything on this computer.
+Subagents: the agent can delegate background work with spawn_agent (steer
+and stop them by name or id); "subagents": {"maxConcurrent": 3} in
+config.json caps how many run at once. Stopping a run stops its subagents.
 "tor": {"enabled": true} sends web search and fetch through a local Tor
 proxy (port 9050; 9150 for Tor Browser) — also a switch on the serve page —
 and is the only way .onion addresses open.`;
@@ -180,11 +183,13 @@ async function main(): Promise<void> {
   const input = { closed: pipedText !== "" };
   rl.on("close", () => { input.closed = true; });
   process.on("SIGINT", () => {
-    if (rt.agent.busy) { rt.agent.stop(); return; }
+    if (rt.agent.busy) { rt.stopAll(); return; }
     rl.close();
     process.exit(0);
   });
   const hooks = terminalHooks(rl, input);
+  // Subagents ask and report through this terminal, like the main agent.
+  rt.setChannel(hooks);
   if (cmd === "ask") {
     // --file <path> (repeatable) attaches files to this one request.
     const files: Array<{ path: string; name: string }> = [];

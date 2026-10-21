@@ -221,6 +221,23 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
     for (const c of clients) if (c.readyState === c.OPEN) c.send(data);
   };
 
+  /**
+   * Ask the owner about one card, whichever agent raised it: the card joins
+   * the same pending map the page answers and is declined after the card
+   * timeout. The runtime's channel points here, so a subagent's cards
+   * surface on the page exactly like the main agent's (their reason says
+   * which subagent sent them).
+   */
+  const askOwner = (card: Extract<AgentEvent, { type: "confirm" }>): Promise<boolean> => new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => settleCard(card.cardId, false), CARD_TIMEOUT_MS);
+    pending.set(card.cardId, { resolve, card: card as typeof card & Record<string, unknown>, timer });
+    broadcast(card as typeof card & Record<string, unknown>);
+  });
+  rt.setChannel({
+    emit: (e) => broadcast(e as AgentEvent & Record<string, unknown>),
+    confirm: askOwner,
+  });
+
   /** The state message, with the conversation branches the page renders. */
   const stateMsg = (): { type: string } & Record<string, unknown> => ({
     type: "state",
@@ -276,22 +293,26 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
           ws.send(JSON.stringify({ type: "error", runId: "", message: `That attachment was not uploaded here: ${outside.name}. Attach the file again.` }));
           return;
         }
+        let thisRunId = "";
         void (async () => {
           const extra = await rt.ownerContext(text, attachments);
           broadcast({ type: "user", text, attachments: attachments.map((a) => a.name) });
           await rt.agent.run(text, {
-            emit: (e: AgentEvent) => broadcast(e as AgentEvent & Record<string, unknown>),
-            confirm: (card) => new Promise<boolean>((resolve) => {
-              const timer = setTimeout(() => settleCard(card.cardId, false), CARD_TIMEOUT_MS);
-              pending.set(card.cardId, { resolve, card: card as typeof card & Record<string, unknown>, timer });
-              broadcast(card as typeof card & Record<string, unknown>);
-            }),
+            emit: (e: AgentEvent) => {
+              if (e.type === "run_start") thisRunId = e.runId;
+              broadcast(e as AgentEvent & Record<string, unknown>);
+            },
+            confirm: askOwner,
           }, extra);
         })().catch((err) => {
           ws.send(JSON.stringify({ type: "error", runId: "", message: err instanceof Error ? err.message : String(err) }));
         }).finally(() => {
-          // A stopped run can leave a card nobody answered; close it as declined.
-          for (const id of [...pending.keys()]) settleCard(id, false);
+          // A stopped run can leave a card nobody answered; close it as
+          // declined. Only this run's cards — a subagent's card is its own
+          // run's business and outlives this one.
+          for (const [id, p] of [...pending.entries()]) {
+            if ((p.card as { runId?: unknown }).runId === thisRunId) settleCard(id, false);
+          }
           rt.syncConversation();
           broadcast(stateMsg());
           broadcast({ type: "turns", count: rt.agent.turns.length });
@@ -299,7 +320,7 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
       } else if (msg.type === "confirm" && typeof msg.cardId === "string") {
         settleCard(msg.cardId, msg.allow === true);
       } else if (msg.type === "stop") {
-        rt.agent.stop();
+        rt.stopAll();
       } else if (msg.type === "settings") {
         rt.update(msg);
         broadcast(stateMsg());
