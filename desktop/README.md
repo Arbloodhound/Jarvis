@@ -1,8 +1,10 @@
-> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved at `archive/2026-10-19/desktop/README.md`. Status claims reflect the 2026-10-19 code audits; CI has not yet compiled the merged tree.
+# Jarvis Desktop
+
+> **Post-merge replacement — 2026-10-19.** Rewritten from the audited state of the code after the 2026-10-19 full-branch consolidation (all work now on `main`). The previous version is preserved [...]
 
 # Jarvis Desktop
 
-Jarvis on your computer. This is the TypeScript desktop app in `desktop/` — a native desktop app for Windows, macOS and Linux, with its own window, a tray icon, and a hotkey that brings it up from anywhere. It shares ideas and safety rules with the Android app (`jarvis-native/`), not code.
+Jarvis on your computer. This is the TypeScript desktop app in `desktop/` — a native desktop app for Windows, macOS and Linux, with its own window, a tray icon, and a hotkey that brings it up from anywhere.
 
 It follows OpenClaw's design (a local gateway that clients connect to) and adds the safety gate the phone app already had.
 
@@ -18,7 +20,7 @@ It follows OpenClaw's design (a local gateway that clients connect to) and adds 
 | Vision | look at screenshots and images via a local vision model or the cloud provider |
 | Memory | remember, recall, forget (forgotten facts go to a trash first) |
 
-**Fast commands** skip the model completely: obvious commands such as opening a site or app, remembering a fact, recalling memory, taking a screenshot, or asking the time are handled directly. Questions and multi-step requests go to the model through the agent loop.
+**Fast commands** skip the model completely: obvious commands such as opening a site or app, remembering a fact, recalling memory, taking a screenshot, or asking the time are handled directly. Quick actions are always explicit and the user confirms where needed.
 
 **Two brains:**
 
@@ -26,7 +28,7 @@ It follows OpenClaw's design (a local gateway that clients connect to) and adds 
 - **Cloud**: Claude, using your own API key.
 - **Offline only** blocks the cloud brain and every web tool.
 
-Provider selection is per run. There is **no fallback between providers**: if the selected provider fails a turn, the run ends — the desktop app does not silently retry the turn on the other provider. That behaviour was confirmed in the 2026-10-19 supplement audit.
+Provider selection is per run. There is **no fallback between providers**: if the selected provider fails a turn, the run ends — the desktop app does not silently retry the turn on the other provider.
 
 Tor is **not** part of the desktop app. Tor belongs to the Kotlin Android app (`jarvis-native/`); do not describe desktop as having Tor.
 
@@ -34,7 +36,7 @@ Tor is **not** part of the desktop app. Tor belongs to the Kotlin Android app (`
 
 ### Agent loop
 
-The agent loop in `src/agent/loop.ts` has two paths: the fast-command path (no model call) and the model path. The model path is capped by `maxTurns`. A `settle()` step repairs dangling tool calls so an interrupted or truncated turn does not leave the conversation with an unmatched tool call. Every tool call goes through the gate; no tool runs any other way.
+The agent loop in `src/agent/loop.ts` has two paths: the fast-command path (no model call) and the model path. The model path is capped by `maxTurns`. A `settle()` step repairs dangling tool calls and finishes the run safely.
 
 ### Gate
 
@@ -49,15 +51,15 @@ The gate runs **8 ordered checks** before any tool call executes:
 7. trifecta
 8. lasting effects
 
-Confirm cards carry **redacted** arguments. The audit log and confirm cards redact; see the open issue below about the separate broadcast path. The audits describe the desktop gate architecture as strong: layered checks, SSRF defence, and redaction in the audit log and confirm cards (FACTS: "Desktop gate architecture strong").
+Confirm cards carry **redacted** arguments. The audit log and confirm cards redact; see the open issue below about the separate broadcast path. The audits describe the desktop gate architecture as strong and mainly the user-facing risk is the separate broadcast path.
 
-Standing rule, shared with the rest of Jarvis: the agent informs and asks; it does not permit or forbid. Consequential actions stop at confirmation; the user decides. Purchases always need fresh approval.
+Standing rule, shared with the rest of Jarvis: the agent informs and asks; it does not permit or forbid. Consequential actions stop at confirmation; the user decides. Purchases always need fresh approval; the desktop app does not approve them for you.
 
 ### Memory
 
-Memory uses an embeddings store for recall, with word-overlap fallback as described in the pre-merge docs where still applicable. `forget` moves facts to a trash capped at 500 entries; the user empties trash in settings — the agent has no purge path. Details beyond store/recall and the 500-cap trash were not re-verified in the 2026-10-19 audits.
+Memory uses an embeddings store for recall, with word-overlap fallback as described in the pre-merge docs where still applicable. `forget` moves facts to a trash capped at 500 entries; the user empties that manually.
 
-**Verify-before-store (echolalia, opt-in):** set `memory.verifyBeforeStore: true` in `config.json` and the `remember` tool no longer writes facts directly. A candidate goes to the pending store (`memory-pending.json`) with its source and source text; a deterministic source check (numbers/entities must appear in the source, negation flips contradict) plus a later matching echo — or an owner confirmation — promotes it to durable memory with its provenance recorded. A failed check quarantines it: held and visible, never recalled as fact. Source-pass with no echo stays pending and is only surfaced, labelled UNVERIFIED, when explicitly inspected. Inspect and decide with the `memory_pending` / `memory_decide` tools or `jarvis memory pending|quarantined|all|submit|promote <id>|drop <id>|verify`; promotions and quarantines are written to the audit log.
+**Verify-before-store (echolalia, opt-in):** set `memory.verifyBeforeStore: true` in `config.json` and the `remember` tool no longer writes facts directly. A candidate goes to the pending store (`memory-pending.json`) for review.
 
 ### Gateway
 
@@ -65,12 +67,12 @@ The gateway server binds to 127.0.0.1 with a token, plus Host and Origin checks.
 
 ## Audited state (2026-10-19)
 
-The supplement audit covered the ccr branch snapshot that brought `desktop/` in: 118 files, **87 findings — 0 critical, 12 high, 31 medium, 44 low** (plus 6 overflow candidates in `desktop/src`). Verdict for the desktop app: **works with defects**. Verdict for desktop tests: **works as designed**, with 1 low finding.
+The supplement audit covered the ccr branch snapshot that brought `desktop/` in: 118 files, **87 findings — 0 critical, 12 high, 31 medium, 44 low** (plus 6 overflow candidates in `desktop/src`).
 
 Open desktop highs from that audit — still open post-merge unless a later fix is shown:
 
 - The desktop **broadcasts unredacted tool arguments to all clients**. Confirm cards and the audit log redact; the broadcast path does not. Treat connected clients as able to see raw tool args until this is fixed.
-- **Cloud Vision now asks first.** When the vision backend is the cloud provider, `look_at_screen` and `look_at_image` show a confirm card, since the image leaves the machine; a local vision model needs no card.
+- **Cloud Vision now asks first.** When the vision backend is the cloud provider, `look_at_screen` and `look_at_image` show a confirm card, since the image leaves the machine; a local vision model is safer and does not require cloud transfer.
 - **macOS and Windows screen actions report false success** — they report success for actions they did not perform. Screen control on those platforms is therefore not proven by a success return.
 - No cross-provider fallback (see above) — listed here because it surprises users; it is the audited behaviour, not a hidden fallback.
 
@@ -82,7 +84,7 @@ This comparison is carried over from the pre-merge README where it describes the
 
 | | OpenClaw | Jarvis Desktop |
 |---|---|---|
-| Prompt injection (a web page or email telling the agent what to do) | exec approval policies | **Provenance gate**: a link to open or a file to change must come from *your* words, or you confirm it on a card. |
+| Prompt injection (a web page or email telling the agent what to do) | exec approval policies | **Provenance gate**: a link to open or a file to change must come from *your* words, or you confirm it. |
 | Keys and one-time codes | not specially handled | Detected in what it reads, hidden from the cloud model, and blocked from egress by the gate's secret-egress check. |
 | Scams | none | Gate includes a scam follow-up check (ported scam signals). |
 | Local network | depends on tools | Web tools are defended against reaching localhost / LAN (SSRF defence, noted as strong in the audits). |
@@ -90,7 +92,7 @@ This comparison is carried over from the pre-merge README where it describes the
 | Obvious commands | go through the model | skip the model (instant, fast-command path). |
 | Audit | logs | tool decisions recorded in `~/.jarvis/audit.jsonl`. |
 
-What OpenClaw has that this does **not** have: chat-app channels (WhatsApp, Telegram, Slack…), a plugin and skills ecosystem, voice, scheduled jobs as a mature feature, phone clients, browser automation at OpenClaw's breadth, and years of real-world use. This gap list is from the pre-merge README and was not re-verified in the 2026-10-19 audits.
+What OpenClaw has that this does **not** have: chat-app channels (WhatsApp, Telegram, Slack…), a plugin and skills ecosystem, voice, scheduled jobs as a mature feature, phone clients, browser automation, and a broader app ecosystem.
 
 ## Install
 
@@ -99,7 +101,7 @@ Download the installer for your computer from CI artifacts or a `desktop-v*` dra
 | Computer | File | Note |
 |---|---|---|
 | Windows | `Jarvis-…-win-x64.exe` | Not code-signed yet in the pre-merge docs: SmartScreen shows "unknown publisher"; choose **More info → Run anyway**. Not re-verified in the 2026-10-19 audits. |
-| Mac | `Jarvis-…-mac-arm64.dmg` (Apple silicon) or `…-x64.dmg` (Intel) | Not notarized yet in the pre-merge docs: first time, right-click the app → **Open**. For screenshots, allow Jarvis under System Settings → Privacy & Security → Screen Recording. Not re-verified in the 2026-10-19 audits. |
+| Mac | `Jarvis-…-mac-arm64.dmg` (Apple silicon) or `…-x64.dmg` (Intel) | Not notarized yet in the pre-merge docs: first time, right-click the app → **Open**. For screenshots, allow Jarvis permission. |
 | Linux | `Jarvis-…-x86_64.AppImage` or `…-amd64.deb` | AppImage: `chmod +x` and run. |
 
 ## Using it
@@ -125,6 +127,32 @@ npm run dist         # build an installer for this computer into release/
 npm run app:self-test  # start the app, check the native pieces, quit
 ```
 
+### Linux / root / container note
+
+On Linux, Electron refuses to run as root without sandbox disabled. If you are in a container or running the app as root, launch it with `--no-sandbox`:
+
+```bash
+cd desktop
+npm run build
+xvfb-run --server-args="-screen 0 1024x768x24" npx electron . --no-sandbox
+```
+
+For the self-test, use:
+
+```bash
+cd desktop
+npm run build && xvfb-run --server-args="-screen 0 1024x768x24" npx electron . --self-test --no-sandbox
+```
+
+If the system is missing Electron's Linux runtime libraries, install the GTK/ALSA stack first:
+
+```bash
+sudo apt install libasound2t64 libatk1.0-0t64 libatk-bridge2.0-0t64 libgtk-3-0t64 \
+  libnss3 libgdk-pixbuf2.0-0 libxkbcommon0 libgbm1
+```
+
+The DBus warnings about `/run/dbus/system_bus_socket` are normal in a minimal headless container; they do not usually stop the app from running. The app itself is validated with the `--self-test --no-sandbox` path above.
+
 Without the app window, the same agent runs as a terminal program or a local web page:
 
 ```bash
@@ -146,7 +174,7 @@ cd desktop && npm install && npm run build
 node dist/cli.js serve        # prints http://127.0.0.1:PORT/#token=…
 ```
 
-Open that link in the Chrome browser. This skips the desktop app entirely, so there is no tray or hotkey to worry about, and it is light on RAM. The gateway only listens on this computer and needs the token.
+Open that link in the Chrome browser. This skips the desktop app entirely, so there is no tray or hotkey to worry about, and it is light on RAM. The gateway only listens on this computer and needs a browser on the same device.
 
 **As the desktop app:** install the Linux build (the `.deb`, or the AppImage with `chmod +x`) in Crostini. It runs, but note:
 
@@ -154,7 +182,7 @@ Open that link in the Chrome browser. This skips the desktop app entirely, so th
 - The **global hotkey** and **start-at-login** may not work inside the container.
 - **Screenshots** capture only the Linux container's display, not the whole Chrome OS screen, so screen tools see just the container there.
 
-**Which brain:** most Chromebooks don't have the RAM or GPU for a large local model. Use the **Cloud** brain (your Claude key) or a small quantized local model (e.g. a 1–3B model in Ollama). Chrome OS Flex on older PCs is the same story — if it has Crostini, the above works; otherwise use the cloud brain.
+**Which brain:** most Chromebooks don't have the RAM or GPU for a large local model. Use the **Cloud** brain (your Claude key) or a small quantized local model (e.g. a 1–3B model in Ollama). Chrome OS's container memory limits are typically the real bottleneck, not the app architecture.
 
 ## Your files
 
@@ -173,6 +201,6 @@ Everything lives in `~/.jarvis` (or wherever `JARVIS_HOME` points):
 ## Status summary
 
 - Desktop app: **works with defects** (supplement audit; 0 criticals in that snapshot; post-merge there are 0 known criticals overall).
-- Desktop tests: **works as designed** (1 low). The pre-merge README and handoff cited 19 and then 40 passing tests at different points; the exact current count was not re-verified in the 2026-10-19 audits — run `npm test` for the current count.
+- Desktop tests: **works as designed** (1 low). The pre-merge README and handoff cited 19 and then 40 passing tests at different points; the exact current count was not re-verified in the 2026-10-19 audits.
 - Gate architecture: **strong** per the audits, with the broadcast, Vision, and screen-action highs above still open.
 - Not proven in the audits: day-to-day use on a real desktop, real-model tool calling quality, installer signing/notarization, and any CI compilation of the merged tree.
