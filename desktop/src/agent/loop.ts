@@ -5,6 +5,7 @@ import { Episode, Gate, type Rule } from "../gate/gate.js";
 import { checkClaimWithModel, extractCheckableClaims, type ModelChecker, type NliVerdict } from "../gate/nli.js";
 import { redactSecrets } from "../gate/secrets.js";
 import type { EcholaliaStore } from "../echolalia.js";
+import type { Forecaster, SeriesStore } from "../forecast.js";
 import type { Memory } from "../memory.js";
 import type { Provider, ToolCall, ToolResult, ToolSpec, Turn, TurnRequest, TurnResult } from "../providers/types.js";
 import type { Embedder } from "../embeddings.js";
@@ -108,6 +109,9 @@ export interface AgentDeps {
    * else learn it from the server's first "exceeds the context" refusal.
    */
   contextWindow?: () => number;
+  /** Number series tracked for forecasts, and the forecasting server client (null when unset). */
+  series?: () => SeriesStore | null;
+  forecaster?: () => Forecaster | null;
 }
 
 export interface RunHooks {
@@ -567,7 +571,7 @@ export class Agent {
       ep.confirm(t.name, args);
     }
 
-    const ctx: ToolContext = { cwd: this.deps.cwd, home: this.deps.home, workspace: this.deps.workspace, memory: this.deps.memory, echolalia: this.deps.echolalia?.() ?? null, embedder: this.deps.embedder(), vision: this.deps.vision(), visionEnabled: this.deps.visionEnabled?.(), transcriber: this.deps.transcriber?.() ?? null, skills, signal };
+    const ctx: ToolContext = { cwd: this.deps.cwd, home: this.deps.home, workspace: this.deps.workspace, memory: this.deps.memory, echolalia: this.deps.echolalia?.() ?? null, embedder: this.deps.embedder(), vision: this.deps.vision(), visionEnabled: this.deps.visionEnabled?.(), transcriber: this.deps.transcriber?.() ?? null, skills, signal, series: this.deps.series?.() ?? null, forecaster: this.deps.forecaster?.() ?? null };
     try {
       const out = await t.run(args, ctx);
       const scam = ep.observe(t.name, t.policy.effects, out, !!t.outside);

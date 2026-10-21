@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import path from "node:path";
@@ -442,7 +443,7 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === "chat") {
-    console.log(dim(`${rt.provider().label}. Type while it works to interrupt with a new message; /compress shrinks a long chat; Ctrl+C stops a run, or quits when idle.`));
+    console.log(dim(`${rt.provider().label}. Type while it works to interrupt with a new message; /compress shrinks a long chat; /refresh reloads Jarvis (new build + config) and keeps this chat; Ctrl+C stops a run, or quits when idle.`));
     // The prompt left listening by the last run, when it ended with no line typed.
     let waiting: Promise<string | null> | null = null;
     chat: for (;;) {
@@ -451,6 +452,21 @@ async function main(): Promise<void> {
       if (got === null) break; // Input ended: end the chat.
       let line = got.trim();
       if (!line) continue;
+      if (line === "/refresh") {
+        // Restart this chat in place with whatever is on disk now (a rebuilt
+        // dist/, an edited config.json): the conversation is saved and the
+        // new process loads it back. Subagents settle first, as on exit.
+        rt.syncConversation();
+        await settleSubagents(rt);
+        console.log(dim("↻ Reloading Jarvis with the latest build and config — this chat continues."));
+        rl.close();
+        process.stdin.pause();
+        process.removeAllListeners("SIGINT");
+        process.on("SIGINT", () => {}); // Ctrl+C belongs to the new chat now.
+        const next = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], { stdio: "inherit", env: process.env });
+        await new Promise<void>((resolve) => next.on("exit", (code, signal) => { process.exitCode = code ?? (signal ? 1 : 0); resolve(); }));
+        process.exit();
+      }
       if (line === "/compress") {
         try {
           console.log(dim(await rt.agent.compress()));
