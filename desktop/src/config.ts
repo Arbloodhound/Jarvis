@@ -56,12 +56,6 @@ export interface Config {
   };
   /** Synthetic keyboard/mouse. Off by default; experimental; every action still needs a card. */
   screenControl: { enabled: boolean };
-  /**
-   * Web tools through a local Tor proxy. Off by default. The proxy is a Tor
-   * (or Tor Browser) SOCKS listener on this computer; the port is the only
-   * knob — 9050 for a Tor daemon, 9150 for Tor Browser. .onion addresses
-   * open only while this is on, and only through the proxy.
-   */
   tor: { enabled: boolean; socksPort: number };
   nli: {
     /** The NLI gate on final answers (deterministic contradiction check against this run's tool results). */
@@ -72,6 +66,29 @@ export interface Config {
      * pass into a fail, never rescue a deterministic fail.
      */
     modelCheck: boolean;
+  };
+  memory: {
+    /**
+     * Echolalia verify-before-store: when true, the remember tool holds new
+     * facts in the pending store until they are verified (source check +
+     * echo, or owner confirmation) instead of writing them straight to
+     * durable memory. Off by default: remember writes directly, as before.
+     */
+    verifyBeforeStore: boolean;
+  };
+  /**
+   * Inbound notifications (the read_notifications tool). A notification
+   * reaches the agent only from an allowed app, outside quiet hours, and
+   * under the per-app burst limit (the three-gate filter in
+   * notifications/filter.ts); Jarvis's own notifications are always
+   * excluded. Dropped notifications are recorded in the audit log.
+   * Defaults are the phone filter's: quiet 22:00–07:00, 5 per minute per app.
+   */
+  notifications: {
+    allowedApps: string[];
+    quietStart: number;
+    quietEnd: number;
+    maxPerMinutePerApp: number;
   };
   port: number;
   writableRoots: string[];
@@ -88,10 +105,14 @@ export interface Paths {
   config: string;
   token: string;
   memory: string;
+  /** Echolalia pending store (verify-before-store candidates). */
+  pending: string;
   audit: string;
   transcript: string;
   conversations: string;
   workspace: string;
+  /** Inbox file drop for inbound notifications: one JSON notification per line, drained by the runtime. */
+  notificationsInbox: string;
 }
 
 /** Problems found while loading files, shown to the owner once the app is up. */
@@ -103,10 +124,12 @@ export function paths(home = process.env.JARVIS_HOME || path.join(homedir(), ".j
     config: path.join(home, "config.json"),
     token: path.join(home, "token"),
     memory: path.join(home, "memory.json"),
+    pending: path.join(home, "memory-pending.json"),
     audit: path.join(home, "audit.jsonl"),
     transcript: path.join(home, "transcript.jsonl"),
     conversations: path.join(home, "conversations.json"),
     workspace: path.join(home, "workspace"),
+    notificationsInbox: path.join(home, "notifications-inbox.jsonl"),
   };
 }
 
@@ -122,6 +145,8 @@ export function defaults(p: Paths): Config {
     screenControl: { enabled: false },
     tor: { enabled: false, socksPort: 9050 },
     nli: { enabled: true, modelCheck: false },
+    memory: { verifyBeforeStore: false },
+    notifications: { allowedApps: [], quietStart: 22, quietEnd: 7, maxPerMinutePerApp: 5 },
     port: 7337,
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
@@ -161,6 +186,8 @@ export function loadConfig(p: Paths = paths()): Config {
     screenControl: { ...base.screenControl, ...(raw.screenControl ?? {}) },
     tor: { ...base.tor, ...(raw.tor ?? {}) },
     nli: { ...base.nli, ...(raw.nli ?? {}) },
+    memory: { ...base.memory, ...(raw.memory ?? {}) },
+    notifications: { ...base.notifications, ...(raw.notifications ?? {}) },
   };
 }
 

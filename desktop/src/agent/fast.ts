@@ -29,7 +29,9 @@ export function fastCommand(input: string, now: Date = new Date()): Fast | null 
   // "remember that …" may contain "and"/"with"; it is one fact, so it is matched before the compound check.
   let m = /^remember(?: that)?\s+(.{3,})$/i.exec(raw);
   if (m && !/^(to|me to|about)\b/i.test(m[1]!)) {
-    return { kind: "tool", tool: "remember", args: { fact: m[1]!.trim() }, say: () => "Got it, I'll remember that." };
+    // With verify-before-store on, the tool result says the fact is only
+    // held unverified — the fast reply must not claim it was remembered.
+    return { kind: "tool", tool: "remember", args: { fact: m[1]!.trim() }, say: (r) => (r.startsWith("Remembered") ? "Got it, I'll remember that." : r) };
   }
   if (COMPOUND.test(s)) return null;
 

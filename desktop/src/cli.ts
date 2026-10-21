@@ -5,6 +5,9 @@ import path from "node:path";
 import type { AgentEvent, RunHooks } from "./agent/loop.js";
 import { readFile } from "node:fs/promises";
 import { accessToken, loadConfig, paths, saveConfig, type Config, type Paths } from "./config.js";
+import { EcholaliaStore, formatEntry } from "./echolalia.js";
+import { AuditLog } from "./gate/audit.js";
+import { Memory } from "./memory.js";
 import { Runtime } from "./runtime.js";
 import { probeTorProxy } from "./tools/index.js";
 import { speak } from "./voice.js";
@@ -26,6 +29,10 @@ const HELP = `Jarvis desktop
   jarvis say "text."    speak a finished sentence with the computer's voice
   jarvis transcribe f   transcribe an audio file (needs voice.sttBaseUrl)
   jarvis where          show where Jarvis keeps its files
+  jarvis memory …       verify-before-store (echolalia) inspection:
+                          pending | quarantined | all
+                          submit "claim" [--source S] [--source-text T]
+                          promote <id> | drop <id> | verify
 
 Attaching context: 'jarvis ask "summarize this" --file notes.md --file chart.png'
 attaches files (repeatable); in any request, @file:path, @folder:path,
@@ -137,6 +144,50 @@ async function setKey(p: Paths, cfg: Config): Promise<void> {
   console.log(`Claude API key saved to ${p.config}. It stays saved for the cloud brain and cloud vision, and is never shown again.`);
 }
 
+/**
+ * `jarvis memory …`: the owner's hands on the echolalia pending store.
+ * Works whether or not verifyBeforeStore is on (inspection is always
+ * available); promotions and quarantines are written to the audit log.
+ */
+async function memoryCommand(p: Paths, rest: string[]): Promise<void> {
+  const audit = new AuditLog(p.audit);
+  const memory = new Memory(p.memory);
+  const store = new EcholaliaStore(p.pending, memory, (entry, decision) => {
+    audit.write({ tool: "echolalia", decision, id: entry.id, claim: entry.claim, source: entry.source, echoes: entry.echoes, reasons: entry.reasons, via: "cli" });
+  });
+  const [sub = "pending", ...args] = rest;
+  if (sub === "pending" || sub === "quarantined" || sub === "all") {
+    const rows = sub === "all" ? store.list() : store.list(sub);
+    console.log(rows.length ? rows.map(formatEntry).join("\n") : `No ${sub === "all" ? "" : `${sub} `}candidate facts.`);
+    return;
+  }
+  if (sub === "submit") {
+    const flag = (name: string): string | undefined => {
+      const i = args.indexOf(`--${name}`);
+      return i >= 0 ? args[i + 1] : undefined;
+    };
+    const claim = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--source" && args[i - 1] !== "--source-text").join(" ").trim();
+    if (!claim) { console.error('Usage: jarvis memory submit "claim" [--source S] [--source-text T]'); process.exitCode = 1; return; }
+    const out = await store.submit(claim, { source: flag("source"), sourceText: flag("source-text") });
+    console.log(out.message);
+    return;
+  }
+  if (sub === "promote" || sub === "drop") {
+    const id = args[0] ?? "";
+    const e = sub === "promote" ? store.promoteByOwner(id) : store.drop(id);
+    if (!e) { console.error(`No pending entry with id ${id}.`); process.exitCode = 1; return; }
+    console.log(sub === "promote" ? `Promoted (${e.id} -> fact ${e.factId}): ${e.claim}` : `Dropped (${e.id}): ${e.claim}`);
+    return;
+  }
+  if (sub === "verify") {
+    const changed = store.verifyAll();
+    console.log(changed.length ? changed.map(formatEntry).join("\n") : "No status changes.");
+    return;
+  }
+  console.error("Usage: jarvis memory pending|quarantined|all|submit|promote <id>|drop <id>|verify");
+  process.exitCode = 1;
+}
+
 async function main(): Promise<void> {
   const [cmd = "help", ...rest] = process.argv.slice(2);
   const p = paths();
@@ -160,6 +211,10 @@ async function main(): Promise<void> {
   const cfg = loadConfig(p);
   if (cmd === "set-key") {
     await setKey(p, cfg);
+    return;
+  }
+  if (cmd === "memory") {
+    await memoryCommand(p, rest);
     return;
   }
   const rt = new Runtime(cfg, p);

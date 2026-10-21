@@ -20,6 +20,8 @@ export interface Fact {
   id: string;
   text: string;
   at: string;
+  /** How this fact earned its place (e.g. echolalia verification), when recorded. */
+  provenance?: string;
   /** Unit vector, present only once embedded. */
   vec?: number[];
   /** The embedder id that produced `vec`; a mismatch means re-embed. */
@@ -53,11 +55,11 @@ export class Memory {
     }
   }
 
-  remember(text: string): Fact {
+  remember(text: string, provenance?: string): Fact {
     const t = text.trim();
     const same = this.store.facts.find((f) => f.text.toLowerCase() === t.toLowerCase());
     if (same) return same;
-    const f: Fact = { id: randomUUID().slice(0, 8), text: t, at: new Date().toISOString() };
+    const f: Fact = { id: randomUUID().slice(0, 8), text: t, at: new Date().toISOString(), ...(provenance ? { provenance } : {}) };
     this.store.facts.push(f);
     this.save();
     return f;

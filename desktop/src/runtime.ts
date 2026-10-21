@@ -6,6 +6,7 @@ import { AuditLog } from "./gate/audit.js";
 import { Gate } from "./gate/gate.js";
 import { createLocalModelChecker } from "./gate/nli.js";
 import { Embedder } from "./embeddings.js";
+import { EcholaliaStore } from "./echolalia.js";
 import { Vision } from "./vision.js";
 import { isLoopbackUrl, Transcriber } from "./voice.js";
 import { Memory } from "./memory.js";
@@ -13,6 +14,8 @@ import { ClaudeProvider } from "./providers/claude.js";
 import { LocalProvider } from "./providers/local.js";
 import type { Provider } from "./providers/types.js";
 import { makeWebFetch, probeTorProxy, toolsFor } from "./tools/index.js";
+import { NotificationFilter, type NotificationInput } from "./notifications/filter.js";
+import { NotificationInbox, type IngestResult } from "./notifications/inbox.js";
 
 /**
  * Wires config, memory, gate, brains and tools into one Agent. Shared by the
@@ -25,19 +28,45 @@ export class Runtime {
   /** Conversation branches; the agent's live turns are the active branch's working copy. */
   readonly conversations: Conversations;
   private readonly cwd: string;
+  readonly audit: AuditLog;
+  /** Echolalia pending store; always exists for inspection, routes remember only when verifyBeforeStore is on. */
+  readonly pending: EcholaliaStore;
+  /**
+   * Inbound notification intelligence: the three-gate filter + queue every
+   * intake feeds (gateway endpoint, inbox file drop) and the
+   * read_notifications tool drains. Built from cfg.notifications at startup;
+   * a config change to the allowlist or quiet hours applies on restart,
+   * like the gate's writable roots.
+   */
+  readonly notifications: NotificationInbox;
 
   constructor(readonly cfg: Config, readonly p: Paths, cwd = process.cwd()) {
     this.cwd = cwd;
     this.memory = new Memory(p.memory);
+    this.audit = new AuditLog(p.audit);
+    this.pending = new EcholaliaStore(p.pending, this.memory, (entry, decision) => {
+      this.audit.write({ tool: "echolalia", decision, id: entry.id, claim: entry.claim, source: entry.source, echoes: entry.echoes, reasons: entry.reasons });
+    });
+    this.notifications = new NotificationInbox({
+      filter: new NotificationFilter({
+        allowedApps: cfg.notifications.allowedApps,
+        quietStart: cfg.notifications.quietStart,
+        quietEnd: cfg.notifications.quietEnd,
+        maxPerMinutePerApp: cfg.notifications.maxPerMinutePerApp,
+      }),
+      audit: new AuditLog(p.audit),
+      inboxFile: p.notificationsInbox,
+    });
     this.agent = new Agent({
       provider: () => this.provider(),
       embedder: () => this.embedder(),
       vision: () => this.vision(),
       transcriber: () => this.transcriber(),
-      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }, ttsEnabled: this.cfg.voice.ttsEnabled }),
+      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }, ttsEnabled: this.cfg.voice.ttsEnabled, notifications: this.notifications }),
       gate: new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd),
       memory: this.memory,
-      audit: new AuditLog(p.audit),
+      echolalia: () => (this.cfg.memory.verifyBeforeStore ? this.pending : null),
+      audit: this.audit,
       home: p.home,
       workspace: p.workspace,
       cwd,
@@ -141,6 +170,16 @@ export class Runtime {
     return new Transcriber({ baseUrl: v.sttBaseUrl, model: v.sttModel });
   }
 
+  /** One inbound notification through the filter choke point (the gateway endpoint calls this). */
+  ingestNotification(input: NotificationInput, source: "gateway" | "inbox_file" | "direct" = "gateway"): IngestResult {
+    return this.notifications.ingest(input, source);
+  }
+
+  /** Drain the inbox file drop (notifications-inbox.jsonl) through the same choke point. */
+  drainNotificationInbox(): IngestResult[] {
+    return this.notifications.drainInboxFile();
+  }
+
   /** The model ids a server has, for the picker. Defaults to the local brain's server. */
   async listModels(baseUrl?: string): Promise<string[]> {
     return LocalProvider.listModels(baseUrl || this.cfg.local.baseUrl);
@@ -164,7 +203,7 @@ export class Runtime {
     return this.torReachable;
   }
 
-  update(change: { brain?: Config["brain"]; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean }): void {
+  update(change: { brain?: Config["brain"]; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean; verifyBeforeStore?: boolean }): void {
     if (change.brain === "cloud" || change.brain === "local") this.cfg.brain = change.brain;
     if (typeof change.offlineOnly === "boolean") this.cfg.offlineOnly = change.offlineOnly;
     if (typeof change.embeddings === "boolean") this.cfg.embeddings.enabled = change.embeddings;
@@ -174,6 +213,7 @@ export class Runtime {
       this.torReachable = null;
       if (change.tor) void this.refreshTorStatus();
     }
+    if (typeof change.verifyBeforeStore === "boolean") this.cfg.memory.verifyBeforeStore = change.verifyBeforeStore;
     saveConfig(this.cfg, this.p);
   }
 
@@ -190,6 +230,9 @@ export class Runtime {
       embeddings: this.cfg.embeddings.enabled,
       /** The last run's router decision (tier + mode + reason), or null before the first run. */
       lastRoute: this.agent.lastRoute,
+      verifyBeforeStore: this.cfg.memory.verifyBeforeStore,
+      pendingMemory: this.pending.list("pending").length,
+      quarantinedMemory: this.pending.list("quarantined").length,
       embedderId: this.embedder()?.id ?? null,
       vision: this.vision()?.label ?? null,
       voiceStt: this.transcriber()?.label ?? null,
@@ -200,6 +243,8 @@ export class Runtime {
       torReachable: this.torReachable,
       nli: this.cfg.nli.enabled,
       nliModelCheck: this.cfg.nli.enabled && this.cfg.nli.modelCheck,
+      notificationsAllowedApps: this.cfg.notifications.allowedApps.length,
+      notificationsPending: this.notifications.pendingCount,
     };
   }
 }
