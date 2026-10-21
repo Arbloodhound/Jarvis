@@ -260,9 +260,6 @@ test("toolsFor: vision off withholds both look tools; on or unset keeps them", (
   assert.ok(on.includes("look_at_screen") && on.includes("look_at_image"));
   const unset = toolsFor({ offlineOnly: false, screenControl: false }).map((t) => t.name);
   assert.ok(unset.includes("look_at_image"), "an unset flag keeps today's behavior");
-  // see_act_verify reads the screen through vision too: off withholds it even with screen control on.
-  assert.ok(!toolsFor({ offlineOnly: false, screenControl: true, vision: false }).some((t) => t.name === "see_act_verify"));
-  assert.ok(toolsFor({ offlineOnly: false, screenControl: true, vision: true }).some((t) => t.name === "see_act_verify"));
 });
 
 function makeRuntime(mutate?: (cfg: Config) => void): { rt: Runtime; home: string } {

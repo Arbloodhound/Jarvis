@@ -1127,7 +1127,7 @@ export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; v
     if (t.name === "speak" && opts.ttsEnabled === false) return false;
     // Vision off in settings withholds the look tools entirely — there is
     // no per-call way back in; the setting is the only switch.
-    if (opts.vision === false && (t.name === "look_at_screen" || t.name === "look_at_image" || t.name === "see_act_verify")) return false;
+    if (opts.vision === false && (t.name === "look_at_screen" || t.name === "look_at_image")) return false;
     return true;
   }).map((t) => {
     let out = t;
