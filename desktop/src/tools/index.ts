@@ -14,6 +14,7 @@ import type { Embedder } from "../embeddings.js";
 import type { Memory } from "../memory.js";
 import type { Vision } from "../vision.js";
 import { speak as speakVoice, type Transcriber } from "../voice.js";
+import { INVESTIGATE_TOOLS } from "./investigate.js";
 import * as os from "./platform.js";
 import { shoppingTools } from "./shopping.js";
 
@@ -33,6 +34,8 @@ export {
 
 export interface ToolContext {
   cwd: string;
+  /** The app home (~/.jarvis): app-level storage (cases/, …) lives beside the workspace. */
+  home: string;
   workspace: string;
   memory: Memory;
   embedder: Embedder | null;
@@ -816,6 +819,8 @@ export const ALL_TOOLS: Tool[] = [
   transcribeAudioTool, speakTool,
   rememberTool, recallTool, forgetTool,
   ...shoppingTools(),
+  ...INVESTIGATE_TOOLS,
+];
 ];
 
 export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean }): Tool[] {

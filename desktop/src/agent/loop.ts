@@ -377,7 +377,7 @@ export class Agent {
       ep.confirm(t.name, args);
     }
 
-    const ctx: ToolContext = { cwd: this.deps.cwd, workspace: this.deps.workspace, memory: this.deps.memory, embedder: this.deps.embedder(), vision: this.deps.vision(), transcriber: this.deps.transcriber?.() ?? null, signal };
+    const ctx: ToolContext = { cwd: this.deps.cwd, home: this.deps.home, workspace: this.deps.workspace, memory: this.deps.memory, embedder: this.deps.embedder(), vision: this.deps.vision(), transcriber: this.deps.transcriber?.() ?? null, signal };
     try {
       const out = await t.run(args, ctx);
       const scam = ep.observe(t.name, t.policy.effects, out, !!t.outside);
