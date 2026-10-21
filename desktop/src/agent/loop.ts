@@ -27,7 +27,13 @@ import { routeRequest, type Route, type RouteChannel } from "./router.js";
  * cards appear one by one. Stop aborts the model stream and every running tool.
  */
 
-export type AgentEvent =
+/** Which subagent an event or card came from (the runtime sets it; absent for the main agent). */
+export interface AgentTag {
+  id: string;
+  name: string;
+}
+
+export type AgentEvent = (
   | { type: "run_start"; runId: string; brain: string; route: Route }
   | { type: "text"; runId: string; delta: string }
   | { type: "thinking"; runId: string; delta: string }
@@ -37,7 +43,22 @@ export type AgentEvent =
   | { type: "confirm_resolved"; runId: string; cardId: string; allowed: boolean }
   | { type: "warning"; runId: string; text: string }
   | { type: "done"; runId: string; text: string; stopped?: boolean }
-  | { type: "error"; runId: string; message: string };
+  | { type: "error"; runId: string; message: string }
+) & { agent?: AgentTag };
+
+/**
+ * How a run ended. run() returns only the text (an error's message for a
+ * failed run, "Stopped." for a stopped one), which reads like an answer;
+ * callers that must tell the three apart — a subagent's hand-off, a
+ * scheduled job's record — use runResult().
+ */
+export interface RunResult {
+  runId: string;
+  status: "done" | "failed" | "stopped";
+  text: string;
+  /** The failure, when status is "failed". */
+  error?: string;
+}
 
 export interface AgentDeps {
   provider: () => Provider;
@@ -97,6 +118,8 @@ export class Agent {
   readonly turns: Turn[] = [];
   /** The most recent run's route (tier + mode + reason), for state displays. */
   lastRoute: Route | null = null;
+  /** How the most recent run ended, or null before the first. */
+  lastResult: RunResult | null = null;
   private running: AbortController | null = null;
 
   constructor(private readonly deps: AgentDeps) {}
@@ -110,10 +133,16 @@ export class Agent {
   }
 
   async run(request: string, hooks: RunHooks, extraContext: string | { channel?: RouteChannel } = "", opts: { channel?: RouteChannel } = {}): Promise<string> {
+    return (await this.runResult(request, hooks, extraContext, opts)).text;
+  }
+
+  /** One run, reporting how it ended (see RunResult). Same arguments as run(). */
+  async runResult(request: string, hooks: RunHooks, extraContext: string | { channel?: RouteChannel } = "", opts: { channel?: RouteChannel } = {}): Promise<RunResult> {
     if (this.running) throw new Error("Already working on something; stop it first.");
     const runId = randomUUID().slice(0, 8);
     const ac = new AbortController();
     this.running = ac;
+    const finish = (r: Omit<RunResult, "runId">): RunResult => (this.lastResult = { runId, ...r });
     try {
       const provider = this.deps.provider();
       const ep = new Episode(request);
@@ -133,16 +162,18 @@ export class Agent {
       const route = routeRequest(request, { channel, fastCommand: fast !== null });
       this.lastRoute = route;
       hooks.emit({ type: "run_start", runId, brain: provider.label, route });
-      if (fast) return await this.runFast(runId, fast, ep, hooks, ac.signal, request, extra, route);
-      return await this.runModel(runId, request, provider, ep, hooks, ac.signal, extra, route);
+      const text = fast
+        ? await this.runFast(runId, fast, ep, hooks, ac.signal, request, extra, route)
+        : await this.runModel(runId, request, provider, ep, hooks, ac.signal, extra, route);
+      return finish({ status: "done", text });
     } catch (err) {
       if (ac.signal.aborted) {
         hooks.emit({ type: "done", runId, text: "Stopped.", stopped: true });
-        return "Stopped.";
+        return finish({ status: "stopped", text: "Stopped." });
       }
       const message = err instanceof Error ? err.message : String(err);
       hooks.emit({ type: "error", runId, message });
-      return message;
+      return finish({ status: "failed", text: message, error: message });
     } finally {
       this.settle();
       this.running = null;
@@ -252,7 +283,16 @@ export class Agent {
         hooks.emit({ type: "warning", runId, text: "The answer hit the length limit and was cut off." });
         break;
       }
-      if (!res.toolCalls.length) break;
+      if (!res.toolCalls.length) {
+        // A message that landed while this last turn ran (steering, a
+        // hand-off) would otherwise be dropped though its sender was told
+        // it was delivered: read it and take another step. On the final
+        // allowed step it stays queued (a subagent's hand-off says so).
+        const late = turn < this.deps.maxTurns - 1 ? this.deps.inbox?.() ?? [] : [];
+        if (!late.length) break;
+        this.turns.push({ role: "user", text: late.join("\n\n") });
+        continue;
+      }
       if (res.stop === "max_tokens") {
         // A tool call cut off mid-way may still parse (a half-written file); never run it.
         this.turns.push({ role: "tool", results: res.toolCalls.map((c) => ({ id: c.id, name: c.name, content: "Not run: the request was cut off by the length limit. Do it in smaller steps.", isError: true })) });

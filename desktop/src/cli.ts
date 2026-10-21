@@ -2,13 +2,15 @@
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import path from "node:path";
-import type { AgentEvent, RunHooks } from "./agent/loop.js";
+import type { AgentEvent } from "./agent/loop.js";
+import { formatHandoff } from "./agent/orchestrator.js";
 import { readFile } from "node:fs/promises";
 import { accessToken, loadConfig, paths, saveConfig, type Config, type Paths } from "./config.js";
 import { EcholaliaStore, formatEntry } from "./echolalia.js";
 import { AuditLog } from "./gate/audit.js";
 import { Memory } from "./memory.js";
-import { Runtime } from "./runtime.js";
+import { Runtime, type OwnerChannel } from "./runtime.js";
+import { TerminalPrompt } from "./terminal.js";
 import { probeTorProxy } from "./tools/index.js";
 import { speak } from "./voice.js";
 import { JobStore, seedDefaultHarnessJobs, type JobKind } from "./scheduler.js";
@@ -60,10 +62,35 @@ It is the only vision switch; there is no per-request opt-out.`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
 const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
 
-function terminalHooks(rl: ReturnType<typeof createInterface>, input: { closed: boolean }): RunHooks {
+/** How long `jarvis ask` waits for running subagents before stopping them and exiting. */
+const ASK_SUBAGENT_WAIT_MS = 120_000;
+
+/**
+ * The terminal as the owner's channel. Every card — the main agent's or a
+ * subagent's — goes through the one serialized prompt (see TerminalPrompt),
+ * so a card raised while the chat waits at "you ›" takes the next line
+ * instead of losing it to the chat. A subagent's events print as short
+ * labelled lines (its text arrives whole in its hand-off), so they never
+ * splice into the main agent's streamed reply.
+ */
+function terminalHooks(term: TerminalPrompt, input: { closed: boolean }): OwnerChannel {
   let thinking = false;
   return {
     emit(e: AgentEvent) {
+      if (e.type === "confirm_resolved") {
+        // The card's run gave up on it (Stop): take it off the prompt.
+        term.withdraw(e.cardId, dim("  (card withdrawn — its run stopped; treated as declined)"));
+        return;
+      }
+      if (e.agent) {
+        const who = `[subagent ${e.agent.name}]`;
+        if (e.type === "run_start") term.notice(dim(`${who} started`));
+        else if (e.type === "tool_start") term.notice(dim(`${who} → ${e.name} ${JSON.stringify(e.args).slice(0, 160)}`));
+        else if (e.type === "tool_end") term.notice(dim(`${who}   ${e.ok ? "✓" : "✗"} ${e.summary.split("\n")[0]?.slice(0, 160) ?? ""}`));
+        else if (e.type === "warning") term.notice(yellow(`${who} ! ${e.text}`));
+        else if (e.type === "error") term.notice(yellow(`${who} ✗ ${e.message}`));
+        return;
+      }
       if (e.type === "thinking") {
         if (!thinking) { process.stdout.write(dim("\n[thinking] ")); thinking = true; }
         process.stdout.write(dim(e.delta));
@@ -79,23 +106,41 @@ function terminalHooks(rl: ReturnType<typeof createInterface>, input: { closed: 
       else if (e.type === "done") process.stdout.write("\n");
     },
     async confirm(card) {
-      process.stdout.write(yellow(`\n? ${card.tool}: ${card.reason}\n  ${JSON.stringify(card.args).slice(0, 400)}\n`));
-      // Piped stdin reaches EOF before a card appears, and rl.question on a
-      // closed interface rejects ("readline was closed") and used to kill
-      // the run. A card nobody can answer is a decline, said out loud.
-      if (input.closed) {
+      const text = yellow(`\n? ${card.tool}: ${card.reason}\n  ${JSON.stringify(card.args).slice(0, 400)}\n`);
+      // Piped stdin reaches EOF before a card appears; a card nobody can
+      // answer is a decline, said out loud.
+      if (input.closed || term.closed) {
+        process.stdout.write(text);
         process.stdout.write(yellow("  Confirmation unavailable — the input is closed, so this is treated as declined.\n"));
         return false;
       }
-      try {
-        const a = (await rl.question("  Allow? [y/N] ")).trim().toLowerCase();
-        return a === "y" || a === "yes";
-      } catch {
-        process.stdout.write(yellow("  Confirmation unavailable — the input closed, so this is treated as declined.\n"));
+      const a = await term.card(card.cardId, text, "  Allow? [y/N] ");
+      if (a === null) {
+        if (term.closed) process.stdout.write(yellow("\n  Confirmation unavailable — the input closed, so this is treated as declined.\n"));
         return false;
       }
+      const v = a.trim().toLowerCase();
+      return v === "y" || v === "yes";
+    },
+    handoff(h) {
+      term.notice(formatHandoff(h));
     },
   };
+}
+
+/**
+ * Before a terminal front-end exits: wait (bounded) for running subagents,
+ * saying so; their hand-offs print as they land. Any still running at the
+ * bound are stopped, with the reason, so nothing works on unobserved.
+ */
+async function settleSubagents(rt: Runtime): Promise<void> {
+  const running = rt.orchestrator.list().filter((c) => c.state === "running").length;
+  if (!running) return;
+  process.stdout.write(dim(`\nWaiting up to ${ASK_SUBAGENT_WAIT_MS / 1000}s for ${running} running subagent(s) to hand off before exiting…\n`));
+  const r = await rt.settleChildren(ASK_SUBAGENT_WAIT_MS);
+  if (r.stopped.length) {
+    process.stdout.write(yellow(`\n! Stopped subagent(s) ${r.stopped.map((n) => `"${n}"`).join(", ")}: still running after ${ASK_SUBAGENT_WAIT_MS / 1000}s, and nothing would see their results once this command exits.\n`));
+  }
 }
 
 /** Read one line with echo muted, so a typed key never lands on screen, in scrollback, or in a log. */
@@ -369,12 +414,13 @@ async function main(): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const input = { closed: pipedText !== "" };
   rl.on("close", () => { input.closed = true; });
+  const term = new TerminalPrompt(rl);
   process.on("SIGINT", () => {
     if (rt.agent.busy) { rt.stopAll(); return; }
     rl.close();
     process.exit(0);
   });
-  const hooks = terminalHooks(rl, input);
+  const hooks = terminalHooks(term, input);
   // Subagents ask and report through this terminal, like the main agent.
   rt.setChannel(hooks);
   if (cmd === "ask") {
@@ -391,22 +437,21 @@ async function main(): Promise<void> {
     if (!text) { console.log('Usage: jarvis ask "what\'s in my Downloads folder?" [--file <path> …]'); rl.close(); return; }
     await rt.agent.run(text, hooks, await rt.ownerContext(text, files), { channel: "cli" });
     rt.syncConversation();
+    await settleSubagents(rt);
     rl.close();
     return;
   }
   if (cmd === "chat") {
     console.log(dim(`${rt.provider().label}. Ctrl+C stops a run, or quits when idle.`));
     for (;;) {
-      let line: string;
-      try {
-        line = (await rl.question("\nyou › ")).trim();
-      } catch {
-        break; // Piped input ended: end the chat instead of dying on a closed readline.
-      }
+      const got = await term.ask("\nyou › ");
+      if (got === null) break; // Input ended: end the chat.
+      const line = got.trim();
       if (!line) continue;
       await rt.agent.run(line, hooks, await rt.ownerContext(line), { channel: "cli" });
       rt.syncConversation();
     }
+    await settleSubagents(rt);
   }
   console.log(HELP);
   rl.close();

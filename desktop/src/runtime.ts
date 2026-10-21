@@ -1,5 +1,5 @@
-import { Agent, type AgentDeps, type RunHooks } from "./agent/loop.js";
-import { Orchestrator, formatHandoff, subagentTools, type ChildHandle, type ChildRun } from "./agent/orchestrator.js";
+import { Agent, type AgentDeps, type RunHooks, type RunResult } from "./agent/loop.js";
+import { Orchestrator, formatHandoff, subagentTools, type ChildHandle, type ChildRun, type Handoff } from "./agent/orchestrator.js";
 import { type Config, type Paths, saveConfig } from "./config.js";
 import { Conversations } from "./conversations.js";
 import { ownerContext, type Attachment } from "./context.js";
@@ -19,6 +19,18 @@ import { JobStore, Scheduler, seedDefaultHarnessJobs, type Job, type RunnerResul
 import { makeWebFetch, probeTorProxy, toolsFor, type Tool } from "./tools/index.js";
 import { NotificationFilter, type NotificationInput } from "./notifications/filter.js";
 import { NotificationInbox, type IngestResult } from "./notifications/inbox.js";
+
+/**
+ * The owner's live channel: the run hooks every subagent reports and asks
+ * through, plus two notices a front-end may take — a hand-off was queued
+ * (it reaches the main conversation on the main agent's next step), and
+ * the busy state changed outside the front-end's own run (a scheduled run
+ * started or ended), so a Stop control can follow it.
+ */
+export interface OwnerChannel extends RunHooks {
+  handoff?: (h: Handoff) => void;
+  stateChanged?: () => void;
+}
 
 /**
  * Wires config, memory, gate, brains and tools into one Agent. Shared by the
@@ -54,7 +66,9 @@ export class Runtime {
    * report and ask through it; with none registered, a subagent's card is
    * declined, the same answer an unanswered card gets.
    */
-  private channel: RunHooks | null = null;
+  private channel: OwnerChannel | null = null;
+  /** Scheduled runs in flight: Stop and quit reach them, and they count as busy. */
+  private readonly scheduledRuns = new Set<Agent>();
 
   constructor(readonly cfg: Config, readonly p: Paths, cwd = process.cwd()) {
     this.cwd = cwd;
@@ -77,6 +91,9 @@ export class Runtime {
     this.orchestrator = new Orchestrator({
       maxConcurrent: () => this.cfg.subagents.maxConcurrent,
       start: (h) => this.startChild(h),
+      // The owner hears of a hand-off when it lands, not only when the
+      // main agent next reads its inbox.
+      onHandoff: (h) => this.channel?.handoff?.(h),
     });
     this.agent = this.newAgent(
       () => [...this.baseTools(), ...subagentTools(this.orchestrator)],
@@ -143,9 +160,13 @@ export class Runtime {
    * at 1), the orchestrator's inbox as its steering channel, and the
    * owner's live channel for its events and cards. A card a subagent raises
    * keeps its own text and gains "(via subagent …)", so the owner always
-   * knows whose action they are approving.
+   * knows whose action they are approving. Every event and card it sends
+   * is tagged with the child's id and name, so a front-end can keep it
+   * apart from the main agent's reply. A failed run rejects `done`, so the
+   * child hands off FAILED rather than DONE with the error as its answer.
    */
   private startChild(h: ChildHandle): ChildRun {
+    const tag = { id: h.id, name: h.name };
     const agent = this.newAgent(() => this.baseTools(), {
       inbox: () => h.drainInbox().map((m) => `[Message from your coordinator]\n${m}`),
       systemSuffix: "\n\nYou are a subagent working for the main Jarvis agent, which delegated this task to you. Do only this task. " +
@@ -156,26 +177,61 @@ export class Runtime {
       emit: (e) => {
         if (e.type === "tool_start") h.report(`running ${e.name}`);
         else if (e.type === "done") h.report("finished");
-        this.channel?.emit(e);
+        this.channel?.emit({ ...e, agent: tag });
       },
       confirm: async (card) => {
         if (!this.channel) return false;
-        return this.channel.confirm({ ...card, reason: `${card.reason} (via subagent "${h.name}")` });
+        return this.channel.confirm({ ...card, reason: `${card.reason} (via subagent "${h.name}")`, agent: tag });
       },
     };
-    const done = agent.run(h.task, hooks);
+    const done = agent.runResult(h.task, hooks).then((r) => {
+      if (r.status === "failed") throw new Error(r.error ?? r.text);
+      return r.text;
+    });
     return { done, stop: () => agent.stop() };
   }
 
   /** Register (or clear) the owner's live channel — see the field note. */
-  setChannel(channel: RunHooks | null): void {
+  setChannel(channel: OwnerChannel | null): void {
     this.channel = channel;
   }
 
-  /** The owner's Stop: the current run and every running subagent. */
+  /** The owner's Stop: the current run, every running subagent and every running scheduled job. */
   stopAll(): void {
     this.agent.stop();
     this.orchestrator.stopAll();
+    this.stopScheduledRuns();
+  }
+
+  /** Stop every scheduled run in flight (part of Stop; the app also calls it on quit). */
+  stopScheduledRuns(): void {
+    for (const a of this.scheduledRuns) a.stop();
+  }
+
+  /**
+   * For a front-end about to exit (`jarvis ask`): wait up to `timeoutMs`
+   * for the running subagents to settle, then stop whichever are still
+   * running and wait briefly for their stopped hand-offs — so no child keeps
+   * working, unobserved, after the owner's terminal is gone. Hand-offs go
+   * out through the channel as usual. Returns how many were running and
+   * the names of those it had to stop.
+   */
+  async settleChildren(timeoutMs: number): Promise<{ waited: number; stopped: string[] }> {
+    const running = () => this.orchestrator.list().filter((c) => c.state === "running");
+    const waited = running().length;
+    if (!waited) return { waited, stopped: [] };
+    const within = (ms: number) => {
+      let timer: NodeJS.Timeout | undefined;
+      return Promise.race([
+        this.orchestrator.idle().then(() => true),
+        new Promise<boolean>((r) => { timer = setTimeout(() => r(false), ms); }),
+      ]).finally(() => clearTimeout(timer));
+    };
+    if (await within(timeoutMs)) return { waited, stopped: [] };
+    const stopped = running().map((c) => c.name);
+    this.orchestrator.stopAll();
+    await within(5_000);
+    return { waited, stopped };
   }
 
   /** Save the agent's live turns back into the active branch. Call after every run and edit. */
@@ -218,6 +274,11 @@ export class Runtime {
    * to the audit log with the job's id and owner — a scheduled job never
    * gains silent privileges. The harness's own jobs are safe internal
    * checks in this build (heartbeat / memory status), not model runs.
+   *
+   * A run that failed or was stopped throws, so the scheduler records it
+   * failed (with the reason) instead of "ran" with the error as its detail.
+   * The run is tracked while it works: the owner's Stop and the app's quit
+   * reach it, and state().busy counts it.
    */
   async runScheduledJob(job: Job): Promise<RunnerResult> {
     if (job.owner === "harness") {
@@ -236,8 +297,18 @@ export class Runtime {
         return false;
       },
     };
-    const answer = await agent.run(job.task, hooks);
-    return { detail: answer, confirmDeclined };
+    this.scheduledRuns.add(agent);
+    this.channel?.stateChanged?.();
+    let r: RunResult;
+    try {
+      r = await agent.runResult(job.task, hooks);
+    } finally {
+      this.scheduledRuns.delete(agent);
+      this.channel?.stateChanged?.();
+    }
+    if (r.status === "failed") throw new Error(r.error ?? r.text);
+    if (r.status === "stopped") throw new Error("Stopped by the owner before it finished.");
+    return { detail: r.text, confirmDeclined };
   }
 
   /** Cloud answers only when chosen AND offline-only is off (same rule as the phone's NetPolicy). */
@@ -361,7 +432,9 @@ export class Runtime {
       brain: this.cfg.brain,
       offlineOnly: this.cfg.offlineOnly,
       answering: this.provider().label,
-      busy: this.agent.busy,
+      /** The main agent or a scheduled run is working (what Stop would stop). */
+      busy: this.agent.busy || this.scheduledRuns.size > 0,
+      scheduledRunning: this.scheduledRuns.size,
       agents: this.orchestrator.list(),
       cloudModel: this.cfg.cloud.model,
       /** Where the cloud key comes from — never the key itself. */

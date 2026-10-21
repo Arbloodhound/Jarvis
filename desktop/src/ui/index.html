@@ -44,6 +44,8 @@
   .msg { padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; word-wrap: break-word; max-width: 100%; }
   .user { background: var(--user); align-self: flex-end; max-width: 85%; }
   .assistant { background: var(--panel); border: 1px solid var(--line); }
+  .assistant.sub { border-style: dashed; margin-left: 24px; font-size: 14px; }
+  .assistant.sub .meta { font-weight: 600; }
   .meta { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
   details.think { color: var(--muted); font-size: 13px; }
   details.think summary { cursor: pointer; }
@@ -132,7 +134,8 @@
 
   const $ = (id) => document.getElementById(id);
   const log = $("log"), main = $("main"), input = $("input"), sendBtn = $("send"), status = $("status");
-  let ws, state = {}, run = null; // run: { el, text, think, thinkBox, tools: Map }
+  let ws, state = {}, run = null; // run: the main agent's current reply { id, box, meta, think, thinkBox, body, textNode }
+  const subRuns = new Map(); // a subagent's run, by runId: its own labelled box, so the main reply stays whole
   let pending = []; // uploaded attachments waiting for the next send: {path, name, size, kind}
   let lastBox = null; // the most recent assistant box, for its "branch from here" button
 
@@ -166,17 +169,30 @@
     $("delbranch").style.opacity = branches.length <= 1 ? .4 : 1;
   }
 
-  function ensureRun(runId) {
-    if (run && run.id === runId) return run;
-    const box = add(el("div", "msg assistant"));
-    lastBox = box;
+  function newRunBox(runId, agent) {
+    const box = add(el("div", agent ? "msg assistant sub" : "msg assistant"));
     const meta = box.appendChild(el("div", "meta"));
     const think = box.appendChild(el("details", "think"));
     think.hidden = true;
     think.appendChild(el("summary", null, "Thinking"));
     const thinkBox = think.appendChild(el("div"));
     const body = box.appendChild(el("div"));
-    run = { id: runId, box, meta, think, thinkBox, body, textNode: null };
+    return { id: runId, box, meta, think, thinkBox, body, textNode: null, agent };
+  }
+
+  /** The box an event renders into: a subagent's own (tagged events), else the main reply's. */
+  function ensureRun(runId, agent) {
+    const known = subRuns.get(runId);
+    if (known) return known;
+    if (agent) {
+      const r = newRunBox(runId, agent);
+      r.meta.textContent = `subagent "${agent.name}"`;
+      subRuns.set(runId, r);
+      return r;
+    }
+    if (run && run.id === runId) return run;
+    run = newRunBox(runId, null);
+    lastBox = run.box;
     return run;
   }
 
@@ -213,7 +229,7 @@
   /** Re-render the whole log from stored history (page load, fork, switch). */
   function renderHistory(entries, branch) {
     log.replaceChildren();
-    run = null; lastBox = null;
+    run = null; lastBox = null; subRuns.clear();
     if (branch) add(el("div", "note", `— ${branch} —`));
     if (!entries.length) { const p = el("p", "empty", "Ask me to do something on this computer."); p.id = "empty"; log.appendChild(p); return; }
     for (const e of entries) {
@@ -240,11 +256,15 @@
         scroll();
         break;
       }
-      case "run_start": { const r = ensureRun(e.runId); r.meta.textContent = e.brain; state.busy = true; showState(); break; }
-      case "thinking": { const r = ensureRun(e.runId); r.think.hidden = false; r.thinkBox.textContent += e.delta; break; }
-      case "text": appendText(ensureRun(e.runId), e.delta); break;
+      case "run_start": {
+        const r = ensureRun(e.runId, e.agent);
+        if (e.agent) { r.meta.textContent = `subagent "${e.agent.name}" · ${e.brain}`; break; }
+        r.meta.textContent = e.brain; state.busy = true; showState(); break;
+      }
+      case "thinking": { const r = ensureRun(e.runId, e.agent); r.think.hidden = false; r.thinkBox.textContent += e.delta; break; }
+      case "text": appendText(ensureRun(e.runId, e.agent), e.delta); break;
       case "tool_start": {
-        const r = ensureRun(e.runId); r.textNode = null;
+        const r = ensureRun(e.runId, e.agent); r.textNode = null;
         const t = r.body.appendChild(el("div", "tool run"));
         t.id = `tool-${e.id}`;
         t.appendChild(el("div", "name", `${e.name} ${JSON.stringify(e.args).slice(0, 200)}`));
@@ -258,7 +278,7 @@
       }
       case "confirm": {
         if (document.getElementById(`card-${e.cardId}`)) break; // re-sent after a reconnect
-        const r = ensureRun(e.runId); r.textNode = null;
+        const r = ensureRun(e.runId, e.agent); r.textNode = null;
         const c = r.body.appendChild(el("div", "confirm"));
         c.id = `card-${e.cardId}`;
         c.appendChild(el("strong", null, `Allow ${e.tool}?`));
@@ -279,10 +299,19 @@
         c.appendChild(el("div", "meta", e.allowed ? "Allowed" : "Declined"));
         break;
       }
-      case "warning": ensureRun(e.runId).body.appendChild(el("div", "warn", e.text)); break;
-      case "error": (e.runId ? ensureRun(e.runId).body : log).appendChild(el("div", "err", e.message)); break;
-      case "reset": log.replaceChildren(el("p", "empty", "New conversation. Ask me to do something on this computer.")); log.firstChild.id = "empty"; run = null; lastBox = null; break;
-      case "done": if (e.stopped) ensureRun(e.runId).body.appendChild(el("div", "meta", "Stopped.")); run = null; break;
+      case "warning": ensureRun(e.runId, e.agent).body.appendChild(el("div", "warn", e.text)); break;
+      case "error": (e.runId ? ensureRun(e.runId, e.agent).body : log).appendChild(el("div", "err", e.message)); break;
+      case "reset": log.replaceChildren(el("p", "empty", "New conversation. Ask me to do something on this computer.")); log.firstChild.id = "empty"; run = null; lastBox = null; subRuns.clear(); break;
+      case "done":
+        if (e.stopped) ensureRun(e.runId, e.agent).body.appendChild(el("div", "meta", "Stopped."));
+        if (e.agent) subRuns.delete(e.runId); else run = null;
+        break;
+      case "handoff": {
+        const how = e.state === "done" ? "finished" : e.state === "failed" ? "failed" : "was stopped";
+        add(el("div", "note", `Subagent "${e.agent?.name ?? "?"}" ${how}${e.summary ? ` — ${e.summary}` : ""}. Jarvis reads its hand-off at its next step.`));
+        scroll();
+        break;
+      }
     }
   }
 
