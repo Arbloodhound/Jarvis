@@ -6,10 +6,10 @@ The prep notes from prep-b, prep-c and prep-d were the composition maps. The sta
 
 ## Final state
 
-- **Final main SHA: `a0fd632`** (tree 50dbf8e3; after the onion reversal below — was `03cdf73`). Every landing was pushed only after a full gate on the exact tree,
+- **Final main SHA: `53ce9a4`** (tree 188f6539; after the onion reversal and the Tor-routing fix below). Every landing was pushed only after a full gate on the exact tree,
   and the tree read back from main was hash-identical to the gated tree.
-- **Final test count: 339**, typecheck clean (342 before the onion reversal below). The final gate ran on a fresh
-  checkout of main `a0fd632` with a fresh `npm install`: tsc clean, 339 pass, 0 fail, 0 skipped.
+- **Final test count: 343**, typecheck clean. The count went 342 → 339 (onion reversal) → 343 (Tor fix). The final
+  gate ran on a fresh checkout of main `53ce9a4` with a fresh `npm install`: tsc clean, 343 pass, 0 fail, 0 skipped.
 - Status per CLAUDE.md: **SOURCE-FIXED BUT RUNTIME-UNPROVEN**. Unit and integration tests pass; there was no live
   desktop run; CI has not run on these merges. The vision-shopping live check (a real vision read of a real listing
   photo) is **blocked by environment**: this container has no cloud key and no local vision model.
@@ -111,15 +111,35 @@ shopping-layer function". Landed as merge `a0fd632` (branch `claude/desktop-remo
 - **Resulting behaviour.** Onion listings now appear in shopping search, marketplace and navigation results,
   unchanged. Opening or checking one is the transport's decision:
   - **Tor off:** refused, verified.
-  - **Tor on:** *not yet working on main.* The shopping tools still fetch through the direct path (`safeFetch`,
-    Tor disabled) whatever the Tor setting is. With Tor on, an onion check still gets the transport's refusal
-    (verified by probe on `a0fd632`). It will succeed only once shopping's fetches use the Tor transport — the
-    open Tor-routing fix (owner's; a candidate patch exists from this session).
+  - **Tor on:** fetched through Tor. This works from `53ce9a4` on, after the Tor-routing fix below; on `a0fd632` it
+    was still refused, verified by probe. Proven by the tor.test.ts test "product_check on an .onion listing: Tor on
+    fetches it through the proxy; Tor off gets the transport refusal".
 - **Branch:** not deleted. This session's GitHub access refuses branch deletes (HTTP 403); the owner should delete
   it.
 - **Stale docs (not changed; out of this task's scope):** CLAUDE.md §Standing Behaviour Rules and ARCHITECTURE.md
   (lines ~159, 174, 190) still state the old rule. They also describe the phone app's Kotlin `ShoppingRun`
   exclusion, which this desktop-only change does not touch.
+
+## Tor routing for every web tool (2026-10-21, at the owner's request) — `663dfa3`
+
+- **Before:** the Tor transport was bound only to web_search and web_fetch. These fetched direct even with Tor on:
+  - shopping: search, marketplace, navigation, product and seller checks, reviews, and the vision reads of listing
+    photos
+  - investigate_run
+  - browse_task
+- **Now:** with Tor on, `toolsFor` hands every tool a Tor-bound `webFetch`, `webFetchBytes` and `torEnabled` through
+  ToolContext, and those tools fetch through it.
+  - browse_task fetches an .onion only through Tor. With Tor off it is refused, with an accurate message; the old
+    message claimed there was no Tor transport at all.
+  - The transport itself is unchanged: .onion is refused unless Tor is on, and never falls back to clearnet.
+- **Tests:** +4 in tor.test.ts, covering product page and photo through the proxy, an onion product_check with Tor on
+  and off, and browse onion with Tor on and off. Gate: 343/343.
+
+## see_act_verify revert (2026-10-21) — `53ce9a4`
+
+The owner clarified that the vision rule is not literal. With vision off, only look_at_screen and look_at_image are
+withheld again, as the vision-shopping build designed it; see_act_verify stays available. The two assertions that
+pinned the extension were removed (no test count change). Gate: 343/343.
 
 ## PARKED (not started, per owner)
 
