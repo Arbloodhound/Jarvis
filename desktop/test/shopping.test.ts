@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,7 +6,7 @@ import { test } from "node:test";
 import { Episode, Gate } from "../src/gate/gate.ts";
 import { ALL_TOOLS, toolsFor, type ToolContext } from "../src/tools/index.ts";
 import {
-  shoppingTools, excludeOnion, extractListings, extractNavLinks, extractPrices, extractReputation,
+  shoppingTools, extractListings, extractNavLinks, extractPrices, extractReputation,
   extractReviews, fetchMarketplace, fetchProductCheck, parseEbayResults, parseListingPage,
   runMarketplaceNav, runProductCheck, runSellerCheck, scanScamSignals, sortRowsMechanically,
   sourceYear, type ListingRow, type NavSession,
@@ -147,39 +146,29 @@ test("extractPrices: disambiguation, symbols required, no invented prices", () =
   assert.equal(sourceYear("no dates here"), "n.d.");
 });
 
-// ---------- the onion exclusion: one function, one call site ----------
+// ---------- onion rows: no exclusion (owner reversal, 2026-10-20) ----------
 
-test("excludeOnion drops rows by source OR link, keeps everything else", () => {
-  const rows = [
-    row({ sourceUrl: "https://shop.example.com/a", link: "https://shop.example.com/a" }),
-    row({ sourceUrl: "https://hidden.onion/list", link: "https://hidden.onion/item" }),
-    row({ sourceUrl: "https://shop.example.com/b", link: "https://sneaky.onion/item" }),
-    row({ sourceUrl: "https://shop.example.com/search?q=x.onion", link: "https://shop.example.com/c" }),
-  ];
-  const { rows: kept, excluded } = excludeOnion(rows);
-  assert.equal(kept.length, 2);
-  assert.equal(excluded.length, 2);
-  assert.equal(kept[1]!.sourceUrl, "https://shop.example.com/search?q=x.onion"); // query text is not a hostname
-});
-
-test("extraction is realm-blind: onion rows are extracted, only the choke point removes them", () => {
+test("rows containing .onion links pass through the search tools unchanged", async () => {
+  // The owner removed the shopping-layer onion exclusion. Extraction, the
+  // marketplace search and navigation all keep an onion listing exactly as
+  // found, and nothing claims anything was excluded. Opening an onion page
+  // is the transport's decision (refused unless Tor is on), not this layer's.
   const extracted = extractListings(NAV_PAGE1_HTML, PAGE1);
   assert.equal(extracted.length, 3);
-  assert.ok(extracted.some((r) => r.link.includes("onion")));
-  const { rows: kept } = excludeOnion(extracted);
-  assert.equal(kept.length, 2);
-});
+  const onionRow = extracted.find((r) => r.link === "https://evil.onion/item/9");
+  assert.ok(onionRow, "the onion listing is extracted");
 
-test("source pin: excludeOnion has exactly one definition and one call site in the shopping layer", () => {
-  const src = readFileSync(new URL("../src/tools/shopping.ts", import.meta.url), "utf8");
-  assert.equal((src.match(/excludeOnion\(/g) || []).length, 2, "definition + the admitRows call, nothing else");
-  assert.equal((src.match(/isOnionUrl\(/g) || []).length, 2, "helper definition + its use inside excludeOnion");
-  const idx = readFileSync(new URL("../src/tools/index.ts", import.meta.url), "utf8");
-  // The transport layer (Tor) legitimately handles .onion in index.ts — refusing it
-  // unless Tor is on. The shopping guarantee pinned here is narrower and exact:
-  // index.ts never CALLS the shopping exclusion; shopping rows are filtered only
-  // inside shopping.ts's admitRows.
-  assert.equal(/excludeOnion\(/.test(idx), false, "index.ts never calls excludeOnion");
+  const ebayUrl = "https://www.ebay.com/sch/i.html?_nkw=widget";
+  const market = await fetchMarketplace("widget", "ebay", "price", new AbortController().signal, stubFetch({ [ebayUrl]: { status: 200, body: NAV_PAGE1_HTML } }));
+  assert.match(market, /Onion Widget/);
+  assert.ok(market.includes("https://evil.onion/item/9"), "the onion link is shown as found");
+  assert.ok(!/exclud/i.test(market), "no exclusion is claimed");
+
+  const sessions = new Map<string, NavSession>();
+  const nav = await runMarketplaceNav("s", { action: "open", url: PAGE1 }, new AbortController().signal, stubFetch(NAV_PAGES), sessions);
+  assert.match(nav, /Onion Widget/);
+  assert.ok(!/exclud/i.test(nav), "no exclusion is claimed");
+  assert.deepEqual(sessions.get("s")!.rows.find((r) => r.link === onionRow.link), onionRow, "the row is unchanged");
 });
 
 // ---------- marketplace extraction ----------
@@ -327,8 +316,8 @@ test("navigation flow: open → next → open listing → back to page 2 → sor
   const p1 = await runMarketplaceNav("s", { action: "open", url: PAGE1 }, sig, fetch, sessions);
   assert.match(p1, /Basic Widget/);
   assert.match(p1, /Next page link is present/);
-  assert.ok(!p1.includes("Onion Widget"), "onion listing removed at the choke point");
-  assert.equal(sessions.get("s")!.rows.length, 2);
+  assert.match(p1, /Onion Widget/); // no shopping-layer onion exclusion (owner reversal, 2026-10-20)
+  assert.equal(sessions.get("s")!.rows.length, 3);
 
   const p2 = await runMarketplaceNav("s", { action: "next" }, sig, fetch, sessions);
   assert.match(p2, /Widget Ultra/);
@@ -352,15 +341,10 @@ test("navigation flow: open → next → open listing → back to page 2 → sor
   assert.match(noNext, /no Next link/i); // the sorted page has none — honest, not invented
 });
 
-test("navigation refuses onion targets without fetching; sessions stay isolated", async () => {
+test("navigation sessions stay isolated", async () => {
   const sig = new AbortController().signal;
   const sessions = new Map<string, NavSession>();
-  const calls: string[] = [];
-  const fetch = stubFetch(NAV_PAGES, calls);
-
-  const onion = await runMarketplaceNav("a", { action: "open", url: "https://evil.onion/search" }, sig, fetch, sessions);
-  assert.match(onion, /onion address/i);
-  assert.equal(calls.length, 0, "the onion target was never fetched");
+  const fetch = stubFetch(NAV_PAGES);
 
   await runMarketplaceNav("a", { action: "open", url: PAGE1 }, sig, fetch, sessions);
   const bResults = await runMarketplaceNav("b", { action: "results" }, sig, fetch, sessions);
@@ -390,14 +374,6 @@ test("product_check labels memory as memory, not page evidence", async () => {
   assert.match(out, /Owner memory \(the owner's own saved facts/);
   const noMemory = await runProductCheck(CLEAN_URL, [], stubCtx(), fetch);
   assert.ok(!noMemory.includes("Owner memory"));
-});
-
-test("check tools refuse onion targets outright", async () => {
-  const fetch = stubFetch({});
-  const out = await runProductCheck("https://evil.onion/item/1", [], stubCtx(), fetch);
-  assert.match(out, /onion address/i);
-  const out2 = await runSellerCheck(["https://evil.onion/usr/x"], "x", stubCtx(), fetch);
-  assert.match(out2, /onion address/i);
 });
 
 // ---------- gate posture & registration ----------
