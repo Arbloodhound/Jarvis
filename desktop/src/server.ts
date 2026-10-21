@@ -32,7 +32,7 @@ const CARD_TIMEOUT_MS = 10 * 60 * 1000;
 const UI_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "ui");
 
 type ClientMsg =
-  | { type: "send"; text: string; attachments?: Array<{ path: string; name?: string }> }
+  | { type: "send"; text: string; attachments?: Array<{ path: string; name?: string }>; interrupt?: boolean }
   | { type: "confirm"; cardId: string; allow: boolean }
   | { type: "stop" }
   | { type: "settings"; brain?: "local" | "cloud"; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean; vision?: boolean }
@@ -40,6 +40,7 @@ type ClientMsg =
   | { type: "list_models" }
   | { type: "state" }
   | { type: "reset" }
+  | { type: "compress" }
   | { type: "branch_fork"; keepTurns?: number; name?: string }
   | { type: "branch_switch"; id: string }
   | { type: "branch_delete"; id: string }
@@ -241,6 +242,9 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
   const clients = new Set<WebSocket>();
   /** Open confirm cards: re-sent to a page that reconnects, declined after CARD_TIMEOUT_MS. */
   const pending = new Map<string, { resolve: (allow: boolean) => void; card: Record<string, unknown>; timer: NodeJS.Timeout }>();
+  // The send being worked on (settles after its run's clean-up), and a counter so an interrupted send never starts.
+  let currentSend: Promise<void> | null = null;
+  let sendSeq = 0;
   const settleCard = (id: string, allow: boolean) => {
     const p = pending.get(id);
     if (!p) return;
@@ -356,7 +360,8 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
       let msg: ClientMsg;
       try { msg = JSON.parse(raw.toString()) as ClientMsg; } catch { return; }
       if (msg.type === "send" && typeof msg.text === "string" && msg.text.trim()) {
-        if (rt.agent.busy) { ws.send(JSON.stringify({ type: "error", runId: "", message: "Still working on the last request. Stop it first." })); return; }
+        // interrupt: stop the request being worked on and take this one next.
+        if (rt.agent.busy && msg.interrupt !== true) { ws.send(JSON.stringify({ type: "error", runId: "", message: "Still working on the last request. Stop it first." })); return; }
         const text = msg.text.trim();
         const attachments = (Array.isArray(msg.attachments) ? msg.attachments : [])
           .filter((a): a is { path: string; name?: string } => !!a && typeof a.path === "string")
@@ -369,7 +374,17 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
           return;
         }
         let thisRunId = "";
-        void (async () => {
+        // The send this one interrupts: it is stopped and settles first. A
+        // later interrupt supersedes this one before it starts.
+        const prior = currentSend;
+        if (msg.interrupt === true) rt.agent.stop();
+        const seq = msg.interrupt === true ? ++sendSeq : sendSeq;
+        const job = (async () => {
+          if (prior) await prior;
+          if (seq !== sendSeq) {
+            ws.send(JSON.stringify({ type: "error", runId: "", message: `Not sent: a newer message interrupted before it started ("${text.slice(0, 60)}").` }));
+            return;
+          }
           const extra = await rt.ownerContext(text, attachments);
           broadcast({ type: "user", text, attachments: attachments.map((a) => a.name) });
           await rt.agent.run(text, {
@@ -391,7 +406,9 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
           rt.syncConversation();
           broadcast(stateMsg());
           broadcast({ type: "turns", count: rt.agent.turns.length });
+          if (currentSend === job) currentSend = null;
         });
+        currentSend = job;
       } else if (msg.type === "confirm" && typeof msg.cardId === "string") {
         settleCard(msg.cardId, msg.allow === true);
       } else if (msg.type === "stop") {
@@ -412,6 +429,15 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
           (models) => ws.send(JSON.stringify({ type: "models", models })),
           (err) => ws.send(JSON.stringify({ type: "models", models: [], error: err instanceof Error ? err.message : String(err) })),
         );
+      } else if (msg.type === "compress") {
+        if (rt.agent.busy) { ws.send(JSON.stringify({ type: "error", runId: "", message: "Stop the current request first." })); return; }
+        void rt.agent.compress().then((text) => {
+          rt.syncConversation();
+          broadcast({ type: "compressed", text });
+          broadcast({ type: "turns", count: rt.agent.turns.length });
+        }, (err) => {
+          ws.send(JSON.stringify({ type: "error", runId: "", message: `Compress failed: ${err instanceof Error ? err.message : String(err)}` }));
+        });
       } else if (msg.type === "reset") {
         if (rt.agent.busy) { ws.send(JSON.stringify({ type: "error", runId: "", message: "Stop the current request first." })); return; }
         rt.agent.reset();

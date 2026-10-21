@@ -11,16 +11,18 @@ import type { Interface } from "node:readline";
  * Here every input line has exactly one taker: the card at the head of the
  * queue when one is showing, otherwise the waiting chat prompt. Cards queue
  * and are shown one at a time, each with its own question; the chat prompt
- * is shown again once the last card is answered. A line nobody asked for
- * (typed while a run works, with no card up) is dropped, as before — it is
- * never held over to answer a later card. Closing the input settles every
+ * is shown again once the last card is answered. While a run works the
+ * chat can listen silently (`ask(q, { silent: true })`): a line typed then,
+ * with no card up, goes to it (the chat uses it to interrupt the run), and
+ * the prompt itself is only shown by `reveal()`. A line is never held over
+ * to answer a later card. Closing the input settles every
  * card and the prompt with null, which callers treat as declined / end of
  * input. A card is never lost and never answered by anything but a line
  * typed while it was showing.
  */
 export class TerminalPrompt {
   private readonly cards: Array<{ id: string; text: string; question: string; resolve: (answer: string | null) => void }> = [];
-  private waiter: { question: string; resolve: (line: string | null) => void } | null = null;
+  private waiter: { question: string; silent: boolean; resolve: (line: string | null) => void } | null = null;
   private closedFlag = false;
 
   constructor(private readonly rl: Interface, private readonly out: NodeJS.WritableStream = process.stdout) {
@@ -32,15 +34,25 @@ export class TerminalPrompt {
     return this.closedFlag;
   }
 
-  /** The chat prompt: the next line no card takes. null when the input closed. */
-  ask(question: string): Promise<string | null> {
+  /**
+   * The chat prompt: the next line no card takes. null when the input closed.
+   * `silent` waits without showing the prompt (a run is printing) until `reveal()`.
+   */
+  ask(question: string, opts: { silent?: boolean } = {}): Promise<string | null> {
     if (this.closedFlag) return Promise.resolve(null);
     if (this.waiter) return Promise.reject(new Error("Already waiting for a line."));
     return new Promise((resolve) => {
-      this.waiter = { question, resolve };
+      this.waiter = { question, silent: !!opts.silent, resolve };
       // With a card up, the prompt waits its turn behind it.
-      if (!this.cards.length) this.show(question);
+      if (!this.cards.length && !opts.silent) this.show(question);
     });
+  }
+
+  /** Show a silent chat prompt (the run it listened through has ended). */
+  reveal(): void {
+    if (!this.waiter || !this.waiter.silent) return;
+    this.waiter.silent = false;
+    if (!this.cards.length) this.show(this.waiter.question);
   }
 
   /** Queue a card: `text` is printed when its turn comes, then `question`; resolves with the line typed for it (null when the input closed). */
@@ -69,7 +81,7 @@ export class TerminalPrompt {
   notice(text: string): void {
     this.out.write(`\n${text}\n`);
     if (this.cards.length) this.show(this.cards[0]!.question);
-    else if (this.waiter) this.show(this.waiter.question);
+    else if (this.waiter && !this.waiter.silent) this.show(this.waiter.question);
   }
 
   private onLine(line: string): void {
@@ -88,7 +100,7 @@ export class TerminalPrompt {
 
   private next(): void {
     if (this.cards.length) this.showHead();
-    else if (this.waiter) this.show(this.waiter.question);
+    else if (this.waiter && !this.waiter.silent) this.show(this.waiter.question);
   }
 
   private showHead(): void {

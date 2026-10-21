@@ -154,6 +154,7 @@ export class Runtime {
       workspace: this.p.workspace,
       cwd: this.cwd,
       maxTurns: this.cfg.maxTurns,
+      contextWindow: () => (this.cfg.brain === "local" ? this.cfg.local.contextTokens ?? 0 : 0),
       nli: {
         enabled: this.cfg.nli.enabled,
         // The model-backed layer runs on the configured LOCAL provider only,
