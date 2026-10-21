@@ -183,9 +183,9 @@ async function memoryCommand(p: Paths, rest: string[]): Promise<void> {
   }
   if (sub === "promote" || sub === "drop") {
     const id = args[0] ?? "";
-    const e = sub === "promote" ? store.promoteByOwner(id) : store.drop(id);
-    if (!e) { console.error(`No pending entry with id ${id}.`); process.exitCode = 1; return; }
-    console.log(sub === "promote" ? `Promoted (${e.id} -> fact ${e.factId}): ${e.claim}` : `Dropped (${e.id}): ${e.claim}`);
+    const out = store.decide(id, sub);
+    if (!out.ok) { console.error(out.message); process.exitCode = 1; return; }
+    console.log(out.message);
     return;
   }
   if (sub === "verify") {

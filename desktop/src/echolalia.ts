@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { startupWarnings } from "./config.js";
 import { dot, type Embedder } from "./embeddings.js";
-import type { Memory } from "./memory.js";
+import { fileStamp, type Memory } from "./memory.js";
 
 /**
  * Echolalia: verify-before-store memory (patent Claim 31).
@@ -24,15 +24,18 @@ import type { Memory } from "./memory.js";
  *      negation contradicts it. (The deterministic core of the phone's
  *      features/nli_gate.py, reimplemented here; no NLI model needed.)
  *   2. Repetition ("echo") — the same claim arrives again, from an
- *      independent source or a later turn, and matches: normalized-string
- *      containment, or embedding cosine >= ECHO_COSINE when an embedder
- *      is configured.
+ *      independent source or a later turn, and matches: whole-token
+ *      containment after normalization, or embedding cosine >= ECHO_COSINE
+ *      when an embedder is configured — either way only with the same
+ *      numbers and named entities (sameAnchors).
  *   3. Owner confirmation — the owner promotes it (tool or CLI); that
  *      promotes immediately, and the override is recorded when it
  *      overrules a failed source check.
  *
  * Promotion rule: source check PASS + (echoes >= 1 OR owner-confirmed).
- * Source check FAIL -> quarantine, with the reason kept on the entry.
+ * Source check FAIL -> quarantine, with the reason kept on the entry. An
+ * echo that brings source text is checked against its own text too: a
+ * contradicting echo quarantines the claim and is not counted.
  * Source check PASS with no echo yet -> stays pending.
  * No source text to check against -> "unverifiable": stays pending until
  * an owner confirms it (an echo alone cannot promote what was never
@@ -40,7 +43,8 @@ import type { Memory } from "./memory.js";
  *
  * Storage follows Memory's conventions: one JSON file, written via a temp
  * file + rename at mode 0600, a corrupt file moved aside with a startup
- * warning rather than crashing.
+ * warning rather than crashing, and re-read before each use when another
+ * process (the `jarvis memory` CLI) has written it since.
  */
 
 export type PendingStatus = "pending" | "promoted" | "quarantined" | "dropped";
@@ -145,12 +149,34 @@ export function normalizeClaim(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " ");
 }
 
-/** Deterministic echo match: equal or one-contains-the-other after normalization. */
+/**
+ * Same anchors: two claims assert the same set of numbers, and every named
+ * entity either one asserts is a whole token of the other. (Entities are
+ * compared against tokens, not entities(), because a name opening one
+ * sentence is not an entity there but is one mid-sentence in the other.)
+ * Without this "owes me 50" would echo "owes me 500", "Tom" would echo
+ * "Tom Baker", and an embedding match would ignore a changed number.
+ */
+export function sameAnchors(a: string, b: string): boolean {
+  const na = numbers(a);
+  const nb = numbers(b);
+  if (na.size !== nb.size || [...na].some((n) => !nb.has(n))) return false;
+  const ta = new Set(normalizeClaim(a).split(" "));
+  const tb = new Set(normalizeClaim(b).split(" "));
+  return [...entities(a)].every((e) => tb.has(e)) && [...entities(b)].every((e) => ta.has(e));
+}
+
+/**
+ * Deterministic echo match: equal, or one contains the other as a run of
+ * whole tokens, after normalization — and the same anchors (sameAnchors).
+ * Raw substrings are not enough: "pay tom" sits inside "pay tomas".
+ */
 export function claimsMatch(a: string, b: string): boolean {
   const na = normalizeClaim(a);
   const nb = normalizeClaim(b);
   if (!na || !nb) return false;
-  return na === nb || na.includes(nb) || nb.includes(na);
+  const contained = na === nb || ` ${na} `.includes(` ${nb} `) || ` ${nb} `.includes(` ${na} `);
+  return contained && sameAnchors(a, b);
 }
 
 export interface SubmitOutcome {
@@ -163,6 +189,8 @@ export interface SubmitOutcome {
 
 export class EcholaliaStore {
   private store: PendingFile;
+  /** fileStamp() of the pending file as this instance last saw it. */
+  private stamp: string | null = null;
 
   constructor(
     private readonly file: string | null,
@@ -171,7 +199,19 @@ export class EcholaliaStore {
     private readonly onDecision?: (entry: PendingEntry, decision: string) => void,
   ) {
     this.store = { entries: [] };
+    this.load();
+  }
+
+  /**
+   * Read the pending file. Run at construction and again whenever the file
+   * changed under us (refresh): `jarvis memory promote|drop|submit|verify`
+   * runs in another process, and its decision must survive this instance's
+   * next save rather than be overwritten by it (Memory does the same).
+   */
+  private load(): void {
+    const file = this.file;
     if (!file || !existsSync(file)) return;
+    this.stamp = fileStamp(file);
     try {
       const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<PendingFile>;
       this.store = { entries: Array.isArray(raw.entries) ? raw.entries : [] };
@@ -179,7 +219,15 @@ export class EcholaliaStore {
       const aside = `${file}.broken-${Date.now()}`;
       renameSync(file, aside);
       startupWarnings.push(`memory-pending.json could not be read (${err instanceof Error ? err.message : String(err)}). It was moved to ${aside}; the pending store starts empty.`);
+      this.stamp = null; // on a reload the last good state is kept and saved back
     }
+  }
+
+  /** Reload when the file changed since this instance last read or wrote it. */
+  private refresh(): void {
+    if (!this.file) return;
+    const now = fileStamp(this.file);
+    if (now !== null && now !== this.stamp) this.load();
   }
 
   /**
@@ -196,15 +244,34 @@ export class EcholaliaStore {
     const text = claim.trim();
     const source = (opts.source ?? "conversation").trim() || "conversation";
     const sourceText = (opts.sourceText ?? "").slice(0, SOURCE_EXCERPT);
-    let entry = await this.findEcho(text, embedder);
+    // The only await (the embedder) comes first, so the read-modify-save
+    // below runs on a fresh read with no gap for another process to write in.
+    let vec: number[] | undefined;
+    if (embedder) {
+      try { vec = await embedder.embedOne(text); } catch { /* deterministic matching still works without vectors */ }
+    }
+    this.refresh();
+    let entry = this.findEcho(text, embedder && vec ? { id: embedder.id, vec } : null);
     let echo = false;
+    let echoFailed = false;
     if (entry) {
       echo = true;
-      entry.echoes += 1;
-      entry.reasons.push(`echo #${entry.echoes} from ${source}${source === entry.source ? " (same source, later turn)" : " (independent source)"}`);
-      // A later arrival may bring the source text the first one lacked.
-      if (sourceText && !entry.sourceText) entry.sourceText = sourceText;
-      if (sourceText && source !== entry.source) entry.reasons.push(`echo source text recorded from ${source}`);
+      // Each echo is checked against its OWN source text, not only the first
+      // arrival's: a later source that contradicts the claim quarantines it,
+      // and only an echo that does not contradict it is counted.
+      const echoCheck = sourceText.trim() ? checkSource(entry.claim, sourceText) : null;
+      if (echoCheck?.result === "fail") {
+        echoFailed = true;
+        entry.status = "quarantined";
+        entry.sourceCheck = "fail";
+        entry.reasons.push(`quarantined: echo from ${source} contradicts the claim: ${echoCheck.reason}`);
+      } else {
+        entry.echoes += 1;
+        entry.reasons.push(`echo #${entry.echoes} from ${source}${source === entry.source ? " (same source, later turn)" : " (independent source)"}`);
+        if (echoCheck) entry.reasons.push(`echo from ${source}: source check pass (${echoCheck.reason})`);
+        // A later arrival may bring the source text the first one lacked.
+        if (sourceText && !entry.sourceText) entry.sourceText = sourceText;
+      }
     } else {
       entry = {
         id: randomUUID().slice(0, 8),
@@ -218,15 +285,13 @@ export class EcholaliaStore {
         sourceCheck: "unverifiable",
       };
       this.store.entries.push(entry);
-      if (embedder) {
-        try {
-          entry.vec = await embedder.embedOne(text);
-          entry.emb = embedder.id;
-        } catch { /* deterministic matching still works without vectors */ }
+      if (embedder && vec) {
+        entry.vec = vec;
+        entry.emb = embedder.id;
       }
     }
-    const before = entry.status;
-    this.verify(entry);
+    const before = echoFailed ? "pending" : entry.status;
+    if (!echoFailed) this.verify(entry);
     this.save();
     if (entry.status !== before) this.onDecision?.(entry, entry.status);
     const message =
@@ -240,6 +305,8 @@ export class EcholaliaStore {
 
   /** Run the verification pass over one entry and apply the promotion rule. */
   verify(entry: PendingEntry, opts: { ownerConfirmed?: boolean } = {}): PendingEntry {
+    // Not refreshed here: `entry` is an object of the current store, held by
+    // the caller (submit, verifyAll, tests); its public callers refresh.
     if (entry.status === "promoted" || entry.status === "dropped") return entry;
     if (opts.ownerConfirmed) return this.promote(entry, "owner confirmed");
     const check = checkSource(entry.claim, entry.sourceText);
@@ -261,7 +328,10 @@ export class EcholaliaStore {
     return entry;
   }
 
-  /** Owner's hands: promote a pending/quarantined entry now, recording why. */
+  /**
+   * Owner's hands: promote a pending/quarantined entry now, recording why.
+   * A promoted or dropped entry comes back unchanged (decide() says why).
+   */
   promoteByOwner(id: string): PendingEntry | null {
     const entry = this.byId(id);
     if (!entry || entry.status === "promoted" || entry.status === "dropped") return entry ?? null;
@@ -272,11 +342,16 @@ export class EcholaliaStore {
     return entry;
   }
 
-  /** Owner's hands: drop a pending/quarantined entry for good. */
+  /**
+   * Owner's hands: drop a pending/quarantined entry for good. A promoted
+   * entry is NOT dropped: its fact is already in memory and dropping the
+   * entry would not remove it, so it comes back unchanged (decide() says
+   * how to forget the fact instead).
+   */
   drop(id: string): PendingEntry | null {
     const entry = this.byId(id);
     if (!entry) return null;
-    if (entry.status !== "dropped") {
+    if (entry.status !== "dropped" && entry.status !== "promoted") {
       entry.status = "dropped";
       entry.reasons.push("dropped by owner");
       this.save();
@@ -285,8 +360,40 @@ export class EcholaliaStore {
     return entry;
   }
 
+  /**
+   * An owner decision with the line to show for it (memory_decide tool and
+   * `jarvis memory promote|drop`). `ok` is false when nothing was done and
+   * the action was refused; the message always states what is true.
+   */
+  decide(id: string, action: "promote" | "drop"): { entry: PendingEntry | null; ok: boolean; message: string } {
+    const before = this.byId(id);
+    if (!before) return { entry: null, ok: false, message: `No pending entry with id ${id}.` };
+    const was = before.status;
+    if (action === "promote") {
+      if (was === "dropped") {
+        return { entry: before, ok: false, message: `Refused: ${before.id} was dropped, so it cannot be promoted: ${before.claim}. To remember it, submit it again.` };
+      }
+      if (was === "promoted") {
+        return { entry: before, ok: true, message: `Already promoted (${before.id} -> fact ${before.factId}): ${before.claim}` };
+      }
+      const e = this.promoteByOwner(id)!;
+      return { entry: e, ok: true, message: `Promoted (${e.id} -> fact ${e.factId}): ${e.claim}` };
+    }
+    if (was === "promoted") {
+      return {
+        entry: before,
+        ok: false,
+        message: `Refused: ${before.id} is already in memory as fact ${before.factId}, and dropping the entry would not remove it: ${before.claim}. To remove it, forget fact ${before.factId} (the forget tool with that id).`,
+      };
+    }
+    if (was === "dropped") return { entry: before, ok: true, message: `Already dropped (${before.id}): ${before.claim}` };
+    const e = this.drop(id)!;
+    return { entry: e, ok: true, message: `Dropped (${e.id}): ${e.claim}` };
+  }
+
   /** Re-run verification on every held entry (e.g. after sources arrive). */
   verifyAll(): PendingEntry[] {
+    this.refresh();
     const changed: PendingEntry[] = [];
     for (const e of this.store.entries) {
       if (e.status !== "pending" && e.status !== "quarantined") continue;
@@ -300,10 +407,12 @@ export class EcholaliaStore {
   }
 
   byId(id: string): PendingEntry | undefined {
+    this.refresh();
     return this.store.entries.find((e) => e.id === id.trim());
   }
 
   list(status?: PendingStatus): PendingEntry[] {
+    this.refresh();
     return this.store.entries.filter((e) => !status || e.status === status);
   }
 
@@ -312,6 +421,7 @@ export class EcholaliaStore {
    * keep the status label attached (the tools and CLI do).
    */
   recallUnverified(query: string): PendingEntry[] {
+    this.refresh();
     const q = normalizeClaim(query);
     return this.store.entries.filter(
       (e) => (e.status === "pending" || e.status === "quarantined") && (!q || normalizeClaim(e.claim).includes(q) || q.includes(normalizeClaim(e.claim))),
@@ -329,24 +439,19 @@ export class EcholaliaStore {
     return entry;
   }
 
-  private async findEcho(claim: string, embedder: Pick<Embedder, "id" | "embedOne"> | null): Promise<PendingEntry | undefined> {
+  private findEcho(claim: string, embedded: { id: string; vec: number[] } | null): PendingEntry | undefined {
     const held = this.store.entries.filter((e) => e.status === "pending");
     const direct = held.find((e) => claimsMatch(e.claim, claim));
-    if (direct || !embedder) return direct;
-    try {
-      const v = await embedder.embedOne(claim);
-      let best: PendingEntry | undefined;
-      let bestScore = ECHO_COSINE;
-      for (const e of held) {
-        if (!e.vec || e.emb !== embedder.id) continue;
-        const s = dot(v, e.vec);
-        if (s >= bestScore) { best = e; bestScore = s; }
-      }
-      if (best) best.reasons.push(`echo matched by embedding similarity (${bestScore.toFixed(2)} >= ${ECHO_COSINE})`);
-      return best;
-    } catch {
-      return undefined;
+    if (direct || !embedded) return direct;
+    let best: PendingEntry | undefined;
+    let bestScore = ECHO_COSINE;
+    for (const e of held) {
+      if (!e.vec || e.emb !== embedded.id || !sameAnchors(e.claim, claim)) continue;
+      const s = dot(embedded.vec, e.vec);
+      if (s >= bestScore) { best = e; bestScore = s; }
     }
+    if (best) best.reasons.push(`echo matched by embedding similarity (${bestScore.toFixed(2)} >= ${ECHO_COSINE})`);
+    return best;
   }
 
   private save(): void {
@@ -354,6 +459,7 @@ export class EcholaliaStore {
     const tmp = `${this.file}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.store, null, 2), { mode: 0o600 });
     renameSync(tmp, this.file);
+    this.stamp = fileStamp(this.file);
   }
 }
 

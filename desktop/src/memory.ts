@@ -19,7 +19,9 @@ import { dot, type Embedder } from "./embeddings.js";
  * - Supersede: an explicit write-time link, as on the phone. Remembering a
  *   fact with `supersedes: <id>` marks the old fact supersededBy the new one
  *   (with invalidatedAt) and keeps it for history. Default recall excludes
- *   superseded facts; tooling can ask for them explicitly.
+ *   superseded facts; tooling can ask for them explicitly. Re-remembering a
+ *   superseded fact's text writes a fresh fact (history stays a line), and a
+ *   link that would close a supersede cycle is refused.
  *
  * Retrieval scoring is the phone's hybrid shape adapted to the desktop: the
  * content score (semantic dot product when embedded, word overlap otherwise)
@@ -27,6 +29,12 @@ import { dot, type Embedder } from "./embeddings.js";
  * adapted from OpenClaw memory-core, MIT, Copyright (c) 2026 OpenClaw
  * Foundation; the desktop has no confidence field, so the source's prior
  * term has no counterpart here.)
+ *
+ * Other processes (the `jarvis memory` CLI, a second app) write the same
+ * file. Every public call first re-reads the file if its stamp (inode, mtime,
+ * size) changed since this instance last read or wrote it, so a mutation
+ * here never overwrites a write made there. Saves stay atomic (tmp + rename,
+ * mode 0600).
  *
  * Forgotten facts go to a trash list first, as on the phone, so "forget" can
  * be undone until the trash is emptied.
@@ -124,8 +132,24 @@ export function temporalFactor(fact: Fact, nowMs: number): number {
   return Math.exp(-Math.LN2 * (ageDays / HALF_LIFE_DAYS));
 }
 
+/**
+ * Identity of the file as last read or written: inode (every atomic save is
+ * a rename, so a new inode), mtime and size. A cheap stat tells whether
+ * another process (the CLI, a second app) has written since.
+ */
+export function fileStamp(file: string): string | null {
+  try {
+    const st = statSync(file);
+    return `${st.ino}:${st.mtimeMs}:${st.size}`;
+  } catch {
+    return null;
+  }
+}
+
 export class Memory {
   private store: Store;
+  /** fileStamp() of the file as this instance last saw it. */
+  private stamp: string | null = null;
 
   /**
    * `now` is injectable so decay/reinforcement are testable without sleeping;
@@ -136,7 +160,19 @@ export class Memory {
     private readonly now: () => Date = () => new Date(),
   ) {
     this.store = { facts: [], trash: [] };
+    this.load();
+  }
+
+  /**
+   * Read the file into this.store. Run at construction and again whenever
+   * the file changed under us (refresh), so a write made by another process
+   * — `jarvis memory promote` while the app runs — is merged in before this
+   * instance's next save instead of being overwritten by it.
+   */
+  private load(): void {
+    const file = this.file;
     if (!file || !existsSync(file)) return;
+    this.stamp = fileStamp(file);
     try {
       const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<Store>;
       // Migration: stores written before the claims machinery lack the claim
@@ -164,7 +200,17 @@ export class Memory {
       const aside = `${file}.broken-${Date.now()}`;
       renameSync(file, aside);
       startupWarnings.push(`memory.json could not be read (${err instanceof Error ? err.message : String(err)}). It was moved to ${aside}; memory starts empty.`);
+      // On a reload this.store keeps the last good state, and the next save
+      // writes it back; the unreadable file stays aside for the owner.
+      this.stamp = null;
     }
+  }
+
+  /** Reload when the file changed since this instance last read or wrote it. */
+  private refresh(): void {
+    if (!this.file) return;
+    const now = fileStamp(this.file);
+    if (now !== null && now !== this.stamp) this.load();
   }
 
   private nowIso(): string {
@@ -183,15 +229,22 @@ export class Memory {
   }
 
   remember(text: string, opts: RememberOptions = {}): Fact {
+    this.refresh();
     const t = text.trim();
-    const same = this.store.facts.find((f) => f.text.toLowerCase() === t.toLowerCase());
+    // Only an ACTIVE fact with the same text is "the same fact". A superseded
+    // one is history: re-remembering its text is a new assertion, so it gets
+    // a fresh fact below and the old one stays in the chain untouched.
+    // (Reviving the old fact in place would turn "re-assert A over B" into a
+    // B -> A -> B loop; a fresh fact keeps the history a straight line.)
+    const same = this.store.facts.find((f) => isActive(f) && f.text.toLowerCase() === t.toLowerCase());
     if (same) {
       // Re-remembering is reinforcement, not a duplicate.
-      if (!same.supersededBy) this.reinforceFact(same);
       if (opts.supersedes && opts.supersedes !== same.id && !same.supersedes) {
+        this.refuseCycle(same.id, opts.supersedes);
         same.supersedes = opts.supersedes;
         this.markSuperseded(opts.supersedes, same.id);
       }
+      this.reinforceFact(same);
       this.save();
       return same;
     }
@@ -214,6 +267,17 @@ export class Memory {
     return f;
   }
 
+  /**
+   * Refuse a link "newId supersedes oldId" when oldId's own history already
+   * leads back to newId: the two would hide each other and recall would
+   * return neither. Throws before anything is written.
+   */
+  private refuseCycle(newId: string, oldId: string): void {
+    if (this.chain(oldId).some((f) => f.id === newId)) {
+      throw new Error(`refused: fact ${newId} superseding ${oldId} would close a supersede cycle (${oldId} already traces back to ${newId})`);
+    }
+  }
+
   /** The old end of a supersede link: replaced by `byId`, history preserved. */
   private markSuperseded(oldId: string, byId: string): void {
     const old = this.store.facts.find((x) => x.id === oldId && x.id !== byId);
@@ -229,6 +293,7 @@ export class Memory {
    * reinforce the fact that replaced them instead.
    */
   reinforce(id: string): boolean {
+    this.refresh();
     const f = this.store.facts.find((x) => x.id === id);
     if (!f || f.supersededBy) return false;
     this.reinforceFact(f);
@@ -238,6 +303,7 @@ export class Memory {
 
   /** A fact by id, whatever its state. */
   byId(id: string): Fact | undefined {
+    this.refresh();
     return this.store.facts.find((f) => f.id === id);
   }
 
@@ -245,17 +311,20 @@ export class Memory {
   chain(id: string): Fact[] {
     const out: Fact[] = [];
     const seen = new Set<string>();
-    let cur = this.byId(id);
+    this.refresh();
+    const find = (x: string) => this.store.facts.find((f) => f.id === x);
+    let cur = find(id);
     while (cur && !seen.has(cur.id)) {
       seen.add(cur.id);
       out.push(cur);
-      cur = cur.supersedes ? this.byId(cur.supersedes) : undefined;
+      cur = cur.supersedes ? find(cur.supersedes) : undefined;
     }
     return out;
   }
 
   /** Word-overlap recall. Always available, no server needed. */
   recall(query: string, limit = 8, opts: { includeSuperseded?: boolean } = {}): Fact[] {
+    this.refresh();
     const pool = opts.includeSuperseded ? this.store.facts : this.store.facts.filter(isActive);
     const q = new Set(words(query));
     if (q.size === 0) return pool.slice(-limit).reverse();
@@ -275,6 +344,7 @@ export class Memory {
    * falls back rather than failing the request.
    */
   async search(query: string, embedder: Embedder | null, limit = 8, opts: { includeSuperseded?: boolean } = {}): Promise<Fact[]> {
+    this.refresh();
     if (!embedder || this.store.facts.length === 0) return this.recall(query, limit, opts);
     try {
       await this.ensureEmbedded(embedder);
@@ -293,20 +363,29 @@ export class Memory {
 
   /** Embed any facts that aren't embedded with this embedder yet (batched). */
   async ensureEmbedded(embedder: Embedder, signal?: AbortSignal): Promise<number> {
+    this.refresh();
     const todo = this.store.facts.filter((f) => f.emb !== embedder.id || !f.vec);
     if (todo.length === 0) return 0;
-    let done = 0;
+    const got = new Map<string, { text: string; vec: number[] }>();
     for (let i = 0; i < todo.length; i += 32) {
       const batch = todo.slice(i, i + 32);
       const vecs = await embedder.embed(batch.map((f) => f.text), signal);
-      batch.forEach((f, j) => { f.vec = vecs[j]; f.emb = embedder.id; });
-      done += batch.length;
+      batch.forEach((f, j) => { if (vecs[j]) got.set(f.id, { text: f.text, vec: vecs[j]! }); });
+    }
+    // Embedding awaits the server; another process may have written in the
+    // meantime. Re-read, then attach the vectors by id to what is on disk now.
+    this.refresh();
+    let done = 0;
+    for (const f of this.store.facts) {
+      const v = got.get(f.id);
+      if (v && v.text === f.text) { f.vec = v.vec; f.emb = embedder.id; done++; }
     }
     this.save();
     return done;
   }
 
   forget(query: string): Fact[] {
+    this.refresh();
     const byId = this.store.facts.filter((f) => f.id === query.trim());
     const hits = byId.length ? byId : this.recall(query, 50, { includeSuperseded: true }).filter((f) => {
       const q = words(query);
@@ -324,6 +403,7 @@ export class Memory {
   }
 
   all(): Fact[] {
+    this.refresh();
     return [...this.store.facts];
   }
 
@@ -332,5 +412,6 @@ export class Memory {
     const tmp = `${this.file}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.store, null, 2), { mode: 0o600 });
     renameSync(tmp, this.file);
+    this.stamp = fileStamp(this.file);
   }
 }
