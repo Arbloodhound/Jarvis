@@ -11,7 +11,7 @@ import { z } from "zod";
 import type { ToolPolicy } from "../gate/gate.js";
 import { resolvePath } from "../gate/gate.js";
 import type { Embedder } from "../embeddings.js";
-import type { Memory } from "../memory.js";
+import { CLAIM_KINDS, type Memory } from "../memory.js";
 import type { Vision } from "../vision.js";
 import * as os from "./platform.js";
 import { shoppingTools } from "./shopping.js";
@@ -732,24 +732,33 @@ const systemInfoTool = tool({
 
 const rememberTool = tool({
   name: "remember",
-  description: "Save a short fact about the owner or their world for later (one fact per call).",
-  schema: z.object({ fact: z.string().min(2).max(500) }),
+  description: "Save a short fact about the owner or their world for later (one fact per call). Optionally tag its kind and salience, and pass `supersedes` with the id of an older fact this one replaces (the old fact is kept as history, not recalled).",
+  schema: z.object({
+    fact: z.string().min(2).max(500),
+    kind: z.enum(CLAIM_KINDS).optional(),
+    salience: z.enum(["low", "medium", "high"]).optional(),
+    supersedes: z.string().optional(),
+  }),
   policy: { effects: ["mutate"], lastsBeyondRequest: true },
-  async run({ fact }, ctx) {
-    const f = ctx.memory.remember(fact);
-    return `Remembered (${f.id}): ${f.text}`;
+  async run({ fact, kind, salience, supersedes }, ctx) {
+    const f = ctx.memory.remember(fact, { kind, salience, supersedes });
+    return `Remembered (${f.id}): ${f.text}${f.supersedes ? ` (supersedes ${f.supersedes})` : ""}`;
   },
 });
 
 const recallTool = tool({
   name: "recall",
-  description: "Search what you remember about the owner. Empty query lists recent facts.",
-  schema: z.object({ query: z.string() }),
+  description: "Search what you remember about the owner. Empty query lists recent facts. Superseded facts are hidden unless `includeSuperseded` is set. Recalled facts are reinforced: they decay slower afterwards.",
+  schema: z.object({ query: z.string(), includeSuperseded: z.boolean().optional() }),
   policy: { effects: ["read"] },
   parallelSafe: true,
-  async run({ query }, ctx) {
-    const hits = await ctx.memory.search(query, ctx.embedder);
-    return hits.length ? hits.map((f) => `(${f.id}) ${f.text}`).join("\n") : "Nothing remembered about that.";
+  async run({ query, includeSuperseded }, ctx) {
+    const hits = await ctx.memory.search(query, ctx.embedder, 8, { includeSuperseded });
+    // Recall-and-use reinforces: decay resets and salience can climb.
+    for (const f of hits) ctx.memory.reinforce(f.id);
+    return hits.length
+      ? hits.map((f) => `(${f.id}) [${f.kind}] ${f.text}${f.supersedes ? ` (supersedes ${f.supersedes})` : ""}${f.supersededBy ? ` (superseded by ${f.supersededBy})` : ""}`).join("\n")
+      : "Nothing remembered about that.";
   },
 });
 
