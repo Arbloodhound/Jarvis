@@ -19,7 +19,9 @@ import { dot, type Embedder } from "./embeddings.js";
  * - Supersede: an explicit write-time link, as on the phone. Remembering a
  *   fact with `supersedes: <id>` marks the old fact supersededBy the new one
  *   (with invalidatedAt) and keeps it for history. Default recall excludes
- *   superseded facts; tooling can ask for them explicitly.
+ *   superseded facts; tooling can ask for them explicitly. Re-remembering a
+ *   superseded fact's text writes a fresh fact (history stays a line), and a
+ *   link that would close a supersede cycle is refused.
  *
  * Retrieval scoring is the phone's hybrid shape adapted to the desktop: the
  * content score (semantic dot product when embedded, word overlap otherwise)
@@ -184,14 +186,20 @@ export class Memory {
 
   remember(text: string, opts: RememberOptions = {}): Fact {
     const t = text.trim();
-    const same = this.store.facts.find((f) => f.text.toLowerCase() === t.toLowerCase());
+    // Only an ACTIVE fact with the same text is "the same fact". A superseded
+    // one is history: re-remembering its text is a new assertion, so it gets
+    // a fresh fact below and the old one stays in the chain untouched.
+    // (Reviving the old fact in place would turn "re-assert A over B" into a
+    // B -> A -> B loop; a fresh fact keeps the history a straight line.)
+    const same = this.store.facts.find((f) => isActive(f) && f.text.toLowerCase() === t.toLowerCase());
     if (same) {
       // Re-remembering is reinforcement, not a duplicate.
-      if (!same.supersededBy) this.reinforceFact(same);
       if (opts.supersedes && opts.supersedes !== same.id && !same.supersedes) {
+        this.refuseCycle(same.id, opts.supersedes);
         same.supersedes = opts.supersedes;
         this.markSuperseded(opts.supersedes, same.id);
       }
+      this.reinforceFact(same);
       this.save();
       return same;
     }
@@ -212,6 +220,17 @@ export class Memory {
     if (opts.supersedes) this.markSuperseded(opts.supersedes, f.id);
     this.save();
     return f;
+  }
+
+  /**
+   * Refuse a link "newId supersedes oldId" when oldId's own history already
+   * leads back to newId: the two would hide each other and recall would
+   * return neither. Throws before anything is written.
+   */
+  private refuseCycle(newId: string, oldId: string): void {
+    if (this.chain(oldId).some((f) => f.id === newId)) {
+      throw new Error(`refused: fact ${newId} superseding ${oldId} would close a supersede cycle (${oldId} already traces back to ${newId})`);
+    }
   }
 
   /** The old end of a supersede link: replaced by `byId`, history preserved. */
