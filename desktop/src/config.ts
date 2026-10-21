@@ -37,6 +37,13 @@ export interface Config {
     dims: number;
   };
   vision: {
+    /**
+     * The owner's one switch for every image read. On (the default), vision
+     * is part of the model: the look tools exist and shopping checks read
+     * listing photos on their own. Off, no code path reaches a vision
+     * backend and the look tools are withheld. There is no per-call opt-out.
+     */
+    enabled: boolean;
     /** Local vision model id (OpenAI-compatible server). The cloud brain reads images on its own. */
     baseUrl: string;
     model: string;
@@ -160,7 +167,7 @@ export function defaults(p: Paths): Config {
     cloud: { model: "claude-opus-5-5", effort: "medium", apiKey: "" },
     local: { baseUrl: "http://127.0.0.1:11434/v1", model: "qwen3:8b" },
     embeddings: { enabled: false, baseUrl: "", model: "embeddinggemma-2", dims: 256 },
-    vision: { baseUrl: "", model: "qwen3-vl" },
+    vision: { enabled: true, baseUrl: "", model: "qwen3-vl" },
     voice: { sttBaseUrl: "", sttModel: "whisper-1", ttsEnabled: true },
     screenControl: { enabled: false },
     tor: { enabled: false, socksPort: 9050 },

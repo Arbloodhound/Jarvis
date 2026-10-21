@@ -51,7 +51,11 @@ and stop them by name or id); "subagents": {"maxConcurrent": 3} in
 config.json caps how many run at once. Stopping a run stops its subagents.
 "tor": {"enabled": true} sends web search and fetch through a local Tor
 proxy (port 9050; 9150 for Tor Browser) — also a switch on the serve page —
-and is the only way .onion addresses open.`;
+and is the only way .onion addresses open.
+"vision": {"enabled": false} turns every image read off — the look tools
+are hidden and shopping checks stop reading listing photos. On (default),
+vision is part of the model: the checks read listing images on their own.
+It is the only vision switch; there is no per-request opt-out.`;
 
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
 const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
@@ -290,6 +294,7 @@ async function main(): Promise<void> {
       ? `on — proxy 127.0.0.1:${cfgW.tor.socksPort} ${(await probeTorProxy(cfgW.tor.socksPort)) ? "reachable" : "NOT reachable"}`
       : "off";
     console.log(`${"tor".padEnd(10)} ${torState}`);
+    console.log(`${"vision".padEnd(10)} ${cfgW.vision.enabled ? `on — ${cfgW.vision.model || cfgW.cloud.model} reads images; shopping checks read listing photos` : "off — no image is read anywhere"}`);
     return;
   }
   if (cmd === "help" || cmd === "--help" || cmd === "-h") { console.log(HELP); return; }

@@ -35,7 +35,7 @@ type ClientMsg =
   | { type: "send"; text: string; attachments?: Array<{ path: string; name?: string }> }
   | { type: "confirm"; cardId: string; allow: boolean }
   | { type: "stop" }
-  | { type: "settings"; brain?: "local" | "cloud"; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean }
+  | { type: "settings"; brain?: "local" | "cloud"; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean; vision?: boolean }
   | { type: "set_model"; which: "local" | "cloud"; model: string }
   | { type: "list_models" }
   | { type: "state" }

@@ -102,7 +102,7 @@ export class Runtime {
 
   /** The tools every agent here shares (the coordinator's four are added only at the top level). */
   private baseTools(): Tool[] {
-    return toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }, ttsEnabled: this.cfg.voice.ttsEnabled, notifications: this.notifications });
+    return toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, vision: this.cfg.vision.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }, ttsEnabled: this.cfg.voice.ttsEnabled, notifications: this.notifications });
   }
 
   /**
@@ -116,6 +116,7 @@ export class Runtime {
       provider: () => this.provider(),
       embedder: () => this.embedder(),
       vision: () => this.vision(),
+      visionEnabled: () => this.cfg.vision.enabled,
       transcriber: () => this.transcriber(),
       skills: () => this.skillStore(),
       tools,
@@ -278,6 +279,9 @@ export class Runtime {
    * cloud brain when it's on. null when offline-only with no local VLM.
    */
   vision(): Vision | null {
+    // The owner's switch: off means no backend exists, for any caller —
+    // the look tools, @image context and shopping checks all see null.
+    if (!this.cfg.vision.enabled) return null;
     const v = this.cfg.vision;
     const localUrl = v.baseUrl || this.cfg.local.baseUrl;
     // Prefer a dedicated local VLM so it works offline and on the local brain.
@@ -337,10 +341,11 @@ export class Runtime {
     return this.torReachable;
   }
 
-  update(change: { brain?: Config["brain"]; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean; verifyBeforeStore?: boolean }): void {
+  update(change: { brain?: Config["brain"]; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean; verifyBeforeStore?: boolean; vision?: boolean }): void {
     if (change.brain === "cloud" || change.brain === "local") this.cfg.brain = change.brain;
     if (typeof change.offlineOnly === "boolean") this.cfg.offlineOnly = change.offlineOnly;
     if (typeof change.embeddings === "boolean") this.cfg.embeddings.enabled = change.embeddings;
+    if (typeof change.vision === "boolean") this.cfg.vision.enabled = change.vision;
     if (typeof change.screenControl === "boolean") this.cfg.screenControl.enabled = change.screenControl;
     if (typeof change.tor === "boolean") {
       this.cfg.tor.enabled = change.tor;
@@ -372,6 +377,7 @@ export class Runtime {
       vision: this.vision()?.label ?? null,
       voiceStt: this.transcriber()?.label ?? null,
       voiceTts: this.cfg.voice.ttsEnabled,
+      visionEnabled: this.cfg.vision.enabled,
       screenControl: this.cfg.screenControl.enabled,
       tor: this.cfg.tor.enabled,
       torPort: this.cfg.tor.socksPort,

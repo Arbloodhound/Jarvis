@@ -51,6 +51,12 @@ export interface ToolContext {
   transcriber: Transcriber | null;
   /** The run's discovered skills, or null when the host wired none in. */
   skills: SkillStore | null;
+  /**
+   * The owner's vision switch, as set for this run. false means vision is
+   * off in settings — the only switch — and image-reading paths stand down
+   * entirely (vision is null then too; this flag lets a tool say WHY).
+   */
+  visionEnabled?: boolean;
   signal: AbortSignal;
   /** How web tools fetch. Set per run by toolsFor (Tor transport when on); direct safeFetch otherwise. */
   webFetch?: WebFetchFn;
@@ -393,6 +399,108 @@ async function fetchChain(raw: string, signal: AbortSignal, tor: TorSettings): P
 
 export async function safeFetch(raw: string, signal: AbortSignal): Promise<Fetched> {
   return fetchChain(raw, signal, TOR_DISABLED);
+}
+
+// ---------- the bytes sibling (image bytes for the vision route) ----------
+
+export interface FetchedBytes { status: number; type: string; bytes: Buffer; url: string }
+
+/** The bytes fetch: one URL in, the final file's raw bytes out. */
+export type WebFetchBytesFn = (url: string, signal: AbortSignal) => Promise<FetchedBytes>;
+
+/** Images bigger than this are refused, not read (the look tools cap at 12 MB for owner files). */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function getBytesOnce(u: URL, signal: AbortSignal, agent: SocksProxyAgent | undefined, timeoutMs: number, maxBytes: number): Promise<FetchedBytes & { location?: string }> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let tooBig = false;
+    const ok = (v: FetchedBytes & { location?: string }) => { if (!settled) { settled = true; resolve(v); } };
+    const bad = (e: unknown) => {
+      if (settled) return;
+      settled = true;
+      // The size refusal wins its race: destroying an over-cap stream can
+      // surface a bare abort error before the close handler runs.
+      reject(tooBig ? new Error(`That image is too large (over ${Math.round(maxBytes / (1024 * 1024))} MB) — it was not read.`) : e instanceof Error ? e : new Error(String(e)));
+    };
+    const mod = u.protocol === "https:" ? https : http;
+    const req = mod.request(u, {
+      method: "GET",
+      // Same checked-DNS pinning as getOnce on the direct path; on the Tor
+      // path the agent carries the hostname to the proxy unresolved.
+      ...(agent ? { agent } : { lookup: publicOnlyLookup as unknown as LookupFunction }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+      headers: {
+        "user-agent": "Mozilla/5.0 (Jarvis desktop agent)",
+        accept: "image/*,*/*;q=0.5",
+        "accept-encoding": "identity",
+      },
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on("data", (c: Buffer) => {
+        size += c.length;
+        if (size > maxBytes) { tooBig = true; res.destroy(); return; }
+        chunks.push(c);
+      });
+      const done = () => {
+        if (tooBig) return bad(new Error("over the size cap"));
+        ok({
+          status: res.statusCode ?? 0,
+          type: String(res.headers["content-type"] ?? ""),
+          bytes: Buffer.concat(chunks),
+          url: u.toString(),
+          location: typeof res.headers.location === "string" ? res.headers.location : undefined,
+        });
+      };
+      res.on("end", done);
+      res.on("close", done);
+      res.on("error", bad);
+    });
+    req.on("error", bad);
+    req.end();
+  });
+}
+
+/**
+ * fetchChain's bytes sibling — the same funnel, raw bytes out: the same
+ * assertPublicUrl pre-flight on every hop, the same checked-DNS lookup on
+ * the direct path, the same Tor proxy semantics (probe first, fail closed,
+ * .onion only through Tor), the same 5-hop redirect walk. Two differences,
+ * both because the payload is an image for the vision route: the body is
+ * capped at maxBytes (over → refused), and the final response must
+ * actually be an image (content-type image/*) or the fetch refuses.
+ */
+async function fetchBytesChain(raw: string, signal: AbortSignal, tor: TorSettings, maxBytes: number): Promise<FetchedBytes> {
+  let agent: SocksProxyAgent | undefined;
+  if (tor.enabled) {
+    if (!(await probeTorProxy(tor.socksPort))) throw new Error(torDown(tor.socksPort));
+    agent = new SocksProxyAgent(`socks5h://127.0.0.1:${tor.socksPort}`);
+  }
+  let url = raw;
+  for (let hop = 0; hop < 5; hop++) {
+    const u = assertPublicUrl(url);
+    if (isOnionUrl(u) && !tor.enabled) throw new Error(ONION_NEEDS_TOR);
+    // Images get more direct-path headroom than text pages (60 s vs 20 s):
+    // the payload is the point here, and a slow CDN should not read as "no
+    // image". The Tor budget matches the text funnel's.
+    const res = await getBytesOnce(u, signal, agent, tor.enabled ? 120_000 : 60_000, maxBytes);
+    if (res.status >= 300 && res.status < 400 && res.location) { url = new URL(res.location, url).toString(); continue; }
+    if (res.status >= 400) throw new Error(`The image link answered HTTP ${res.status}.`);
+    if (!/^image\//i.test(res.type)) throw new Error(`That link is not an image (content-type: ${res.type || "unknown"}) — it was not read.`);
+    return res;
+  }
+  throw new Error("Too many redirects.");
+}
+
+export async function safeFetchBytes(raw: string, signal: AbortSignal, maxBytes: number = MAX_IMAGE_BYTES): Promise<FetchedBytes> {
+  return fetchBytesChain(raw, signal, TOR_DISABLED, maxBytes);
+}
+
+/** The bytes fetch for one run: through Tor when on, direct when off. */
+export function makeWebFetchBytes(tor: TorSettings, maxBytes: number = MAX_IMAGE_BYTES): WebFetchBytesFn {
+  if (!tor.enabled) return (url, signal) => safeFetchBytes(url, signal, maxBytes);
+  return (url, signal) => fetchBytesChain(url, signal, tor, maxBytes);
 }
 
 /** The web fetch for one run: through Tor when on, direct when off. */
@@ -1007,11 +1115,14 @@ export const ALL_TOOLS: Tool[] = [
   skillListTool, skillSearchTool, skillReadTool,
 ];
 
-export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean; notifications?: NotificationInbox }): Tool[] {
+export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; vision?: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean; notifications?: NotificationInbox }): Tool[] {
   return ALL_TOOLS.filter((t) => {
     if (opts.offlineOnly && t.network) return false;
     if ((t.name === "control_screen" || t.name === "see_act_verify") && !opts.screenControl) return false;
     if (t.name === "speak" && opts.ttsEnabled === false) return false;
+    // Vision off in settings withholds the look tools entirely — there is
+    // no per-call way back in; the setting is the only switch.
+    if (opts.vision === false && (t.name === "look_at_screen" || t.name === "look_at_image" || t.name === "see_act_verify")) return false;
     return true;
   }).map((t) => {
     let out = t;

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Tool, ToolContext } from "./index.js";
-import { htmlToText, runWebSearch, safeFetch } from "./index.js";
+import type { FetchedBytes, Tool, ToolContext, WebFetchBytesFn } from "./index.js";
+import { htmlToText, MAX_IMAGE_BYTES, runWebSearch, safeFetch, safeFetchBytes } from "./index.js";
 
 /**
  * Shopping, marketplace and review tools — a port of the phone app's
@@ -28,6 +28,18 @@ import { htmlToText, runWebSearch, safeFetch } from "./index.js";
  * Transport is the app's own: every fetch goes through safeFetch, so the
  * search-fallback chain (DuckDuckGo → Bing → Brave) and any Tor routing
  * on that path strengthen these tools for free.
+ *
+ * - Vision is inherent when it is on (the owner's rule: vision ON means
+ *   it is ALWAYS part of the model). product_check and seller_check read
+ *   the page's images through the vision route as a fixed step of every
+ *   check — never a per-call choice, and neither tool's schema carries a
+ *   vision flag. The readings are reported in their own labeled block
+ *   ("Vision-read evidence — not page text"), never merged into the
+ *   page-text facts; a disagreement is printed as a named conflict. The
+ *   only off switch is the vision setting itself: off (or no vision
+ *   backend) means zero vision calls, and the check says so in one line.
+ *   Image bytes come through safeFetchBytes — the funnel's bytes sibling,
+ *   with the same SSRF checks and an image-only, size-capped payload.
  */
 
 function tool<S extends z.ZodType = z.ZodType>(t: Tool<S>): Tool {
@@ -368,6 +380,8 @@ export interface ListingDetail {
   condition: string;
   text: string;
   claims: Claim[];
+  /** The page's image URLs, structured data first — the vision step reads these. */
+  images: string[];
 }
 
 function jsonLdProduct(html: string): Record<string, unknown> | null {
@@ -396,6 +410,42 @@ function metaContent(html: string, prop: string): string {
   const m = new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i").exec(html)
     ?? new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, "i").exec(html);
   return m ? m[1]!.replace(/&amp;/g, "&") : "";
+}
+
+/**
+ * The page's image URLs in reading order: the product's structured-data
+ * image first (the listing's own photo, most likely), then og:image /
+ * twitter:image, then <img> tags in document order. Resolved against the
+ * page, deduped, capped. data:/blob: URLs are skipped — they cannot be
+ * fetched through the funnel — and so are formats the vision route
+ * cannot read (SVG/GIF/WebP/ICO/AVIF by extension). The vision step says
+ * what it could not read rather than pretending.
+ */
+export function extractImageUrls(html: string, pageUrl: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: unknown) => {
+    if (typeof raw !== "string") return;
+    const t = raw.trim();
+    if (!t || /^(data|blob):/i.test(t)) return;
+    const abs = resolveUrl(t, pageUrl);
+    if (!/^https?:\/\//i.test(abs) || seen.has(abs)) return;
+    // The vision route reads PNG and JPEG; formats it cannot read (vector
+    // or animated chrome, mostly site logos) never enter the walk.
+    if (/\.(svg|svgz|gif|webp|ico|avif)(\?|#|$)/i.test(abs)) return;
+    seen.add(abs);
+    out.push(abs);
+  };
+  const ld = jsonLdProduct(html);
+  const ldImg = ld?.["image"] as unknown;
+  if (typeof ldImg === "string") push(ldImg);
+  else if (Array.isArray(ldImg)) for (const im of ldImg) push(typeof im === "string" ? im : (im as { url?: unknown } | null)?.url);
+  else if (ldImg && typeof ldImg === "object") push((ldImg as { url?: unknown }).url);
+  push(metaContent(html, "og:image"));
+  push(metaContent(html, "twitter:image"));
+  for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)) { push(m[1]); if (out.length >= 8) break; }
+  for (const m of html.matchAll(/<img[^>]+data-src=["']([^"']+)["']/gi)) { push(m[1]); if (out.length >= 8) break; }
+  return out.slice(0, 8);
 }
 
 /** Fetch-shaped extraction of one listing/product page into claims + fields. */
@@ -470,7 +520,7 @@ export function parseListingPage(html: string, pageUrl: string): ListingDetail {
     if (agg["reviewCount"] != null) claim("feedback_count", String(agg["reviewCount"]), "aggregateRating in the page's structured data");
   }
 
-  return { url: pageUrl, title, price, shipping, freeShipping, total, seller, returns, stock, condition, text, claims };
+  return { url: pageUrl, title, price, shipping, freeShipping, total, seller, returns, stock, condition, text, claims, images: extractImageUrls(html, pageUrl) };
 }
 
 // ---------- scam signals (page-local, evidence-named) ----------
@@ -552,6 +602,8 @@ export interface Reputation {
   feedback: Array<{ text: string; source: string }>;
   sources: string[];
   claims: Claim[];
+  /** The page's image URLs (storefront/logo photos) — the vision step reads these. */
+  images: string[];
 }
 
 export function extractReputation(html: string, pageUrl: string, seller = ""): Reputation {
@@ -581,7 +633,7 @@ export function extractReputation(html: string, pageUrl: string, seller = ""): R
       feedback.push({ text: snip.slice(0, 200), source: pageUrl });
     }
   }
-  return { seller, ratingOutOf5, positivePct, feedbackCount, disputes, accountAge, feedback, sources: [pageUrl], claims };
+  return { seller, ratingOutOf5, positivePct, feedbackCount, disputes, accountAge, feedback, sources: [pageUrl], claims, images: extractImageUrls(html, pageUrl) };
 }
 
 // ---------- reviews ----------
@@ -879,6 +931,103 @@ function memoryLines(notes: string[]): string {
   return `\nOwner memory (the owner's own saved facts — labeled as memory, not page evidence):\n${notes.map((n) => `- ${n}`).join("\n")}`;
 }
 
+// ---------- vision-read evidence (a fixed step of every check when vision is on) ----------
+
+const VISION_QUESTION_PRODUCT =
+  "This is a photo from a product listing. Report only what is visible in the image: " +
+  "(1) any price or price-tag text, exactly as shown; " +
+  "(2) the item's apparent condition (new/sealed, like new, used, worn, damaged) and the cues you see; " +
+  "(3) quantity, pack contents or bundle items visible; " +
+  "(4) brand name, logo or markings; " +
+  "(5) any other readable text. " +
+  "If a thing is not visible, say it is not visible. Do not guess, and do not use outside knowledge.";
+
+const VISION_QUESTION_SELLER =
+  "This is a photo from a seller's page or storefront. Report only what is visible in the image: " +
+  "any business name or signage text, exactly as shown; logos or brand markings; what is being sold or displayed; " +
+  "and any other readable text. If a thing is not visible, say so. Do not guess.";
+
+export interface VisionRead {
+  image: string;
+  text: string;
+}
+
+const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/**
+ * Read the page's images through the vision route: the primary image,
+ * plus up to two more when an earlier read yields little (a substantial
+ * report ends the walk). Every image that cannot be read earns a named
+ * line with the reason — nothing is silently skipped.
+ */
+async function readListingImages(images: string[], question: string, ctx: ToolContext, bytesFn: WebFetchBytesFn): Promise<{ lines: string[]; reads: VisionRead[] }> {
+  const lines: string[] = [];
+  const reads: VisionRead[] = [];
+  for (const img of images.slice(0, 6)) {
+    if (reads.length >= 3) break;
+    if (reads.length && reads[reads.length - 1]!.text.length >= 60) break;
+    let f: FetchedBytes;
+    try {
+      f = await bytesFn(img, ctx.signal);
+    } catch (err) {
+      lines.push(`- ${img} — could not be fetched for reading: ${errText(err)}`);
+      continue;
+    }
+    const mediaType = /^image\/png/i.test(f.type) ? "image/png" as const : /^image\/jpe?g/i.test(f.type) ? "image/jpeg" as const : null;
+    if (!mediaType) {
+      lines.push(`- ${img} — ${f.type || "no content-type"}: the vision route reads PNG and JPEG, so this image was not read.`);
+      continue;
+    }
+    if (f.bytes.length > MAX_IMAGE_BYTES) {
+      lines.push(`- ${img} — too large to read (over ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))} MB).`);
+      continue;
+    }
+    try {
+      const text = (await ctx.vision!.describe([{ data: f.bytes.toString("base64"), mediaType }], question, ctx.signal)).replace(/\s+/g, " ").trim();
+      reads.push({ image: img, text });
+      lines.push(`- ${img}\n  Vision read: "${text.slice(0, 800)}"`);
+    } catch (err) {
+      lines.push(`- ${img} — the vision model could not read it: ${errText(err)}`);
+    }
+  }
+  return { lines, reads };
+}
+
+/**
+ * The vision step of a check. It ALWAYS runs — when vision is on it is
+ * part of the model, not a step anyone chooses — and it always leaves
+ * its block in the output: the readings, or one plain line saying why
+ * there are none (off in settings / no vision backend / no usable
+ * image). Vision facts never touch the page-text table; a price visible
+ * in an image that disagrees with the page's stated price becomes a
+ * named CONFLICT line, reported and never silently resolved.
+ */
+async function visionEvidenceBlock(opts: { images: string[]; question: string; pagePrice: Money | null; ctx: ToolContext; bytesFn: WebFetchBytesFn }): Promise<string> {
+  const { ctx } = opts;
+  if (ctx.visionEnabled === false) {
+    return "\nVision-read evidence: off — vision is turned off in settings (the only switch), so no images were read for this check.";
+  }
+  if (!ctx.vision) {
+    return "\nVision-read evidence: unavailable — no vision model is configured, so the page's images were not read.";
+  }
+  if (!opts.images.length) {
+    return "\nVision-read evidence: no usable image was found on the page, so nothing was read from images.";
+  }
+  const { lines, reads } = await readListingImages(opts.images, opts.question, ctx, opts.bytesFn);
+  const out = ["\nVision-read evidence (from listing images — not page text):", ...(lines.length ? lines : ["- no image on the page could be read."])];
+  if (opts.pagePrice) {
+    const seen = new Set<number>();
+    for (const r of reads) {
+      for (const p of extractPrices(r.text)) {
+        if (p.currency !== opts.pagePrice.currency || Math.abs(p.amount - opts.pagePrice.amount) < 0.005 || seen.has(p.amount)) continue;
+        seen.add(p.amount);
+        out.push(`- CONFLICT (price): the page text states ${fmtMoney(opts.pagePrice)}, but the listing image at ${r.image} shows ${fmtMoney(p)} (vision-read). Both are reported as found; neither was changed — verify on the listing itself.`);
+      }
+    }
+  }
+  return out.join("\n");
+}
+
 // ---------- shared fetch cores (injectable fetch, like runWebSearch) ----------
 
 async function fetchPage(url: string, signal: AbortSignal, fetchFn: FetchFn): Promise<{ res?: { status: number; type: string; body: string; url: string }; refusal?: string }> {
@@ -925,6 +1074,7 @@ export async function fetchSellerCheck(urls: string[], signal: AbortSignal, fetc
       rep.feedback = [...rep.feedback, ...r.feedback].slice(0, 5);
       rep.sources.push(url);
       rep.claims.push(...r.claims);
+      if (!rep.images.length) rep.images = r.images;
     }
   }
   if (!rep) return { refusal: "No seller page could be fetched." };
@@ -1115,18 +1265,19 @@ function marketplaceNavigateTool(): Tool {
   });
 }
 
-export async function runProductCheck(url: string, seenPrices: Money[], ctx: ToolContext, fetchFn: FetchFn = safeFetch): Promise<string> {
+export async function runProductCheck(url: string, seenPrices: Money[], ctx: ToolContext, fetchFn: FetchFn = safeFetch, bytesFn: WebFetchBytesFn = safeFetchBytes): Promise<string> {
   if (!admitRow(blankRow({ sourceUrl: url, link: url }))) return ONION_REFUSAL;
   const { detail, signals, refusal } = await fetchProductCheck(url, seenPrices, ctx.signal, fetchFn);
   if (refusal) return refusal;
   const notes = await memoryNotes(ctx, detail!.seller);
-  return detailTable(detail!, signals!) + memoryLines(notes);
+  const vision = await visionEvidenceBlock({ images: detail!.images, question: VISION_QUESTION_PRODUCT, pagePrice: detail!.price, ctx, bytesFn });
+  return detailTable(detail!, signals!) + vision + memoryLines(notes);
 }
 
 function productCheckTool(): Tool {
   return tool({
   name: "product_check",
-  description: "Fetch a product/listing page and build a verification table: title, price, shipping, total, seller, returns, stock/condition — every value from the fetched page — plus named scam signals with their page evidence. Informs; never recommends for or against buying.",
+  description: "Fetch a product/listing page and build a verification table: title, price, shipping, total, seller, returns, stock/condition — every value from the fetched page — plus named scam signals with their page evidence. When vision is on in settings, the listing's photos are also read automatically and reported as a separate vision-read evidence block (never merged into the page-text facts; a disagreement is printed as a conflict). Informs; never recommends for or against buying.",
   schema: z.object({
     url: z.string().url(),
     seen_prices: z.array(z.object({ amount: z.number(), currency: z.string() })).optional()
@@ -1143,7 +1294,7 @@ function productCheckTool(): Tool {
   });
 }
 
-export async function runSellerCheck(urls: string[], seller: string, ctx: ToolContext, fetchFn: FetchFn = safeFetch): Promise<string> {
+export async function runSellerCheck(urls: string[], seller: string, ctx: ToolContext, fetchFn: FetchFn = safeFetch, bytesFn: WebFetchBytesFn = safeFetchBytes): Promise<string> {
   for (const u of urls) {
     if (!admitRow(blankRow({ sourceUrl: u, link: u }))) return ONION_REFUSAL;
   }
@@ -1151,7 +1302,8 @@ export async function runSellerCheck(urls: string[], seller: string, ctx: ToolCo
   if (refusal) return refusal;
   rep!.seller = seller || rep!.seller || "";
   const notes = await memoryNotes(ctx, rep!.seller);
-  let out = reputationTable(rep!, signals!);
+  const vision = await visionEvidenceBlock({ images: rep!.images, question: VISION_QUESTION_SELLER, pagePrice: null, ctx, bytesFn });
+  let out = reputationTable(rep!, signals!) + vision;
   if (!rep!.claims.length && !rep!.feedback.length) {
     out += "\nNo reputation data could be extracted from the fetched page(s) — the seller is UNVERIFIED by this check, which is not the same as untrustworthy.";
   }
@@ -1161,7 +1313,7 @@ export async function runSellerCheck(urls: string[], seller: string, ctx: ToolCo
 function sellerCheckTool(): Tool {
   return tool({
   name: "seller_check",
-  description: "Check a seller or company from fetched pages: rating, feedback count, disputes, account age, quoted feedback snippets and named scam signals — a trust table of evidence, never a verdict. Consults the owner's memory for saved facts about the seller.",
+  description: "Check a seller or company from fetched pages: rating, feedback count, disputes, account age, quoted feedback snippets and named scam signals — a trust table of evidence, never a verdict. When vision is on in settings, storefront/page photos are also read automatically and reported as a separate vision-read evidence block. Consults the owner's memory for saved facts about the seller.",
   schema: z.object({
     url: z.string().url().describe("the seller's profile/store page"),
     extra_urls: z.array(z.string().url()).max(4).optional().describe("more fetched pages about the same seller"),

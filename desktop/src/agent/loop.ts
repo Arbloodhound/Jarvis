@@ -53,6 +53,8 @@ export interface AgentDeps {
    * say so.
    */
   skills?: () => SkillStore | null;
+  /** The owner's vision switch for this run (tools read it to stand down when off). */
+  visionEnabled?: () => boolean;
   tools: () => Tool[];
   gate: Gate;
   memory: Memory;
@@ -406,7 +408,7 @@ export class Agent {
       ep.confirm(t.name, args);
     }
 
-    const ctx: ToolContext = { cwd: this.deps.cwd, home: this.deps.home, workspace: this.deps.workspace, memory: this.deps.memory, echolalia: this.deps.echolalia?.() ?? null, embedder: this.deps.embedder(), vision: this.deps.vision(), transcriber: this.deps.transcriber?.() ?? null, skills, signal };
+    const ctx: ToolContext = { cwd: this.deps.cwd, home: this.deps.home, workspace: this.deps.workspace, memory: this.deps.memory, echolalia: this.deps.echolalia?.() ?? null, embedder: this.deps.embedder(), vision: this.deps.vision(), visionEnabled: this.deps.visionEnabled?.(), transcriber: this.deps.transcriber?.() ?? null, skills, signal };
     try {
       const out = await t.run(args, ctx);
       const scam = ep.observe(t.name, t.policy.effects, out, !!t.outside);
