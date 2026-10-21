@@ -259,6 +259,8 @@ async function runSelfTest(): Promise<void> {
 app.on("before-quit", () => { quitting = true; });
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  // Quitting stops scheduled runs already working, not just future firings.
+  rt?.stopScheduledRuns();
   rt?.scheduler.stop();
   gw?.server.close();
 });

@@ -394,3 +394,10 @@ test("gateway POST /api/notifications: token required, batch filtered, drops aud
     gw.server.close();
   }
 });
+
+test("only the main agent reads the owner's notifications: subagents and scheduled runs don't get read_notifications", () => {
+  const { home, p } = tempHome("jarvis-notif-scope-");
+  const rt = new Runtime(loadConfig(p), p, home) as unknown as { baseTools(): Array<{ name: string }>; delegateTools(): Array<{ name: string }> };
+  assert.ok(rt.baseTools().some((t) => t.name === "read_notifications"), "the main agent keeps it");
+  assert.ok(!rt.delegateTools().some((t) => t.name === "read_notifications"), "delegated runs never drain the owner's inbox");
+});

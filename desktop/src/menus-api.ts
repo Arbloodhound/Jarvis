@@ -8,11 +8,12 @@ import type { Runtime } from "./runtime.js";
 import { AdminError, SkillAdmin, validateName } from "./skills-admin.js";
 import { skillRoots } from "./skills.js";
 import { ALL_TOOLS } from "./tools/index.js";
+import { subagentCatalog } from "./tools/agent-defs.js";
 
 /**
  * Gateway routes behind the Skills and Agents menus (ui/menus.js):
  *
- *   GET    /api/tools                 tool names a saved agent may list
+ *   GET    /api/tools                 tool names a saved agent may list (the subagent catalogue)
  *   GET    /api/skills                every discovered skill (editable flag)
  *   GET    /api/skills/:name          one skill, with its body
  *   PUT    /api/skills/:name          create / update (body: {description, body, frontmatter?, mode?})
@@ -94,7 +95,7 @@ function modeOf(v: unknown): "create" | "update" | "upsert" {
   throw new AdminError(400, "invalid_field", 'mode must be "create", "update" or left out.');
 }
 
-const toolNames = (): string[] => ALL_TOOLS.map((t) => t.name);
+const toolNames = (): string[] => subagentCatalog(ALL_TOOLS).map((t) => t.name);
 
 /**
  * Handle one request if it is a menu route. Returns false (untouched) for
@@ -140,7 +141,7 @@ export function handleMenuRoute(req: IncomingMessage, res: ServerResponse, url: 
     if (kind === "tools") {
       if (name !== undefined) { fail(res, 404, "not_found", "Not found."); return; }
       if (req.method !== "GET") { fail(res, 405, "method_not_allowed", "Use GET."); return; }
-      send(res, 200, { ok: true, tools: ALL_TOOLS.map((t) => ({ name: t.name, description: t.description })) });
+      send(res, 200, { ok: true, tools: subagentCatalog(ALL_TOOLS).map((t) => ({ name: t.name, description: t.description })) });
       return;
     }
     if (name === undefined || name === "") {

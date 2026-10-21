@@ -292,8 +292,28 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
     broadcast(card as typeof card & Record<string, unknown>);
   });
   rt.setChannel({
-    emit: (e) => broadcast(e as AgentEvent & Record<string, unknown>),
+    emit: (e) => {
+      broadcast(e as AgentEvent & Record<string, unknown>);
+      // A subagent's card its own run gave up on (Stop aborted it) would
+      // otherwise sit in `pending` and be re-sent to every page that
+      // reconnects. The loop emits confirm_resolved either way; an answered
+      // card is already gone from the map, so this only settles orphans —
+      // and when the child's run ends, nothing of its stays open.
+      if (e.type === "confirm_resolved") settleCard(e.cardId, false);
+      else if (e.type === "done" || e.type === "error") {
+        for (const [id, p] of [...pending.entries()]) {
+          if ((p.card as { runId?: unknown }).runId === e.runId) settleCard(id, false);
+        }
+      }
+    },
     confirm: askOwner,
+    // A hand-off landed: tell every page (who finished, how, a short
+    // summary) and push state so the subagent list and busy flag follow.
+    handoff: (h) => {
+      broadcast({ type: "handoff", agent: { id: h.id, name: h.name }, state: h.state, task: h.task, summary: redactSecrets((h.state === "failed" ? h.error : h.result) ?? "").text.slice(0, 400) });
+      broadcast(stateMsg());
+    },
+    stateChanged: () => broadcast(stateMsg()),
   });
 
   /** The state message, with the conversation branches the page renders. */

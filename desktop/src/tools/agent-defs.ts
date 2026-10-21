@@ -19,10 +19,22 @@ function tool<S extends z.ZodType>(t: Tool<S>): Tool {
   return t as unknown as Tool;
 }
 
-/** The tool names a definition may list: every shared tool (the orchestration four are not among them). */
+/**
+ * Tools a subagent never gets (mirrors Runtime.delegateTools: only the main
+ * agent drains the owner's notifications). The orchestration four are not
+ * in ALL_TOOLS at all.
+ */
+export const NOT_FOR_SUBAGENTS: ReadonlySet<string> = new Set(["read_notifications"]);
+
+/** The catalogue a definition may pick from, out of a full tool list. */
+export function subagentCatalog<T extends { name: string }>(all: readonly T[]): T[] {
+  return all.filter((t) => !NOT_FOR_SUBAGENTS.has(t.name));
+}
+
+/** The tool names a definition may list. */
 export async function subagentToolNames(): Promise<string[]> {
   const { ALL_TOOLS } = await import("./index.js");
-  return ALL_TOOLS.map((t) => t.name);
+  return subagentCatalog(ALL_TOOLS).map((t) => t.name);
 }
 
 async function store(home: string): Promise<AgentStore> {

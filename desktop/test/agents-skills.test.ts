@@ -223,6 +223,7 @@ test("gateway /api/skills, /api/agents, /api/tools: token, CRUD round trip, erro
     assert.equal(tools.status, 200);
     const names = (tools.body.tools as Array<{ name: string }>).map((t) => t.name);
     assert.ok(names.includes("read_file") && !names.includes("spawn_agent"));
+    assert.ok(!names.includes("read_notifications"), "the catalogue matches what a subagent can get");
 
     // skills CRUD
     assert.deepEqual((await call("GET", "/api/skills")).body.skills, []);
