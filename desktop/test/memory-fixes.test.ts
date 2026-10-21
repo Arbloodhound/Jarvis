@@ -150,3 +150,49 @@ test("an echo whose own source passes is counted and promotes", async () => {
   assert.equal(out.entry.echoes, 1);
   assert.match(out.entry.reasons.join(" "), /echo from booking email: source check pass/);
 });
+
+// ---------- bug 4: another process's writes survive this one's next save ----------
+
+test("Memory: a write from another instance on the same file is not lost on the next save", () => {
+  const file = path.join(tmp("xproc"), "memory.json");
+  const { memory } = clocked();
+  const app = memory(file);
+  app.remember("the app wrote this first");
+  const cli = memory(file); // another process: its own instance, same file
+  const fromCli = cli.remember("the cli wrote this");
+  assert.ok(app.byId(fromCli.id), "the app sees the other process's fact");
+  app.remember("the app wrote this later");
+  const texts = memory(file).all().map((f) => f.text).sort();
+  assert.deepEqual(texts, ["the app wrote this first", "the app wrote this later", "the cli wrote this"]);
+  // And the other way round: forget in one process is not undone by the other.
+  cli.forget(fromCli.id);
+  app.remember("one more from the app");
+  assert.equal(memory(file).byId(fromCli.id), undefined);
+});
+
+test("Echolalia: a CLI promote/drop is not undone by the app's next save", async () => {
+  const dir = tmp("xproc-echo");
+  const memFile = path.join(dir, "memory.json");
+  const pendFile = path.join(dir, "pending.json");
+  const { memory } = clocked();
+  const appMem = memory(memFile);
+  const app = new EcholaliaStore(pendFile, appMem);
+  const a = await app.submit("The owner prefers tea", { source: "conversation" });
+  const b = await app.submit("The owner walks at 7", { source: "conversation" });
+
+  // `jarvis memory promote|drop` in another process.
+  const cliMem = memory(memFile);
+  const cli = new EcholaliaStore(pendFile, cliMem);
+  const promoted = cli.promoteByOwner(a.entry.id)!;
+  cli.drop(b.entry.id);
+
+  // The app keeps working with its own instances.
+  assert.equal(app.byId(a.entry.id)!.status, "promoted", "the app sees the CLI's decision");
+  await app.submit("The workshop has 42 seats", { source: "venue page", sourceText: "The workshop has 42 seats" });
+  appMem.remember("the app remembers something else");
+
+  const fresh = new EcholaliaStore(pendFile, memory(memFile));
+  assert.equal(fresh.byId(a.entry.id)!.status, "promoted");
+  assert.equal(fresh.byId(b.entry.id)!.status, "dropped");
+  assert.ok(memory(memFile).byId(promoted.factId!), "the promoted fact survives the app's memory save");
+});

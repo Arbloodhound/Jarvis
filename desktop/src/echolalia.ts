@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { startupWarnings } from "./config.js";
 import { dot, type Embedder } from "./embeddings.js";
-import type { Memory } from "./memory.js";
+import { fileStamp, type Memory } from "./memory.js";
 
 /**
  * Echolalia: verify-before-store memory (patent Claim 31).
@@ -43,7 +43,8 @@ import type { Memory } from "./memory.js";
  *
  * Storage follows Memory's conventions: one JSON file, written via a temp
  * file + rename at mode 0600, a corrupt file moved aside with a startup
- * warning rather than crashing.
+ * warning rather than crashing, and re-read before each use when another
+ * process (the `jarvis memory` CLI) has written it since.
  */
 
 export type PendingStatus = "pending" | "promoted" | "quarantined" | "dropped";
@@ -188,6 +189,8 @@ export interface SubmitOutcome {
 
 export class EcholaliaStore {
   private store: PendingFile;
+  /** fileStamp() of the pending file as this instance last saw it. */
+  private stamp: string | null = null;
 
   constructor(
     private readonly file: string | null,
@@ -196,7 +199,19 @@ export class EcholaliaStore {
     private readonly onDecision?: (entry: PendingEntry, decision: string) => void,
   ) {
     this.store = { entries: [] };
+    this.load();
+  }
+
+  /**
+   * Read the pending file. Run at construction and again whenever the file
+   * changed under us (refresh): `jarvis memory promote|drop|submit|verify`
+   * runs in another process, and its decision must survive this instance's
+   * next save rather than be overwritten by it (Memory does the same).
+   */
+  private load(): void {
+    const file = this.file;
     if (!file || !existsSync(file)) return;
+    this.stamp = fileStamp(file);
     try {
       const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<PendingFile>;
       this.store = { entries: Array.isArray(raw.entries) ? raw.entries : [] };
@@ -204,7 +219,15 @@ export class EcholaliaStore {
       const aside = `${file}.broken-${Date.now()}`;
       renameSync(file, aside);
       startupWarnings.push(`memory-pending.json could not be read (${err instanceof Error ? err.message : String(err)}). It was moved to ${aside}; the pending store starts empty.`);
+      this.stamp = null; // on a reload the last good state is kept and saved back
     }
+  }
+
+  /** Reload when the file changed since this instance last read or wrote it. */
+  private refresh(): void {
+    if (!this.file) return;
+    const now = fileStamp(this.file);
+    if (now !== null && now !== this.stamp) this.load();
   }
 
   /**
@@ -221,7 +244,14 @@ export class EcholaliaStore {
     const text = claim.trim();
     const source = (opts.source ?? "conversation").trim() || "conversation";
     const sourceText = (opts.sourceText ?? "").slice(0, SOURCE_EXCERPT);
-    let entry = await this.findEcho(text, embedder);
+    // The only await (the embedder) comes first, so the read-modify-save
+    // below runs on a fresh read with no gap for another process to write in.
+    let vec: number[] | undefined;
+    if (embedder) {
+      try { vec = await embedder.embedOne(text); } catch { /* deterministic matching still works without vectors */ }
+    }
+    this.refresh();
+    let entry = this.findEcho(text, embedder && vec ? { id: embedder.id, vec } : null);
     let echo = false;
     let echoFailed = false;
     if (entry) {
@@ -255,11 +285,9 @@ export class EcholaliaStore {
         sourceCheck: "unverifiable",
       };
       this.store.entries.push(entry);
-      if (embedder) {
-        try {
-          entry.vec = await embedder.embedOne(text);
-          entry.emb = embedder.id;
-        } catch { /* deterministic matching still works without vectors */ }
+      if (embedder && vec) {
+        entry.vec = vec;
+        entry.emb = embedder.id;
       }
     }
     const before = echoFailed ? "pending" : entry.status;
@@ -277,6 +305,8 @@ export class EcholaliaStore {
 
   /** Run the verification pass over one entry and apply the promotion rule. */
   verify(entry: PendingEntry, opts: { ownerConfirmed?: boolean } = {}): PendingEntry {
+    // Not refreshed here: `entry` is an object of the current store, held by
+    // the caller (submit, verifyAll, tests); its public callers refresh.
     if (entry.status === "promoted" || entry.status === "dropped") return entry;
     if (opts.ownerConfirmed) return this.promote(entry, "owner confirmed");
     const check = checkSource(entry.claim, entry.sourceText);
@@ -324,6 +354,7 @@ export class EcholaliaStore {
 
   /** Re-run verification on every held entry (e.g. after sources arrive). */
   verifyAll(): PendingEntry[] {
+    this.refresh();
     const changed: PendingEntry[] = [];
     for (const e of this.store.entries) {
       if (e.status !== "pending" && e.status !== "quarantined") continue;
@@ -337,10 +368,12 @@ export class EcholaliaStore {
   }
 
   byId(id: string): PendingEntry | undefined {
+    this.refresh();
     return this.store.entries.find((e) => e.id === id.trim());
   }
 
   list(status?: PendingStatus): PendingEntry[] {
+    this.refresh();
     return this.store.entries.filter((e) => !status || e.status === status);
   }
 
@@ -349,6 +382,7 @@ export class EcholaliaStore {
    * keep the status label attached (the tools and CLI do).
    */
   recallUnverified(query: string): PendingEntry[] {
+    this.refresh();
     const q = normalizeClaim(query);
     return this.store.entries.filter(
       (e) => (e.status === "pending" || e.status === "quarantined") && (!q || normalizeClaim(e.claim).includes(q) || q.includes(normalizeClaim(e.claim))),
@@ -366,24 +400,19 @@ export class EcholaliaStore {
     return entry;
   }
 
-  private async findEcho(claim: string, embedder: Pick<Embedder, "id" | "embedOne"> | null): Promise<PendingEntry | undefined> {
+  private findEcho(claim: string, embedded: { id: string; vec: number[] } | null): PendingEntry | undefined {
     const held = this.store.entries.filter((e) => e.status === "pending");
     const direct = held.find((e) => claimsMatch(e.claim, claim));
-    if (direct || !embedder) return direct;
-    try {
-      const v = await embedder.embedOne(claim);
-      let best: PendingEntry | undefined;
-      let bestScore = ECHO_COSINE;
-      for (const e of held) {
-        if (!e.vec || e.emb !== embedder.id || !sameAnchors(e.claim, claim)) continue;
-        const s = dot(v, e.vec);
-        if (s >= bestScore) { best = e; bestScore = s; }
-      }
-      if (best) best.reasons.push(`echo matched by embedding similarity (${bestScore.toFixed(2)} >= ${ECHO_COSINE})`);
-      return best;
-    } catch {
-      return undefined;
+    if (direct || !embedded) return direct;
+    let best: PendingEntry | undefined;
+    let bestScore = ECHO_COSINE;
+    for (const e of held) {
+      if (!e.vec || e.emb !== embedded.id || !sameAnchors(e.claim, claim)) continue;
+      const s = dot(embedded.vec, e.vec);
+      if (s >= bestScore) { best = e; bestScore = s; }
     }
+    if (best) best.reasons.push(`echo matched by embedding similarity (${bestScore.toFixed(2)} >= ${ECHO_COSINE})`);
+    return best;
   }
 
   private save(): void {
@@ -391,6 +420,7 @@ export class EcholaliaStore {
     const tmp = `${this.file}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.store, null, 2), { mode: 0o600 });
     renameSync(tmp, this.file);
+    this.stamp = fileStamp(this.file);
   }
 }
 
