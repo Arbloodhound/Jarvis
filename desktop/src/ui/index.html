@@ -94,6 +94,7 @@
   <label class="switch"><input type="checkbox" id="embed"> Semantic memory</label>
   <label class="switch" title="Experimental: let Jarvis type and click. Every action still asks you."><input type="checkbox" id="screenctl"> Screen control</label>
   <label class="switch" title="Send web search and fetch through a local Tor proxy (127.0.0.1:9050; Tor Browser uses 9150). .onion links open only with this on."><input type="checkbox" id="tor"> Tor</label>
+  <label class="switch" title="Vision is part of the model when on: Jarvis can look at images and screenshots, and shopping checks read listing photos on their own. Off: no image is ever read and the look tools are hidden."><input type="checkbox" id="vision"> Vision</label>
   <button id="new" type="button" class="plain" title="Start a new conversation (what Jarvis remembers about you stays)">New chat</button>
   <select id="branch" title="Conversation branch — switching keeps every branch's history"></select>
   <button id="fork" type="button" class="plain" title="Fork this conversation into a new branch from here">Fork</button>
@@ -146,9 +147,10 @@
     $("embed").checked = !!state.embeddings;
     $("screenctl").checked = !!state.screenControl;
     $("tor").checked = !!state.tor;
+    $("vision").checked = state.visionEnabled !== false;
     const model = state.brain === "cloud" ? state.cloudModel : state.localModel;
     $("model").textContent = model || "model…";
-    status.textContent = `${state.answering || ""}${state.embeddings && state.embedderId ? " · memory: " + state.embedderId : ""}${state.tor ? ` · tor: ${state.torReachable == null ? "on" : state.torReachable ? "proxy ok" : "NO PROXY"}` : ""}${state.busy ? " · working" : ""}`;
+    status.textContent = `${state.answering || ""}${state.embeddings && state.embedderId ? " · memory: " + state.embedderId : ""}${state.tor ? ` · tor: ${state.torReachable == null ? "on" : state.torReachable ? "proxy ok" : "NO PROXY"}` : ""}${state.visionEnabled === false ? " · vision: OFF" : ""}${state.busy ? " · working" : ""}`;
     sendBtn.textContent = state.busy ? "Stop" : "Send";
     sendBtn.classList.toggle("stop", !!state.busy);
     // Branch picker: one option per branch, the active one selected.
@@ -374,6 +376,7 @@
   $("embed").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", embeddings: ev.target.checked }));
   $("screenctl").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", screenControl: ev.target.checked }));
   $("tor").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", tor: ev.target.checked }));
+  $("vision").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", vision: ev.target.checked }));
   $("b-local").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "local" }));
   $("b-cloud").onclick = () => ws?.send(JSON.stringify({ type: "settings", brain: "cloud" }));
   $("offline").onchange = (ev) => ws?.send(JSON.stringify({ type: "settings", offlineOnly: ev.target.checked }));

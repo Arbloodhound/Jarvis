@@ -31,7 +31,8 @@ export class Runtime {
       provider: () => this.provider(),
       embedder: () => this.embedder(),
       vision: () => this.vision(),
-      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort } }),
+      visionEnabled: () => this.cfg.vision.enabled,
+      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, vision: this.cfg.vision.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort } }),
       gate: new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd),
       memory: this.memory,
       audit: new AuditLog(p.audit),
@@ -106,6 +107,9 @@ export class Runtime {
    * cloud brain when it's on. null when offline-only with no local VLM.
    */
   vision(): Vision | null {
+    // The owner's switch: off means no backend exists, for any caller —
+    // the look tools, @image context and shopping checks all see null.
+    if (!this.cfg.vision.enabled) return null;
     const v = this.cfg.vision;
     const localUrl = v.baseUrl || this.cfg.local.baseUrl;
     // Prefer a dedicated local VLM so it works offline and on the local brain.
@@ -142,10 +146,11 @@ export class Runtime {
     return this.torReachable;
   }
 
-  update(change: { brain?: Config["brain"]; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean }): void {
+  update(change: { brain?: Config["brain"]; offlineOnly?: boolean; embeddings?: boolean; screenControl?: boolean; tor?: boolean; vision?: boolean }): void {
     if (change.brain === "cloud" || change.brain === "local") this.cfg.brain = change.brain;
     if (typeof change.offlineOnly === "boolean") this.cfg.offlineOnly = change.offlineOnly;
     if (typeof change.embeddings === "boolean") this.cfg.embeddings.enabled = change.embeddings;
+    if (typeof change.vision === "boolean") this.cfg.vision.enabled = change.vision;
     if (typeof change.screenControl === "boolean") this.cfg.screenControl.enabled = change.screenControl;
     if (typeof change.tor === "boolean") {
       this.cfg.tor.enabled = change.tor;
@@ -168,6 +173,7 @@ export class Runtime {
       embeddings: this.cfg.embeddings.enabled,
       embedderId: this.embedder()?.id ?? null,
       vision: this.vision()?.label ?? null,
+      visionEnabled: this.cfg.vision.enabled,
       screenControl: this.cfg.screenControl.enabled,
       tor: this.cfg.tor.enabled,
       torPort: this.cfg.tor.socksPort,
