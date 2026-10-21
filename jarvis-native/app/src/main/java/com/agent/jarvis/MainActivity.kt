@@ -21,17 +21,11 @@ import com.agent.jarvis.ui.theme.JarvisTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // A seeded setup applies here too, not only when the service connects.
-        // Toggling the accessibility binding to force a reconnect is unreliable
-        // — Android often leaves the service listed but unbound — and the
-        // activity and the service share a process, so applying it here updates
-        // the very same state. This is what makes a device test one command
-        // instead of four settings screens.
+        // Apply a seeded setup file here too, not only when the service connects.
         AgentAccessibilityService.applySetupFile(this)
         enableEdgeToEdge()
         setContent {
             JarvisTheme {
-                // Saveable: rotating inside Settings must not bounce back to chat.
                 var screen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("chat") }
                 var guideFrom by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("chat") }
                 // Shared engine — one JNI handle, never two 800MB loads.
@@ -69,7 +63,7 @@ class MainActivity : ComponentActivity() {
                         onOpenGuide = { guideFrom = "settings"; screen = "guide" },
                     )
                 }
-                // Floating diagnostic button, over every screen. Off by default; the owner taps it.
+                // Floating diagnostic button, over every screen. Off by default.
                 com.agent.jarvis.ui.DiagnosticFab(
                     modifier = androidx.compose.ui.Modifier
                         .align(androidx.compose.ui.Alignment.BottomEnd)

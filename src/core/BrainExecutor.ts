@@ -864,7 +864,7 @@ export class BrainExecutor {
 
       messages.push({ role: 'assistant', content: rawResponse });
 
-      // Stuck detector: if the same tool fails twice in a row, stop and report honestly
+      // Stuck detector: if the same tool fails twice in a row, stop and report
       if (isFailure) {
         const prevMsg = messages.length >= 4 ? messages[messages.length - 3].content : '';
         const prevWasSameTool = prevMsg.includes(`"tool":"${toolCall.tool}"`);

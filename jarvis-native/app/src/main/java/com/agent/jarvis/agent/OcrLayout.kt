@@ -4,7 +4,7 @@ package com.agent.jarvis.agent
  * OCR lines put back into reading order for the brain: top to bottom, and lines sitting side by
  * side on the same row joined with " · " (a price next to a name stays with it). The takeover
  * overlay's own words ("Jarvis is working", "Stop") are dropped, and so is the status bar's clock
- * and battery strip at the very top. Pure, JVM-tested; the recognition is in [ScreenVision].
+ * and battery strip at the very top. The recognition is in [ScreenVision].
  */
 object OcrLayout {
 

@@ -106,8 +106,7 @@ class VoiceActivity : ComponentActivity() {
                 }
                 val brain = remember {
                     Brain(applicationContext, engine).also { b ->
-                        // Spoken: no "Answer now" button, so keep thinking short; every answer is
-                        // said out loud, sentence by sentence as it is written.
+                        // Spoken: every answer is said out loud, sentence by sentence as it is written.
                         b.maxThinkingDepth = com.agent.jarvis.agent.WaitBudget.Depth.QUICK
                         b.spokenAlways = true
                         b.onAnswer = { text -> reply = text }

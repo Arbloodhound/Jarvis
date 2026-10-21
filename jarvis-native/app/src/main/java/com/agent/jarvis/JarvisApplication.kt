@@ -8,21 +8,16 @@ class JarvisApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        // Route and action-gate entries in the audit log need a Context they are not handed.
         com.agent.jarvis.gate.GateAuditLog.init(this)
         // Thermal headroom polling (API 30+; no-op below). Read via ThermalGuard.level.
         try { com.agent.jarvis.agent.ThermalGuard.start(this) } catch (_: Exception) {}
-        // Pre-tick apps that look like they hold money or credentials, once,
-        // before the agent has a chance to read anything.
+        // Pre-tick apps that look like they hold money or credentials, once.
         try { com.agent.jarvis.ui.ProtectedApps.seedIfUnset(this) } catch (_: Exception) {}
         wireMemory()
         // Harness scheduler: arm the next tick for the jobs already scheduled (harness/SchedulerRuntime.kt).
         try { com.agent.jarvis.harness.SchedulerRuntime.start(this) } catch (_: Exception) {}
         try { com.agent.jarvis.agent.ForYou.registerJobs(this) } catch (_: Exception) {}
-        // Foreground service keeps the process alive when backgrounded —
-        // on this device class (3.5GB Samsung) backgrounded processes lose
-        // their accessibility binding and get reclaimed.
-        // Not while the owner has Jarvis switched off (JarvisPower).
+        // Foreground service keeps the process alive when backgrounded. Only while Jarvis is on (JarvisPower).
         if (JarvisPower.isOn(this)) try {
             ContextCompat.startForegroundService(
                 this, Intent(this, AgentBackgroundService::class.java)

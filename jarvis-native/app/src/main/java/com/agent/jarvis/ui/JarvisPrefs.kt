@@ -8,7 +8,7 @@ object JarvisPrefs {
 
     private const val K_OWNER_NAME = "owner_name"
     private const val K_INSTRUCTIONS = "custom_instructions"
-    /** Longest custom instructions kept: they go into every prompt, and prompt tokens are prefill time. */
+    /** Longest custom instructions kept: they go into every prompt. */
     const val MAX_INSTRUCTIONS = 1500
 
     /** The owner's name (Settings → PEOPLE): Jarvis is told it, and "[Me]" in transcripts is them. Blank = not set. */

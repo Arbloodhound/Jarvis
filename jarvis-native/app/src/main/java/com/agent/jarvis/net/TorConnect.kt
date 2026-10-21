@@ -6,16 +6,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
- * Starting Tor on request: Settings → "Connect to Tor" and the tor_connect tool (the non-screen
- * route). Tor is built into the app ([EmbeddedTor]); when Orbot already runs on 9050 that is used
- * instead, so two tors don't run side by side. Connected means bootstrapped (in-app) or the proxy
- * port answering (Orbot).
+ * Tor is built into the app ([EmbeddedTor]); when Orbot already runs on 9050 that is used instead.
+ * Connected means bootstrapped (in-app) or the proxy port answering (Orbot).
  */
 object TorConnect {
     const val ORBOT = "org.torproject.android"
     const val TOR_BROWSER = "org.torproject.torbrowser"
 
-    /** How long a connect waits: a cold Tor start (directory download) can take a minute or more. */
+    /** How long a connect waits. */
     const val WAIT_MS = 90_000L
 
     enum class State { OFF, STARTING, ON, FAILED }
@@ -25,7 +23,7 @@ object TorConnect {
     const val IN_APP = "in-app Tor"
     const val VIA_ORBOT = "Orbot"
 
-    /** Pure. What the owner (and the model) is told. */
+    /** Pure. Renders [Outcome] as a status string. */
     fun describe(o: Outcome): String {
         val s = (o.ms + 500) / 1000
         return when (o.state) {

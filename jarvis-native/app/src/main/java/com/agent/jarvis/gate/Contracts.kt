@@ -3,8 +3,7 @@ package com.agent.jarvis.gate
 import org.json.JSONObject
 
 /**
- * Contracts (port of gatellml lang/contracts.py): the deliberately tiny,
- * decidable check fragment. Every check is O(size of argument); each returns
+ * Contracts (port of gatellml lang/contracts.py). Every check is O(size of argument); each returns
  * null on pass or a human-readable hint on violation.
  */
 

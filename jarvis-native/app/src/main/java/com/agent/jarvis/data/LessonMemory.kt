@@ -30,7 +30,7 @@ data class LessonEntity(
 
 @Dao
 interface LessonDao {
-    /** Every lesson, no cap: older lessons that keep working stay in use. Most proven first
+    /** Every lesson, no cap. Most proven first
      * (worked most often, then served most), newest breaking ties. */
     @Query("SELECT * FROM lessons ORDER BY ok DESC, served DESC, createdAt DESC")
     suspend fun all(): List<LessonEntity>

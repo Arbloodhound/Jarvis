@@ -24,7 +24,7 @@ data class ChatMessage(
 /**
  * The conversation store: Compose-visible state backed by Room.
  * messages = the open conversation; conversations = the drawer list.
- * Every append persists; process death no longer erases anything.
+ * Every append persists.
  */
 object ChatStore {
     val messages = mutableStateListOf<ChatMessage>()
@@ -41,17 +41,10 @@ object ChatStore {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val ui = CoroutineScope(Dispatchers.Main.immediate)
 
-    /**
-     * Agent work outlives the screen it was started from.
-     *
-     * Runs used to be launched from the chat screen's own composition scope,
-     * so opening Settings mid-task cancelled the task and the user got
-     * "brain fault - The coroutine scope left the composition". A run belongs
-     * to the app, not to whichever screen happens to be showing.
-     */
+    /** Agent work outlives the screen it was started from; runs live here, not on a composition scope. */
     val agentScope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main.immediate)
 
-    /** True while a run is in flight — process-wide, for the same reason. */
+    /** True while a run is in flight — process-wide. */
     val thinking = mutableStateOf(false)
 
     /**
@@ -69,7 +62,7 @@ object ChatStore {
         }
 
     /**
-     * The model's thinking, kept with the answer it led to (DeepSeek-style: tap to read it all).
+     * The model's thinking, kept with the answer it led to.
      * Keyed by message id; this session only, not saved with the chat.
      */
     val thoughts = mutableStateMapOf<String, String>()
@@ -88,9 +81,7 @@ object ChatStore {
     /**
      * Compose snapshot state is not thread-safe. Streaming answers arrive on
      * OkHttp's IO threads and the on-device model emits from its own worker,
-     * so every mutation of [messages] funnels through here. Writing it from a
-     * background thread crashes the process later, in the global snapshot
-     * observer, far from the line that did it.
+     * so every mutation of [messages] funnels through here.
      */
     private fun onUi(block: () -> Unit) {
         if (Looper.myLooper() == Looper.getMainLooper()) block()
@@ -147,8 +138,7 @@ object ChatStore {
         while (messages.size > i) messages.removeAt(messages.size - 1)
     }
 
-    /** A new conversation holding this one up to and including message [id], opened: try another
-     *  direction from that point without losing this one. */
+    /** A new conversation holding this one up to and including message [id], opened. */
     suspend fun branchFrom(id: String) {
         val i = messages.indexOfFirst { it.id == id }
         if (i < 0) return
@@ -182,8 +172,7 @@ object ChatStore {
     /** Append a streamed piece to a bubble, addressed by id rather than index —
      * indices shift when anything else is added or removed mid-stream. */
     fun appendTo(id: String, piece: String) {
-        // Pieces are batched: one redraw per [STREAM_FLUSH_MS] instead of one main-thread hop and
-        // one bubble rebuild per token (CROSSEVAL_OPENCLAW §2). [textOf]/[messageById] include
+        // Pieces are batched: one redraw per [STREAM_FLUSH_MS]. [textOf]/[messageById] include
         // what is still pending, so nothing reading the bubble sees it short.
         val sb = pendingPieces.getOrPut(id) { StringBuilder() }
         synchronized(sb) { sb.append(piece) }
@@ -258,10 +247,8 @@ object ChatStore {
     }
 
     // ── The chat screen's brain ──────────────────────────────────────────
-    // Owned by the process, not by the screen: runs live on [agentScope], so a
-    // brain built per composition was orphaned when Settings opened mid-run
-    // (its pending confirmation vanished with it). Rebuilt for a new config
-    // only when nothing is in flight. Main thread only.
+    // Owned by the process, not by the screen: runs live on [agentScope].
+    // Rebuilt for a new config only when nothing is in flight. Main thread only.
     private var chatBrain: com.agent.jarvis.agent.Brain? = null
     private var chatBrainVersion = 0
     private var chatSpeaker: Speaker? = null

@@ -1,10 +1,6 @@
 /**
  * AppDirectory — Static map of common app names → Android package names,
  * plus a fuzzy name-matching scorer for installed apps.
- *
- * Purpose: Avoid burning AI credits asking "what is Spotify's package name?"
- * for the 200 most common apps. Also provides a proper scoring-based match
- * against the device's installed app list instead of first-partial-match.
  */
 
 import { JarvisDevLog } from '../utils/JarvisDevLog';

@@ -1,12 +1,9 @@
 package com.agent.jarvis.agent
 
 /**
- * What Jarvis may do for a voice at a LOCKED phone (said to ambient listening). Anyone can talk to
- * a locked phone, so nothing private: no memory, notes, messages, contacts, screen, apps, location
- * or clipboard. Harmless things are fine: flashlight, volume, music, alarms, battery, the time,
- * general questions, and adding a note (it writes, it reveals nothing). Before, a locked phone
- * refused everything ("Unlock your phone to continue"), so "Hey Jarvis, turn on the flashlight"
- * with the phone in a pocket did nothing (owner, 2026-10-07). Pure, JVM-tested.
+ * What Jarvis may do for a voice at a LOCKED phone (said to ambient listening). Nothing private:
+ * no memory, notes, messages, contacts, screen, apps, location or clipboard. Harmless things are
+ * fine: flashlight, volume, music, alarms, battery, the time, general questions, and adding a note.
  */
 object LockedPolicy {
 
@@ -23,7 +20,7 @@ object LockedPolicy {
     fun allowed(request: String): Boolean {
         val r = IntentRouter.requestPart(request).trim()
         if (r.isEmpty()) return false
-        if (com.agent.jarvis.listen.NameInference.told(r) != null) return false   // naming people is the owner's
+        if (com.agent.jarvis.listen.NameInference.told(r) != null) return false
         if (com.agent.jarvis.listen.UserNotes.command(r) != null) return true
         if (MemoryFocus.detect(r) != null || MemoryFocus.screen(r) != null) return false
         if (MemoryBrief.wants(r).search) return false

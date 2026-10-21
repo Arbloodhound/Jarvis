@@ -8,7 +8,6 @@ import { JarvisDevLog as DebugLog } from '../utils/JarvisDevLog';
 //   pro     — agent works, no ads, API unlocked ($9.99/mo)
 //   dev     — everything, no restrictions (7-tap toggle)
 //
-// No backend. No credits. No proxy. BYO API only.
 // Subscriptions handled by Google Play / App Store.
 // ═══════════════════════════════════════════════════════
 
@@ -63,15 +62,6 @@ export class TierService {
     } catch {}
 
     await this.loadTodayUsage();
-
-    // ══════════════════════════════════════════════════════
-    // SUBSCRIPTION CHECK: When Google Play Billing is added,
-    // verify subscription status here and set tier accordingly.
-    //
-    // const subStatus = await GooglePlayBilling.getSubscriptionStatus();
-    // if (subStatus === 'pro') this.tier = 'pro';
-    // else if (subStatus === 'no_ads') this.tier = 'no_ads';
-    // ══════════════════════════════════════════════════════
 
     this.initialized = true;
     DebugLog.systemEvent('TierService', `Initialized: tier=${this.tier} msgs=${this.usage.messageCount} ai=${this.usage.aiCallCount}`);

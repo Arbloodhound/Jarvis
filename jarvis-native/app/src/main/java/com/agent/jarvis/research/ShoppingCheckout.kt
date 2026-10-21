@@ -1,21 +1,11 @@
 package com.agent.jarvis.research
 
 /**
- * Gated checkout preparation — port of the TESTED Python reference
- * (jarvis-v4/shopping/checkout.py).
+ * Gated checkout preparation. Builds the order plan; stops at confirmation.
+ * No purchase-execution path in this file: no cart APIs, no payment sending.
  *
- * GATED PREPARATION ONLY. This builds the order plan and STOPS at
- * the owner's confirmation. There is NO purchase-execution path in
- * this file: no cart APIs, no payment sending. Approval hands the
- * plan to the existing gated tool flow (their 120s confirm card) —
- * a SEPARATE step, never implied here.
- *
- * cryptoPrep is display-only {amount, address} for the confirm
- * card. Keys and seed phrases are NEVER handled — not here, not
- * anywhere in this module.
- *
- * SOURCE ONLY: not compiled in this sandbox. Pure logic — no
- * Android deps. The confirm-card wiring itself is repo-side.
+ * cryptoPrep is display-only {amount, address} for the confirm card; keys and
+ * seed phrases are never handled.
  */
 object ShoppingCheckout {
 

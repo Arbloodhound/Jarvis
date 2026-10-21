@@ -8,9 +8,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * The on/off switch for everything Jarvis runs in the background (owner, 2026-10-20: "an on and off
- * button … so it's not draining all my battery"). Off: any run stops, background listening and the
- * keep-alive service stop, both models leave memory, and the memory model does no background work.
+ * The on/off switch for everything Jarvis runs in the background. Off: any run stops, background
+ * listening and the keep-alive service stop, both models leave memory, and the memory model does no
+ * background work.
  * Nothing restarts them (app start, boot) until it is turned on again. Opening the app and asking
  * still works; the model loads for that question.
  *

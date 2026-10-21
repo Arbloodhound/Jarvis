@@ -6,8 +6,7 @@ import org.json.JSONObject
  * Obvious one-shot voice/text commands turned into a tool call WITHOUT a model run: "flashlight on",
  * "volume 50", "hang up", "call mom". The whole request must be the command (anchored), not a
  * question and not a chain. The call still goes through the gate and confirm cards like any other
- * ([Brain.runLocalCall]); anything that does not match falls through to the model. Pure, JVM-tested.
- * (Owner, 2026-10-19: fast voice. The model run, 5-50 s on the phone, was the delay for commands.)
+ * ([Brain.runLocalCall]); anything that does not match falls through to the model.
  */
 object FastCommand {
     private val LEAD = Regex("^(?:hey jarvis[, ]*|jarvis[, ]*|please[, ]*|can you[, ]*|could you[, ]*)+", RegexOption.IGNORE_CASE)

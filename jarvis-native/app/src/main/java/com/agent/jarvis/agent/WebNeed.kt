@@ -1,11 +1,10 @@
 package com.agent.jarvis.agent
 
 /**
- * When the on-device brain gets web results first (owner, 2026-10-07: it kept saying it can't
- * browse the internet, though the phone is online). Asked for in words ("search the web for …",
+ * When the on-device brain gets web results first. Asked for in words ("search the web for …",
  * "google …", "look up …"), or a question about something current (news, weather, prices, scores,
  * "latest", "today's"). The app searches ([Tools] web_search: DuckDuckGo, Wikipedia) and the results
- * go to the brain in a block; the model never browses by itself. Pure, JVM-tested.
+ * go to the brain in a block; the model never browses by itself.
  */
 object WebNeed {
     private val ASKED = Regex(
@@ -18,7 +17,7 @@ object WebNeed {
             "weather|forecast|temperature outside|price of|prices?|cost of|stock|share price|exchange rate|" +
             "scores?|who won|results? of|fixtures?|opening hours|open now|near me|release date|came out|" +
             "trending|election|this year|" +
-            // Finding products (owner: "look for certain products I ask for"): always a search.
+            // Finding products: always a search.
             "cheapest|best deals?|on sale|in stock|where (?:can|do|to) (?:i )?(?:buy|get|find)|for sale|reviews? of|" +
             "find me|look for|looking for|compare)\\b",
         RegexOption.IGNORE_CASE,

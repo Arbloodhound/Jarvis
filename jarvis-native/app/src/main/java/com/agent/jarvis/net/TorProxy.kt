@@ -73,14 +73,10 @@ class TorProxy(
         /** Orbot's (and the tor daemon's) loopback address. */
         const val HOST = "127.0.0.1"
 
-        /**
-         * Orbot's default SOCKS port (also the tor daemon's). A constant, not a setting: Orbot
-         * uses it unless the owner changes it there. Tor Browser's own port (9150) is not used —
-         * it's the browser's, not shared with other apps on Android.
-         */
+        /** Orbot's default SOCKS port (also the tor daemon's). */
         const val PORT = 9050
 
-        /** Tor Browser's user agent family: the same as many onion visitors, nothing that names Jarvis. */
+        /** Tor Browser's user agent family. */
         private const val UA = "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"
 
         /** The in-app Tor's SOCKS port once it is bootstrapped (EmbeddedTor), else -1. */

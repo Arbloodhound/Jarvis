@@ -23,9 +23,6 @@ class JarvisNotificationService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         Log.i(TAG, "notification listener connected")
-        // The app policy used to be loaded only when the accessibility service
-        // connected; with that service off, every protected app's notifications
-        // were processed and logged.
         AgentAccessibilityService.loadBlockedPackages(this)
         EventTrigger.registerDefaults()
     }
@@ -44,9 +41,6 @@ class JarvisNotificationService : NotificationListenerService() {
             val warned = runTriggers(sbn.packageName, title, text, sbn.key,
                 (sbn.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) != 0)
 
-            // Capture is standing collection, not a per-task read: without
-            // this check every banking alert, message preview and two-factor
-            // code lands in a log on disk.
             if (!com.agent.jarvis.ui.JarvisPrefs.captureNotifications(this)) return
             // Notification filter (Settings, off by default): quiet hours and a per-app burst limit
             // decide what Jarvis keeps. The triggers above already saw it (scam shield, codes).
@@ -98,12 +92,10 @@ class JarvisNotificationService : NotificationListenerService() {
                 EventTrigger.Action.Type.WARN -> {
                     warned = a.data
                     Log.i(TAG, "SCAM WARN from=${pkg}: ${a.data}")
-                    // A notification stays until it is read; a toast is gone in seconds and may
-                    // not show at all over a full-screen app (seen on the A15 over YouTube).
                     val posted = postWarning(title, a.label)
                     android.os.Handler(mainLooper).post {
                         if (!posted) Toast.makeText(this, "Jarvis: " + a.label, Toast.LENGTH_LONG).show()
-                        // Said out loud too: the person most likely to fall for it may not read a toast.
+                        // Said out loud too.
                         if (com.agent.jarvis.ui.JarvisPrefs.speakAnswers(this)) {
                             speaker().speak("Careful. " + a.label + " Don't send money, codes or cards to it.")
                         }
@@ -174,8 +166,6 @@ class JarvisNotificationService : NotificationListenerService() {
     companion object {
         private const val TAG = "JarvisNotif"
         private const val SCAM_CHANNEL = "jarvis_scam_warnings"
-        // 7001 is AgentBackgroundService's foreground notification and 7101
-        // AmbientListenService's; 7000 + (ms % 1000) replaced them.
         private const val SCAM_ID_BASE = 20000
     }
 }
