@@ -16,6 +16,8 @@ import type { Vision } from "../vision.js";
 import { speak as speakVoice, type Transcriber } from "../voice.js";
 import * as os from "./platform.js";
 import { shoppingTools } from "./shopping.js";
+import { BROWSE_DEFAULT_STEPS, BROWSE_MAX_STEPS, renderBrowseReport, runBrowseTask } from "./browse.js";
+import { seeActVerifyTool } from "./screenact.js";
 
 export {
   excludeOnion, extractListings, extractNavLinks, extractPrices, extractReputation, extractReviews,
@@ -576,6 +578,33 @@ const webSearchTool = tool({
   },
 });
 
+const browseTaskTool = tool({
+  name: "browse_task",
+  description:
+    "Browse autonomously for a goal: starting from a search (or a start URL), fetch pages in full and follow their outbound links within a step budget, then return a structured report. Every fact in the report comes from a page actually fetched in full and carries that page's URL and content hash; search snippets are labelled as snippets and are never page content or evidence. A page that cannot be fetched is reported as FAILED — say so, never fill the gap from a snippet. Reading only: no forms, no clicks, no purchases. .onion links are refused (no Tor transport in this build).",
+  schema: z.object({
+    goal: z.string().min(1).max(2000).describe("What to find out by browsing"),
+    start_url: z.string().url().optional().describe("Start here instead of searching"),
+    search_query: z.string().min(1).max(500).optional().describe("Search query to seed the task (defaults to the goal)"),
+    max_steps: z.number().int().min(1).max(BROWSE_MAX_STEPS).optional().describe(`Page-fetch budget (default ${BROWSE_DEFAULT_STEPS}, hard cap ${BROWSE_MAX_STEPS})`),
+  }),
+  policy: { effects: ["egress"], egressArgs: ["goal", "search_query"], targetArgs: ["start_url"] },
+  outside: true,
+  network: true,
+  async run({ goal, start_url, search_query, max_steps }, ctx) {
+    const report = await runBrowseTask(
+      { goal, startUrl: start_url, searchQuery: search_query, maxSteps: max_steps },
+      {
+        fetchFn: safeFetch,
+        searchFn: async (q, signal) => runWebSearch(q, signal),
+        htmlToText,
+        signal: ctx.signal,
+      },
+    );
+    return renderBrowseReport(report);
+  },
+});
+
 // ---------- desktop ----------
 
 const openUrlTool = tool({
@@ -683,18 +712,20 @@ const seeImageTool = tool({
 const controlScreenTool = tool({
   name: "control_screen",
   description:
-    "Type text, press a key combo, or click at a point on the screen. Experimental; off unless the owner turned it on. Every action asks the owner first. Use look_at_screen to see before acting.",
+    "Type text, press a key combo, click, move the cursor, or scroll on the screen. The cursor glides along a smooth eased path (never a teleport), typing follows a natural variable cadence, and scrolling is emitted in small increments. Experimental; off unless the owner turned it on. Every action asks the owner first. Use look_at_screen to see before acting.",
   schema: z.object({
-    action: z.enum(["type", "key", "click"]),
+    action: z.enum(["type", "key", "click", "move", "scroll"]),
     text: z.string().max(2000).optional().describe("for type"),
     keys: z.string().max(40).optional().describe("for key, e.g. ctrl+c, Return, Tab"),
     x: z.number().int().min(0).max(20000).optional(),
     y: z.number().int().min(0).max(20000).optional(),
     button: z.enum(["left", "right", "middle"]).optional(),
+    direction: z.enum(["up", "down"]).optional().describe("for scroll"),
+    amount: z.number().int().min(-60).max(60).optional().describe("for scroll: wheel clicks (positive = down, negative = up); with direction, its size is used"),
   }),
   // Experimental and far-reaching: a confirm card for every single action.
   policy: { effects: ["mutate"], alwaysConfirm: true },
-  async run({ action, text, keys, x, y, button }) {
+  async run({ action, text, keys, x, y, button, direction, amount }) {
     if (action === "type") {
       if (!text) throw new Error("Nothing to type.");
       await os.screenType(text);
@@ -704,6 +735,18 @@ const controlScreenTool = tool({
       if (!keys) throw new Error("No key combo given.");
       await os.screenKey(keys);
       return `Pressed ${keys}.`;
+    }
+    if (action === "move") {
+      if (x === undefined || y === undefined) throw new Error("Move needs x and y.");
+      await os.screenMove(x, y);
+      return `Moved the cursor to ${x}, ${y}.`;
+    }
+    if (action === "scroll") {
+      let signed = amount ?? 3;
+      if (direction) signed = (direction === "down" ? 1 : -1) * Math.abs(signed || 3);
+      if (signed === 0) throw new Error("Scroll amount is zero.");
+      await os.screenScroll(signed, x, y);
+      return `Scrolled ${signed > 0 ? "down" : "up"} ${Math.abs(signed)} clicks.`;
     }
     if (x === undefined || y === undefined) throw new Error("Click needs x and y.");
     await os.screenClick(x, y, button ?? "left");
@@ -811,17 +854,17 @@ const forgetTool = tool({
 
 export const ALL_TOOLS: Tool[] = [
   readFileTool, listDirTool, findFilesTool, writeFileTool, runCommandTool,
-  webSearchTool, webFetchTool, openUrlTool, openAppTool,
+  webSearchTool, webFetchTool, browseTaskTool, openUrlTool, openAppTool,
   clipboardReadTool, clipboardWriteTool, notifyTool, screenshotTool, seeScreenTool, seeImageTool, controlScreenTool, systemInfoTool,
   transcribeAudioTool, speakTool,
-  rememberTool, recallTool, forgetTool,
+  rememberTool, recallTool, forgetTool, seeActVerifyTool,
   ...shoppingTools(),
 ];
 
 export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean }): Tool[] {
   return ALL_TOOLS.filter((t) => {
     if (opts.offlineOnly && t.network) return false;
-    if (t.name === "control_screen" && !opts.screenControl) return false;
+    if ((t.name === "control_screen" || t.name === "see_act_verify") && !opts.screenControl) return false;
     if (t.name === "speak" && opts.ttsEnabled === false) return false;
     return true;
   }).map((t) => {
