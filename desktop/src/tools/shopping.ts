@@ -1145,7 +1145,7 @@ function shopSearchTool(): Tool {
   network: true,
   parallelSafe: true,
   async run({ query }, ctx) {
-    const outcome = await runWebSearch(`${query} buy price`, ctx.signal);
+    const outcome = await runWebSearch(`${query} buy price`, ctx.signal, ctx.webFetch ?? safeFetch);
     if (!outcome.results.length) return outcome.text;
     const candidates = outcome.results.map((r) => blankRow({ title: r.title, link: r.url, sourceUrl: r.url, note: r.snippet }));
     const lines = [
@@ -1192,7 +1192,7 @@ function marketplaceSearchTool(): Tool {
   network: true,
   parallelSafe: true,
   async run({ query, marketplace = "ebay", sort = "price" }, ctx) {
-    return fetchMarketplace(query, marketplace, sort, ctx.signal);
+    return fetchMarketplace(query, marketplace, sort, ctx.signal, ctx.webFetch ?? safeFetch);
   },
   });
 }
@@ -1212,7 +1212,7 @@ function marketplaceNavigateTool(): Tool {
   outside: true,
   network: true,
   async run({ action, url, index, by, session = "default" }, ctx) {
-    return runMarketplaceNav(session, { action, url, index, by }, ctx.signal);
+    return runMarketplaceNav(session, { action, url, index, by }, ctx.signal, ctx.webFetch ?? safeFetch);
   },
   });
 }
@@ -1240,7 +1240,7 @@ function productCheckTool(): Tool {
   parallelSafe: true,
   async run({ url, seen_prices = [] }, ctx) {
     const seen: Money[] = seen_prices.map((p) => ({ amount: p.amount, currency: p.currency, raw: "" }));
-    return runProductCheck(url, seen, ctx);
+    return runProductCheck(url, seen, ctx, ctx.webFetch ?? safeFetch, ctx.webFetchBytes ?? safeFetchBytes);
   },
   });
 }
@@ -1272,7 +1272,7 @@ function sellerCheckTool(): Tool {
   network: true,
   parallelSafe: true,
   async run({ url, extra_urls = [], seller = "" }, ctx) {
-    return runSellerCheck([url, ...extra_urls], seller, ctx);
+    return runSellerCheck([url, ...extra_urls], seller, ctx, ctx.webFetch ?? safeFetch, ctx.webFetchBytes ?? safeFetchBytes);
   },
   });
 }
@@ -1291,7 +1291,7 @@ function productReviewsTool(): Tool {
   parallelSafe: true,
   async run({ url, extra_urls = [] }, ctx) {
     const urls = [url, ...extra_urls];
-    const { set, refusal } = await fetchProductReviews(urls, ctx.signal);
+    const { set, refusal } = await fetchProductReviews(urls, ctx.signal, ctx.webFetch ?? safeFetch);
     if (refusal) return refusal;
     return reviewsTable(set!, urls);
   },

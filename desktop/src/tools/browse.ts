@@ -22,9 +22,9 @@ import { createHash } from "node:crypto";
  *  - Navigation is bounded: a step budget (one step = one page fetch
  *    attempt), default 8, hard cap 15. Reading only — no form
  *    submission, no clicks, no purchases; the only verb is GET.
- *  - .onion URLs are refused, never fetched: main has no Tor transport
- *    for web tools today, and an onion must never be fetched over
- *    clearnet.
+ *  - .onion URLs are fetched only when Tor is on (deps.torEnabled, with
+ *    fetchFn the Tor transport, which fails closed); with Tor off they are
+ *    refused, never fetched — an onion is never fetched over clearnet.
  *
  * Why a tool-internal loop and not an agent-loop sub-run: a tool's
  * context (ToolContext in tools/index.ts) carries no provider handle,
@@ -73,6 +73,8 @@ export interface BrowseDeps {
   /** The same HTML→text conversion web_fetch uses. */
   htmlToText: (html: string) => string;
   signal: AbortSignal;
+  /** True when fetchFn is the Tor transport — the only case an .onion is fetched. */
+  torEnabled?: boolean;
 }
 
 export interface BrowseOptions {
@@ -260,12 +262,12 @@ export async function runBrowseTask(opts: BrowseOptions, deps: BrowseDeps): Prom
     report.stepsUsed++;
     const step = report.stepsUsed;
 
-    if (isOnionUrl(next.url)) {
+    if (isOnionUrl(next.url) && !deps.torEnabled) {
       report.failed.push({
         step,
         url: next.url,
         foundOn: next.foundOn,
-        error: "REFUSED: .onion URLs are not fetched — this build has no Tor transport for web tools, and an onion is never fetched over clearnet.",
+        error: "REFUSED: .onion URLs are fetched only through Tor, and Tor is off — an onion is never fetched over clearnet.",
       });
       continue;
     }

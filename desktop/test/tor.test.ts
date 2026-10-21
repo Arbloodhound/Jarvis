@@ -37,12 +37,13 @@ interface StubProxy {
   close(): Promise<void>;
 }
 
-function startStubProxy(opts: { grantThenClose?: boolean } = {}): Promise<StubProxy> {
+function startStubProxy(opts: { grantThenClose?: boolean; respond?: (host: string) => { type: string; body: string | Buffer } } = {}): Promise<StubProxy> {
   const connects: StubProxy["connects"] = [];
   let greetings = 0;
   const server = createServer((sock: Socket) => {
     let buf = Buffer.alloc(0);
     let stage: "greeting" | "connect" | "tunnel" = "greeting";
+    let connHost = "";
     sock.on("error", () => {});
     sock.on("data", (chunk) => {
       buf = Buffer.concat([buf, chunk as Buffer]);
@@ -81,6 +82,7 @@ function startStubProxy(opts: { grantThenClose?: boolean } = {}): Promise<StubPr
           }
           buf = buf.subarray(4 + addrLen + 2);
           connects.push({ atyp, host });
+          connHost = host;
           sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0])); // granted
           // Search test variant: the stub cannot terminate TLS, so it
           // grants the tunnel and closes — the fetch then fails fast at
@@ -91,9 +93,10 @@ function startStubProxy(opts: { grantThenClose?: boolean } = {}): Promise<StubPr
         }
         // Tunnel open: be the origin server for whatever HTTP arrives.
         if (!buf.includes("\r\n\r\n")) return;
-        sock.end(
-          `HTTP/1.1 200 OK\r\ncontent-type: text/html\r\ncontent-length: ${Buffer.byteLength(STUB_BODY)}\r\nconnection: close\r\n\r\n${STUB_BODY}`,
-        );
+        const page = opts.respond?.(connHost) ?? { type: "text/html", body: STUB_BODY };
+        const body = typeof page.body === "string" ? Buffer.from(page.body) : page.body;
+        sock.write(`HTTP/1.1 200 OK\r\ncontent-type: ${page.type}\r\ncontent-length: ${body.length}\r\nconnection: close\r\n\r\n`);
+        sock.end(body);
         return;
       }
     });
@@ -264,6 +267,75 @@ test("the web_search tool bound with Tor on asks every provider through the prox
   } finally {
     await stub.close();
   }
+});
+
+// Every web tool shares one transport: with Tor on, toolsFor hands each
+// tool's run a Tor-bound webFetch / webFetchBytes, so shopping, browse and
+// investigate fetch through the proxy exactly like web_fetch does.
+
+const PNG_1PX = Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000" + "1f15c4890000000d4944415478da63f8cfc0f01f0005000201" + "e221bc330000000049454e44ae426082", "hex");
+
+test("product_check with Tor on: the listing page AND its photo (vision read) transit the proxy", async () => {
+  const page = `<html><head><title>Kettle</title><meta property="og:image" content="http://img.example.com/kettle.png"></head><body><h1>Kettle</h1><p>Price: $25.00</p></body></html>`;
+  const stub = await startStubProxy({ respond: (host) => (host === "img.example.com" ? { type: "image/png", body: PNG_1PX } : { type: "text/html", body: page }) });
+  const home = mkdtempSync(path.join(tmpdir(), "jarvis-tor-shop-"));
+  try {
+    const tools = toolsFor({ offlineOnly: false, screenControl: false, tor: { enabled: true, socksPort: stub.port } });
+    const pc = tools.find((t) => t.name === "product_check")!;
+    const asked: string[] = [];
+    const vision = { kind: "local", label: "stub-vlm", describe: async (_imgs: unknown, q: string) => { asked.push(q); return "A white kettle; price tag reads $25.00."; } };
+    const out = await pc.run({ url: "http://shop.example.com/kettle" } as never, { ...toolCtx(home), vision: vision as never, visionEnabled: true });
+    const hosts = stub.connects.map((c) => c.host);
+    assert.ok(hosts.includes("shop.example.com"), `page via proxy: ${hosts}`);
+    assert.ok(hosts.includes("img.example.com"), `photo via proxy: ${hosts}`);
+    assert.ok(stub.connects.every((c) => c.atyp === 3), "hostnames unresolved");
+    assert.equal(asked.length, 1, "the photo was read once");
+    assert.match(out, /Vision read/);
+  } finally {
+    await stub.close();
+  }
+});
+
+test("browse_task with Tor on fetches an .onion start page through the proxy", async () => {
+  const stub = await startStubProxy();
+  const home = mkdtempSync(path.join(tmpdir(), "jarvis-tor-browse-"));
+  try {
+    const tools = toolsFor({ offlineOnly: false, screenControl: false, tor: { enabled: true, socksPort: stub.port } });
+    const bt = tools.find((t) => t.name === "browse_task")!;
+    const out = await bt.run({ goal: "read the page", start_url: ONION, max_steps: 1 } as never, toolCtx(home));
+    assert.deepEqual(stub.connects, [{ atyp: 3, host: new URL(ONION).hostname }]);
+    assert.ok(!/REFUSED/.test(out), out);
+    assert.ok(out.includes(STUB_BODY), out);
+  } finally {
+    await stub.close();
+  }
+});
+
+test("product_check on an .onion listing: Tor on fetches it through the proxy; Tor off gets the transport refusal", async () => {
+  // No shopping-layer onion exclusion (owner reversal, 2026-10-20): the transport decides.
+  const listing = `<html><head><title>Onion Kettle</title></head><body><h1>Onion Kettle</h1><p>Price: $19.00</p></body></html>`;
+  const stub = await startStubProxy({ respond: () => ({ type: "text/html", body: listing }) });
+  const home = mkdtempSync(path.join(tmpdir(), "jarvis-tor-onion-shop-"));
+  try {
+    const on = toolsFor({ offlineOnly: false, screenControl: false, tor: { enabled: true, socksPort: stub.port } }).find((t) => t.name === "product_check")!;
+    const out = await on.run({ url: ONION } as never, toolCtx(home));
+    assert.deepEqual(stub.connects, [{ atyp: 3, host: new URL(ONION).hostname }]);
+    assert.match(out, /Onion Kettle/);
+    const off = toolsFor({ offlineOnly: false, screenControl: false }).find((t) => t.name === "product_check")!;
+    const refused = await off.run({ url: ONION } as never, toolCtx(home));
+    assert.match(refused, /opens \.onion addresses only with Tor on/);
+    assert.equal(stub.connects.length, 1, "Tor off never touched the proxy");
+  } finally {
+    await stub.close();
+  }
+});
+
+test("browse_task with Tor off refuses an .onion before any fetch", async () => {
+  const home = mkdtempSync(path.join(tmpdir(), "jarvis-notor-browse-"));
+  const tools = toolsFor({ offlineOnly: false, screenControl: false });
+  const bt = tools.find((t) => t.name === "browse_task")!;
+  const out = await bt.run({ goal: "read the page", start_url: ONION, max_steps: 1 } as never, toolCtx(home));
+  assert.match(out, /fetched only through Tor, and Tor is off/);
 });
 
 // ---------- settings / update path ----------

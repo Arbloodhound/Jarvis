@@ -60,6 +60,10 @@ export interface ToolContext {
   signal: AbortSignal;
   /** How web tools fetch. Set per run by toolsFor (Tor transport when on); direct safeFetch otherwise. */
   webFetch?: WebFetchFn;
+  /** The image-bytes sibling of webFetch (vision reads of listing photos). Same Tor binding. */
+  webFetchBytes?: WebFetchBytesFn;
+  /** True when this run's web transport is Tor — the only case an .onion may be fetched. */
+  torEnabled?: boolean;
 }
 
 export interface Tool<S extends z.ZodType = z.ZodType> {
@@ -699,7 +703,7 @@ const webSearchTool = tool({
 const browseTaskTool = tool({
   name: "browse_task",
   description:
-    "Browse autonomously for a goal: starting from a search (or a start URL), fetch pages in full and follow their outbound links within a step budget, then return a structured report. Every fact in the report comes from a page actually fetched in full and carries that page's URL and content hash; search snippets are labelled as snippets and are never page content or evidence. A page that cannot be fetched is reported as FAILED — say so, never fill the gap from a snippet. Reading only: no forms, no clicks, no purchases. .onion links are refused (no Tor transport in this build).",
+    "Browse autonomously for a goal: starting from a search (or a start URL), fetch pages in full and follow their outbound links within a step budget, then return a structured report. Every fact in the report comes from a page actually fetched in full and carries that page's URL and content hash; search snippets are labelled as snippets and are never page content or evidence. A page that cannot be fetched is reported as FAILED — say so, never fill the gap from a snippet. Reading only: no forms, no clicks, no purchases. .onion links are fetched only when Tor is on (through Tor, never clearnet); with Tor off they are refused.",
   schema: z.object({
     goal: z.string().min(1).max(2000).describe("What to find out by browsing"),
     start_url: z.string().url().optional().describe("Start here instead of searching"),
@@ -713,10 +717,11 @@ const browseTaskTool = tool({
     const report = await runBrowseTask(
       { goal, startUrl: start_url, searchQuery: search_query, maxSteps: max_steps },
       {
-        fetchFn: safeFetch,
-        searchFn: async (q, signal) => runWebSearch(q, signal),
+        fetchFn: ctx.webFetch ?? safeFetch,
+        searchFn: async (q, signal) => runWebSearch(q, signal, ctx.webFetch ?? safeFetch),
         htmlToText,
         signal: ctx.signal,
+        torEnabled: ctx.torEnabled === true,
       },
     );
     return renderBrowseReport(report);
@@ -1135,20 +1140,24 @@ export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; v
     if (opts.cloudVision && (out.name === "look_at_screen" || out.name === "look_at_image")) {
       out = { ...out, policy: { ...out.policy, alwaysConfirm: true } };
     }
-    // Tor is transport, not a new tool: the same web search/fetch, fetching
-    // through the proxy. The binding is built per toolsFor call — and the
-    // agent asks for its tools per run — so a settings toggle takes effect
-    // on the next run without a restart. Offline-only still wins above:
-    // with it on, these tools are filtered out before this point.
-    if (opts.tor?.enabled && (out.name === "web_search" || out.name === "web_fetch")) {
-      const webFetch = makeWebFetch(opts.tor);
+    // Tor is transport, not a new tool: every tool that touches the web
+    // (search, fetch, browse, shopping pages and listing images,
+    // investigate) fetches through the proxy via the ctx transport. The
+    // binding is built per toolsFor call — and the agent asks for its tools
+    // per run — so a settings toggle takes effect on the next run without a
+    // restart. Offline-only still wins above: with it on, the web tools are
+    // filtered out before this point.
+    if (opts.tor?.enabled) {
+      const tor = opts.tor;
+      const webFetch = makeWebFetch(tor);
+      const webFetchBytes = makeWebFetchBytes(tor);
       const orig = out;
       out = {
         ...orig,
         description: orig.name === "web_fetch"
           ? `${orig.description} Tor is on: the request goes through Tor, and .onion addresses work.`
           : orig.description,
-        run: (args, ctx) => orig.run(args, { ...ctx, webFetch }),
+        run: (args, ctx) => orig.run(args, { ...ctx, webFetch, webFetchBytes, torEnabled: true }),
       };
     }
     return out;

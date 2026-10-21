@@ -3,7 +3,7 @@ import type { ToolPolicy } from "../gate/gate.js";
 import {
   CaseStore, LEGS, LEG_LABELS, gatherLeg, summarizeCase, type Leg,
 } from "../investigate.js";
-import { htmlToText, runWebSearch, safeFetch, type Tool } from "./index.js";
+import { htmlToText, runWebSearch, safeFetch, type Tool, type WebFetchFn } from "./index.js";
 
 /**
  * The investigate tools. Case CRUD is local-file only (storage under the app
@@ -26,7 +26,7 @@ function tool<S extends z.ZodType>(t: {
   outside?: boolean;
   parallelSafe?: boolean;
   network?: boolean;
-  run(args: z.infer<S>, ctx: { home: string; signal: AbortSignal }): Promise<string>;
+  run(args: z.infer<S>, ctx: { home: string; signal: AbortSignal; webFetch?: WebFetchFn }): Promise<string>;
 }): Tool {
   return t as unknown as Tool;
 }
@@ -185,9 +185,9 @@ export const investigateRunTool = tool({
   async run({ case: slug, leg }, ctx) {
     const s = store(ctx.home);
     const out = await gatherLeg(s, slug, leg as Leg, {
-      search: async (q) => (await runWebSearch(q, ctx.signal)).results,
+      search: async (q) => (await runWebSearch(q, ctx.signal, ctx.webFetch ?? safeFetch)).results,
       fetchText: async (url) => {
-        const res = await safeFetch(url, ctx.signal);
+        const res = await (ctx.webFetch ?? safeFetch)(url, ctx.signal);
         if (res.status >= 400) throw new Error(`HTTP ${res.status}`);
         return res.type.includes("html") ? htmlToText(res.body) : res.body;
       },
