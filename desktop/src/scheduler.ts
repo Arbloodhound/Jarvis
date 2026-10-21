@@ -514,13 +514,19 @@ export class Scheduler {
     }
     // Bookkeeping: a firing counts as a run whether it ran, failed or was
     // declined — a broken or card-blocked job retries on its next period,
-    // never in a tight loop. A once job never fires twice.
-    const fresh = this.deps.store.get(job.id) ?? job;
-    fresh.lastRun = iso(nowMs);
-    if (fresh.kind === "once") { fresh.enabled = false; fresh.nextRun = null; }
-    else if (fresh.kind === "cron" && fresh.enabled) fresh.nextRun = computeNextRun(fresh.kind, fresh.schedule, nowMs, null);
-    else fresh.nextRun = null;
-    this.deps.store.put(fresh);
+    // never in a tight loop. A once job never fires twice. A job removed
+    // while it ran (e.g. `jarvis jobs remove` in another process) stays
+    // removed: nothing is written back, and the removal is logged.
+    const fresh = this.deps.store.get(job.id);
+    if (fresh) {
+      fresh.lastRun = iso(nowMs);
+      if (fresh.kind === "once") { fresh.enabled = false; fresh.nextRun = null; }
+      else if (fresh.kind === "cron" && fresh.enabled) fresh.nextRun = computeNextRun(fresh.kind, fresh.schedule, nowMs, null);
+      else fresh.nextRun = null;
+      this.deps.store.put(fresh);
+    } else {
+      this.audit({ event: "scheduler_job_removed_during_run", jobId: job.id, owner: job.owner, kind: job.kind, detail: "the job was removed while it ran; not saved back" });
+    }
     this.audit({ event: "scheduler_run", jobId: job.id, owner: job.owner, kind: job.kind, status, detail });
     const outcome: FireOutcome = { jobId: job.id, owner: job.owner, status, at: iso(nowMs), detail };
     this.remember(outcome);

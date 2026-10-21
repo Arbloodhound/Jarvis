@@ -358,6 +358,22 @@ test("start(): a job due before the scheduler started is held to the grace rule 
   assert.ok(entries.some((e) => e.event === "scheduler_missed_skipped" && e.jobId === old.id));
 });
 
+test("a job removed while it fires stays removed: no save after the run, and the removal is audited", async () => {
+  let id = "";
+  let store!: JobStore;
+  const made = makeScheduler(async () => { store.remove(id); return { detail: "x" }; }); // `jarvis jobs remove` mid-run
+  store = made.store;
+  id = store.add({ owner: "me", kind: "cron", schedule: "every 60s", task: "t" }, T0).id;
+  const out = await made.sched.tick(T0 + 61_000);
+  assert.equal(out[0]?.status, "ran");
+  assert.equal(store.get(id), null); // not written back
+  assert.equal(store.load().length, 0);
+  const gone = made.entries.find((e) => e.event === "scheduler_job_removed_during_run");
+  assert.equal(gone?.jobId, id);
+  assert.equal(gone?.owner, "me");
+  assert.ok(made.entries.some((e) => e.event === "scheduler_run" && e.jobId === id)); // the run itself is still logged
+});
+
 // ------------------------------------------------------------------ hooks ---
 
 test("hook job fires when its watched file changes, and not before", { timeout: 30_000 }, async () => {
