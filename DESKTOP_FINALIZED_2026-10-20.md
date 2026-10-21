@@ -141,6 +141,46 @@ The owner clarified that the vision rule is not literal. With vision off, only l
 withheld again, as the vision-shopping build designed it; see_act_verify stays available. The two assertions that
 pinned the extension were removed (no test count change). Gate: 343/343.
 
+## Bug-review fixes (2026-10-21) — main `f18a20e`, 404/404
+
+Three parallel reviews of today's merges found confirmed bugs. Each fix was written with a test that failed on the old
+code first, and each branch was merged after a full gate:
+
+| Branch | Fixes |
+|---|---|
+| fix/notif-config | notifications config validation, atomic inbox drain judged by arrival time, ASCII-safe investigate slugs |
+| fix/scheduler | no overlapping ticks or double-fire, grace rule for jobs missed before start, removed jobs stay removed, DST spring gap |
+| fix/tools-gate | list URL arguments gated (secret egress), see_act_verify acts once per card, notifications marked as untrusted, investigate target gated, open_url refuses .onion |
+| fix/memory | supersede revival plus cycle refusal, echo matching on whole tokens with the same numbers, per-echo source check, reload across processes, honest drop/promote |
+| fix/runtime | serialized terminal cards, failures reported as FAILED, hand-off notices, `ask` waits for subagents, Stop reaches scheduled runs, labelled subagent boxes, late steer read, stale cards settled |
+
+Also: only the main agent reads notifications; subagents and scheduled runs don't (`f18a20e`).
+
+## IN FLIGHT — automated finish (if this session stops, the scheduled routine does this)
+
+Two branches are being built. Their agents push them to origin when they pass their gate:
+- `feat/design-calls`:
+  - `create_skill` tool, which needs a card
+  - writes into a skills folder need a card
+  - investigation draft approval needs the owner's card
+  - recall no longer inflates salience
+  - scheduler lock across processes
+  - DST fall-back double-fire
+- `feat/agents-skills-ui`:
+  - Skills and Agents menus: list, create, edit and delete
+  - AGENT.md definitions
+  - create_agent / list_agents / delete_agent tools
+  - `spawn_agent {agent}`
+  - token-protected /api/skills and /api/agents
+
+Ritual for each branch once it exists on origin:
+1. Merge into fresh origin/main with `--no-ff`. Resolve conflicts by keeping both sides.
+2. In desktop/: `npm install`, `npx tsc --noEmit`, `npm test`. All must pass.
+3. Push to main.
+4. Gate again on a fresh checkout of main.
+5. Delete the branch if allowed. This session's GitHub access refused deletes with a 403; if that happens again, leave the branch and say so.
+6. Record the result here.
+
 ## PARKED (not started, per owner)
 
 RunPod (owner's payment step), repo description one-liner, MCP client build, cloud→local fallback decision,
