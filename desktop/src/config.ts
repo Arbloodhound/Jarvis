@@ -90,6 +90,16 @@ export interface Config {
     quietEnd: number;
     maxPerMinutePerApp: number;
   };
+  skills: {
+    /**
+     * Allowlist of skill names a session may see. Empty (the default) means
+     * every discovered skill is eligible — the Python SkillStore semantics
+     * (`set(allowlist) if allowlist else None`).
+     */
+    allow: string[];
+    /** Extra skill roots, scanned after the app-home and workspace skills dirs, in listed order. */
+    roots: string[];
+  };
   port: number;
   writableRoots: string[];
   /**
@@ -102,6 +112,7 @@ export interface Config {
 
 export interface Paths {
   home: string;
+  skills: string;
   config: string;
   token: string;
   memory: string;
@@ -113,6 +124,7 @@ export interface Paths {
   workspace: string;
   /** Inbox file drop for inbound notifications: one JSON notification per line, drained by the runtime. */
   notificationsInbox: string;
+  jobs: string;
 }
 
 /** Problems found while loading files, shown to the owner once the app is up. */
@@ -121,6 +133,7 @@ export const startupWarnings: string[] = [];
 export function paths(home = process.env.JARVIS_HOME || path.join(homedir(), ".jarvis")): Paths {
   return {
     home,
+    skills: path.join(home, "skills"),
     config: path.join(home, "config.json"),
     token: path.join(home, "token"),
     memory: path.join(home, "memory.json"),
@@ -130,6 +143,7 @@ export function paths(home = process.env.JARVIS_HOME || path.join(homedir(), ".j
     conversations: path.join(home, "conversations.json"),
     workspace: path.join(home, "workspace"),
     notificationsInbox: path.join(home, "notifications-inbox.jsonl"),
+    jobs: path.join(home, "jobs.json"),
   };
 }
 
@@ -147,6 +161,7 @@ export function defaults(p: Paths): Config {
     nli: { enabled: true, modelCheck: false },
     memory: { verifyBeforeStore: false },
     notifications: { allowedApps: [], quietStart: 22, quietEnd: 7, maxPerMinutePerApp: 5 },
+    skills: { allow: [], roots: [] },
     port: 7337,
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
@@ -188,6 +203,10 @@ export function loadConfig(p: Paths = paths()): Config {
     nli: { ...base.nli, ...(raw.nli ?? {}) },
     memory: { ...base.memory, ...(raw.memory ?? {}) },
     notifications: { ...base.notifications, ...(raw.notifications ?? {}) },
+    skills: {
+      allow: Array.isArray(raw.skills?.allow) ? raw.skills.allow.filter((s): s is string => typeof s === "string") : base.skills.allow,
+      roots: Array.isArray(raw.skills?.roots) ? raw.skills.roots.filter((s): s is string => typeof s === "string") : base.skills.roots,
+    },
   };
 }
 

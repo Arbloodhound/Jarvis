@@ -1,4 +1,4 @@
-import { Agent } from "./agent/loop.js";
+import { Agent, type RunHooks } from "./agent/loop.js";
 import { type Config, type Paths, saveConfig } from "./config.js";
 import { Conversations } from "./conversations.js";
 import { ownerContext, type Attachment } from "./context.js";
@@ -10,9 +10,11 @@ import { EcholaliaStore } from "./echolalia.js";
 import { Vision } from "./vision.js";
 import { isLoopbackUrl, Transcriber } from "./voice.js";
 import { Memory } from "./memory.js";
+import { SkillStore, skillRoots } from "./skills.js";
 import { ClaudeProvider } from "./providers/claude.js";
 import { LocalProvider } from "./providers/local.js";
 import type { Provider } from "./providers/types.js";
+import { JobStore, Scheduler, seedDefaultHarnessJobs, type Job, type RunnerResult } from "./scheduler.js";
 import { makeWebFetch, probeTorProxy, toolsFor } from "./tools/index.js";
 import { NotificationFilter, type NotificationInput } from "./notifications/filter.js";
 import { NotificationInbox, type IngestResult } from "./notifications/inbox.js";
@@ -27,6 +29,9 @@ export class Runtime {
   readonly memory: Memory;
   /** Conversation branches; the agent's live turns are the active branch's working copy. */
   readonly conversations: Conversations;
+  readonly jobs: JobStore;
+  readonly scheduler: Scheduler;
+  private readonly gate: Gate;
   private readonly cwd: string;
   readonly audit: AuditLog;
   /** Echolalia pending store; always exists for inspection, routes remember only when verifyBeforeStore is on. */
@@ -57,32 +62,49 @@ export class Runtime {
       audit: new AuditLog(p.audit),
       inboxFile: p.notificationsInbox,
     });
-    this.agent = new Agent({
-      provider: () => this.provider(),
-      embedder: () => this.embedder(),
-      vision: () => this.vision(),
-      transcriber: () => this.transcriber(),
-      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }, ttsEnabled: this.cfg.voice.ttsEnabled, notifications: this.notifications }),
-      gate: new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd),
-      memory: this.memory,
-      echolalia: () => (this.cfg.memory.verifyBeforeStore ? this.pending : null),
-      audit: this.audit,
-      home: p.home,
-      workspace: p.workspace,
-      cwd,
-      maxTurns: cfg.maxTurns,
-      nli: {
-        enabled: cfg.nli.enabled,
-        // The model-backed layer runs on the configured LOCAL provider only,
-        // and only when explicitly turned on; deterministic-only otherwise.
-        modelCheck: cfg.nli.modelCheck ? createLocalModelChecker({ baseUrl: cfg.local.baseUrl, model: cfg.local.model }) : null,
-      },
-    });
+    this.gate = new Gate({ writableRoots: cfg.writableRoots, extraAllowedCommands: cfg.extraAllowedCommands, protectedPaths: [p.token, p.config] }, cwd);
+    this.agent = this.newAgent();
     // Resume the active conversation branch, so a restart (or the CLI after
     // the gateway) continues the same conversation the owner left.
     this.conversations = new Conversations(p.conversations);
     const saved = this.conversations.activeTurns();
     if (saved.length) this.agent.loadTurns(saved);
+    this.jobs = new JobStore(p.jobs);
+    this.scheduler = new Scheduler({
+      store: this.jobs,
+      audit: this.audit,
+      cwd,
+      runJob: (job) => this.runScheduledJob(job),
+    });
+    // First init only (seedDefaultHarnessJobs no-ops when jobs.json
+    // already exists): the phone bug was default jobs never being seeded.
+    seedDefaultHarnessJobs(this.jobs, Date.now());
+  }
+
+  /** One agent wired to this runtime's gate, memory, audit and brains. */
+  private newAgent(): Agent {
+    return new Agent({
+      provider: () => this.provider(),
+      embedder: () => this.embedder(),
+      vision: () => this.vision(),
+      transcriber: () => this.transcriber(),
+      skills: () => this.skillStore(),
+      tools: () => toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }, ttsEnabled: this.cfg.voice.ttsEnabled, notifications: this.notifications }),
+      gate: this.gate,
+      memory: this.memory,
+      echolalia: () => (this.cfg.memory.verifyBeforeStore ? this.pending : null),
+      audit: this.audit,
+      home: this.p.home,
+      workspace: this.p.workspace,
+      cwd: this.cwd,
+      maxTurns: this.cfg.maxTurns,
+      nli: {
+        enabled: this.cfg.nli.enabled,
+        // The model-backed layer runs on the configured LOCAL provider only,
+        // and only when explicitly turned on; deterministic-only otherwise.
+        modelCheck: this.cfg.nli.modelCheck ? createLocalModelChecker({ baseUrl: this.cfg.local.baseUrl, model: this.cfg.local.model }) : null,
+      },
+    });
   }
 
   /** Save the agent's live turns back into the active branch. Call after every run and edit. */
@@ -103,6 +125,48 @@ export class Runtime {
       webFetch: this.cfg.offlineOnly ? null : makeWebFetch({ enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }),
       signal: AbortSignal.timeout(60_000),
     });
+  }
+
+  /**
+   * The session's skills, discovered fresh: roots in precedence order —
+   * the app-home skills dir, the workspace skills dir, then config-listed
+   * extra roots. The config allowlist governs eligibility; empty means all
+   * (Python SkillStore semantics). Discovery is metadata-only; bodies load
+   * on demand through the skill tools.
+   */
+  skillStore(): SkillStore {
+    const store = new SkillStore(this.cfg.skills.allow);
+    store.discover(skillRoots(this.p.home, this.p.workspace, this.cfg.skills.roots));
+    return store;
+  }
+
+  /**
+   * How a scheduled job runs: through a fresh agent run, headlessly, with
+   * the gate fully active. No user interface is attached, so a confirm
+   * card is declined (the piped-stdin rule) and that decline is written
+   * to the audit log with the job's id and owner — a scheduled job never
+   * gains silent privileges. The harness's own jobs are safe internal
+   * checks in this build (heartbeat / memory status), not model runs.
+   */
+  async runScheduledJob(job: Job): Promise<RunnerResult> {
+    if (job.owner === "harness") {
+      if (job.id === "harness:heartbeat") return { detail: `heartbeat ok at ${new Date().toISOString()}` };
+      if (job.id === "harness:memory-upkeep") return { detail: `memory upkeep check: ${this.memory.all().length} fact(s) stored; nothing to consolidate in this build` };
+      return { detail: `harness status check ok: ${job.id}` };
+    }
+    const agent = this.newAgent();
+    let confirmDeclined = false;
+    let runId = "";
+    const hooks: RunHooks = {
+      emit: (e) => { if (e.type === "run_start") runId = e.runId; },
+      confirm: async (card) => {
+        confirmDeclined = true;
+        this.audit.write({ event: "scheduler_confirm_declined", jobId: job.id, owner: job.owner, runId, tool: card.tool, rule: card.rule, detail: "no user interface attached to a scheduled run" });
+        return false;
+      },
+    };
+    const answer = await agent.run(job.task, hooks);
+    return { detail: answer, confirmDeclined };
   }
 
   /** Cloud answers only when chosen AND offline-only is off (same rule as the phone's NetPolicy). */
@@ -245,6 +309,9 @@ export class Runtime {
       nliModelCheck: this.cfg.nli.enabled && this.cfg.nli.modelCheck,
       notificationsAllowedApps: this.cfg.notifications.allowedApps.length,
       notificationsPending: this.notifications.pendingCount,
+      skills: this.skillStore().list().length,
+      scheduler: this.scheduler.status(),
+      jobs: this.jobs.load().map((j) => ({ id: j.id, owner: j.owner, kind: j.kind, schedule: j.schedule, task: j.task, enabled: j.enabled, lastRun: j.lastRun, nextRun: j.nextRun })),
     };
   }
 }
