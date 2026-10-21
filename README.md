@@ -2,7 +2,7 @@
 
 # Jarvis (Jarvis)
 
-*Last updated: 2026-10-19.*
+*Last updated: 2026-10-21 (self-hosted rig and desktop features added; the rest is the 2026-10-19 audited state).*
 
 An Android agent that drives real apps on the phone. A language model runs on the device itself, reads the screen through the accessibility service, and taps. When a step is beyond it, it can escalate to a cloud model. A policy gate on the device can refuse the model before anything destructive happens.
 
@@ -15,12 +15,30 @@ This repository is the consolidated Jarvis codebase. After the 2026-10-19 full-b
 - `jarvis-native/` — the current app. Native Kotlin Android app; this is the shipping app. It contains the harness package `com.agent.jarvis.harness` (see below).
 - `desktop/` — a TypeScript desktop app: agent loop, gate, providers, memory, tools, gateway server and CLI, with tests in `desktop/test`.
 - `src/` — the TypeScript app of the Expo / React Native lineage. Its live path is `AgentCore` / `BrainExecutor` / `TaskExecutor`; its `server/` directory is orphaned (see "Known open issues").
+- `tools/runpod/` — `start.sh`, a one-command self-hosted rig for a rented GPU (RunPod / Vast.ai): local brain + vision on llama.cpp, Jarvis Desktop on a virtual desktop it can drive, Tor, private search, a forecasting server. See `tools/runpod/README.md`.
 - `jarvis-native/app/src/main/cpp/` — native bridge code, including llama.cpp through JNI, so on-device models run without a server. *(Build details for the native libraries were not re-verified in the 2026-10-19 audits.)*
-- `DEVLOG.md` — what changed, why, and the bugs that mattered. Append-only.
+- `DEVLOG.md` — what changed, why, and the bugs that mattered. Append-only (started 2026-10-21).
+- `HANDOFF_2026-10-21.md` — the latest session handoff (pod rig + desktop features); `HANDOFF.md` — the 2026-10-19 post-merge state.
 - `CLAUDE.md`, `SKILLS_REFERENCE.md` — how this repo is worked on.
 - `archive/2026-10-19/` — the pre-replacement versions of the living docs, preserved during the 2026-10-19 doc replacement.
 
 Older versions of this file described everything outside `jarvis-native/` as "history, not the product." That framing is superseded: the post-merge tree deliberately carries the Kotlin app, the desktop TypeScript app, and the `src/` TypeScript app together on `main`. The `src/` lineage is not the shipping Android app, but it is part of the consolidated tree and is described as such in `ARCHITECTURE.md`.
+
+## Self-hosted rig and desktop features (2026-10-21)
+
+Jarvis Desktop now runs fully self-hosted on a rented GPU: `tools/runpod/start.sh` brings up a GLM-5.2 brain and a Qwen3-VL vision model on llama.cpp, a noVNC virtual desktop (Chrome, Tor Browser, files, terminal, the Jarvis app), Tor, SearXNG and a Timestral forecasting server, and was used on a RunPod B300 on 2026-10-21.
+
+Desktop features built for it are in open draft PRs (Arbloodhound/Jarvis#25–#31), each with its own tests; the pod runs them as patches until they merge:
+
+- **Always allow** (`jarvis chat --yes`, `autoApprove`) — except purchases and scam follow-ups, which always ask.
+- **Tor auto mode** — Tor only for `.onion` or when asked; still fail-closed.
+- **Interrupt** — type while it works to switch to a new message.
+- **Context compression** — older turns are summarised before the model's window fills; an overflow error is compressed and retried once; `/compress` on demand.
+- **Whole-page reading** — `read_browser_page` reads an entire Chrome tab at once; `scroll_read` scrolls and reads any app in one step.
+- **Prediction layer** — `record_number` / `forecast` track numbers over time (from the owner, results or memory) and forecast them with ranges via Timestral; it informs only.
+- **`/refresh`** — restart the chat in place with the latest build and config, keeping the conversation.
+
+Status and evidence per feature: `HANDOFF_2026-10-21.md`. CI's macOS/Windows test jobs are red on these PRs for a reason not yet known (Linux is green).
 
 ## How it works
 
