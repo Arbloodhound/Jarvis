@@ -85,6 +85,22 @@ test("cron: aliases and invalid expressions", () => {
   assert.throws(() => parseCron("*/0 * * * *"), /step/);
 });
 
+test("cron: a job inside the DST spring-forward gap runs at the first valid time after it, not a day late", () => {
+  const prevTz = process.env.TZ;
+  process.env.TZ = "America/New_York"; // 2026-03-08: 02:00 -> 03:00, so 02:xx does not exist
+  try {
+    const daily = new Date(nextCron("30 2 * * *", local(2026, 3, 7, 12, 0))!);
+    assert.deepEqual([daily.getDate(), daily.getHours(), daily.getMinutes()], [8, 3, 0]);
+    const dayAfter = new Date(nextCron("30 2 * * *", daily.getTime())!);
+    assert.deepEqual([dayAfter.getDate(), dayAfter.getHours(), dayAfter.getMinutes()], [9, 2, 30]); // back to normal
+    // Reaching the gap minute by minute (from inside 01:xx) behaves the same.
+    const stepped = new Date(nextCron("*/30 1,2 * * *", local(2026, 3, 8, 1, 30))!);
+    assert.deepEqual([stepped.getDate(), stepped.getHours(), stepped.getMinutes()], [8, 3, 0]);
+  } finally {
+    if (prevTz === undefined) delete process.env.TZ; else process.env.TZ = prevTz;
+  }
+});
+
 test("interval shorthand: units, @every, and bare numbers rejected", () => {
   assert.equal(parseIntervalMs("every 30m"), 30 * 60_000);
   assert.equal(parseIntervalMs("every 3600s"), 3_600_000);

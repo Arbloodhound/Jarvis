@@ -148,7 +148,17 @@ export function cronMatches(p: ParsedCron, d: Date): boolean {
   return domHit || dowHit;
 }
 
-/** The next match strictly after `afterMs`, or null if none within ~5 years. Local time. */
+/** DST spring-forward: the clock jumped from `fromHour` to `d`; was a skipped hour one the job runs in? */
+const gapHit = (p: ParsedCron, fromHour: number, d: Date): boolean => {
+  for (let h = fromHour; h < d.getHours(); h++) if (p.hour.has(h)) return true;
+  return false;
+};
+
+/**
+ * The next match strictly after `afterMs`, or null if none within ~5 years. Local time.
+ * A time inside a DST spring-forward gap (02:30 on a day 02:00 jumps to
+ * 03:00) runs at the first valid time after the gap, as standard cron does.
+ */
 export function nextCron(expr: string | ParsedCron, afterMs: number): number | null {
   const p = typeof expr === "string" ? parseCron(expr) : expr;
   const d = new Date(afterMs);
@@ -159,8 +169,18 @@ export function nextCron(expr: string | ParsedCron, afterMs: number): number | n
     if (!p.month.has(d.getMonth() + 1)) { d.setDate(1); d.setHours(0, 0, 0, 0); d.setMonth(d.getMonth() + 1); continue; }
     const dayOk = p.domStar && p.dowStar ? true : p.domStar ? p.dow.has(d.getDay()) : p.dowStar ? p.dom.has(d.getDate()) : p.dom.has(d.getDate()) || p.dow.has(d.getDay());
     if (!dayOk) { d.setDate(d.getDate() + 1); d.setHours(0, 0, 0, 0); continue; }
-    if (!p.hour.has(d.getHours())) { d.setHours(d.getHours() + 1, 0, 0, 0); continue; }
-    if (!p.minute.has(d.getMinutes())) { d.setMinutes(d.getMinutes() + 1, 0, 0); continue; }
+    if (!p.hour.has(d.getHours())) {
+      const want = d.getHours() + 1;
+      d.setHours(want, 0, 0, 0);
+      if (d.getHours() > want && gapHit(p, want, d)) return d.getTime();
+      continue;
+    }
+    if (!p.minute.has(d.getMinutes())) {
+      const h = d.getHours();
+      d.setMinutes(d.getMinutes() + 1, 0, 0);
+      if (d.getHours() > h + 1 && gapHit(p, h + 1, d)) return d.getTime();
+      continue;
+    }
     return d.getTime();
   }
   return null;
