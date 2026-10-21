@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import fs, { appendFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { createServer as netServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { defaults, loadConfig, paths } from "../src/config.ts";
 import { AuditLog } from "../src/gate/audit.ts";
 import { NotificationFilter, OWN_PACKAGE } from "../src/notifications/filter.ts";
@@ -236,6 +237,75 @@ test("inbox file drop: lines are drained through the same filter, the file is em
   assert.ok(audit.includes("not_allowed"), audit);
   assert.ok(audit.includes("invalid"), audit);
   assert.ok(existsSync(p.notificationsInbox));
+});
+
+test("inbox file drop: a line without `at` arrives at the file's mtime, so quiet hours judge arrival, not the drain", () => {
+  const { p } = tempHome("jarvis-notif-mtime-");
+  // Drained at 23:00 (inside the default 22–07 quiet hours); the line was written at noon.
+  const inbox = new NotificationInbox({
+    filter: new NotificationFilter({ allowedApps: ["Slack"], now: () => atHour(23) }),
+    inboxFile: p.notificationsInbox,
+  });
+  appendFileSync(p.notificationsInbox, JSON.stringify({ app: "Slack", title: "Lunch?" }) + "\n");
+  appendFileSync(p.notificationsInbox, JSON.stringify({ app: "Slack", title: "Early", at: atHour(9) }) + "\n");
+  utimesSync(p.notificationsInbox, NOON / 1000, NOON / 1000);
+  const got = inbox.takePending();
+  assert.deepEqual(got.map((n) => [n.title, n.at]), [["Lunch?", NOON], ["Early", atHour(9)]], "no `at`: the mtime; with `at`: kept");
+});
+
+test("inbox file drop: a drained backlog is rate-limited in its own minute, not the live one", () => {
+  const { p } = tempHome("jarvis-notif-burst-");
+  const inbox = new NotificationInbox({
+    filter: new NotificationFilter({ allowedApps: ["Slack"], now: () => atHour(14) }),
+    inboxFile: p.notificationsInbox,
+  });
+  for (let i = 0; i < 5; i++) appendFileSync(p.notificationsInbox, JSON.stringify({ app: "Slack", title: `old ${i}` }) + "\n");
+  utimesSync(p.notificationsInbox, NOON / 1000, NOON / 1000);
+  const drained = inbox.drainInboxFile();
+  assert.deepEqual(drained.map((r) => r.allowed), [true, true, true, true, true]);
+  const live = [0, 1, 2, 3, 4].map((i) => inbox.ingest({ app: "Slack", title: `live ${i}` }, "gateway"));
+  assert.deepEqual(live.map((r) => r.reason ?? "ok"), ["ok", "ok", "ok", "ok", "ok"], "the 14:00 minute still has all its slots");
+});
+
+test("filter: rate limits are judged per arrival minute even when arrivals come out of order", () => {
+  const f = new NotificationFilter({ allowedApps: ["Slack"] });
+  const ONE = atHour(13);
+  for (let i = 0; i < 5; i++) assert.equal(f.allow({ app: "Slack", title: `a${i}`, at: ONE }), true);
+  // A late-drained backlog item from an earlier minute must not reset 13:00's count.
+  assert.equal(f.allow({ app: "Slack", title: "backlog", at: NOON }), true);
+  assert.equal(f.check({ app: "Slack", title: "a5", at: ONE }).verdict.allowed, false, "13:00 is still full");
+});
+
+test("inbox file drop: a line appended while the drain reads is kept for the next drain, not truncated away", () => {
+  const { p } = tempHome("jarvis-notif-race-");
+  const inbox = new NotificationInbox({
+    filter: new NotificationFilter({ allowedApps: ["Slack"], now: () => NOON }),
+    inboxFile: p.notificationsInbox,
+  });
+  appendFileSync(p.notificationsInbox, JSON.stringify({ app: "Slack", title: "first", at: NOON }) + "\n");
+  // A producer appends between the drain's read and whatever it does to the file next.
+  const real = fs.readFileSync;
+  let raced = false;
+  mock.method(fs, "readFileSync", (...args: Parameters<typeof fs.readFileSync>) => {
+    const out = real(...args);
+    if (!raced) {
+      raced = true;
+      appendFileSync(p.notificationsInbox, JSON.stringify({ app: "Slack", title: "second", at: NOON }) + "\n");
+    }
+    return out;
+  });
+  syncBuiltinESMExports();
+  let first: string[];
+  try {
+    first = inbox.takePending().map((n) => n.title);
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+  assert.ok(raced, "the race was injected");
+  assert.deepEqual(first, ["first"]);
+  assert.deepEqual(inbox.takePending().map((n) => n.title), ["second"], "the racing line survives to the next drain");
+  assert.deepEqual(readdirSync(p.home).filter((f) => f.startsWith("notifications-inbox")), ["notifications-inbox.jsonl"], "no aside file is left behind");
 });
 
 // ---------- the agent surface ----------

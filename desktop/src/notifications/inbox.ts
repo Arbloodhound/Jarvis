@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { AuditLog } from "../gate/audit.js";
 import {
   NotificationFilter,
@@ -19,7 +20,9 @@ import {
  *    exactly like the gateway's other channels).
  * 2. The inbox file drop: `notifications-inbox.jsonl` in the app home, one
  *    JSON notification per line, appended by the Electron shell or any local
- *    process and drained by the runtime (drainInboxFile).
+ *    process and drained by the runtime (drainInboxFile). A line's `at` is
+ *    its arrival time; a line without one arrived no later than the file's
+ *    last write, so it is stamped with the drained file's mtime.
  *
  * ingest() runs the three-gate filter. Passing notifications queue for the
  * read_notifications tool and are delivered exactly once (takePending
@@ -100,24 +103,41 @@ export class NotificationInbox {
   }
 
   /**
-   * Drain the inbox file drop: read notifications-inbox.jsonl, ingest every
-   * line through the same choke point, then empty the file so each line is
-   * processed once. Malformed lines are audited as drops (reason "invalid")
-   * and never reach the agent. Returns the per-line results.
+   * Drain the inbox file drop: take notifications-inbox.jsonl, ingest every
+   * line through the same choke point, so each line is processed once.
+   * Malformed lines are audited as drops (reason "invalid") and never reach
+   * the agent. Returns the per-line results.
+   *
+   * The file is taken atomically: renamed aside to a unique name, then read
+   * and deleted, so a line a producer appends meanwhile lands in a fresh
+   * file for the next drain instead of being truncated away. Gates judge
+   * arrival, not the drain: a line with `at` keeps it, and a line without
+   * one gets the taken file's mtime — the last moment anything was written
+   * to it, so the latest it can have arrived.
    */
   drainInboxFile(): IngestResult[] {
     const file = this.opts.inboxFile;
     if (!file || !existsSync(file)) return [];
-    let raw: string;
+    const taken = `${file}.draining-${process.pid}-${randomBytes(4).toString("hex")}`;
     try {
-      raw = readFileSync(file, "utf8");
+      renameSync(file, taken);
     } catch {
-      return [];
+      return []; // gone, or held open (Windows): the next drain tries again
     }
-    if (!raw.trim()) return [];
-    // Empty the file before ingesting, so a crash mid-drain can't re-deliver;
+    // Leave an empty drop in place for producers that expect it; "a" never clobbers a line appended since the rename.
+    try { writeFileSync(file, "", { flag: "a" }); } catch { /* the producer's append recreates it */ }
+    let raw: string;
+    let arrivedBy: number;
+    try {
+      arrivedBy = statSync(taken).mtimeMs;
+      raw = readFileSync(taken, "utf8");
+    } catch {
+      return []; // the taken file stays on disk for the owner; nothing is lost
+    }
+    // Delete before ingesting, so a crash mid-drain can't re-deliver;
     // dropped lines are in the audit log if the owner wants them.
-    try { writeFileSync(file, ""); } catch { /* a failed truncate surfaces on the next drain */ }
+    try { rmSync(taken, { force: true }); } catch { /* a leftover aside file is never re-read */ }
+    if (!raw.trim()) return [];
     const results: IngestResult[] = [];
     for (const line of raw.split("\n")) {
       const trimmed = line.trim();
@@ -133,6 +153,7 @@ export class NotificationInbox {
         this.auditInvalid("inbox_file", trimmed);
         continue;
       }
+      if (input.at === undefined) input.at = Math.floor(arrivedBy);
       results.push(this.ingest(input, "inbox_file"));
     }
     return results;
