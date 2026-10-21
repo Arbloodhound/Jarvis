@@ -63,7 +63,8 @@ export interface Config {
   };
   /** Synthetic keyboard/mouse. Off by default; experimental; every action still needs a card. */
   screenControl: { enabled: boolean };
-  tor: { enabled: boolean; socksPort: number };
+  /** auto: Tor only for .onion and owner-requested fetches (see TorSettings). */
+  tor: { enabled: boolean; socksPort: number; auto: boolean };
   nli: {
     /** The NLI gate on final answers (deterministic contradiction check against this run's tool results). */
     enabled: boolean;
@@ -170,7 +171,7 @@ export function defaults(p: Paths): Config {
     vision: { enabled: true, baseUrl: "", model: "qwen3-vl" },
     voice: { sttBaseUrl: "", sttModel: "whisper-1", ttsEnabled: true },
     screenControl: { enabled: false },
-    tor: { enabled: false, socksPort: 9050 },
+    tor: { enabled: false, socksPort: 9050, auto: false },
     nli: { enabled: true, modelCheck: false },
     memory: { verifyBeforeStore: false },
     notifications: { allowedApps: [], quietStart: 22, quietEnd: 7, maxPerMinutePerApp: 5 },

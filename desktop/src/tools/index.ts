@@ -273,7 +273,7 @@ export function htmlToText(html: string): string {
 interface Fetched { status: number; type: string; body: string; url: string }
 
 /** The fetch the web tools run: one URL in, the final page out (redirects followed). */
-export type WebFetchFn = (url: string, signal: AbortSignal) => Promise<Fetched>;
+export type WebFetchFn = (url: string, signal: AbortSignal, opts?: FetchOpts) => Promise<Fetched>;
 
 // ---------- Tor transport ----------
 
@@ -282,6 +282,19 @@ export interface TorSettings {
   enabled: boolean;
   /** SOCKS port of a local Tor daemon (9050) or Tor Browser (9150). */
   socksPort: number;
+  /**
+   * Tor only where it is needed or asked for (ignored while `enabled` is on,
+   * which routes everything): .onion addresses go through Tor automatically,
+   * a fetch the owner asks to make over Tor (web_fetch via_tor) does too, and
+   * everything else stays on the direct path.
+   */
+  auto?: boolean;
+}
+
+/** Per-request options for a web fetch. */
+export interface FetchOpts {
+  /** Route this request through Tor (the owner asked). Needs Tor on or auto. */
+  viaTor?: boolean;
 }
 
 export const TOR_DISABLED: TorSettings = { enabled: false, socksPort: 9050 };
@@ -293,6 +306,9 @@ export function isOnionUrl(u: URL): boolean {
 
 const ONION_NEEDS_TOR =
   "That is a .onion address. Jarvis opens .onion addresses only with Tor on (the Tor setting, or \"tor.enabled\" in config) — and only through the Tor proxy, never over the regular internet.";
+
+const TOR_NOT_SET_UP =
+  "Tor was asked for, but Tor is off. Turn it on (\"tor.enabled\") or set it to auto (\"tor.auto\") in config — nothing was fetched.";
 
 const torDown = (port: number) =>
   `Tor is on but no Tor proxy is reachable at 127.0.0.1:${port}. Start Tor (or Tor Browser, which uses port 9150), or turn Tor off. Web tools will not fall back to a direct connection.`;
@@ -361,6 +377,38 @@ function getOnce(u: URL, signal: AbortSignal, agent?: SocksProxyAgent, timeoutMs
 }
 
 /**
+ * Which hops of one fetch go through Tor. Everything (tor.enabled); only
+ * .onion hops and requests the owner asked to send over Tor (tor.auto); or
+ * nothing, with .onion refused and a Tor request refused (Tor off). The
+ * proxy is proved alive (greeting handshake, this computer only) before the
+ * first Tor hop; a dead proxy fails closed. Once a fetch has used Tor, the
+ * rest of its redirect chain stays on Tor: a hop that started inside Tor
+ * never drops back to a direct connection.
+ */
+function torRoute(tor: TorSettings, opts: FetchOpts): { agentFor(u: URL): Promise<SocksProxyAgent | undefined> } {
+  if (opts.viaTor && !tor.enabled && !tor.auto) throw new Error(TOR_NOT_SET_UP);
+  let agent: SocksProxyAgent | undefined;
+  const open = async () => {
+    if (!agent) {
+      if (!(await probeTorProxy(tor.socksPort))) throw new Error(torDown(tor.socksPort));
+      agent = new SocksProxyAgent(`socks5h://127.0.0.1:${tor.socksPort}`);
+    }
+    return agent;
+  };
+  return {
+    async agentFor(u: URL) {
+      if (agent) return agent;
+      if (tor.enabled || (tor.auto && opts.viaTor)) return open();
+      if (isOnionUrl(u)) {
+        if (!tor.auto) throw new Error(ONION_NEEDS_TOR);
+        return open();
+      }
+      return undefined;
+    },
+  };
+}
+
+/**
  * One fetch, redirects followed by hand (each hop re-checked). Two modes:
  *
  * - Direct (the default, unchanged): the connection's own DNS lookup is the
@@ -374,27 +422,22 @@ function getOnce(u: URL, signal: AbortSignal, agent?: SocksProxyAgent, timeoutMs
  *   local-name and literal-address blocks in assertPublicUrl run on every
  *   hop before anything is fetched, in both modes.
  *
- * .onion is refused outright unless Tor is on — never fetched direct. Tor
- * on but no proxy answering fails closed with a clear error; there is no
- * silent fallback to a direct fetch.
+ * .onion is refused outright unless Tor is on or auto — never fetched
+ * direct. Tor on (or needed under auto) but no proxy answering fails closed
+ * with a clear error; there is no silent fallback to a direct fetch. See
+ * torRoute for which hops use Tor.
  */
-async function fetchChain(raw: string, signal: AbortSignal, tor: TorSettings): Promise<Fetched> {
-  let agent: SocksProxyAgent | undefined;
-  if (tor.enabled) {
-    // Prove the proxy answers before fetching anything (greeting handshake,
-    // this computer only). A dead proxy is a clear refusal, not a fallback.
-    if (!(await probeTorProxy(tor.socksPort))) throw new Error(torDown(tor.socksPort));
-    agent = new SocksProxyAgent(`socks5h://127.0.0.1:${tor.socksPort}`);
-  }
+async function fetchChain(raw: string, signal: AbortSignal, tor: TorSettings, opts: FetchOpts = {}): Promise<Fetched> {
+  const route = torRoute(tor, opts);
   let url = raw;
   for (let hop = 0; hop < 5; hop++) {
     const u = assertPublicUrl(url);
-    if (isOnionUrl(u) && !tor.enabled) throw new Error(ONION_NEEDS_TOR);
+    const agent = await route.agentFor(u);
     // Tor gets a longer leash: a cold onion connection first fetches the
     // service's descriptor and builds a rendezvous circuit, which takes
     // far longer than a clearnet handshake (measured: ~2 min on a cold,
     // proxied Tor; ~4 s warm). The direct path keeps its 20 s ceiling.
-    const res = await getOnce(u, signal, agent, tor.enabled ? 120_000 : 20_000);
+    const res = await getOnce(u, signal, agent, agent ? 120_000 : 20_000);
     if (res.status >= 300 && res.status < 400 && res.location) { url = new URL(res.location, url).toString(); continue; }
     return res;
   }
@@ -476,19 +519,15 @@ function getBytesOnce(u: URL, signal: AbortSignal, agent: SocksProxyAgent | unde
  * actually be an image (content-type image/*) or the fetch refuses.
  */
 async function fetchBytesChain(raw: string, signal: AbortSignal, tor: TorSettings, maxBytes: number): Promise<FetchedBytes> {
-  let agent: SocksProxyAgent | undefined;
-  if (tor.enabled) {
-    if (!(await probeTorProxy(tor.socksPort))) throw new Error(torDown(tor.socksPort));
-    agent = new SocksProxyAgent(`socks5h://127.0.0.1:${tor.socksPort}`);
-  }
+  const route = torRoute(tor, {});
   let url = raw;
   for (let hop = 0; hop < 5; hop++) {
     const u = assertPublicUrl(url);
-    if (isOnionUrl(u) && !tor.enabled) throw new Error(ONION_NEEDS_TOR);
+    const agent = await route.agentFor(u);
     // Images get more direct-path headroom than text pages (60 s vs 20 s):
     // the payload is the point here, and a slow CDN should not read as "no
     // image". The Tor budget matches the text funnel's.
-    const res = await getBytesOnce(u, signal, agent, tor.enabled ? 120_000 : 60_000, maxBytes);
+    const res = await getBytesOnce(u, signal, agent, agent ? 120_000 : 60_000, maxBytes);
     if (res.status >= 300 && res.status < 400 && res.location) { url = new URL(res.location, url).toString(); continue; }
     if (res.status >= 400) throw new Error(`The image link answered HTTP ${res.status}.`);
     if (!/^image\//i.test(res.type)) throw new Error(`That link is not an image (content-type: ${res.type || "unknown"}) — it was not read.`);
@@ -501,28 +540,35 @@ export async function safeFetchBytes(raw: string, signal: AbortSignal, maxBytes:
   return fetchBytesChain(raw, signal, TOR_DISABLED, maxBytes);
 }
 
-/** The bytes fetch for one run: through Tor when on, direct when off. */
+/** The bytes fetch for one run: through Tor when on (or for .onion under auto), direct otherwise. */
 export function makeWebFetchBytes(tor: TorSettings, maxBytes: number = MAX_IMAGE_BYTES): WebFetchBytesFn {
-  if (!tor.enabled) return (url, signal) => safeFetchBytes(url, signal, maxBytes);
+  if (!tor.enabled && !tor.auto) return (url, signal) => safeFetchBytes(url, signal, maxBytes);
   return (url, signal) => fetchBytesChain(url, signal, tor, maxBytes);
 }
 
-/** The web fetch for one run: through Tor when on, direct when off. */
+/**
+ * The web fetch for one run: through Tor when on; under auto, .onion and
+ * owner-requested (viaTor) fetches through Tor and the rest direct; with Tor
+ * off, direct, refusing .onion and a viaTor request.
+ */
 export function makeWebFetch(tor: TorSettings): WebFetchFn {
-  if (!tor.enabled) return safeFetch;
-  return (url, signal) => fetchChain(url, signal, tor);
+  return (url, signal, opts) => fetchChain(url, signal, tor, opts);
 }
 
 const webFetchTool = tool({
   name: "web_fetch",
   description: "Fetch a web page and return its readable text (links kept in brackets).",
-  schema: z.object({ url: z.string().url() }),
+  schema: z.object({
+    url: z.string().url(),
+    via_tor: z.boolean().optional().describe("true only when the owner asks for this request to go through Tor. .onion addresses use Tor on their own when Tor is on or set to auto."),
+  }),
   policy: { effects: ["egress"], targetArgs: ["url"] },
   outside: true,
   network: true,
   parallelSafe: true,
-  async run({ url }, ctx) {
-    const res = await (ctx.webFetch ?? safeFetch)(url, ctx.signal);
+  async run({ url, via_tor }, ctx) {
+    const fetchFn = ctx.webFetch ?? makeWebFetch(TOR_DISABLED);
+    const res = await fetchFn(url, ctx.signal, via_tor ? { viaTor: true } : undefined);
     const text = res.type.includes("html") ? htmlToText(res.body) : res.body;
     return `${res.status} ${url}\n${text.length > MAX_FETCH ? text.slice(0, MAX_FETCH) + "\n[… cut]" : text}`;
   },
@@ -1159,16 +1205,17 @@ export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; v
     // per run — so a settings toggle takes effect on the next run without a
     // restart. Offline-only still wins above: with it on, the web tools are
     // filtered out before this point.
-    if (opts.tor?.enabled) {
+    if (opts.tor?.enabled || opts.tor?.auto) {
       const tor = opts.tor;
       const webFetch = makeWebFetch(tor);
       const webFetchBytes = makeWebFetchBytes(tor);
       const orig = out;
+      const note = tor.enabled
+        ? " Tor is on: the request goes through Tor, and .onion addresses work."
+        : " Tor is on auto: .onion addresses go through Tor automatically; everything else goes direct unless via_tor is set because the owner asked.";
       out = {
         ...orig,
-        description: orig.name === "web_fetch"
-          ? `${orig.description} Tor is on: the request goes through Tor, and .onion addresses work.`
-          : orig.description,
+        description: orig.name === "web_fetch" ? `${orig.description}${note}` : orig.description,
         run: (args, ctx) => orig.run(args, { ...ctx, webFetch, webFetchBytes, torEnabled: true }),
       };
     }

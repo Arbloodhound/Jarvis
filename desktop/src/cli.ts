@@ -53,7 +53,8 @@ and stop them by name or id); "subagents": {"maxConcurrent": 3} in
 config.json caps how many run at once. Stopping a run stops its subagents.
 "tor": {"enabled": true} sends web search and fetch through a local Tor
 proxy (port 9050; 9150 for Tor Browser) — also a switch on the serve page —
-and is the only way .onion addresses open.
+and is the only way .onion addresses open. "tor": {"auto": true} instead uses
+Tor only where needed: .onion addresses, and fetches you ask to make over Tor.
 "vision": {"enabled": false} turns every image read off — the look tools
 are hidden and shopping checks stop reading listing photos. On (default),
 vision is part of the model: the checks read listing images on their own.
@@ -335,9 +336,12 @@ async function main(): Promise<void> {
         ? "from ANTHROPIC_API_KEY — not saved (jarvis set-key saves it)"
         : "not set (jarvis set-key saves one)";
     console.log(`${"api key".padEnd(10)} ${keyState}`);
+    const torReach = async () => ((await probeTorProxy(cfgW.tor.socksPort)) ? "reachable" : "NOT reachable");
     const torState = cfgW.tor.enabled
-      ? `on — proxy 127.0.0.1:${cfgW.tor.socksPort} ${(await probeTorProxy(cfgW.tor.socksPort)) ? "reachable" : "NOT reachable"}`
-      : "off";
+      ? `on — proxy 127.0.0.1:${cfgW.tor.socksPort} ${await torReach()}`
+      : cfgW.tor.auto
+        ? `auto (.onion and requests you ask for go through Tor) — proxy 127.0.0.1:${cfgW.tor.socksPort} ${await torReach()}`
+        : "off";
     console.log(`${"tor".padEnd(10)} ${torState}`);
     console.log(`${"vision".padEnd(10)} ${cfgW.vision.enabled ? `on — ${cfgW.vision.model || cfgW.cloud.model} reads images; shopping checks read listing photos` : "off — no image is read anywhere"}`);
     return;

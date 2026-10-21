@@ -195,6 +195,86 @@ test("tor on + proxy down: fails closed with the clear message, never falls back
   await assert.rejects(makeWebFetch({ enabled: true, socksPort: port })(ONION, sig()), /will not fall back/);
 });
 
+// ---------- auto: Tor only where needed (.onion) or asked (viaTor) ----------
+
+test("tor auto: clearnet stays direct — the proxy sees nothing", async () => {
+  const stub = await startStubProxy();
+  try {
+    await makeWebFetch({ enabled: false, auto: true, socksPort: stub.port })("http://example.com/", sig()).catch(() => {});
+    assert.equal(stub.greetings, 0);
+    assert.equal(stub.connects.length, 0);
+  } finally {
+    await stub.close();
+  }
+});
+
+test("tor auto: .onion goes through the proxy on its own, hostname unresolved", async () => {
+  const stub = await startStubProxy();
+  try {
+    const res = await makeWebFetch({ enabled: false, auto: true, socksPort: stub.port })(ONION, sig());
+    assert.equal(res.status, 200);
+    assert.equal(stub.connects.length, 1);
+    assert.equal(stub.connects[0]!.atyp, 3);
+    assert.ok(stub.connects[0]!.host.endsWith(".onion"), stub.connects[0]!.host);
+  } finally {
+    await stub.close();
+  }
+});
+
+test("tor auto: a clearnet fetch the owner asked to send over Tor (viaTor) transits the proxy", async () => {
+  const stub = await startStubProxy();
+  try {
+    const res = await makeWebFetch({ enabled: false, auto: true, socksPort: stub.port })("http://example.com/asked", sig(), { viaTor: true });
+    assert.equal(res.body, STUB_BODY);
+    assert.deepEqual(stub.connects, [{ atyp: 3, host: "example.com" }]);
+  } finally {
+    await stub.close();
+  }
+});
+
+test("tor auto + proxy down: .onion and viaTor fail closed, never direct", async () => {
+  const port = await deadPort();
+  const f = makeWebFetch({ enabled: false, auto: true, socksPort: port });
+  await assert.rejects(f(ONION, sig()), /will not fall back/);
+  await assert.rejects(f("http://example.com/", sig(), { viaTor: true }), /will not fall back/);
+});
+
+test("tor off: a viaTor request is refused before anything is fetched", async () => {
+  const stub = await startStubProxy();
+  try {
+    await assert.rejects(
+      makeWebFetch({ enabled: false, socksPort: stub.port })("http://example.com/", sig(), { viaTor: true }),
+      /Tor was asked for, but Tor is off/,
+    );
+    assert.equal(stub.greetings, 0);
+  } finally {
+    await stub.close();
+  }
+});
+
+test("the web_fetch tool, bound with Tor on auto: via_tor routes through the proxy, .onion too", async () => {
+  const stub = await startStubProxy();
+  try {
+    const tools = toolsFor({ offlineOnly: false, screenControl: false, tor: { enabled: false, auto: true, socksPort: stub.port } });
+    const wf = tools.find((t) => t.name === "web_fetch")!;
+    assert.match(wf.description, /Tor is on auto/);
+    const ctx = { signal: sig() } as unknown as ToolContext;
+    const asked = await wf.run({ url: "http://example.com/a", via_tor: true }, ctx);
+    assert.match(asked, /tor stub origin content/);
+    const onion = await wf.run({ url: ONION }, ctx);
+    assert.match(onion, /tor stub origin content/);
+    assert.equal(stub.connects.length, 2);
+  } finally {
+    await stub.close();
+  }
+});
+
+test("the web_fetch tool with Tor off refuses via_tor instead of fetching direct", async () => {
+  const tools = toolsFor({ offlineOnly: false, screenControl: false });
+  const wf = tools.find((t) => t.name === "web_fetch")!;
+  await assert.rejects(wf.run({ url: "http://example.com/", via_tor: true }, { signal: sig() } as unknown as ToolContext), /Tor was asked for, but Tor is off/);
+});
+
 test("tor on: local names and private literals are still refused pre-flight", async () => {
   const stub = await startStubProxy();
   try {
