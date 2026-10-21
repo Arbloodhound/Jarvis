@@ -26,7 +26,18 @@ export interface Config {
     /** Any OpenAI-compatible server: Ollama, llama.cpp server, LM Studio, vLLM. */
     baseUrl: string;
     model: string;
+    /**
+     * The model's context window per conversation, in tokens (llama.cpp:
+     * -c / -np). Absent or 0 = ask the server, else learn it from its first
+     * "too long" refusal. Near it, older turns are compressed into a summary.
+     */
+    contextTokens?: number;
   };
+  /**
+   * The prediction layer: a Timestral forecasting server (forecast/server.py).
+   * Empty = not set up (the forecast tool says so); series are tracked anyway.
+   */
+  forecast: { baseUrl: string };
   embeddings: {
     /** On = semantic memory. Off = word-overlap recall (no server needed). */
     enabled: boolean;
@@ -138,6 +149,8 @@ export interface Paths {
   /** Inbox file drop for inbound notifications: one JSON notification per line, drained by the runtime. */
   notificationsInbox: string;
   jobs: string;
+  /** Number series tracked for forecasts. */
+  series: string;
 }
 
 /** Problems found while loading files, shown to the owner once the app is up. */
@@ -157,6 +170,7 @@ export function paths(home = process.env.JARVIS_HOME || path.join(homedir(), ".j
     workspace: path.join(home, "workspace"),
     notificationsInbox: path.join(home, "notifications-inbox.jsonl"),
     jobs: path.join(home, "jobs.json"),
+    series: path.join(home, "series.json"),
   };
 }
 
@@ -166,6 +180,7 @@ export function defaults(p: Paths): Config {
     offlineOnly: false,
     cloud: { model: "claude-opus-5-5", effort: "medium", apiKey: "" },
     local: { baseUrl: "http://127.0.0.1:11434/v1", model: "qwen3:8b" },
+    forecast: { baseUrl: "" },
     embeddings: { enabled: false, baseUrl: "", model: "embeddinggemma-2", dims: 256 },
     vision: { enabled: true, baseUrl: "", model: "qwen3-vl" },
     voice: { sttBaseUrl: "", sttModel: "whisper-1", ttsEnabled: true },
@@ -209,6 +224,7 @@ export function loadConfig(p: Paths = paths()): Config {
     ...raw,
     cloud: { ...base.cloud, ...(raw.cloud ?? {}) },
     local: { ...base.local, ...(raw.local ?? {}) },
+    forecast: { ...base.forecast, ...(raw.forecast ?? {}) },
     embeddings: { ...base.embeddings, ...(raw.embeddings ?? {}) },
     vision: { ...base.vision, ...(raw.vision ?? {}) },
     voice: { ...base.voice, ...(raw.voice ?? {}) },

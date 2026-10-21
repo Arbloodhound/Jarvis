@@ -27,6 +27,19 @@ export class LocalProvider implements Provider {
     return (body.data ?? []).map((m) => m.id).filter((id): id is string => typeof id === "string").sort();
   }
 
+  /**
+   * The context window per conversation, from llama.cpp's /props (each
+   * slot's n_ctx: `-c` divided by `-np`). Other servers don't answer it: 0.
+   */
+  async contextSize(): Promise<number> {
+    const root = this.baseUrl.replace(/\/$/, "").replace(/\/v1$/, "");
+    const res = await fetch(`${root}/props`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return 0;
+    const body = (await res.json()) as { n_ctx?: unknown; default_generation_settings?: { n_ctx?: unknown } };
+    const n = body.default_generation_settings?.n_ctx ?? body.n_ctx;
+    return typeof n === "number" && n > 0 ? n : 0;
+  }
+
   async turn(req: TurnRequest): Promise<TurnResult> {
     let res: Response;
     try {

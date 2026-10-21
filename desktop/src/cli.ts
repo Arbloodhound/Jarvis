@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import path from "node:path";
@@ -442,14 +443,59 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === "chat") {
-    console.log(dim(`${rt.provider().label}. Ctrl+C stops a run, or quits when idle.`));
-    for (;;) {
-      const got = await term.ask("\nyou › ");
+    console.log(dim(`${rt.provider().label}. Type while it works to interrupt with a new message; /compress shrinks a long chat; /refresh reloads Jarvis (new build + config) and keeps this chat; Ctrl+C stops a run, or quits when idle.`));
+    // The prompt left listening by the last run, when it ended with no line typed.
+    let waiting: Promise<string | null> | null = null;
+    chat: for (;;) {
+      const got = await (waiting ?? term.ask("\nyou › "));
+      waiting = null;
       if (got === null) break; // Input ended: end the chat.
-      const line = got.trim();
+      let line = got.trim();
       if (!line) continue;
-      await rt.agent.run(line, hooks, await rt.ownerContext(line), { channel: "cli" });
-      rt.syncConversation();
+      if (line === "/refresh") {
+        // Restart this chat in place with whatever is on disk now (a rebuilt
+        // dist/, an edited config.json): the conversation is saved and the
+        // new process loads it back. Subagents settle first, as on exit.
+        rt.syncConversation();
+        await settleSubagents(rt);
+        console.log(dim("↻ Reloading Jarvis with the latest build and config — this chat continues."));
+        rl.close();
+        process.stdin.pause();
+        process.removeAllListeners("SIGINT");
+        process.on("SIGINT", () => {}); // Ctrl+C belongs to the new chat now.
+        const next = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], { stdio: "inherit", env: process.env });
+        await new Promise<void>((resolve) => next.on("exit", (code, signal) => { process.exitCode = code ?? (signal ? 1 : 0); resolve(); }));
+        process.exit();
+      }
+      if (line === "/compress") {
+        try {
+          console.log(dim(await rt.agent.compress()));
+          rt.syncConversation();
+        } catch (err) {
+          console.log(yellow(`✗ ${err instanceof Error ? err.message : String(err)}`));
+        }
+        continue;
+      }
+      // A line typed while the run works (and no card is up) interrupts it:
+      // the run stops and the new line is the next request. Its subagents
+      // keep going and still hand off.
+      for (;;) {
+        const run = rt.agent.run(line, hooks, await rt.ownerContext(line), { channel: "cli" }).then(() => null);
+        let typed: string | null = null;
+        for (;;) {
+          const listen = term.ask("\nyou › ", { silent: true });
+          const first = await Promise.race([run.then(() => ({ ended: true as const })), listen.then((l) => ({ ended: false as const, l }))]);
+          if (first.ended) { waiting = listen; break; }
+          if (first.l === null) { rt.agent.stop(); await run; rt.syncConversation(); break chat; }
+          if (first.l.trim()) { typed = first.l.trim(); break; }
+        }
+        if (typed === null) { rt.syncConversation(); term.reveal(); break; }
+        process.stdout.write(yellow("\n↯ Interrupted — switching to your new message.\n"));
+        rt.agent.stop();
+        await run;
+        rt.syncConversation();
+        line = typed;
+      }
     }
     await settleSubagents(rt);
   }

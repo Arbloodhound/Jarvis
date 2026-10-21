@@ -22,6 +22,9 @@ import * as os from "./platform.js";
 import { shoppingTools } from "./shopping.js";
 import { BROWSE_DEFAULT_STEPS, BROWSE_MAX_STEPS, renderBrowseReport, runBrowseTask } from "./browse.js";
 import { seeActVerifyTool } from "./screenact.js";
+import { readBrowserPageTool, scrollReadTool } from "./pageread.js";
+import { FORECAST_TOOLS } from "./forecast.js";
+import type { Forecaster, SeriesStore } from "../forecast.js";
 
 export {
   extractListings, extractNavLinks, extractPrices, extractReputation, extractReviews,
@@ -64,6 +67,10 @@ export interface ToolContext {
   webFetchBytes?: WebFetchBytesFn;
   /** True when this run's web transport is Tor — the only case an .onion may be fetched. */
   torEnabled?: boolean;
+  /** Number series tracked for forecasts (null when the host wired none). */
+  series?: SeriesStore | null;
+  /** The forecasting server client, or null when forecast.baseUrl is unset. */
+  forecaster?: Forecaster | null;
 }
 
 export interface Tool<S extends z.ZodType = z.ZodType> {
@@ -1127,6 +1134,8 @@ export const ALL_TOOLS: Tool[] = [
   clipboardReadTool, clipboardWriteTool, notifyTool, readNotificationsTool, screenshotTool, seeScreenTool, seeImageTool, controlScreenTool, systemInfoTool,
   transcribeAudioTool, speakTool,
   rememberTool, recallTool, forgetTool, memoryPendingTool, memoryDecideTool, seeActVerifyTool,
+  readBrowserPageTool, scrollReadTool,
+  ...FORECAST_TOOLS,
   ...shoppingTools(),
   ...INVESTIGATE_TOOLS,
   skillListTool, skillSearchTool, skillReadTool,
@@ -1135,11 +1144,11 @@ export const ALL_TOOLS: Tool[] = [
 export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; vision?: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean; notifications?: NotificationInbox }): Tool[] {
   return ALL_TOOLS.filter((t) => {
     if (opts.offlineOnly && t.network) return false;
-    if ((t.name === "control_screen" || t.name === "see_act_verify") && !opts.screenControl) return false;
+    if ((t.name === "control_screen" || t.name === "see_act_verify" || t.name === "scroll_read") && !opts.screenControl) return false;
     if (t.name === "speak" && opts.ttsEnabled === false) return false;
     // Vision off in settings withholds the look tools entirely — there is
     // no per-call way back in; the setting is the only switch.
-    if (opts.vision === false && (t.name === "look_at_screen" || t.name === "look_at_image")) return false;
+    if (opts.vision === false && (t.name === "look_at_screen" || t.name === "look_at_image" || t.name === "scroll_read")) return false;
     return true;
   }).map((t) => {
     let out = t;

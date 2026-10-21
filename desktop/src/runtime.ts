@@ -11,6 +11,7 @@ import { EcholaliaStore } from "./echolalia.js";
 import { Vision } from "./vision.js";
 import { isLoopbackUrl, Transcriber } from "./voice.js";
 import { Memory } from "./memory.js";
+import { Forecaster, SeriesStore } from "./forecast.js";
 import { SkillStore, skillRoots } from "./skills.js";
 import { ClaudeProvider } from "./providers/claude.js";
 import { LocalProvider } from "./providers/local.js";
@@ -43,6 +44,8 @@ export class Runtime {
    * from the same deps — same brain endpoint, gate, memory and vision. */
   readonly orchestrator: Orchestrator;
   readonly memory: Memory;
+  /** Number series tracked for forecasts (~/.jarvis/series.json). */
+  readonly series: SeriesStore;
   /** Conversation branches; the agent's live turns are the active branch's working copy. */
   readonly conversations: Conversations;
   readonly jobs: JobStore;
@@ -73,6 +76,7 @@ export class Runtime {
   constructor(readonly cfg: Config, readonly p: Paths, cwd = process.cwd()) {
     this.cwd = cwd;
     this.memory = new Memory(p.memory);
+    this.series = new SeriesStore(p.series);
     this.audit = new AuditLog(p.audit);
     this.pending = new EcholaliaStore(p.pending, this.memory, (entry, decision) => {
       this.audit.write({ tool: "echolalia", decision, id: entry.id, claim: entry.claim, source: entry.source, echoes: entry.echoes, reasons: entry.reasons });
@@ -154,6 +158,9 @@ export class Runtime {
       workspace: this.p.workspace,
       cwd: this.cwd,
       maxTurns: this.cfg.maxTurns,
+      series: () => this.series,
+      forecaster: () => (this.cfg.forecast.baseUrl ? new Forecaster(this.cfg.forecast.baseUrl) : null),
+      contextWindow: () => (this.cfg.brain === "local" ? this.cfg.local.contextTokens ?? 0 : 0),
       nli: {
         enabled: this.cfg.nli.enabled,
         // The model-backed layer runs on the configured LOCAL provider only,
