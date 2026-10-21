@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { claimsMatch, EcholaliaStore } from "../src/echolalia.ts";
 import type { Embedder } from "../src/embeddings.ts";
 import { Memory } from "../src/memory.ts";
+import { ALL_TOOLS, type ToolContext } from "../src/tools/index.ts";
 
 /**
  * Regressions for the memory / echolalia fixes of 2026-10-21: re-remembering
@@ -195,4 +198,75 @@ test("Echolalia: a CLI promote/drop is not undone by the app's next save", async
   assert.equal(fresh.byId(a.entry.id)!.status, "promoted");
   assert.equal(fresh.byId(b.entry.id)!.status, "dropped");
   assert.ok(memory(memFile).byId(promoted.factId!), "the promoted fact survives the app's memory save");
+});
+
+// ---------- bug 5: owner decisions on settled entries state the truth ----------
+
+async function decideTool(store: EcholaliaStore, memory: Memory, id: string, action: "promote" | "drop"): Promise<string> {
+  const ctx: ToolContext = { cwd: "/tmp", workspace: "/tmp", memory, echolalia: store, embedder: null, vision: null, signal: new AbortController().signal };
+  return ALL_TOOLS.find((t) => t.name === "memory_decide")!.run({ id, action } as never, ctx);
+}
+
+test("drop of a promoted entry is refused: the fact stays and the reply says how to forget it", async () => {
+  const m = clocked().memory();
+  const store = new EcholaliaStore(null, m);
+  const out = await store.submit("The owner prefers tea", { source: "conversation" });
+  const factId = store.promoteByOwner(out.entry.id)!.factId!;
+  const reply = await decideTool(store, m, out.entry.id, "drop");
+  assert.doesNotMatch(reply, /^Dropped/);
+  assert.match(reply, new RegExp(`already in memory as fact ${factId}`));
+  assert.match(reply, /forget/);
+  assert.equal(store.byId(out.entry.id)!.status, "promoted");
+  assert.ok(m.byId(factId), "the fact is still in memory");
+  assert.equal(store.drop(out.entry.id)!.status, "promoted", "drop() itself refuses too");
+});
+
+test("promote of a dropped entry is a clear refusal, never '-> fact undefined'", async () => {
+  const m = clocked().memory();
+  const store = new EcholaliaStore(null, m);
+  const out = await store.submit("The owner walks at 7", { source: "conversation" });
+  store.drop(out.entry.id);
+  const reply = await decideTool(store, m, out.entry.id, "promote");
+  assert.doesNotMatch(reply, /undefined/);
+  assert.doesNotMatch(reply, /^Promoted/);
+  assert.match(reply, /was dropped/);
+  assert.deepEqual(m.all(), []);
+});
+
+const PKG = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const CLI = path.join(PKG, "src", "cli.ts");
+
+function runCli(args: string[], home: string): Promise<{ status: number | null; out: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--import", "tsx", CLI, ...args], {
+      cwd: PKG,
+      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", JARVIS_HOME: home },
+    });
+    let buf = "";
+    child.stdout.on("data", (d) => (buf += d));
+    child.stderr.on("data", (d) => (buf += d));
+    const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`CLI timed out: ${args.join(" ")}\n${buf}`)); }, 60_000);
+    child.on("error", (e) => { clearTimeout(timer); reject(e); });
+    child.on("close", (status) => { clearTimeout(timer); resolve({ status, out: buf }); });
+    child.stdin.end("");
+  });
+}
+
+test("CLI: drop of a promoted entry and promote of a dropped one are refusals", { timeout: 120_000 }, async () => {
+  const home = mkdtempSync(path.join(tmpdir(), "jarvis-memfix-cli-"));
+  const id = (out: string) => /\(([0-9a-f]{8})\)/.exec(out)![1]!;
+  const a = id((await runCli(["memory", "submit", "The owner prefers tea"], home)).out);
+  assert.match((await runCli(["memory", "promote", a], home)).out, /Promoted/);
+  const drop = await runCli(["memory", "drop", a], home);
+  assert.notEqual(drop.status, 0);
+  assert.match(drop.out, /already in memory as fact/);
+  const mem = JSON.parse(readFileSync(path.join(home, "memory.json"), "utf8")) as { facts: unknown[] };
+  assert.equal(mem.facts.length, 1);
+
+  const b = id((await runCli(["memory", "submit", "The owner walks at 7"], home)).out);
+  await runCli(["memory", "drop", b], home);
+  const promote = await runCli(["memory", "promote", b], home);
+  assert.notEqual(promote.status, 0);
+  assert.doesNotMatch(promote.out, /undefined/);
+  assert.match(promote.out, /was dropped/);
 });

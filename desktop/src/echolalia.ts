@@ -328,7 +328,10 @@ export class EcholaliaStore {
     return entry;
   }
 
-  /** Owner's hands: promote a pending/quarantined entry now, recording why. */
+  /**
+   * Owner's hands: promote a pending/quarantined entry now, recording why.
+   * A promoted or dropped entry comes back unchanged (decide() says why).
+   */
   promoteByOwner(id: string): PendingEntry | null {
     const entry = this.byId(id);
     if (!entry || entry.status === "promoted" || entry.status === "dropped") return entry ?? null;
@@ -339,17 +342,53 @@ export class EcholaliaStore {
     return entry;
   }
 
-  /** Owner's hands: drop a pending/quarantined entry for good. */
+  /**
+   * Owner's hands: drop a pending/quarantined entry for good. A promoted
+   * entry is NOT dropped: its fact is already in memory and dropping the
+   * entry would not remove it, so it comes back unchanged (decide() says
+   * how to forget the fact instead).
+   */
   drop(id: string): PendingEntry | null {
     const entry = this.byId(id);
     if (!entry) return null;
-    if (entry.status !== "dropped") {
+    if (entry.status !== "dropped" && entry.status !== "promoted") {
       entry.status = "dropped";
       entry.reasons.push("dropped by owner");
       this.save();
       this.onDecision?.(entry, "dropped");
     }
     return entry;
+  }
+
+  /**
+   * An owner decision with the line to show for it (memory_decide tool and
+   * `jarvis memory promote|drop`). `ok` is false when nothing was done and
+   * the action was refused; the message always states what is true.
+   */
+  decide(id: string, action: "promote" | "drop"): { entry: PendingEntry | null; ok: boolean; message: string } {
+    const before = this.byId(id);
+    if (!before) return { entry: null, ok: false, message: `No pending entry with id ${id}.` };
+    const was = before.status;
+    if (action === "promote") {
+      if (was === "dropped") {
+        return { entry: before, ok: false, message: `Refused: ${before.id} was dropped, so it cannot be promoted: ${before.claim}. To remember it, submit it again.` };
+      }
+      if (was === "promoted") {
+        return { entry: before, ok: true, message: `Already promoted (${before.id} -> fact ${before.factId}): ${before.claim}` };
+      }
+      const e = this.promoteByOwner(id)!;
+      return { entry: e, ok: true, message: `Promoted (${e.id} -> fact ${e.factId}): ${e.claim}` };
+    }
+    if (was === "promoted") {
+      return {
+        entry: before,
+        ok: false,
+        message: `Refused: ${before.id} is already in memory as fact ${before.factId}, and dropping the entry would not remove it: ${before.claim}. To remove it, forget fact ${before.factId} (the forget tool with that id).`,
+      };
+    }
+    if (was === "dropped") return { entry: before, ok: true, message: `Already dropped (${before.id}): ${before.claim}` };
+    const e = this.drop(id)!;
+    return { entry: e, ok: true, message: `Dropped (${e.id}): ${e.claim}` };
   }
 
   /** Re-run verification on every held entry (e.g. after sources arrive). */

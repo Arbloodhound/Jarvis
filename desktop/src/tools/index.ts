@@ -1009,16 +1009,12 @@ const memoryPendingTool = tool({
 const memoryDecideTool = tool({
   name: "memory_decide",
   description:
-    "The owner's decision on a pending/quarantined candidate fact (see memory_pending for ids): promote makes it a real remembered fact immediately; drop discards it.",
+    "The owner's decision on a pending/quarantined candidate fact (see memory_pending for ids): promote makes it a real remembered fact immediately; drop discards it. A promoted entry is already a fact and cannot be dropped (forget the fact instead); a dropped entry cannot be promoted.",
   schema: z.object({ id: z.string().min(1), action: z.enum(["promote", "drop"]) }),
   policy: { effects: ["mutate"], lastsBeyondRequest: true },
   async run({ id, action }, ctx) {
     if (!ctx.echolalia) return "Verify-before-store is off, so there is no pending store in use.";
-    const e = action === "promote" ? ctx.echolalia.promoteByOwner(id) : ctx.echolalia.drop(id);
-    if (!e) return `No pending entry with id ${id}.`;
-    return action === "promote"
-      ? `Promoted (${e.id} -> fact ${e.factId}): ${e.claim}`
-      : `Dropped (${e.id}): ${e.claim}`;
+    return ctx.echolalia.decide(id, action).message;
   },
 });
 
