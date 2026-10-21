@@ -6,10 +6,10 @@ The prep notes from prep-b, prep-c and prep-d were the composition maps. The sta
 
 ## Final state
 
-- **Final main SHA: `03cdf73`** (tree e926e9d6). Every landing was pushed only after a full gate on the exact tree,
+- **Final main SHA: `a0fd632`** (tree 50dbf8e3; after the onion reversal below — was `03cdf73`). Every landing was pushed only after a full gate on the exact tree,
   and the tree read back from main was hash-identical to the gated tree.
-- **Final test count: 342**, typecheck clean. The final gate ran on a fresh checkout of main `03cdf73` with a fresh
-  `npm install`: tsc clean, 342 pass, 0 fail, 0 skipped.
+- **Final test count: 339**, typecheck clean (342 before the onion reversal below). The final gate ran on a fresh
+  checkout of main `a0fd632` with a fresh `npm install`: tsc clean, 339 pass, 0 fail, 0 skipped.
 - Status per CLAUDE.md: **SOURCE-FIXED BUT RUNTIME-UNPROVEN**. Unit and integration tests pass; there was no live
   desktop run; CI has not run on these merges. The vision-shopping live check (a real vision read of a real listing
   photo) is **blocked by environment**: this container has no cloud key and no local vision model.
@@ -85,6 +85,41 @@ The prep notes from prep-b, prep-c and prep-d were the composition maps. The sta
 - **Still to delete (owner):** `claude/desktop-vision-shopping-2026-10-20` @ f8bcb6d0. It is landed in `03cdf73`.
   The delete was refused by the same 403. Run `git push origin --delete claude/desktop-vision-shopping-2026-10-20`
   or use the GitHub branches page.
+
+## Owner reversal — shopping onion exclusion removed (2026-10-21)
+
+On the owner's explicit order (2026-10-20), this reverses the former rule "onion exclusion stays a separate
+shopping-layer function". Landed as merge `a0fd632` (branch `claude/desktop-remove-onion-exclusion-2026-10-20` @
+67f5f5e).
+
+- **Removed from `desktop/src/tools/shopping.ts`:**
+  - `excludeOnion` and its `isOnionUrl` helper
+  - the `admitRows` / `admitRow` choke point
+  - `ONION_REFUSAL`, i.e. the pre-fetch refusal of onion targets in navigation, product_check, seller_check and
+    product_reviews
+  - both "N onion result(s) excluded" notes in shop_search and the marketplace renderer
+
+  The header comment records the reversal. `index.ts` changed only by dropping `excludeOnion` from its re-export
+  list; the transport's onion handling is untouched.
+- **Test delta: 342 → 339.**
+  - Removed 4 tests: the two `excludeOnion` behaviour tests, the source pin, and "check tools refuse onion
+    targets outright".
+  - Added 1: "rows containing .onion links pass through the search tools unchanged".
+  - The nav-flow test now expects the onion row (3 rows, not 2). The nav isolation test keeps all of its
+    isolation checks and lost only the onion refusal.
+  - Gates: on the branch, tsc clean and 339/339. On fresh main `a0fd632`, tsc clean and 339/339, 0 skipped.
+- **Resulting behaviour.** Onion listings now appear in shopping search, marketplace and navigation results,
+  unchanged. Opening or checking one is the transport's decision:
+  - **Tor off:** refused, verified.
+  - **Tor on:** *not yet working on main.* The shopping tools still fetch through the direct path (`safeFetch`,
+    Tor disabled) whatever the Tor setting is. With Tor on, an onion check still gets the transport's refusal
+    (verified by probe on `a0fd632`). It will succeed only once shopping's fetches use the Tor transport — the
+    open Tor-routing fix (owner's; a candidate patch exists from this session).
+- **Branch:** not deleted. This session's GitHub access refuses branch deletes (HTTP 403); the owner should delete
+  it.
+- **Stale docs (not changed; out of this task's scope):** CLAUDE.md §Standing Behaviour Rules and ARCHITECTURE.md
+  (lines ~159, 174, 190) still state the old rule. They also describe the phone app's Kotlin `ShoppingRun`
+  exclusion, which this desktop-only change does not touch.
 
 ## PARKED (not started, per owner)
 
