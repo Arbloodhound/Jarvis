@@ -84,6 +84,7 @@ async function start(): Promise<void> {
   installNative();
   rt = new Runtime(cfg, p, homedir());
   gw = await startServer(rt, accessToken(p), cfg.port, { fallbackPort: true, onEvent });
+  rt.scheduler.start();
 
   win = new BrowserWindow({
     width: 980,
@@ -257,6 +258,7 @@ async function runSelfTest(): Promise<void> {
 app.on("before-quit", () => { quitting = true; });
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  rt?.scheduler.stop();
   gw?.server.close();
 });
 // Stay alive in the tray when every window is closed.

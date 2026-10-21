@@ -8,6 +8,7 @@ import { accessToken, loadConfig, paths, saveConfig, type Config, type Paths } f
 import { Runtime } from "./runtime.js";
 import { probeTorProxy } from "./tools/index.js";
 import { speak } from "./voice.js";
+import { JobStore, seedDefaultHarnessJobs, type JobKind } from "./scheduler.js";
 import { startServer } from "./server.js";
 
 /**
@@ -25,6 +26,7 @@ const HELP = `Jarvis desktop
   jarvis set-key        save the Claude API key to config (stays saved)
   jarvis say "text."    speak a finished sentence with the computer's voice
   jarvis transcribe f   transcribe an audio file (needs voice.sttBaseUrl)
+  jarvis jobs ...       scheduled jobs: list | add | remove | enable | disable
   jarvis where          show where Jarvis keeps its files
 
 Attaching context: 'jarvis ask "summarize this" --file notes.md --file chart.png'
@@ -137,6 +139,87 @@ async function setKey(p: Paths, cfg: Config): Promise<void> {
   console.log(`Claude API key saved to ${p.config}. It stays saved for the cloud brain and cloud vision, and is never shown again.`);
 }
 
+
+const JOBS_HELP = `jarvis jobs list
+  jarvis jobs add --owner <owner> --kind cron|once|hook --schedule <when> --task <what>
+      cron: --schedule "30 9 * * 1-5", "every 30m", or "@daily"
+      once: --schedule 2026-10-21T09:00:00 (an ISO time)
+      hook: --schedule /path/to/watched-file (fires when the file changes)
+      --owner is required: an ownerless job is a routing error.
+  jarvis jobs remove <id>
+  jarvis jobs enable <id>
+  jarvis jobs disable <id>`;
+
+function flagValue(args: string[], name: string): string | undefined {
+  const i = args.indexOf(name);
+  return i >= 0 && i + 1 < args.length ? args[i + 1] : undefined;
+}
+
+function positional(args: string[], skipFlags: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (skipFlags.includes(a)) { i++; continue; }
+    if (a.startsWith("--")) continue;
+    out.push(a);
+  }
+  return out;
+}
+
+/** `jarvis jobs ...`: manage the job book directly; no model or gateway needed. */
+function jobsCommand(p: Paths, rest: string[]): void {
+  const [sub = "list", ...args] = rest;
+  const store = new JobStore(p.jobs);
+  // First init seeds the harness's own jobs; later inits never re-seed.
+  seedDefaultHarnessJobs(store, Date.now());
+  if (sub === "list") {
+    const jobs = store.load();
+    if (!jobs.length) { console.log("No jobs."); return; }
+    for (const j of jobs) {
+      console.log(`${j.id}  owner=${j.owner}  kind=${j.kind}  ${j.enabled ? "enabled" : "DISABLED"}  next=${j.nextRun ?? "-"}  last=${j.lastRun ?? "-"}  schedule=${j.schedule}  task=${j.task}`);
+    }
+    return;
+  }
+  if (sub === "add") {
+    const owner = flagValue(args, "--owner");
+    if (!owner) {
+      console.error("jobs add needs --owner <owner>: an ownerless job is a routing error.\n" + JOBS_HELP);
+      process.exitCode = 1;
+      return;
+    }
+    const kind = (flagValue(args, "--kind") ?? "cron") as JobKind;
+    const schedule = flagValue(args, "--schedule");
+    const task = flagValue(args, "--task") ?? flagValue(args, "--prompt") ?? positional(args, ["--owner", "--kind", "--schedule", "--id"]).join(" ");
+    if (!schedule || !task) {
+      console.error("jobs add needs --schedule and --task.\n" + JOBS_HELP);
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      const job = store.add({ id: flagValue(args, "--id"), owner, kind, schedule, task, enabled: !args.includes("--disabled") }, Date.now());
+      console.log(`Added ${job.id} (owner ${job.owner}, ${job.kind}, next ${job.nextRun ?? "-"})`);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (sub === "remove" || sub === "enable" || sub === "disable") {
+    const id = positional(args, [])[0];
+    if (!id) { console.error(`jobs ${sub} needs a job id.\n` + JOBS_HELP); process.exitCode = 1; return; }
+    if (sub === "remove") {
+      if (!store.remove(id)) { console.error(`No job with id ${id}.`); process.exitCode = 1; return; }
+      console.log(`Removed ${id}.`);
+      return;
+    }
+    const job = store.setEnabled(id, sub === "enable", Date.now());
+    if (!job) { console.error(`No job with id ${id}.`); process.exitCode = 1; return; }
+    console.log(`${sub === "enable" ? "Enabled" : "Disabled"} ${job.id} (next ${job.nextRun ?? "-"}).`);
+    return;
+  }
+  console.log(JOBS_HELP);
+}
+
 async function main(): Promise<void> {
   const [cmd = "help", ...rest] = process.argv.slice(2);
   const p = paths();
@@ -156,6 +239,7 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === "help" || cmd === "--help" || cmd === "-h") { console.log(HELP); return; }
+  if (cmd === "jobs") { jobsCommand(p, rest); return; }
 
   const cfg = loadConfig(p);
   if (cmd === "set-key") {
@@ -203,6 +287,7 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "serve") {
+    rt.scheduler.start();
     const token = accessToken(p);
     const gw = await startServer(rt, token, cfg.port);
     console.log(`Jarvis is listening on this computer only.\n\n  Open: ${gw.url}\n\n  Brain: ${rt.provider().label}${cfg.offlineOnly ? " (offline only)" : ""}\n  Files: ${p.home}`);

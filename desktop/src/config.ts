@@ -103,6 +103,7 @@ export interface Paths {
   transcript: string;
   conversations: string;
   workspace: string;
+  jobs: string;
 }
 
 /** Problems found while loading files, shown to the owner once the app is up. */
@@ -119,6 +120,7 @@ export function paths(home = process.env.JARVIS_HOME || path.join(homedir(), ".j
     transcript: path.join(home, "transcript.jsonl"),
     conversations: path.join(home, "conversations.json"),
     workspace: path.join(home, "workspace"),
+    jobs: path.join(home, "jobs.json"),
   };
 }
 
