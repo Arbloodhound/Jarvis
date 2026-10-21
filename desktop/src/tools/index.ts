@@ -21,6 +21,7 @@ import { INVESTIGATE_TOOLS } from "./investigate.js";
 import * as os from "./platform.js";
 import { shoppingTools } from "./shopping.js";
 import { BROWSE_DEFAULT_STEPS, BROWSE_MAX_STEPS, renderBrowseReport, runBrowseTask } from "./browse.js";
+import { seeActVerifyTool } from "./screenact.js";
 
 export {
   excludeOnion, extractListings, extractNavLinks, extractPrices, extractReputation, extractReviews,
@@ -749,18 +750,20 @@ const seeImageTool = tool({
 const controlScreenTool = tool({
   name: "control_screen",
   description:
-    "Type text, press a key combo, or click at a point on the screen. Experimental; off unless the owner turned it on. Every action asks the owner first. Use look_at_screen to see before acting.",
+    "Type text, press a key combo, click, move the cursor, or scroll on the screen. The cursor glides along a smooth eased path (never a teleport), typing follows a natural variable cadence, and scrolling is emitted in small increments. Experimental; off unless the owner turned it on. Every action asks the owner first. Use look_at_screen to see before acting.",
   schema: z.object({
-    action: z.enum(["type", "key", "click"]),
+    action: z.enum(["type", "key", "click", "move", "scroll"]),
     text: z.string().max(2000).optional().describe("for type"),
     keys: z.string().max(40).optional().describe("for key, e.g. ctrl+c, Return, Tab"),
     x: z.number().int().min(0).max(20000).optional(),
     y: z.number().int().min(0).max(20000).optional(),
     button: z.enum(["left", "right", "middle"]).optional(),
+    direction: z.enum(["up", "down"]).optional().describe("for scroll"),
+    amount: z.number().int().min(-60).max(60).optional().describe("for scroll: wheel clicks (positive = down, negative = up); with direction, its size is used"),
   }),
   // Experimental and far-reaching: a confirm card for every single action.
   policy: { effects: ["mutate"], alwaysConfirm: true },
-  async run({ action, text, keys, x, y, button }) {
+  async run({ action, text, keys, x, y, button, direction, amount }) {
     if (action === "type") {
       if (!text) throw new Error("Nothing to type.");
       await os.screenType(text);
@@ -770,6 +773,18 @@ const controlScreenTool = tool({
       if (!keys) throw new Error("No key combo given.");
       await os.screenKey(keys);
       return `Pressed ${keys}.`;
+    }
+    if (action === "move") {
+      if (x === undefined || y === undefined) throw new Error("Move needs x and y.");
+      await os.screenMove(x, y);
+      return `Moved the cursor to ${x}, ${y}.`;
+    }
+    if (action === "scroll") {
+      let signed = amount ?? 3;
+      if (direction) signed = (direction === "down" ? 1 : -1) * Math.abs(signed || 3);
+      if (signed === 0) throw new Error("Scroll amount is zero.");
+      await os.screenScroll(signed, x, y);
+      return `Scrolled ${signed > 0 ? "down" : "up"} ${Math.abs(signed)} clicks.`;
     }
     if (x === undefined || y === undefined) throw new Error("Click needs x and y.");
     await os.screenClick(x, y, button ?? "left");
@@ -979,7 +994,7 @@ export const ALL_TOOLS: Tool[] = [
   webSearchTool, webFetchTool, browseTaskTool, openUrlTool, openAppTool,
   clipboardReadTool, clipboardWriteTool, notifyTool, readNotificationsTool, screenshotTool, seeScreenTool, seeImageTool, controlScreenTool, systemInfoTool,
   transcribeAudioTool, speakTool,
-  rememberTool, recallTool, forgetTool, memoryPendingTool, memoryDecideTool,
+  rememberTool, recallTool, forgetTool, memoryPendingTool, memoryDecideTool, seeActVerifyTool,
   ...shoppingTools(),
   ...INVESTIGATE_TOOLS,
   skillListTool, skillSearchTool, skillReadTool,
@@ -988,7 +1003,7 @@ export const ALL_TOOLS: Tool[] = [
 export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean; notifications?: NotificationInbox }): Tool[] {
   return ALL_TOOLS.filter((t) => {
     if (opts.offlineOnly && t.network) return false;
-    if (t.name === "control_screen" && !opts.screenControl) return false;
+    if ((t.name === "control_screen" || t.name === "see_act_verify") && !opts.screenControl) return false;
     if (t.name === "speak" && opts.ttsEnabled === false) return false;
     return true;
   }).map((t) => {

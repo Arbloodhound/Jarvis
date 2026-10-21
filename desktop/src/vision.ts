@@ -42,17 +42,23 @@ export class Vision {
     return this.cfg.kind === "cloud" ? `Claude (${this.cfg.model})` : `Local VLM (${this.cfg.model})`;
   }
 
-  async describe(images: Image[], question: string, signal?: AbortSignal): Promise<string> {
+  /**
+   * Describe images in words. `maxTokens` caps the answer (default 2048):
+   * short-form callers (grounding / verify reads) pass a small cap so a slow
+   * local VLM finishes inside the model server's request window instead of
+   * rambling past it.
+   */
+  async describe(images: Image[], question: string, signal?: AbortSignal, maxTokens = 2048): Promise<string> {
     if (images.length === 0) throw new Error("No image to look at.");
-    return this.cfg.kind === "cloud" ? this.cloud(images, question, signal) : this.local(images, question, signal);
+    return this.cfg.kind === "cloud" ? this.cloud(images, question, signal, maxTokens) : this.local(images, question, signal, maxTokens);
   }
 
-  private async cloud(images: Image[], question: string, signal?: AbortSignal): Promise<string> {
+  private async cloud(images: Image[], question: string, signal: AbortSignal | undefined, maxTokens: number): Promise<string> {
     const client = new Anthropic(this.cfg.apiKey ? { apiKey: this.cfg.apiKey } : {});
     const msg = await client.messages.create(
       {
         model: this.cfg.model,
-        max_tokens: 2048,
+        max_tokens: maxTokens,
         messages: [{
           role: "user",
           content: [
@@ -66,7 +72,7 @@ export class Vision {
     return msg.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("").trim();
   }
 
-  private async local(images: Image[], question: string, signal?: AbortSignal): Promise<string> {
+  private async local(images: Image[], question: string, signal: AbortSignal | undefined, maxTokens: number): Promise<string> {
     let res: Response;
     try {
       res = await fetch(`${this.cfg.baseUrl.replace(/\/$/, "")}/chat/completions`, {
@@ -75,7 +81,7 @@ export class Vision {
         signal,
         body: JSON.stringify({
           model: this.cfg.model,
-          max_tokens: 2048,
+          max_tokens: maxTokens,
           messages: [{
             role: "user",
             content: [

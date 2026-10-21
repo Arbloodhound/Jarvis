@@ -31,3 +31,13 @@ test("a non-vision local model gives a clear error", async () => {
   await assert.rejects(v.describe([{ data: "x", mediaType: "image/png" }], "?"), /no description|vision model/i);
   srv.close();
 });
+
+test("describe passes a caller maxTokens cap to the local server (default stays 2048)", async () => {
+  const seen: number[] = [];
+  const { srv, url } = await fake((body) => { seen.push(body.max_tokens); return { choices: [{ message: { content: "ok" } }] }; });
+  const v = new Vision({ kind: "local", baseUrl: url, model: "qwen3-vl" });
+  await v.describe([{ data: "aGVsbG8=", mediaType: "image/png" }], "?", undefined, 123);
+  await v.describe([{ data: "aGVsbG8=", mediaType: "image/png" }], "?");
+  srv.close();
+  assert.deepEqual(seen, [123, 2048]);
+});

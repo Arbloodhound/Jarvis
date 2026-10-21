@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { platform } from "node:os";
+import { planMousePath, planScroll, planTyping, type MouseStep, type ScrollStep, type TypingStep } from "./human.js";
 
 /**
  * The few things that differ per operating system, each done with the
@@ -166,11 +167,154 @@ async function first(tries: Array<[string, string[]]>, install: string): Promise
 
 const LINUX_HINT = "Screen control needs 'xdotool' (X11) or 'ydotool' (Wayland). Install one, e.g. `sudo apt install xdotool`.";
 
+/**
+ * Human-quality execution. Screen actions are planned by the pure
+ * planners in human.ts (eased cursor paths, natural typing cadence,
+ * incremental scroll) and replayed here step by step: sleep the step's
+ * delay, then emit the step. The Linux/xdotool executors below are the
+ * real, live-proven path. Deliberate exceptions where a one-shot burst
+ * survives, and why:
+ * - ydotool-only Linux (no xdotool): ydotool has no per-step location
+ *   or move reporting this code can drive, so typing/key fall back to
+ *   the legacy one-shot ydotool call. xdotool systems never see it.
+ * - macOS/Windows: typing replays the same plan through per-chunk
+ *   backend calls (design parity), but those paths are UNPROVEN on real
+ *   hardware; mouse-move/scroll have no steppable backend there yet
+ *   and say so instead of faking a plan replay.
+ */
+
+export type RunFn = (cmd: string, args: string[]) => Promise<string>;
+export type SleepFn = (ms: number) => Promise<void>;
+
+export interface ScreenExecDeps {
+  runFn: RunFn;
+  sleepFn: SleepFn;
+}
+
+const realSleep: SleepFn = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Test seam: substitute the command runner and the clock. */
+let screenDepsForTest: ScreenExecDeps | null = null;
+let xdotoolKnown: boolean | null = null;
+export function useScreenDepsForTest(deps: ScreenExecDeps | null): void {
+  screenDepsForTest = deps;
+  xdotoolKnown = null;
+}
+function screenDeps(): ScreenExecDeps {
+  return screenDepsForTest ?? { runFn: (cmd, args) => run(cmd, args, undefined, 10000), sleepFn: realSleep };
+}
+
+async function xdotoolAvailable(deps: ScreenExecDeps): Promise<boolean> {
+  if (xdotoolKnown !== null) return xdotoolKnown;
+  try {
+    await deps.runFn("xdotool", ["version"]);
+    xdotoolKnown = true;
+  } catch {
+    xdotoolKnown = false;
+  }
+  return xdotoolKnown;
+}
+
+/** Replay a planned cursor path through xdotool, one move per step. */
+export async function replayMousePath(steps: MouseStep[], deps: ScreenExecDeps): Promise<void> {
+  for (const s of steps) {
+    if (s.delayMs > 0) await deps.sleepFn(s.delayMs);
+    // No `--sync`: on xdotool 3.2016 it can stall waiting for a motion
+    // event; a plain mousemove is flushed when the command exits.
+    await deps.runFn("xdotool", ["mousemove", String(s.x), String(s.y)]);
+  }
+}
+
+/**
+ * Replay a typing plan through xdotool, one `type` call per step.
+ * xdotool's own `type --delay` is a single uniform delay, so it cannot
+ * express the plan's variable cadence; the executor sleeps between
+ * per-key calls instead. That is the default (and only) xdotool path.
+ */
+export async function replayTypingPlan(steps: TypingStep[], deps: ScreenExecDeps): Promise<void> {
+  for (const s of steps) {
+    if (s.delayMs > 0) await deps.sleepFn(s.delayMs);
+    await deps.runFn("xdotool", ["type", "--clearmodifiers", "--", s.text]);
+  }
+}
+
+/** Replay a scroll plan: each increment is its own burst of wheel clicks. */
+export async function replayScrollPlan(steps: ScrollStep[], deps: ScreenExecDeps): Promise<void> {
+  for (const s of steps) {
+    if (s.delayMs > 0) await deps.sleepFn(s.delayMs);
+    const button = s.steps < 0 ? "4" : "5"; // wheel up / wheel down
+    for (let i = 0; i < Math.abs(s.steps); i++) {
+      await deps.runFn("xdotool", ["click", button]);
+    }
+  }
+}
+
+/** Current cursor position on Linux/X11, or null when it can't be read. */
+export async function screenMouseLocation(deps: ScreenExecDeps = screenDeps()): Promise<{ x: number; y: number } | null> {
+  try {
+    const out = await deps.runFn("xdotool", ["getmouselocation", "--shell"]);
+    const x = /\bX=(\d+)/.exec(out);
+    const y = /\bY=(\d+)/.exec(out);
+    if (!x || !y) return null;
+    return { x: Number(x[1]), y: Number(y[1]) };
+  } catch {
+    return null;
+  }
+}
+
+/** Move the cursor to (x, y) along a planned eased path (no click). */
+export async function screenMove(x: number, y: number): Promise<void> {
+  if (currentOs() === "darwin") throw new Error("Moving the mouse without clicking isn't wired up on macOS yet (no steppable move backend).");
+  if (currentOs() === "win32") throw new Error("Moving the mouse without clicking isn't wired up on Windows yet.");
+  const deps = screenDeps();
+  if (!(await xdotoolAvailable(deps))) throw new Error(LINUX_HINT);
+  const from = (await screenMouseLocation(deps)) ?? { x, y };
+  await replayMousePath(planMousePath(from, { x, y }), deps);
+}
+
+/**
+ * Scroll by `amount` wheel clicks (positive = down, negative = up),
+ * optionally after gliding the cursor to (x, y) first. The scroll is
+ * emitted as planned increments, never one jump.
+ */
+export async function screenScroll(amount: number, x?: number, y?: number): Promise<void> {
+  if (currentOs() === "darwin") throw new Error("Scrolling isn't wired up on macOS yet.");
+  if (currentOs() === "win32") throw new Error("Scrolling isn't wired up on Windows yet.");
+  const deps = screenDeps();
+  if (!(await xdotoolAvailable(deps))) throw new Error(LINUX_HINT);
+  if (x !== undefined && y !== undefined) {
+    const from = (await screenMouseLocation(deps)) ?? { x, y };
+    await replayMousePath(planMousePath(from, { x, y }), deps);
+  }
+  await replayScrollPlan(planScroll(amount), deps);
+}
+
 export async function screenType(text: string): Promise<void> {
   if (text.length > 2000) throw new Error("Too much text to type at once.");
-  if (currentOs() === "darwin") { await run("osascript", ["-e", "on run argv\ntell application \"System Events\" to keystroke (item 1 of argv)\nend run", text]); return; }
-  if (currentOs() === "win32") { await run("powershell", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(`Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait(${psQuote(text).replace(/([+^%~(){}[\]])/g, "{$1}")})`, "utf16le").toString("base64")]); return; }
-  await first([["xdotool", ["type", "--clearmodifiers", "--", text]], ["ydotool", ["type", text]]], LINUX_HINT);
+  const plan = planTyping(text);
+  if (currentOs() === "darwin") {
+    // Same plan, per-chunk backend calls — design parity, unproven on a Mac.
+    for (const s of plan) {
+      if (s.delayMs > 0) await realSleep(s.delayMs);
+      await run("osascript", ["-e", "on run argv\ntell application \"System Events\" to keystroke (item 1 of argv)\nend run", s.text]);
+    }
+    return;
+  }
+  if (currentOs() === "win32") {
+    // Same plan, per-chunk SendKeys — design parity, unproven on Windows.
+    for (const s of plan) {
+      if (s.delayMs > 0) await realSleep(s.delayMs);
+      await run("powershell", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(`Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait(${psQuote(s.text).replace(/([+^%~(){}[\]])/g, "{$1}")})`, "utf16le").toString("base64")]);
+    }
+    return;
+  }
+  const deps = screenDeps();
+  if (await xdotoolAvailable(deps)) {
+    await replayTypingPlan(plan, deps);
+    return;
+  }
+  // Documented exception: ydotool-only systems keep the one-shot burst.
+  await first([["ydotool", ["type", text]]], LINUX_HINT);
 }
 
 /** Split "ctrl+shift+c" into its modifiers and the final key. */
@@ -312,5 +456,16 @@ export async function screenClick(x: number, y: number, button: "left" | "right"
   const b = { left: "1", right: "3", middle: "2" }[button];
   if (currentOs() === "darwin") { await run("osascript", ["-e", `tell application "System Events" to click at {${x}, ${y}}`]); return; }
   if (currentOs() === "win32") throw new Error("Mouse clicking isn't wired up on Windows yet.");
-  await first([["xdotool", ["mousemove", String(x), String(y), "click", b]], ["ydotool", ["mousemove", String(x), String(y)]]], LINUX_HINT);
+  const deps = screenDeps();
+  if (await xdotoolAvailable(deps)) {
+    // Glide to the target along a planned eased path, then click there.
+    // When the current position can't be read, the path degrades to a
+    // single step at the target (position unknown, distance unknown).
+    const from = (await screenMouseLocation(deps)) ?? { x, y };
+    await replayMousePath(planMousePath(from, { x, y }), deps);
+    await deps.runFn("xdotool", ["click", b]);
+    return;
+  }
+  // Documented exception: ydotool-only systems keep the one-shot move.
+  await first([["ydotool", ["mousemove", String(x), String(y)]]], LINUX_HINT);
 }
