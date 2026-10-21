@@ -19,6 +19,7 @@ import { JobStore, Scheduler, seedDefaultHarnessJobs, type Job, type RunnerResul
 import { makeWebFetch, probeTorProxy, toolsFor, type Tool } from "./tools/index.js";
 import { NotificationFilter, type NotificationInput } from "./notifications/filter.js";
 import { NotificationInbox, type IngestResult } from "./notifications/inbox.js";
+import { AgentStore, childTools, definitionSuffix } from "./agents.js";
 
 /**
  * Wires config, memory, gate, brains and tools into one Agent. Shared by the
@@ -77,6 +78,7 @@ export class Runtime {
     this.orchestrator = new Orchestrator({
       maxConcurrent: () => this.cfg.subagents.maxConcurrent,
       start: (h) => this.startChild(h),
+      resolveAgent: (name) => new AgentStore(this.p.home).get(name),
     });
     this.agent = this.newAgent(
       () => [...this.baseTools(), ...subagentTools(this.orchestrator)],
@@ -146,11 +148,12 @@ export class Runtime {
    * knows whose action they are approving.
    */
   private startChild(h: ChildHandle): ChildRun {
-    const agent = this.newAgent(() => this.baseTools(), {
+    // A saved definition narrows the child's tools and adds its instructions.
+    const agent = this.newAgent(() => childTools(h.definition, this.baseTools()), {
       inbox: () => h.drainInbox().map((m) => `[Message from your coordinator]\n${m}`),
       systemSuffix: "\n\nYou are a subagent working for the main Jarvis agent, which delegated this task to you. Do only this task. " +
         "You share the owner's gate, tools and memory, but you cannot spawn subagents. " +
-        "Your final answer is your hand-off: make it complete, concrete and self-contained, because the main agent gets only that.",
+        "Your final answer is your hand-off: make it complete, concrete and self-contained, because the main agent gets only that." + definitionSuffix(h.definition),
     });
     const hooks: RunHooks = {
       emit: (e) => {

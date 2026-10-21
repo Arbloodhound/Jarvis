@@ -11,6 +11,7 @@ import { startupWarnings } from "./config.js";
 import type { Turn } from "./providers/types.js";
 import { asNotificationInput } from "./notifications/inbox.js";
 import type { Runtime } from "./runtime.js";
+import { handleMenuRoute } from "./menus-api.js";
 
 /**
  * The gateway: one HTTP + WebSocket server on 127.0.0.1. It serves the chat
@@ -179,6 +180,8 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true }));
       return;
     }
+    // Skills / Agents menus: /api/skills, /api/agents, /api/tools (token-checked there) and their UI files.
+    if (handleMenuRoute(req, res, url, { rt, token })) return;
     if (req.method === "POST" && url.pathname === "/api/upload") { handleUpload(req, res, url); return; }
     if (req.method === "POST" && url.pathname === "/api/notifications") {
       // Inbound notification intake. Auth is the gateway's own, no weaker:

@@ -22,6 +22,7 @@ import * as os from "./platform.js";
 import { shoppingTools } from "./shopping.js";
 import { BROWSE_DEFAULT_STEPS, BROWSE_MAX_STEPS, renderBrowseReport, runBrowseTask } from "./browse.js";
 import { seeActVerifyTool } from "./screenact.js";
+import { AGENT_DEF_TOOLS } from "./agent-defs.js";
 
 export {
   extractListings, extractNavLinks, extractPrices, extractReputation, extractReviews,
@@ -1130,6 +1131,7 @@ export const ALL_TOOLS: Tool[] = [
   ...shoppingTools(),
   ...INVESTIGATE_TOOLS,
   skillListTool, skillSearchTool, skillReadTool,
+  ...AGENT_DEF_TOOLS,
 ];
 
 export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; vision?: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean; notifications?: NotificationInbox }): Tool[] {

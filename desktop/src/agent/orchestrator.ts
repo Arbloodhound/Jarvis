@@ -61,6 +61,8 @@ export interface ChildHandle {
   readonly id: string;
   readonly name: string;
   readonly task: string;
+  /** The saved agent definition it was started from (src/agents.ts), if any. */
+  readonly definition?: AgentSpec;
   /** Steering messages sent since the child's last step, in order. */
   drainInbox(): string[];
   /** Note what the child is doing (shown by agent_status). */
@@ -76,6 +78,9 @@ export interface ChildRun {
 }
 
 export type ChildStarter = (h: ChildHandle) => ChildRun;
+
+/** A saved agent definition as a child needs it: its instructions and tool allowlist ([] = default). */
+export interface AgentSpec { name: string; instructions: string; tools: readonly string[] }
 
 interface ChildRec {
   id: string;
@@ -105,6 +110,8 @@ export class Orchestrator {
     maxConcurrent: () => number;
     /** Fired the moment a hand-off is queued (the runtime tells the owner). */
     onHandoff?: (h: Handoff) => void;
+    /** Look up a saved agent definition by name (spawn_agent's `agent` field). */
+    resolveAgent?: (name: string) => AgentSpec | null;
   }) {}
 
   /**
@@ -112,10 +119,12 @@ export class Orchestrator {
    * the task is blank, when the concurrency cap is full (spawn refuses; it
    * never queues), or when a subagent tries to spawn (depth cap 1).
    */
-  spawn(task: string, name?: string, depth = 0): string {
+  spawn(task: string, name?: string, depth = 0, agent?: string): string {
     if (depth >= 1) throw new Error("Subagents cannot spawn subagents — delegation stops at one level.");
     const brief = task.trim();
     if (!brief) throw new Error("A subagent needs a task.");
+    const definition = agent ? this.opts.resolveAgent?.(agent) ?? undefined : undefined;
+    if (agent && !definition) throw new Error(`No saved agent named "${agent}" — list_agents shows them.`);
     const running = [...this.children.values()].filter((c) => c.state === "running").length;
     const max = Math.max(1, Math.floor(this.opts.maxConcurrent()) || 1);
     if (running >= max) {
@@ -124,7 +133,7 @@ export class Orchestrator {
     const id = `agent:${randomUUID().slice(0, 8)}`;
     const rec: ChildRec = {
       id,
-      name: this.uniqueName(name?.trim() || id),
+      name: this.uniqueName(name?.trim() || definition?.name || id),
       task: brief,
       state: "running",
       startedAt: Date.now(),
@@ -139,6 +148,7 @@ export class Orchestrator {
       id,
       name: rec.name,
       task: brief,
+      definition,
       drainInbox: () => rec.inbox.splice(0),
       report: (note) => { rec.note = note; rec.lastActivityAt = Date.now(); },
     };
@@ -266,12 +276,13 @@ export function subagentTools(orch: Orchestrator): Tool[] {
       schema: z.object({
         task: z.string().min(1).describe("The subagent's full brief"),
         name: z.string().min(1).max(40).optional().describe("A short name, e.g. \"prices\" — used in status, cards and hand-offs"),
+        agent: z.string().min(1).max(64).optional().describe("A saved agent definition to run (list_agents): it adds that agent's instructions and limits its tools"),
       }),
       // Delegating work is far-reaching: the owner approves each distinct
       // delegation on a card (the phone registry's approval-once for agent.spawn).
       policy: { effects: ["mutate"], alwaysConfirm: true },
-      async run({ task, name }) {
-        const id = orch.spawn(task, name, 0);
+      async run({ task, name, agent }) {
+        const id = orch.spawn(task, name, 0, agent);
         const info = orch.list().find((c) => c.id === id)!;
         return `Spawned subagent "${info.name}" (${id}) for: ${task}\nIt works in the background; its result returns here as a hand-off message. agent_status shows it meanwhile.`;
       },
