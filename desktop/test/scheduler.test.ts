@@ -85,6 +85,22 @@ test("cron: aliases and invalid expressions", () => {
   assert.throws(() => parseCron("*/0 * * * *"), /step/);
 });
 
+test("cron: a job inside the DST spring-forward gap runs at the first valid time after it, not a day late", () => {
+  const prevTz = process.env.TZ;
+  process.env.TZ = "America/New_York"; // 2026-03-08: 02:00 -> 03:00, so 02:xx does not exist
+  try {
+    const daily = new Date(nextCron("30 2 * * *", local(2026, 3, 7, 12, 0))!);
+    assert.deepEqual([daily.getDate(), daily.getHours(), daily.getMinutes()], [8, 3, 0]);
+    const dayAfter = new Date(nextCron("30 2 * * *", daily.getTime())!);
+    assert.deepEqual([dayAfter.getDate(), dayAfter.getHours(), dayAfter.getMinutes()], [9, 2, 30]); // back to normal
+    // Reaching the gap minute by minute (from inside 01:xx) behaves the same.
+    const stepped = new Date(nextCron("*/30 1,2 * * *", local(2026, 3, 8, 1, 30))!);
+    assert.deepEqual([stepped.getDate(), stepped.getHours(), stepped.getMinutes()], [8, 3, 0]);
+  } finally {
+    if (prevTz === undefined) delete process.env.TZ; else process.env.TZ = prevTz;
+  }
+});
+
 test("interval shorthand: units, @every, and bare numbers rejected", () => {
   assert.equal(parseIntervalMs("every 30m"), 30 * 60_000);
   assert.equal(parseIntervalMs("every 3600s"), 3_600_000);
@@ -247,6 +263,131 @@ test("a run that needed a confirmation is reported declined-confirm and audit-lo
   assert.equal(dec?.jobId, job.id);
   assert.equal(dec?.owner, "parity-test");
   assert.equal(store.get(job.id)!.enabled, false); // still marked run: no retry loop
+});
+
+/** A promise the test releases by hand: stands in for a slow job run, no real sleep. */
+function deferred(): { p: Promise<void>; release: () => void } {
+  let release!: () => void;
+  const p = new Promise<void>((r) => { release = r; });
+  return { p, release };
+}
+
+test("overlapping ticks never fire a job twice: a tick blocked on a slow job does not re-fire one another tick ran", async () => {
+  const fired: string[] = [];
+  const gate = deferred();
+  const { store, sched } = makeScheduler(async (j) => { fired.push(j.task); if (j.task === "a") await gate.p; return { detail: "x" }; });
+  store.add({ owner: "me", kind: "once", schedule: new Date(T0 + 1000).toISOString(), task: "a" }, T0);
+  const b = store.add({ owner: "me", kind: "once", schedule: new Date(T0 + 1000).toISOString(), task: "b" }, T0);
+  const first = sched.tick(T0 + 2000); // blocks inside job a
+  const second = await sched.tick(T0 + 3000); // the next timer tick, while the first is still running
+  gate.release();
+  await first;
+  assert.deepEqual(fired, ["a", "b"]); // b once, never a,b,b
+  assert.deepEqual(second, []); // skipped: a tick never overlaps another
+  assert.equal(store.get(b.id)!.enabled, false);
+});
+
+test("a tick re-reads each job before firing it: a job disabled while an earlier job ran is not fired from a stale copy", async () => {
+  const fired: string[] = [];
+  const gate = deferred();
+  const { store, sched } = makeScheduler(async (j) => { fired.push(j.task); if (j.task === "a") await gate.p; return { detail: "x" }; });
+  store.add({ owner: "me", kind: "once", schedule: new Date(T0 + 1000).toISOString(), task: "a" }, T0);
+  const b = store.add({ owner: "me", kind: "cron", schedule: "every 1s", task: "b" }, T0);
+  const first = sched.tick(T0 + 2000);
+  store.setEnabled(b.id, false, T0 + 2000); // e.g. `jarvis jobs disable` from another process
+  gate.release();
+  await first;
+  assert.deepEqual(fired, ["a"]);
+  assert.equal(store.get(b.id)!.enabled, false);
+  assert.equal(store.get(b.id)!.lastRun, null);
+});
+
+/** Let pending promise callbacks run (no timers involved), until `done()` or a bounded number of turns. */
+async function settle(done: () => boolean): Promise<void> {
+  for (let i = 0; i < 200 && !done(); i++) await new Promise((r) => setImmediate(r));
+}
+
+const DAY = 86_400_000;
+
+test("start(): while the catch-up is blocked on a slow job, timer ticks do not fire a job missed beyond the grace window", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const fired: string[] = [];
+  const gate = deferred();
+  const { store, dir } = tmpStore();
+  const { entries, log } = captureAudit();
+  let now = T0;
+  const sched = new Scheduler({
+    store, audit: log as never, graceMs: 60_000, tickMs: 1000, now: () => now, cwd: dir,
+    runJob: async (j) => { fired.push(j.task); if (j.task === "a") await gate.p; return { detail: "x" }; },
+  });
+  store.add({ owner: "me", kind: "once", schedule: new Date(T0 - 10_000).toISOString(), task: "a" }, T0 - 2 * DAY); // inside grace
+  const b = store.add({ owner: "me", kind: "once", schedule: new Date(T0 - DAY).toISOString(), task: "b" }, T0 - 2 * DAY); // a day late
+  sched.start(); // catch-up starts, blocks inside a
+  for (let i = 0; i < 3; i++) { now += 1000; t.mock.timers.tick(1000); await settle(() => false); }
+  gate.release();
+  await settle(() => sched.recentRuns.some((r) => r.jobId === b.id));
+  sched.stop();
+  assert.deepEqual(fired, ["a"]); // b was missed by a day: never fired
+  assert.equal(sched.recentRuns.find((r) => r.jobId === b.id)?.status, "skipped-missed");
+  assert.ok(entries.some((e) => e.event === "scheduler_missed_skipped" && e.jobId === b.id));
+  assert.equal(store.get(b.id)!.enabled, false);
+});
+
+test("a catch-up pass does not save a stale copy over a firing written meanwhile (lastRun is kept)", async () => {
+  const gate = deferred();
+  const { store, sched } = makeScheduler(async (j) => { if (j.task === "a") await gate.p; return { detail: "x" }; }, 60_000);
+  store.add({ owner: "me", kind: "once", schedule: new Date(T0 - 10_000).toISOString(), task: "a" }, T0 - 2 * DAY);
+  const b = store.add({ owner: "me", kind: "cron", schedule: "every 1h", task: "b" }, T0 - 2 * DAY); // nextRun long past
+  const catchUp = sched.tick(T0, { catchUp: true });
+  // Meanwhile b is fired elsewhere: its real firing writes lastRun and a future nextRun.
+  const ran = store.get(b.id)!;
+  ran.lastRun = new Date(T0).toISOString();
+  ran.nextRun = new Date(T0 + 3_600_000).toISOString();
+  store.put(ran);
+  gate.release();
+  const out = await catchUp;
+  assert.equal(store.get(b.id)!.lastRun, new Date(T0).toISOString());
+  assert.equal(store.get(b.id)!.nextRun, new Date(T0 + 3_600_000).toISOString());
+  assert.equal(out.find((o) => o.jobId === b.id), undefined); // not due any more: nothing to skip
+});
+
+test("start(): a job due before the scheduler started is held to the grace rule even if the catch-up pass never saw it", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const fired: string[] = [];
+  const { store, dir } = tmpStore();
+  const { entries, log } = captureAudit();
+  let now = T0;
+  const sched = new Scheduler({
+    store, audit: log as never, graceMs: 60_000, tickMs: 1000, now: () => now, cwd: dir,
+    runJob: async (j) => { fired.push(j.task); return { detail: "x" }; },
+  });
+  store.add({ owner: "me", kind: "once", schedule: new Date(T0 + DAY).toISOString(), task: "later" }, T0); // job file exists: no seeding
+  sched.start();
+  await settle(() => false); // catch-up done (nothing due)
+  // Written after the catch-up, e.g. by `jarvis jobs add` in another process, with a time a day before start.
+  const old = store.add({ owner: "me", kind: "once", schedule: new Date(T0 - DAY).toISOString(), task: "old" }, T0);
+  now += 1000; t.mock.timers.tick(1000);
+  await settle(() => sched.recentRuns.some((r) => r.jobId === old.id));
+  sched.stop();
+  assert.deepEqual(fired, []);
+  assert.equal(sched.recentRuns.find((r) => r.jobId === old.id)?.status, "skipped-missed");
+  assert.ok(entries.some((e) => e.event === "scheduler_missed_skipped" && e.jobId === old.id));
+});
+
+test("a job removed while it fires stays removed: no save after the run, and the removal is audited", async () => {
+  let id = "";
+  let store!: JobStore;
+  const made = makeScheduler(async () => { store.remove(id); return { detail: "x" }; }); // `jarvis jobs remove` mid-run
+  store = made.store;
+  id = store.add({ owner: "me", kind: "cron", schedule: "every 60s", task: "t" }, T0).id;
+  const out = await made.sched.tick(T0 + 61_000);
+  assert.equal(out[0]?.status, "ran");
+  assert.equal(store.get(id), null); // not written back
+  assert.equal(store.load().length, 0);
+  const gone = made.entries.find((e) => e.event === "scheduler_job_removed_during_run");
+  assert.equal(gone?.jobId, id);
+  assert.equal(gone?.owner, "me");
+  assert.ok(made.entries.some((e) => e.event === "scheduler_run" && e.jobId === id)); // the run itself is still logged
 });
 
 // ------------------------------------------------------------------ hooks ---

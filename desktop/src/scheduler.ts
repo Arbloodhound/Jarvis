@@ -32,7 +32,8 @@ import type { AuditLog } from "./gate/audit.js";
  *   (multiple missed periods coalesce into that one firing). A job
  *   older than the grace window is skipped and logged
  *   (`scheduler_missed_skipped`): a once job is disabled as expired,
- *   a cron/interval job advances to its next future time.
+ *   a cron/interval job advances to its next future time. The rule
+ *   covers every job due before the start time, whichever tick finds it.
  * - Hook jobs are the minimal honest phone-hook: watch one file (or a
  *   not-yet-existing file's parent folder) with fs.watch and fire when
  *   its mtime changes. No command/URL polling is claimed.
@@ -147,7 +148,17 @@ export function cronMatches(p: ParsedCron, d: Date): boolean {
   return domHit || dowHit;
 }
 
-/** The next match strictly after `afterMs`, or null if none within ~5 years. Local time. */
+/** DST spring-forward: the clock jumped from `fromHour` to `d`; was a skipped hour one the job runs in? */
+const gapHit = (p: ParsedCron, fromHour: number, d: Date): boolean => {
+  for (let h = fromHour; h < d.getHours(); h++) if (p.hour.has(h)) return true;
+  return false;
+};
+
+/**
+ * The next match strictly after `afterMs`, or null if none within ~5 years. Local time.
+ * A time inside a DST spring-forward gap (02:30 on a day 02:00 jumps to
+ * 03:00) runs at the first valid time after the gap, as standard cron does.
+ */
 export function nextCron(expr: string | ParsedCron, afterMs: number): number | null {
   const p = typeof expr === "string" ? parseCron(expr) : expr;
   const d = new Date(afterMs);
@@ -158,8 +169,18 @@ export function nextCron(expr: string | ParsedCron, afterMs: number): number | n
     if (!p.month.has(d.getMonth() + 1)) { d.setDate(1); d.setHours(0, 0, 0, 0); d.setMonth(d.getMonth() + 1); continue; }
     const dayOk = p.domStar && p.dowStar ? true : p.domStar ? p.dow.has(d.getDay()) : p.dowStar ? p.dom.has(d.getDate()) : p.dom.has(d.getDate()) || p.dow.has(d.getDay());
     if (!dayOk) { d.setDate(d.getDate() + 1); d.setHours(0, 0, 0, 0); continue; }
-    if (!p.hour.has(d.getHours())) { d.setHours(d.getHours() + 1, 0, 0, 0); continue; }
-    if (!p.minute.has(d.getMinutes())) { d.setMinutes(d.getMinutes() + 1, 0, 0); continue; }
+    if (!p.hour.has(d.getHours())) {
+      const want = d.getHours() + 1;
+      d.setHours(want, 0, 0, 0);
+      if (d.getHours() > want && gapHit(p, want, d)) return d.getTime();
+      continue;
+    }
+    if (!p.minute.has(d.getMinutes())) {
+      const h = d.getHours();
+      d.setMinutes(d.getMinutes() + 1, 0, 0);
+      if (d.getHours() > h + 1 && gapHit(p, h + 1, d)) return d.getTime();
+      continue;
+    }
     return d.getTime();
   }
   return null;
@@ -374,6 +395,9 @@ interface AuditLike { write(entry: Record<string, unknown>): void }
 
 export class Scheduler {
   private timer: NodeJS.Timeout | null = null;
+  private ticking = false;
+  /** When start() ran: a job due before this is a missed job, whichever tick finds it. */
+  private startedAtMs: number | null = null;
   private readonly firing = new Set<string>();
   private readonly watchers = new Map<string, FSWatcher>();
   private readonly watchedSig = new Map<string, string>();
@@ -397,11 +421,18 @@ export class Scheduler {
     return { running: this.running, jobs: jobs.length, enabled: jobs.filter((j) => j.enabled).length, nextRun: next, recentRuns: [...this.recentRuns] };
   }
 
-  /** Start the timer. The first tick is a catch-up (missed-job grace applies). */
+  /**
+   * Start the timer. The first tick is a catch-up (missed-job grace applies).
+   * Timer ticks are skipped while it runs (ticks never overlap), and any
+   * later tick still holds a job due before the start time to the grace
+   * rule, so a job missed days ago is skipped, never fired late.
+   */
   start(): void {
     if (this.timer) return;
-    seedDefaultHarnessJobs(this.deps.store, this.now());
-    void this.tick(this.now(), { catchUp: true });
+    const startMs = this.now();
+    this.startedAtMs = startMs;
+    seedDefaultHarnessJobs(this.deps.store, startMs);
+    void this.tick(startMs, { catchUp: true });
     const ms = this.deps.tickMs ?? 1000;
     this.timer = setInterval(() => { void this.tick(); }, ms);
     this.timer.unref?.();
@@ -410,6 +441,7 @@ export class Scheduler {
 
   stop(): void {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    this.startedAtMs = null;
     for (const w of this.watchers.values()) { try { w.close(); } catch { /* already closed */ } }
     this.watchers.clear();
     this.watchedSig.clear();
@@ -417,13 +449,31 @@ export class Scheduler {
     this.debounce.clear();
   }
 
-  /** One evaluation pass. Returns what fired (or was skipped) this pass. */
+  /**
+   * One evaluation pass. Returns what fired (or was skipped) this pass.
+   * Ticks never overlap: start() runs one every tickMs without awaiting it,
+   * and a tick blocked on a slow job must not race a newer tick over the
+   * jobs after it. A tick that finds one already running is skipped ([]).
+   */
   async tick(nowMs: number = this.now(), opts: { catchUp?: boolean } = {}): Promise<FireOutcome[]> {
+    if (this.ticking) return [];
+    this.ticking = true;
+    try {
+      return await this.evaluate(nowMs, opts);
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async evaluate(nowMs: number, opts: { catchUp?: boolean }): Promise<FireOutcome[]> {
     const outcomes: FireOutcome[] = [];
     const grace = this.deps.graceMs ?? MISSED_GRACE_MS;
-    const jobs = this.deps.store.load();
-    for (const job of jobs) {
-      if (!job.enabled || job.kind === "hook") continue;
+    for (const { id } of this.deps.store.load()) {
+      // Re-read each job right before acting on it: an earlier job in this
+      // pass may have run for minutes, and another process (`jarvis jobs`)
+      // may have disabled, moved or removed this one meanwhile.
+      const job = this.deps.store.get(id);
+      if (!job || !job.enabled || job.kind === "hook") continue;
       if (job.nextRun === null) {
         // A time job with no next run (hand-edited file, re-enabled once job):
         // give a once job its time back; re-base a cron job on now. Never fire blind.
@@ -438,7 +488,10 @@ export class Scheduler {
       }
       const dueMs = Date.parse(job.nextRun);
       if (!Number.isFinite(dueMs) || dueMs > nowMs) continue;
-      if (opts.catchUp && nowMs - dueMs > grace) {
+      // Missed: judged at the catch-up time, or at the start time for a job
+      // that was already due before start() but that this tick finds later.
+      const missedRef = opts.catchUp ? nowMs : this.startedAtMs !== null && dueMs < this.startedAtMs ? this.startedAtMs : null;
+      if (missedRef !== null && missedRef - dueMs > grace) {
         // Missed beyond the grace window: skip, log, advance — never burst.
         const scheduledFor = job.nextRun;
         // A skip is not a run: lastRun is deliberately left untouched.
@@ -481,13 +534,19 @@ export class Scheduler {
     }
     // Bookkeeping: a firing counts as a run whether it ran, failed or was
     // declined — a broken or card-blocked job retries on its next period,
-    // never in a tight loop. A once job never fires twice.
-    const fresh = this.deps.store.get(job.id) ?? job;
-    fresh.lastRun = iso(nowMs);
-    if (fresh.kind === "once") { fresh.enabled = false; fresh.nextRun = null; }
-    else if (fresh.kind === "cron" && fresh.enabled) fresh.nextRun = computeNextRun(fresh.kind, fresh.schedule, nowMs, null);
-    else fresh.nextRun = null;
-    this.deps.store.put(fresh);
+    // never in a tight loop. A once job never fires twice. A job removed
+    // while it ran (e.g. `jarvis jobs remove` in another process) stays
+    // removed: nothing is written back, and the removal is logged.
+    const fresh = this.deps.store.get(job.id);
+    if (fresh) {
+      fresh.lastRun = iso(nowMs);
+      if (fresh.kind === "once") { fresh.enabled = false; fresh.nextRun = null; }
+      else if (fresh.kind === "cron" && fresh.enabled) fresh.nextRun = computeNextRun(fresh.kind, fresh.schedule, nowMs, null);
+      else fresh.nextRun = null;
+      this.deps.store.put(fresh);
+    } else {
+      this.audit({ event: "scheduler_job_removed_during_run", jobId: job.id, owner: job.owner, kind: job.kind, detail: "the job was removed while it ran; not saved back" });
+    }
     this.audit({ event: "scheduler_run", jobId: job.id, owner: job.owner, kind: job.kind, status, detail });
     const outcome: FireOutcome = { jobId: job.id, owner: job.owner, status, at: iso(nowMs), detail };
     this.remember(outcome);
