@@ -1,24 +1,14 @@
 package com.agent.jarvis.research
 
 /**
- * Seller reputation, merge, rank — port of the TESTED Python
- * reference (jarvis-v4/shopping/reputation.py).
+ * Seller reputation, merge, rank. Works on seller/listing pages the caller already
+ * fetched: no fetching, no transport selection, no realm branching here.
  *
- * Works on seller/listing pages the caller already fetched (and
- * where relevant screened). URL-agnostic like the rest of
- * shopping/: no fetching, no transport selection, no realm
- * branching here.
- *
- * - sellerReputation: rating, review count, feedback snippets,
- *   disputes, account age — every claim cites its source URL.
- * - mergeSellers: same seller across marketplaces, matching
- *   method SHOWN (exact/strong/weak + evidence). No silent merges.
- * - rankSellers: LABELLED mechanical rule only. Suspicious sellers
- *   stay listed with their flag — the table informs, the user
- *   decides. No buy language, no permit/forbid.
- *
- * SOURCE ONLY: not compiled in this sandbox. Pure logic — no
- * Android deps.
+ * - sellerReputation: rating, review count, feedback snippets, disputes, account age —
+ *   every claim cites its source URL.
+ * - mergeSellers: same seller across marketplaces, matching method shown
+ *   (exact/strong/weak + evidence).
+ * - rankSellers: labelled mechanical rule only.
  */
 object SellerReputation {
 

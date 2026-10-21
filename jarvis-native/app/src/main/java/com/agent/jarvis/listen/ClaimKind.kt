@@ -1,7 +1,7 @@
 package com.agent.jarvis.listen
 
 /**
- * Which librarian notes become durable verified claims, and under what claim kind. Pure, JVM-tested.
+ * Which librarian notes become durable verified claims, and under what claim kind.
  *
  * Only durable knowledge is promoted: a FACT (something true about the world) and a PERSON (who
  * someone is) go to the claim store through the verify + NLI gate; PLAN/TODO are time-bound tasks,
