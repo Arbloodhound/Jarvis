@@ -154,7 +154,8 @@
     const model = state.brain === "cloud" ? state.cloudModel : state.localModel;
     $("model").textContent = model || "model…";
     status.textContent = `${state.answering || ""}${state.embeddings && state.embedderId ? " · memory: " + state.embedderId : ""}${state.tor ? ` · tor: ${state.torReachable == null ? "on" : state.torReachable ? "proxy ok" : "NO PROXY"}` : ""}${state.visionEnabled === false ? " · vision: OFF" : ""}${state.busy ? " · working" : ""}`;
-    sendBtn.textContent = state.busy ? "Stop" : "Send";
+    const interrupting = !!state.busy && !!input.value.trim();
+    sendBtn.textContent = interrupting ? "Interrupt" : state.busy ? "Stop" : "Send";
     sendBtn.classList.toggle("stop", !!state.busy);
     // Branch picker: one option per branch, the active one selected.
     const sel = $("branch");
@@ -326,16 +327,17 @@
 
   $("form").onsubmit = (ev) => {
     ev.preventDefault();
-    if (state.busy) { ws?.send(JSON.stringify({ type: "stop" })); return; }
     const text = input.value.trim();
+    // While working: with a message typed, interrupt with it; with none, Stop.
+    if (state.busy && !text) { ws?.send(JSON.stringify({ type: "stop" })); return; }
     if (!text || !ws || ws.readyState !== 1) return;
-    ws.send(JSON.stringify({ type: "send", text, attachments: pending.filter((a) => a.path).map((a) => ({ path: a.path, name: a.name })) }));
+    ws.send(JSON.stringify({ type: "send", text, interrupt: !!state.busy, attachments: pending.filter((a) => a.path).map((a) => ({ path: a.path, name: a.name })) }));
     pending = [];
     renderChips();
     input.value = ""; input.style.height = "";
   };
-  // Enter sends; while Jarvis is working it does nothing (only the Stop button stops).
-  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); if (!state.busy) $("form").requestSubmit(); } });
+  // Enter sends; while Jarvis is working, Enter with a message interrupts with it (an empty Enter does nothing; the Stop button stops).
+  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); if (!state.busy || input.value.trim()) $("form").requestSubmit(); } });
   $("new").onclick = () => ws?.send(JSON.stringify({ type: "reset" }));
   $("fork").onclick = () => ws?.send(JSON.stringify({ type: "branch_fork" }));
   $("branch").onchange = (ev) => { if (ev.target.value && ev.target.value !== state.activeBranch) ws?.send(JSON.stringify({ type: "branch_switch", id: ev.target.value })); };
@@ -343,7 +345,7 @@
     const b = (state.branches || []).find((x) => x.id === state.activeBranch);
     if (b && confirm(`Delete the branch "${b.name}" and its history?`)) ws?.send(JSON.stringify({ type: "branch_delete", id: b.id }));
   };
-  input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 200) + "px"; renderChips(); });
+  input.addEventListener("input", () => { if (state.busy) showState(); input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 200) + "px"; renderChips(); });
 
   // Attachments: picker, drag-and-drop, each file uploaded to the gateway
   // (which stores it under the Jarvis home) and held for the next send.
