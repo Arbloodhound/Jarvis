@@ -117,6 +117,15 @@ export class Runtime {
     seedDefaultHarnessJobs(this.jobs, Date.now());
   }
 
+  /**
+   * The tools a delegated run gets (subagents and scheduled jobs): the shared
+   * set minus read_notifications, which drains the owner's inbox — only the
+   * main agent, talking to the owner, reads notifications.
+   */
+  private delegateTools(): Tool[] {
+    return this.baseTools().filter((t) => t.name !== "read_notifications");
+  }
+
   /** The tools every agent here shares (the coordinator's four are added only at the top level). */
   private baseTools(): Tool[] {
     return toolsFor({ offlineOnly: this.cfg.offlineOnly, screenControl: this.cfg.screenControl.enabled, vision: this.cfg.vision.enabled, cloudVision: this.vision()?.kind === "cloud", tor: { enabled: this.cfg.tor.enabled, socksPort: this.cfg.tor.socksPort }, ttsEnabled: this.cfg.voice.ttsEnabled, notifications: this.notifications });
@@ -128,7 +137,7 @@ export class Runtime {
    * inbox and standing orders; the defaults (shared tools, no orchestration)
    * are what a scheduled run gets.
    */
-  private newAgent(tools: () => Tool[] = () => this.baseTools(), extra: Partial<AgentDeps> = {}): Agent {
+  private newAgent(tools: () => Tool[] = () => this.delegateTools(), extra: Partial<AgentDeps> = {}): Agent {
     return new Agent({
       provider: () => this.provider(),
       embedder: () => this.embedder(),
@@ -167,7 +176,7 @@ export class Runtime {
    */
   private startChild(h: ChildHandle): ChildRun {
     const tag = { id: h.id, name: h.name };
-    const agent = this.newAgent(() => this.baseTools(), {
+    const agent = this.newAgent(() => this.delegateTools(), {
       inbox: () => h.drainInbox().map((m) => `[Message from your coordinator]\n${m}`),
       systemSuffix: "\n\nYou are a subagent working for the main Jarvis agent, which delegated this task to you. Do only this task. " +
         "You share the owner's gate, tools and memory, but you cannot spawn subagents. " +
