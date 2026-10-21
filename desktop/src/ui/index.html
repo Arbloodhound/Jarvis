@@ -98,6 +98,7 @@
   <label class="switch" title="Send web search and fetch through a local Tor proxy (127.0.0.1:9050; Tor Browser uses 9150). .onion links open only with this on."><input type="checkbox" id="tor"> Tor</label>
   <label class="switch" title="Vision is part of the model when on: Jarvis can look at images and screenshots, and shopping checks read listing photos on their own. Off: no image is ever read and the look tools are hidden."><input type="checkbox" id="vision"> Vision</label>
   <button id="new" type="button" class="plain" title="Start a new conversation (what Jarvis remembers about you stays)">New chat</button>
+  <button id="compress" type="button" class="plain" title="Summarise the older part of this conversation so it takes less of the model's context (also: type /compress)">Compress</button>
   <select id="branch" title="Conversation branch — switching keeps every branch's history"></select>
   <button id="fork" type="button" class="plain" title="Fork this conversation into a new branch from here">Fork</button>
   <button id="delbranch" type="button" class="plain" title="Delete the current branch">✕</button>
@@ -307,6 +308,7 @@
         if (e.stopped) ensureRun(e.runId, e.agent).body.appendChild(el("div", "meta", "Stopped."));
         if (e.agent) subRuns.delete(e.runId); else run = null;
         break;
+      case "compressed": add(el("div", "note", e.text)); scroll(); break;
       case "handoff": {
         const how = e.state === "done" ? "finished" : e.state === "failed" ? "failed" : "was stopped";
         add(el("div", "note", `Subagent "${e.agent?.name ?? "?"}" ${how}${e.summary ? ` — ${e.summary}` : ""}. Jarvis reads its hand-off at its next step.`));
@@ -331,6 +333,7 @@
     // While working: with a message typed, interrupt with it; with none, Stop.
     if (state.busy && !text) { ws?.send(JSON.stringify({ type: "stop" })); return; }
     if (!text || !ws || ws.readyState !== 1) return;
+    if (text === "/compress") { ws.send(JSON.stringify({ type: "compress" })); input.value = ""; return; }
     ws.send(JSON.stringify({ type: "send", text, interrupt: !!state.busy, attachments: pending.filter((a) => a.path).map((a) => ({ path: a.path, name: a.name })) }));
     pending = [];
     renderChips();
@@ -339,6 +342,7 @@
   // Enter sends; while Jarvis is working, Enter with a message interrupts with it (an empty Enter does nothing; the Stop button stops).
   input.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); if (!state.busy || input.value.trim()) $("form").requestSubmit(); } });
   $("new").onclick = () => ws?.send(JSON.stringify({ type: "reset" }));
+  $("compress").onclick = () => ws?.send(JSON.stringify({ type: "compress" }));
   $("fork").onclick = () => ws?.send(JSON.stringify({ type: "branch_fork" }));
   $("branch").onchange = (ev) => { if (ev.target.value && ev.target.value !== state.activeBranch) ws?.send(JSON.stringify({ type: "branch_switch", id: ev.target.value })); };
   $("delbranch").onclick = () => {

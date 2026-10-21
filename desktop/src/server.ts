@@ -40,6 +40,7 @@ type ClientMsg =
   | { type: "list_models" }
   | { type: "state" }
   | { type: "reset" }
+  | { type: "compress" }
   | { type: "branch_fork"; keepTurns?: number; name?: string }
   | { type: "branch_switch"; id: string }
   | { type: "branch_delete"; id: string }
@@ -428,6 +429,15 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
           (models) => ws.send(JSON.stringify({ type: "models", models })),
           (err) => ws.send(JSON.stringify({ type: "models", models: [], error: err instanceof Error ? err.message : String(err) })),
         );
+      } else if (msg.type === "compress") {
+        if (rt.agent.busy) { ws.send(JSON.stringify({ type: "error", runId: "", message: "Stop the current request first." })); return; }
+        void rt.agent.compress().then((text) => {
+          rt.syncConversation();
+          broadcast({ type: "compressed", text });
+          broadcast({ type: "turns", count: rt.agent.turns.length });
+        }, (err) => {
+          ws.send(JSON.stringify({ type: "error", runId: "", message: `Compress failed: ${err instanceof Error ? err.message : String(err)}` }));
+        });
       } else if (msg.type === "reset") {
         if (rt.agent.busy) { ws.send(JSON.stringify({ type: "error", runId: "", message: "Stop the current request first." })); return; }
         rt.agent.reset();

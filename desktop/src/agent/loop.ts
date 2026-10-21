@@ -6,12 +6,13 @@ import { checkClaimWithModel, extractCheckableClaims, type ModelChecker, type Nl
 import { redactSecrets } from "../gate/secrets.js";
 import type { EcholaliaStore } from "../echolalia.js";
 import type { Memory } from "../memory.js";
-import type { Provider, ToolCall, ToolResult, Turn } from "../providers/types.js";
+import type { Provider, ToolCall, ToolResult, ToolSpec, Turn, TurnRequest, TurnResult } from "../providers/types.js";
 import type { Embedder } from "../embeddings.js";
 import type { SkillStore } from "../skills.js";
 import type { Vision } from "../vision.js";
 import type { Transcriber } from "../voice.js";
 import { jsonSchema, type Tool, type ToolContext } from "../tools/index.js";
+import { capToolResults, chooseCut, fixedTokens, historyBudget, isOverflow, replaceHead, summarise, TOOL_RESULT_HARD, TOOL_RESULT_KEEP, turnsTokens, windowFromError } from "./compress.js";
 import { fastCommand } from "./fast.js";
 import { requestContext, systemPrompt } from "./prompt.js";
 import { routeRequest, type Route, type RouteChannel } from "./router.js";
@@ -101,6 +102,12 @@ export interface AgentDeps {
   inbox?: () => string[];
   /** Appended to the system prompt (a subagent's standing orders). */
   systemSuffix?: string;
+  /**
+   * The model's context window in tokens, when the owner set one (config
+   * local.contextTokens). 0 or absent = ask the server (llama.cpp /props),
+   * else learn it from the server's first "exceeds the context" refusal.
+   */
+  contextWindow?: () => number;
 }
 
 export interface RunHooks {
@@ -113,6 +120,8 @@ const SUMMARY = 400;
 const DECLINED = "The owner declined this.";
 /** About 150k tokens of conversation, well inside every current model's window. */
 const HISTORY_BUDGET = 600_000;
+/** Below this many (estimated) tokens of conversation compression never runs. */
+const MIN_COMPRESS_TOKENS = 2000;
 
 export class Agent {
   readonly turns: Turn[] = [];
@@ -121,6 +130,12 @@ export class Agent {
   /** How the most recent run ended, or null before the first. */
   lastResult: RunResult | null = null;
   private running: AbortController | null = null;
+  /** Context windows by provider label: asked of the server, or named in its overflow error. */
+  private readonly detectedWindow = new Map<string, number>();
+  private readonly learnedWindow = new Map<string, number>();
+  /** The current model run's request turn (index into turns, -1 outside a run) and its text. */
+  private runStart = -1;
+  private runRequest = "";
 
   constructor(private readonly deps: AgentDeps) {}
 
@@ -177,7 +192,109 @@ export class Agent {
     } finally {
       this.settle();
       this.running = null;
+      this.runStart = -1;
     }
+  }
+
+  /**
+   * `/compress`: summarise everything before the last exchange into one
+   * note, now, whatever the size. Returns what it did, for the owner.
+   */
+  async compress(): Promise<string> {
+    if (this.running) throw new Error("Stop the current request first.");
+    let lastUser = -1;
+    for (let i = this.turns.length - 1; i >= 0; i--) if (this.turns[i]!.role === "user") { lastUser = i; break; }
+    if (lastUser <= 0) return "Nothing to compress yet.";
+    const ac = new AbortController();
+    this.running = ac;
+    try {
+      const provider = this.deps.provider();
+      const window = await this.window(provider);
+      const before = turnsTokens(this.turns);
+      const summary = await summarise(provider, this.turns.slice(0, lastUser), window, ac.signal);
+      if (!summary) return "The model returned an empty summary; nothing was changed.";
+      replaceHead(this.turns, lastUser, summary, null);
+      capToolResults(this.turns, TOOL_RESULT_KEEP, 2);
+      return `Compressed the conversation: ~${before} → ~${turnsTokens(this.turns)} tokens${window ? ` (window ${window})` : ""}.`;
+    } finally {
+      this.settle();
+      this.running = null;
+    }
+  }
+
+  /** One model step, fitted to the context window first; a server that still refuses it as too long gets one harder compression and a retry. */
+  private async step(provider: Provider, req: TurnRequest, runId: string, hooks: RunHooks): Promise<TurnResult> {
+    await this.fit(provider, req.system, req.tools, req.signal, runId, hooks, false);
+    try {
+      return await provider.turn(req);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (req.signal.aborted || !isOverflow(message)) throw err;
+      const named = windowFromError(message);
+      if (named) {
+        const had = this.learnedWindow.get(provider.label) ?? 0;
+        this.learnedWindow.set(provider.label, had ? Math.min(had, named) : named);
+      }
+      if (!(await this.fit(provider, req.system, req.tools, req.signal, runId, hooks, true))) throw err;
+      return await provider.turn(req);
+    }
+  }
+
+  /** The context window for this provider in tokens, 0 when unknown. */
+  private async window(provider: Provider): Promise<number> {
+    const set = this.deps.contextWindow?.() ?? 0;
+    if (set > 0) return set;
+    if (!this.detectedWindow.has(provider.label)) {
+      let n = 0;
+      try { n = (await provider.contextSize?.()) ?? 0; } catch { n = 0; }
+      this.detectedWindow.set(provider.label, n);
+    }
+    const known = [this.detectedWindow.get(provider.label) ?? 0, this.learnedWindow.get(provider.label) ?? 0].filter((n) => n > 0);
+    return known.length ? Math.min(...known) : 0;
+  }
+
+  /**
+   * Keep the conversation inside the window: near it (or `hard`, after a
+   * refusal) shrink old tool results, summarise the older turns into one
+   * note, and keep the recent ones. True when the conversation got smaller.
+   */
+  private async fit(provider: Provider, system: string, tools: ToolSpec[], signal: AbortSignal, runId: string, hooks: RunHooks, hard: boolean): Promise<boolean> {
+    const before = turnsTokens(this.turns);
+    // A short conversation fits any window: don't even ask the server.
+    if (!hard && before < MIN_COMPRESS_TOKENS) return false;
+    const window = await this.window(provider);
+    if (!window && !hard) return false;
+    const budget = window ? historyBudget(window, fixedTokens(system, tools)) : Math.floor(before * 0.6);
+    if (!hard && before <= budget * 0.85) return false;
+    const target = Math.floor(budget * (hard ? 0.35 : 0.5));
+
+    capToolResults(this.turns, TOOL_RESULT_KEEP, 2);
+    let summarised = 0;
+    if (turnsTokens(this.turns) > target) {
+      const cut = chooseCut(this.turns, Math.floor(target * 0.6));
+      if (cut > 0) {
+        let summary = "";
+        try {
+          summary = await summarise(provider, this.turns.slice(0, cut), window, signal);
+        } catch (err) {
+          if (signal.aborted) throw err;
+        }
+        const carried = this.runStart >= 0 && this.runStart < cut ? this.runRequest : null;
+        const headLen = replaceHead(this.turns, cut, summary, carried);
+        if (this.runStart >= 0) this.runStart = this.runStart < cut ? 0 : this.runStart - cut + headLen;
+        summarised = cut;
+      }
+    }
+    if (turnsTokens(this.turns) > target) capToolResults(this.turns, TOOL_RESULT_HARD, 1);
+    if (turnsTokens(this.turns) > target) capToolResults(this.turns, TOOL_RESULT_HARD, 0);
+    const after = turnsTokens(this.turns);
+    if (after >= before) return false;
+    hooks.emit({
+      type: "warning",
+      runId,
+      text: `Compressed the conversation to fit the model's ${window ? `${window}-token ` : ""}window: ~${before} → ~${after} tokens${summarised ? `, ${summarised} older turns summarised` : ", old tool results shortened"}.`,
+    });
+    return true;
   }
 
   /** Forget the conversation (memory facts stay). */
@@ -254,13 +371,15 @@ export class Agent {
     const embedder = this.deps.embedder();
     const withContext = await requestContext(request, this.deps.memory, embedder);
     this.turns.push({ role: "user", text: extraContext ? `${withContext}\n\n${extraContext}` : withContext });
+    this.runStart = this.turns.length - 1;
+    this.runRequest = request;
     const cloud = provider.kind === "cloud";
     /** Tool-result texts from THIS run: the evidence the NLI gate checks the final answer against. */
     const evidence: string[] = [];
 
     let answer = "";
     for (let turn = 0; turn < this.deps.maxTurns; turn++) {
-      const res = await provider.turn({
+      const res = await this.step(provider, {
         system,
         turns: this.turns,
         tools: specs,
@@ -268,7 +387,7 @@ export class Agent {
         effort: route.effort,
         onText: (delta) => hooks.emit({ type: "text", runId, delta }),
         onThinking: (delta) => hooks.emit({ type: "thinking", runId, delta }),
-      });
+      }, runId, hooks);
       this.turns.push({ role: "assistant", text: res.text, toolCalls: res.toolCalls, raw: res.raw, brain: provider.kind, route });
       if (res.text) answer += (answer ? "\n\n" : "") + res.text;
 

@@ -26,6 +26,12 @@ export interface Config {
     /** Any OpenAI-compatible server: Ollama, llama.cpp server, LM Studio, vLLM. */
     baseUrl: string;
     model: string;
+    /**
+     * The model's context window per conversation, in tokens (llama.cpp:
+     * -c / -np). Absent or 0 = ask the server, else learn it from its first
+     * "too long" refusal. Near it, older turns are compressed into a summary.
+     */
+    contextTokens?: number;
   };
   embeddings: {
     /** On = semantic memory. Off = word-overlap recall (no server needed). */

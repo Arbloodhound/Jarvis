@@ -69,7 +69,7 @@ class FakeDoc {
 function loadPage() {
   const doc = new FakeDoc();
   for (const id of ["log", "main", "input", "send", "status", "b-local", "b-cloud", "offline", "embed", "screenctl", "tor", "vision", "model",
-    "branch", "delbranch", "new", "fork", "form", "chips", "attach", "fileinput", "footer", "picker", "picker-input", "picker-list", "picker-note", "picker-title"]) {
+    "branch", "delbranch", "new", "compress", "fork", "form", "chips", "attach", "fileinput", "footer", "picker", "picker-input", "picker-list", "picker-note", "picker-title"]) {
     doc.createElement("div").id = id;
   }
   const empty = doc.createElement("p"); empty.id = "empty"; doc.getElementById("log")!.appendChild(empty);

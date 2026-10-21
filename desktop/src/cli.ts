@@ -442,7 +442,7 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === "chat") {
-    console.log(dim(`${rt.provider().label}. Type while it works to interrupt with a new message; Ctrl+C stops a run, or quits when idle.`));
+    console.log(dim(`${rt.provider().label}. Type while it works to interrupt with a new message; /compress shrinks a long chat; Ctrl+C stops a run, or quits when idle.`));
     // The prompt left listening by the last run, when it ended with no line typed.
     let waiting: Promise<string | null> | null = null;
     chat: for (;;) {
@@ -451,6 +451,15 @@ async function main(): Promise<void> {
       if (got === null) break; // Input ended: end the chat.
       let line = got.trim();
       if (!line) continue;
+      if (line === "/compress") {
+        try {
+          console.log(dim(await rt.agent.compress()));
+          rt.syncConversation();
+        } catch (err) {
+          console.log(yellow(`✗ ${err instanceof Error ? err.message : String(err)}`));
+        }
+        continue;
+      }
       // A line typed while the run works (and no card is up) interrupts it:
       // the run stops and the new line is the next request. Its subagents
       // keep going and still hand off.
