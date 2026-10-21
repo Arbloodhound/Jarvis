@@ -3,7 +3,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { EcholaliaStore } from "../src/echolalia.ts";
+import { claimsMatch, EcholaliaStore } from "../src/echolalia.ts";
+import type { Embedder } from "../src/embeddings.ts";
 import { Memory } from "../src/memory.ts";
 
 /**
@@ -87,4 +88,36 @@ test("echolalia promote of a superseded text points factId at a recallable fact"
     assert.equal(e.status, "promoted");
     assert.ok(m.recall("trains leave").some((f) => f.id === e.factId), "factId must be recallable");
   });
+});
+
+// ---------- bug 2: echo matching on whole tokens, same numbers and entities ----------
+
+test("claimsMatch: whole tokens only; numbers and entities must agree", () => {
+  assert.ok(!claimsMatch("alice owes me 50", "alice owes me 500 dollars"), "50 is not 500");
+  assert.ok(!claimsMatch("Pay Tom", "Pay Tomas"), "Tom is not Tomas");
+  assert.ok(!claimsMatch("Lunch with Tom", "Lunch with Tom Baker"), "an extra entity is a different claim");
+  assert.ok(!claimsMatch("Trains leave at 9", "Trains leave at 9 and 10"), "an extra number is a different claim");
+  // Unchanged: equality and whole-token containment with the same anchors.
+  assert.ok(claimsMatch("Ana lives in Lyon", "Reminder: Ana lives in Lyon!"));
+  assert.ok(claimsMatch("alice owes me 50", "Alice owes me 50."));
+});
+
+test("an arrival with a different number is not an echo and does not promote the other claim", async () => {
+  const m = clocked().memory();
+  const store = new EcholaliaStore(null, m);
+  await store.submit("alice owes me 500 dollars", { source: "chat", sourceText: "alice owes me 500 dollars" });
+  const out = await store.submit("alice owes me 50", { source: "email", sourceText: "alice owes me 50" });
+  assert.equal(out.echo, false);
+  assert.deepEqual(m.all(), [], "nothing promoted");
+  assert.equal(store.list("pending").length, 2);
+});
+
+test("an embedding match still needs the same numbers to count as an echo", async () => {
+  const m = clocked().memory();
+  const store = new EcholaliaStore(null, m);
+  const same = { id: "same@2", embedOne: async () => [1, 0] } as unknown as Embedder;
+  await store.submit("The workshop has 42 seats", { source: "venue page", sourceText: "The workshop has 42 seats" }, same);
+  const out = await store.submit("The workshop seats 40 people", { source: "email", sourceText: "The workshop seats 40 people" }, same);
+  assert.equal(out.echo, false);
+  assert.deepEqual(m.all(), []);
 });

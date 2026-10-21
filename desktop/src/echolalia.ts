@@ -24,9 +24,10 @@ import type { Memory } from "./memory.js";
  *      negation contradicts it. (The deterministic core of the phone's
  *      features/nli_gate.py, reimplemented here; no NLI model needed.)
  *   2. Repetition ("echo") — the same claim arrives again, from an
- *      independent source or a later turn, and matches: normalized-string
- *      containment, or embedding cosine >= ECHO_COSINE when an embedder
- *      is configured.
+ *      independent source or a later turn, and matches: whole-token
+ *      containment after normalization, or embedding cosine >= ECHO_COSINE
+ *      when an embedder is configured — either way only with the same
+ *      numbers and named entities (sameAnchors).
  *   3. Owner confirmation — the owner promotes it (tool or CLI); that
  *      promotes immediately, and the override is recorded when it
  *      overrules a failed source check.
@@ -145,12 +146,34 @@ export function normalizeClaim(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " ");
 }
 
-/** Deterministic echo match: equal or one-contains-the-other after normalization. */
+/**
+ * Same anchors: two claims assert the same set of numbers, and every named
+ * entity either one asserts is a whole token of the other. (Entities are
+ * compared against tokens, not entities(), because a name opening one
+ * sentence is not an entity there but is one mid-sentence in the other.)
+ * Without this "owes me 50" would echo "owes me 500", "Tom" would echo
+ * "Tom Baker", and an embedding match would ignore a changed number.
+ */
+export function sameAnchors(a: string, b: string): boolean {
+  const na = numbers(a);
+  const nb = numbers(b);
+  if (na.size !== nb.size || [...na].some((n) => !nb.has(n))) return false;
+  const ta = new Set(normalizeClaim(a).split(" "));
+  const tb = new Set(normalizeClaim(b).split(" "));
+  return [...entities(a)].every((e) => tb.has(e)) && [...entities(b)].every((e) => ta.has(e));
+}
+
+/**
+ * Deterministic echo match: equal, or one contains the other as a run of
+ * whole tokens, after normalization — and the same anchors (sameAnchors).
+ * Raw substrings are not enough: "pay tom" sits inside "pay tomas".
+ */
 export function claimsMatch(a: string, b: string): boolean {
   const na = normalizeClaim(a);
   const nb = normalizeClaim(b);
   if (!na || !nb) return false;
-  return na === nb || na.includes(nb) || nb.includes(na);
+  const contained = na === nb || ` ${na} `.includes(` ${nb} `) || ` ${nb} `.includes(` ${na} `);
+  return contained && sameAnchors(a, b);
 }
 
 export interface SubmitOutcome {
@@ -338,7 +361,7 @@ export class EcholaliaStore {
       let best: PendingEntry | undefined;
       let bestScore = ECHO_COSINE;
       for (const e of held) {
-        if (!e.vec || e.emb !== embedder.id) continue;
+        if (!e.vec || e.emb !== embedder.id || !sameAnchors(e.claim, claim)) continue;
         const s = dot(v, e.vec);
         if (s >= bestScore) { best = e; bestScore = s; }
       }
