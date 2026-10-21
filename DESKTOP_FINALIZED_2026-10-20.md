@@ -1,4 +1,4 @@
-# DESKTOP_FINALIZED_2026-10-20 — **PARTIAL (1 open item: vision-shopping, unpushed on the owner's other machine)**
+# DESKTOP_FINALIZED_2026-10-20 — **FINAL** (all planned features on main; one housekeeping step for the owner: delete the vision-shopping branch)
 
 Written 2026-10-21 by a Claude Code cloud session (record branch `claude/jarvis-desktop-finalize-3ifkur`, PR #23).
 The plan was `handoff/FINISH_DESKTOP_2026-10-20.md` (on `claude/handoff-docs-2026-10-20`), executed in the owner's order.
@@ -6,12 +6,13 @@ The prep notes from prep-b, prep-c and prep-d were the composition maps. The sta
 
 ## Final state
 
-- **Final main SHA: `bde1dbb`** (tree 21962a1b). Every landing was pushed only after a full gate on the exact tree,
+- **Final main SHA: `03cdf73`** (tree e926e9d6). Every landing was pushed only after a full gate on the exact tree,
   and the tree read back from main was hash-identical to the gated tree.
-- **Final test count: 325**, typecheck clean. The final gate ran on a fresh checkout of main `bde1dbb` with a fresh
-  `npm install`: tsc clean, 325 pass, 0 fail, 0 skipped.
+- **Final test count: 342**, typecheck clean. The final gate ran on a fresh checkout of main `03cdf73` with a fresh
+  `npm install`: tsc clean, 342 pass, 0 fail, 0 skipped.
 - Status per CLAUDE.md: **SOURCE-FIXED BUT RUNTIME-UNPROVEN**. Unit and integration tests pass; there was no live
-  desktop run; CI has not run on these merges.
+  desktop run; CI has not run on these merges. The vision-shopping live check (a real vision read of a real listing
+  photo) is **blocked by environment**: this container has no cloud key and no local vision model.
 
 ## Landings
 
@@ -22,6 +23,7 @@ The prep notes from prep-b, prep-c and prep-d were the composition maps. The sta
 | 3 | `8eb0c6d` | stack-screen @ 449ee537 (humaninput + synergy; browse was already on main) | **296** ✓ FINISH target |
 | 4 | `f2ed71d` | memory-claims @ 20308f39 (kind/salience/decay/supersede) | **309** ✓ FINISH target |
 | 5 | `bde1dbb` | subagents @ 9585ce93 (spawn/status/steer/stop, depth 1, cap 3) | **325** (+16) ✓ |
+| 6 | `03cdf73` | vision-shopping @ f8bcb6d0 (vision on/off setting + vision-read evidence in shopping checks; WIP ported from c60f6e06) | **342** (+17) ✓ |
 
 ### Compositions (both sides kept; no feature or test dropped)
 1. **comms:** ALL_TOOLS keeps both `browseTaskTool` and `readNotificationsTool`.
@@ -44,6 +46,21 @@ The prep notes from prep-b, prep-c and prep-d were the composition maps. The sta
    - Every agent keeps transcriber, skills, echolalia, notifications, NLI and TTS.
    - In loop.ts, inbox hand-offs join main's string `extraContext`; the router's options-shaped argument is still
      honoured.
+6. **vision-shopping onto bde1dbb:** this was a WIP with no build report. It gated 142/142 on its own base (125 + 17);
+   that run is the only source for the delta.
+   - `visionEnabled` was added to the loop's ToolContext and to `newAgent()`.
+   - The `vision` flag goes into `baseTools()`, so the top agent, subagents and scheduled runs all honour the switch.
+   - `vision.enabled` (default on) sits beside the voice block, and `update()` takes both `verifyBeforeStore` and
+     `vision`.
+   - **Judgment call (owner rule: off means no image is read anywhere):** vision off also withholds `see_act_verify`.
+     That tool landed after the WIP's base and reads the screen through vision. It is asserted in
+     `vision-shop.test.ts`.
+   - **Owner rule verified in source:** the vision step is a fixed part of `product_check` / `seller_check`. Neither
+     schema has a vision flag, so there is no per-call bypass. Readings are reported in their own labelled block,
+     never merged into the page facts; a price conflict is printed as a named CONFLICT. When vision is off, or there
+     is no backend, there are zero vision calls and a one-line statement says so.
+   - **Noted, not changed:** listing-image fetches go direct even when Tor is on. This matches main's existing
+     shopping page fetches (Tor wraps only web_search / web_fetch); it is a pre-existing scope question.
 
 ## Feature inventory now on main (desktop/)
 
@@ -63,36 +80,11 @@ The prep notes from prep-b, prep-c and prep-d were the composition maps. The sta
 
 ## Branches
 
-**Deleted: none.** Every delete was refused by the session's auto-mode permission classifier ("Git Destructive").
-The owner, or a session with permission, should delete these 12 branches. Each one's content is on main:
-- `claude/desktop-parity-{humaninput,synergy,investigate,skills,scheduler,echolalia,notifications}-2026-10-20`
-- `claude/desktop-stack-{comms,work,screen}-2026-10-20`
-- `claude/desktop-memory-claims-2026-10-20`
-- `claude/desktop-subagents-2026-10-20`
-
-The comms and screen stacks were single combined commits, so the parity tips for echolalia, notifications,
-humaninput and synergy are not git ancestors of main. Their content arrived through the stacks.
-
-## Open item — vision-shopping (PARTIAL)
-
-`claude/desktop-vision-shopping-2026-10-20` was never pushed, because its build agent was stopped, and no
-DESKTOP_VISION_SHOP report exists. The FINISH doc's only spec is one line: "vision on/off setting + vision-read
-evidence in shopping; built off c60f6e06". It was not built from that line, because that would be guessing at the
-design. It needs a build brief, or a restart of its build agent.
-
-**Update 2026-10-21:** the build agent on the owner's other machine was shut down before pushing. Its unfinished
-work exists only on that machine's disk, at `~/workspace/jarvis-rebuild/desktop-vision-shop/`. It is not in the repo
-and not reachable from cloud sessions. Owner's design rule for finishing it: vision ON means vision is always part of
-the model (deterministic enrichment in the shopping checks, with no per-call bypass); the settings toggle is the only
-off switch.
-
-To land it: push `claude/desktop-vision-shopping-2026-10-20` based on main `bde1dbb`, along with
-`DESKTOP_VISION_SHOP_2026-10-20.md`. Then verify the report, merge, run the full gate (expect 325 + delta), delete
-the branch, and flip this record to FINAL.
-
-## Branch cleanup (done)
-All 12 merged branches were deleted by the owner. This was verified on 2026-10-21: the remote heads are main,
-handoff-docs, this record branch, and two unrelated older branches.
+- **Deleted by the owner (verified 2026-10-21):** all 12 merged branches, i.e. the 7 parity branches, the 3 stacks,
+  memory-claims and subagents. This session's GitHub access refuses branch deletes (HTTP 403).
+- **Still to delete (owner):** `claude/desktop-vision-shopping-2026-10-20` @ f8bcb6d0. It is landed in `03cdf73`.
+  The delete was refused by the same 403. Run `git push origin --delete claude/desktop-vision-shopping-2026-10-20`
+  or use the GitHub branches page.
 
 ## PARKED (not started, per owner)
 
