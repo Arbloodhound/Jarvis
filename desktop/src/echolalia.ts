@@ -33,7 +33,9 @@ import type { Memory } from "./memory.js";
  *      overrules a failed source check.
  *
  * Promotion rule: source check PASS + (echoes >= 1 OR owner-confirmed).
- * Source check FAIL -> quarantine, with the reason kept on the entry.
+ * Source check FAIL -> quarantine, with the reason kept on the entry. An
+ * echo that brings source text is checked against its own text too: a
+ * contradicting echo quarantines the claim and is not counted.
  * Source check PASS with no echo yet -> stays pending.
  * No source text to check against -> "unverifiable": stays pending until
  * an owner confirms it (an echo alone cannot promote what was never
@@ -221,13 +223,25 @@ export class EcholaliaStore {
     const sourceText = (opts.sourceText ?? "").slice(0, SOURCE_EXCERPT);
     let entry = await this.findEcho(text, embedder);
     let echo = false;
+    let echoFailed = false;
     if (entry) {
       echo = true;
-      entry.echoes += 1;
-      entry.reasons.push(`echo #${entry.echoes} from ${source}${source === entry.source ? " (same source, later turn)" : " (independent source)"}`);
-      // A later arrival may bring the source text the first one lacked.
-      if (sourceText && !entry.sourceText) entry.sourceText = sourceText;
-      if (sourceText && source !== entry.source) entry.reasons.push(`echo source text recorded from ${source}`);
+      // Each echo is checked against its OWN source text, not only the first
+      // arrival's: a later source that contradicts the claim quarantines it,
+      // and only an echo that does not contradict it is counted.
+      const echoCheck = sourceText.trim() ? checkSource(entry.claim, sourceText) : null;
+      if (echoCheck?.result === "fail") {
+        echoFailed = true;
+        entry.status = "quarantined";
+        entry.sourceCheck = "fail";
+        entry.reasons.push(`quarantined: echo from ${source} contradicts the claim: ${echoCheck.reason}`);
+      } else {
+        entry.echoes += 1;
+        entry.reasons.push(`echo #${entry.echoes} from ${source}${source === entry.source ? " (same source, later turn)" : " (independent source)"}`);
+        if (echoCheck) entry.reasons.push(`echo from ${source}: source check pass (${echoCheck.reason})`);
+        // A later arrival may bring the source text the first one lacked.
+        if (sourceText && !entry.sourceText) entry.sourceText = sourceText;
+      }
     } else {
       entry = {
         id: randomUUID().slice(0, 8),
@@ -248,8 +262,8 @@ export class EcholaliaStore {
         } catch { /* deterministic matching still works without vectors */ }
       }
     }
-    const before = entry.status;
-    this.verify(entry);
+    const before = echoFailed ? "pending" : entry.status;
+    if (!echoFailed) this.verify(entry);
     this.save();
     if (entry.status !== before) this.onDecision?.(entry, entry.status);
     const message =

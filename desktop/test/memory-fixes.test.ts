@@ -121,3 +121,32 @@ test("an embedding match still needs the same numbers to count as an echo", asyn
   assert.equal(out.echo, false);
   assert.deepEqual(m.all(), []);
 });
+
+// ---------- bug 3: each echo's own source text is checked ----------
+
+test("an echo whose own source contradicts the claim quarantines it instead of promoting", async () => {
+  const m = clocked().memory();
+  const store = new EcholaliaStore(null, m);
+  await store.submit("The workshop has 42 seats", { source: "venue page", sourceText: "The workshop has 42 seats in total" });
+  const out = await store.submit("The workshop has 42 seats", { source: "booking email", sourceText: "The workshop has 17 seats" });
+  assert.equal(out.echo, true);
+  assert.equal(out.entry.status, "quarantined");
+  assert.equal(out.entry.sourceCheck, "fail");
+  assert.equal(out.entry.echoes, 0, "a contradicting echo is not counted");
+  assert.match(out.entry.reasons.join(" "), /booking email.*number mismatch/);
+  assert.match(out.message, /Quarantined/);
+  assert.deepEqual(m.all(), []);
+  // verifyAll leaves a failed check for the owner, it does not re-pass it.
+  store.verifyAll();
+  assert.equal(store.byId(out.entry.id)!.status, "quarantined");
+});
+
+test("an echo whose own source passes is counted and promotes", async () => {
+  const m = clocked().memory();
+  const store = new EcholaliaStore(null, m);
+  await store.submit("The workshop has 42 seats", { source: "venue page", sourceText: "The workshop has 42 seats in total" });
+  const out = await store.submit("The workshop has 42 seats", { source: "booking email", sourceText: "Booked: the workshop has 42 seats" });
+  assert.equal(out.entry.status, "promoted");
+  assert.equal(out.entry.echoes, 1);
+  assert.match(out.entry.reasons.join(" "), /echo from booking email: source check pass/);
+});
