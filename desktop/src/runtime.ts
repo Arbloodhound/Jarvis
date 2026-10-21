@@ -166,6 +166,8 @@ export class Runtime {
       cloudKeySource: this.cfg.cloud.apiKey ? "config" : process.env.ANTHROPIC_API_KEY ? "env" : "none",
       localModel: this.cfg.local.model,
       embeddings: this.cfg.embeddings.enabled,
+      /** The last run's router decision (tier + mode + reason), or null before the first run. */
+      lastRoute: this.agent.lastRoute,
       embedderId: this.embedder()?.id ?? null,
       vision: this.vision()?.label ?? null,
       screenControl: this.cfg.screenControl.enabled,

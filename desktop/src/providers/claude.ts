@@ -44,7 +44,8 @@ export class ClaudeProvider implements Provider {
           eager_input_streaming: true,
         })),
         thinking: { type: "adaptive", display: "summarized" },
-        output_config: { effort: this.effort },
+        // The router's per-run effort wins over the configured default.
+        output_config: { effort: req.effort ?? this.effort },
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
       },

@@ -10,6 +10,7 @@ import type { Vision } from "../vision.js";
 import { jsonSchema, type Tool, type ToolContext } from "../tools/index.js";
 import { fastCommand } from "./fast.js";
 import { requestContext, systemPrompt } from "./prompt.js";
+import { routeRequest, type Route, type RouteChannel } from "./router.js";
 
 /**
  * One agent: a conversation, a brain, tools, and the gate between them.
@@ -23,7 +24,7 @@ import { requestContext, systemPrompt } from "./prompt.js";
  */
 
 export type AgentEvent =
-  | { type: "run_start"; runId: string; brain: string }
+  | { type: "run_start"; runId: string; brain: string; route: Route }
   | { type: "text"; runId: string; delta: string }
   | { type: "thinking"; runId: string; delta: string }
   | { type: "tool_start"; runId: string; id: string; name: string; args: Record<string, unknown> }
@@ -61,6 +62,8 @@ const HISTORY_BUDGET = 600_000;
 
 export class Agent {
   readonly turns: Turn[] = [];
+  /** The most recent run's route (tier + mode + reason), for state displays. */
+  lastRoute: Route | null = null;
   private running: AbortController | null = null;
 
   constructor(private readonly deps: AgentDeps) {}
@@ -73,7 +76,7 @@ export class Agent {
     this.running?.abort();
   }
 
-  async run(request: string, hooks: RunHooks, extraContext = ""): Promise<string> {
+  async run(request: string, hooks: RunHooks, extraContext: string | { channel?: RouteChannel } = "", opts: { channel?: RouteChannel } = {}): Promise<string> {
     if (this.running) throw new Error("Already working on something; stop it first.");
     const runId = randomUUID().slice(0, 8);
     const ac = new AbortController();
@@ -81,11 +84,21 @@ export class Agent {
     try {
       const provider = this.deps.provider();
       const ep = new Episode(request);
-      hooks.emit({ type: "run_start", runId, brain: provider.label });
       this.trim();
       const fast = fastCommand(request);
-      if (fast) return await this.runFast(runId, fast, ep, hooks, ac.signal, request, extraContext);
-      return await this.runModel(runId, request, provider, ep, hooks, ac.signal, extraContext);
+      // The router labels every run — fast commands included (tier=fast,
+      // and they still short-circuit below). No model call: router.ts is
+      // deterministic rules, and its reason travels with the run. The
+      // channel arrives either as run options or in the options-shaped
+      // third argument (both call conventions exist: context features pass
+      // an extraContext string there, voice passes { channel }).
+      const channel = (typeof extraContext === "object" ? extraContext.channel : undefined) ?? opts.channel ?? "chat";
+      const extra = typeof extraContext === "string" ? extraContext : "";
+      const route = routeRequest(request, { channel, fastCommand: fast !== null });
+      this.lastRoute = route;
+      hooks.emit({ type: "run_start", runId, brain: provider.label, route });
+      if (fast) return await this.runFast(runId, fast, ep, hooks, ac.signal, request, extra, route);
+      return await this.runModel(runId, request, provider, ep, hooks, ac.signal, extra, route);
     } catch (err) {
       if (ac.signal.aborted) {
         hooks.emit({ type: "done", runId, text: "Stopped.", stopped: true });
@@ -148,7 +161,7 @@ export class Agent {
     }
   }
 
-  private async runFast(runId: string, fast: NonNullable<ReturnType<typeof fastCommand>>, ep: Episode, hooks: RunHooks, signal: AbortSignal, request: string, extraContext = ""): Promise<string> {
+  private async runFast(runId: string, fast: NonNullable<ReturnType<typeof fastCommand>>, ep: Episode, hooks: RunHooks, signal: AbortSignal, request: string, extraContext: string, route: Route): Promise<string> {
     let text: string;
     if (fast.kind === "answer") {
       text = fast.text;
@@ -160,13 +173,13 @@ export class Agent {
         : res!.content.startsWith(DECLINED) ? "Okay, I didn't do it."
         : res!.content;
     }
-    this.turns.push({ role: "user", text: extraContext ? `${request}\n\n${extraContext}` : request }, { role: "assistant", text, toolCalls: [], brain: "fast" });
+    this.turns.push({ role: "user", text: extraContext ? `${request}\n\n${extraContext}` : request }, { role: "assistant", text, toolCalls: [], brain: "fast", route });
     hooks.emit({ type: "text", runId, delta: text });
     hooks.emit({ type: "done", runId, text });
     return text;
   }
 
-  private async runModel(runId: string, request: string, provider: Provider, ep: Episode, hooks: RunHooks, signal: AbortSignal, extraContext = ""): Promise<string> {
+  private async runModel(runId: string, request: string, provider: Provider, ep: Episode, hooks: RunHooks, signal: AbortSignal, extraContext: string, route: Route): Promise<string> {
     const tools = this.deps.tools();
     const specs = tools.map((t) => ({ name: t.name, description: t.description, inputSchema: jsonSchema(t) }));
     const system = systemPrompt(this.deps.home, platform());
@@ -182,10 +195,11 @@ export class Agent {
         turns: this.turns,
         tools: specs,
         signal,
+        effort: route.effort,
         onText: (delta) => hooks.emit({ type: "text", runId, delta }),
         onThinking: (delta) => hooks.emit({ type: "thinking", runId, delta }),
       });
-      this.turns.push({ role: "assistant", text: res.text, toolCalls: res.toolCalls, raw: res.raw, brain: provider.kind });
+      this.turns.push({ role: "assistant", text: res.text, toolCalls: res.toolCalls, raw: res.raw, brain: provider.kind, route });
       if (res.text) answer += (answer ? "\n\n" : "") + res.text;
 
       if (res.stop === "refusal") {
