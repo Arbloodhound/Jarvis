@@ -62,4 +62,6 @@ export interface Provider {
   readonly kind: "cloud" | "local";
   readonly label: string;
   turn(req: TurnRequest): Promise<TurnResult>;
+  /** The server's context window per conversation in tokens, 0 when it doesn't say. Optional. */
+  contextSize?(): Promise<number>;
 }
