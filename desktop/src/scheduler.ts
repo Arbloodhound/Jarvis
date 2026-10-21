@@ -32,7 +32,8 @@ import type { AuditLog } from "./gate/audit.js";
  *   (multiple missed periods coalesce into that one firing). A job
  *   older than the grace window is skipped and logged
  *   (`scheduler_missed_skipped`): a once job is disabled as expired,
- *   a cron/interval job advances to its next future time.
+ *   a cron/interval job advances to its next future time. The rule
+ *   covers every job due before the start time, whichever tick finds it.
  * - Hook jobs are the minimal honest phone-hook: watch one file (or a
  *   not-yet-existing file's parent folder) with fs.watch and fire when
  *   its mtime changes. No command/URL polling is claimed.
@@ -375,6 +376,8 @@ interface AuditLike { write(entry: Record<string, unknown>): void }
 export class Scheduler {
   private timer: NodeJS.Timeout | null = null;
   private ticking = false;
+  /** When start() ran: a job due before this is a missed job, whichever tick finds it. */
+  private startedAtMs: number | null = null;
   private readonly firing = new Set<string>();
   private readonly watchers = new Map<string, FSWatcher>();
   private readonly watchedSig = new Map<string, string>();
@@ -398,11 +401,18 @@ export class Scheduler {
     return { running: this.running, jobs: jobs.length, enabled: jobs.filter((j) => j.enabled).length, nextRun: next, recentRuns: [...this.recentRuns] };
   }
 
-  /** Start the timer. The first tick is a catch-up (missed-job grace applies). */
+  /**
+   * Start the timer. The first tick is a catch-up (missed-job grace applies).
+   * Timer ticks are skipped while it runs (ticks never overlap), and any
+   * later tick still holds a job due before the start time to the grace
+   * rule, so a job missed days ago is skipped, never fired late.
+   */
   start(): void {
     if (this.timer) return;
-    seedDefaultHarnessJobs(this.deps.store, this.now());
-    void this.tick(this.now(), { catchUp: true });
+    const startMs = this.now();
+    this.startedAtMs = startMs;
+    seedDefaultHarnessJobs(this.deps.store, startMs);
+    void this.tick(startMs, { catchUp: true });
     const ms = this.deps.tickMs ?? 1000;
     this.timer = setInterval(() => { void this.tick(); }, ms);
     this.timer.unref?.();
@@ -411,6 +421,7 @@ export class Scheduler {
 
   stop(): void {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    this.startedAtMs = null;
     for (const w of this.watchers.values()) { try { w.close(); } catch { /* already closed */ } }
     this.watchers.clear();
     this.watchedSig.clear();
@@ -457,7 +468,10 @@ export class Scheduler {
       }
       const dueMs = Date.parse(job.nextRun);
       if (!Number.isFinite(dueMs) || dueMs > nowMs) continue;
-      if (opts.catchUp && nowMs - dueMs > grace) {
+      // Missed: judged at the catch-up time, or at the start time for a job
+      // that was already due before start() but that this tick finds later.
+      const missedRef = opts.catchUp ? nowMs : this.startedAtMs !== null && dueMs < this.startedAtMs ? this.startedAtMs : null;
+      if (missedRef !== null && missedRef - dueMs > grace) {
         // Missed beyond the grace window: skip, log, advance — never burst.
         const scheduledFor = job.nextRun;
         // A skip is not a run: lastRun is deliberately left untouched.
