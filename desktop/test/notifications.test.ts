@@ -150,6 +150,41 @@ test("config: a saved notifications section merges over the defaults", () => {
   assert.deepEqual(loaded.notifications, { allowedApps: ["Slack"], quietStart: 23, quietEnd: 7, maxPerMinutePerApp: 5 });
 });
 
+test("config: a null allowedApps falls back to the default, so the runtime's state() still builds", () => {
+  const { home, p } = tempHome("jarvis-notif-cfg3-");
+  writeFileSync(p.config, JSON.stringify({ notifications: { allowedApps: null } }) + "\n");
+  const loaded = loadConfig(p);
+  assert.deepEqual(loaded.notifications.allowedApps, []);
+  const rt = new Runtime(loaded, p, home);
+  assert.equal(rt.state().notificationsAllowedApps, 0);
+});
+
+test("config: a string allowedApps is not split into characters; non-string entries are dropped", () => {
+  const { p } = tempHome("jarvis-notif-cfg4-");
+  writeFileSync(p.config, JSON.stringify({ notifications: { allowedApps: "com.whatsapp" } }) + "\n");
+  assert.deepEqual(loadConfig(p).notifications.allowedApps, []);
+  writeFileSync(p.config, JSON.stringify({ notifications: { allowedApps: ["com.whatsapp", 7, null, "Slack"] } }) + "\n");
+  assert.deepEqual(loadConfig(p).notifications.allowedApps, ["com.whatsapp", "Slack"]);
+});
+
+test("config: quiet hours must be integers 0–23 and the rate a positive integer, else the default", () => {
+  const { p } = tempHome("jarvis-notif-cfg5-");
+  const d = defaults(p).notifications;
+  // Raw JSON text, so 1e400 (parses to Infinity) and fractional values reach loadConfig as written.
+  for (const bad of ["24", "-1", "7.5", '"8"', "null"]) {
+    writeFileSync(p.config, `{"notifications":{"quietStart":${bad},"quietEnd":${bad}}}\n`);
+    const n = loadConfig(p).notifications;
+    assert.equal(n.quietStart, d.quietStart, `quietStart ${bad}`);
+    assert.equal(n.quietEnd, d.quietEnd, `quietEnd ${bad}`);
+  }
+  for (const bad of ["0", "-3", "2.5", '"10"', "null", "1e400"]) {
+    writeFileSync(p.config, `{"notifications":{"maxPerMinutePerApp":${bad}}}\n`);
+    assert.equal(loadConfig(p).notifications.maxPerMinutePerApp, d.maxPerMinutePerApp, `maxPerMinutePerApp ${bad}`);
+  }
+  writeFileSync(p.config, JSON.stringify({ notifications: { quietStart: 0, quietEnd: 23, maxPerMinutePerApp: 1 } }) + "\n");
+  assert.deepEqual(loadConfig(p).notifications, { allowedApps: [], quietStart: 0, quietEnd: 23, maxPerMinutePerApp: 1 });
+});
+
 // ---------- the inbox choke point ----------
 
 test("inbox: passing notifications queue and are delivered exactly once; drops are audited, never queued", () => {
