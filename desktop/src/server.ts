@@ -9,6 +9,7 @@ import { isUploadPath, MAX_UPLOAD_BYTES, storeUpload } from "./context.js";
 import { redactSecrets } from "./gate/secrets.js";
 import { startupWarnings } from "./config.js";
 import type { Turn } from "./providers/types.js";
+import { asNotificationInput } from "./notifications/inbox.js";
 import type { Runtime } from "./runtime.js";
 
 /**
@@ -179,6 +180,60 @@ export async function startServer(rt: Runtime, token: string, port: number, opts
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/upload") { handleUpload(req, res, url); return; }
+    if (req.method === "POST" && url.pathname === "/api/notifications") {
+      // Inbound notification intake. Auth is the gateway's own, no weaker:
+      // the Host check above has already run (DNS-rebinding guard), and the
+      // caller must present the same access token the WebSocket channel
+      // requires — as an Authorization: Bearer header, an x-jarvis-token
+      // header, or the ?token= query parameter. There is no unauthenticated
+      // intake. Every notification then goes through the runtime's filter
+      // choke point; drops are audited there, never surfaced to the agent.
+      const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? "")?.[1] ?? "";
+      const presented = bearer || (typeof req.headers["x-jarvis-token"] === "string" ? req.headers["x-jarvis-token"] : "") || url.searchParams.get("token") || "";
+      if (!sameToken(presented, token)) {
+        res.writeHead(401, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "A valid Jarvis access token is required." }));
+        return;
+      }
+      const chunks: Buffer[] = [];
+      let size = 0;
+      req.on("data", (c: Buffer) => {
+        size += c.length;
+        if (size <= 1024 * 1024) chunks.push(c);
+        else req.destroy();
+      });
+      req.on("error", () => { if (!res.writableEnded) res.writeHead(400).end("Bad request."); });
+      req.on("end", () => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        } catch {
+          res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: "Body must be JSON: one notification, an array of them, or { notifications: [...] }." }));
+          return;
+        }
+        const items: unknown[] = Array.isArray(parsed)
+          ? parsed
+          : parsed && typeof parsed === "object" && Array.isArray((parsed as { notifications?: unknown }).notifications)
+            ? (parsed as { notifications: unknown[] }).notifications
+            : [parsed];
+        // File drops that arrived first are older; drain them into the same
+        // choke point before this batch so ordering stays arrival order.
+        rt.drainNotificationInbox();
+        const results = items.map((item) => {
+          const input = asNotificationInput(item);
+          if (!input) {
+            rt.notifications.auditInvalid("gateway", JSON.stringify(item) ?? "");
+            return { app: null, allowed: false, reason: "invalid" };
+          }
+          const r = rt.ingestNotification(input, "gateway");
+          return r.allowed
+            ? { app: r.notification.app, allowed: true }
+            : { app: r.notification.app, allowed: false, reason: r.reason, gate: r.gate };
+        });
+        const accepted = results.filter((r) => r.allowed).length;
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, accepted, dropped: results.length - accepted, results }));
+      });
+      return;
+    }
     res.writeHead(404).end("Not found.");
   });
 

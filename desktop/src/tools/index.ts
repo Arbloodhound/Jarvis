@@ -11,9 +11,11 @@ import { z } from "zod";
 import type { ToolPolicy } from "../gate/gate.js";
 import { resolvePath } from "../gate/gate.js";
 import type { Embedder } from "../embeddings.js";
+import { formatEntry, type EcholaliaStore } from "../echolalia.js";
 import type { Memory } from "../memory.js";
 import type { Vision } from "../vision.js";
 import { speak as speakVoice, type Transcriber } from "../voice.js";
+import { formatPending, type NotificationInbox } from "../notifications/inbox.js";
 import * as os from "./platform.js";
 import { shoppingTools } from "./shopping.js";
 
@@ -35,6 +37,8 @@ export interface ToolContext {
   cwd: string;
   workspace: string;
   memory: Memory;
+  /** Echolalia pending store, present only when memory.verifyBeforeStore is on. */
+  echolalia: EcholaliaStore | null;
   embedder: Embedder | null;
   vision: Vision | null;
   /** Speech-to-text backend, or null when not set up / withheld offline. */
@@ -639,6 +643,34 @@ const notifyTool = tool({
   },
 });
 
+/**
+ * Inbound notifications, the counterpart to `notify` above (which is
+ * outbound and untouched). The unbound tool has no inbox; the runtime binds
+ * its NotificationInbox in toolsFor, the same way Tor binds its fetch. What
+ * it returns has already passed the three-gate filter at intake — this tool
+ * never sees a dropped notification — and each notification is delivered
+ * exactly once.
+ */
+const readNotificationsTool = tool({
+  name: "read_notifications",
+  description:
+    "Read new inbound notifications that passed the notification filter (allowed apps only, outside quiet hours, under the per-app burst limit) and have not been delivered yet. Each is shown once. Use it to answer \"what did I miss?\".",
+  schema: z.object({}),
+  policy: { effects: ["read"] },
+  parallelSafe: true,
+  async run() {
+    return "No notification inbox is set up on this computer.";
+  },
+});
+
+/** Bind read_notifications to a real inbox (draining its file drop first, via takePending). */
+export function bindReadNotifications(inbox: NotificationInbox): Tool {
+  return {
+    ...readNotificationsTool,
+    run: async () => formatPending(inbox.takePending()),
+  } as Tool;
+}
+
 const screenshotTool = tool({
   name: "screenshot",
   description: "Take a screenshot of the whole screen and save it in the workspace. Returns the file path.",
@@ -777,12 +809,51 @@ const systemInfoTool = tool({
 
 const rememberTool = tool({
   name: "remember",
-  description: "Save a short fact about the owner or their world for later (one fact per call).",
-  schema: z.object({ fact: z.string().min(2).max(500) }),
+  description:
+    "Save a short fact about the owner or their world for later (one fact per call). When verify-before-store is on, the fact is held UNVERIFIED in the pending store instead: give source and source_text (the text the fact came from) so it can be checked; it becomes a real memory only after the source check passes and it is echoed or the owner confirms it.",
+  schema: z.object({
+    fact: z.string().min(2).max(500),
+    source: z.string().max(200).optional().describe("Where the fact came from (a message, tool, page or person)"),
+    source_text: z.string().max(2000).optional().describe("The source text the fact was read from, for verification"),
+  }),
   policy: { effects: ["mutate"], lastsBeyondRequest: true },
-  async run({ fact }, ctx) {
+  async run({ fact, source, source_text }, ctx) {
+    if (ctx.echolalia) {
+      const out = await ctx.echolalia.submit(fact, { source, sourceText: source_text }, ctx.embedder);
+      return out.message;
+    }
     const f = ctx.memory.remember(fact);
     return `Remembered (${f.id}): ${f.text}`;
+  },
+});
+
+const memoryPendingTool = tool({
+  name: "memory_pending",
+  description:
+    "Inspect verify-before-store memory: list pending (UNVERIFIED) and quarantined candidate facts. These are NOT remembered facts — never present them as fact. Empty status lists both.",
+  schema: z.object({ status: z.enum(["pending", "quarantined"]).optional() }),
+  policy: { effects: ["read"] },
+  parallelSafe: true,
+  async run({ status }, ctx) {
+    if (!ctx.echolalia) return "Verify-before-store is off, so there is no pending store in use. Facts go straight to memory with the remember tool.";
+    const rows = status ? ctx.echolalia.list(status) : [...ctx.echolalia.list("pending"), ...ctx.echolalia.list("quarantined")];
+    return rows.length ? rows.map(formatEntry).join("\n") : "No pending or quarantined candidate facts.";
+  },
+});
+
+const memoryDecideTool = tool({
+  name: "memory_decide",
+  description:
+    "The owner's decision on a pending/quarantined candidate fact (see memory_pending for ids): promote makes it a real remembered fact immediately; drop discards it.",
+  schema: z.object({ id: z.string().min(1), action: z.enum(["promote", "drop"]) }),
+  policy: { effects: ["mutate"], lastsBeyondRequest: true },
+  async run({ id, action }, ctx) {
+    if (!ctx.echolalia) return "Verify-before-store is off, so there is no pending store in use.";
+    const e = action === "promote" ? ctx.echolalia.promoteByOwner(id) : ctx.echolalia.drop(id);
+    if (!e) return `No pending entry with id ${id}.`;
+    return action === "promote"
+      ? `Promoted (${e.id} -> fact ${e.factId}): ${e.claim}`
+      : `Dropped (${e.id}): ${e.claim}`;
   },
 });
 
@@ -812,13 +883,13 @@ const forgetTool = tool({
 export const ALL_TOOLS: Tool[] = [
   readFileTool, listDirTool, findFilesTool, writeFileTool, runCommandTool,
   webSearchTool, webFetchTool, openUrlTool, openAppTool,
-  clipboardReadTool, clipboardWriteTool, notifyTool, screenshotTool, seeScreenTool, seeImageTool, controlScreenTool, systemInfoTool,
+  clipboardReadTool, clipboardWriteTool, notifyTool, readNotificationsTool, screenshotTool, seeScreenTool, seeImageTool, controlScreenTool, systemInfoTool,
   transcribeAudioTool, speakTool,
-  rememberTool, recallTool, forgetTool,
+  rememberTool, recallTool, forgetTool, memoryPendingTool, memoryDecideTool,
   ...shoppingTools(),
 ];
 
-export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean }): Tool[] {
+export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean; notifications?: NotificationInbox }): Tool[] {
   return ALL_TOOLS.filter((t) => {
     if (opts.offlineOnly && t.network) return false;
     if (t.name === "control_screen" && !opts.screenControl) return false;
@@ -826,6 +897,11 @@ export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; c
     return true;
   }).map((t) => {
     let out = t;
+    // The notification inbox is the runtime's; bind it so read_notifications
+    // drains the real queue instead of the unbound placeholder.
+    if (opts.notifications && out.name === "read_notifications") {
+      out = bindReadNotifications(opts.notifications);
+    }
     // With cloud vision, a screenshot or image leaves the computer, so confirm each look.
     if (opts.cloudVision && (out.name === "look_at_screen" || out.name === "look_at_image")) {
       out = { ...out, policy: { ...out.policy, alwaysConfirm: true } };

@@ -57,6 +57,8 @@ Standing rule, shared with the rest of Jarvis: the agent informs and asks; it do
 
 Memory uses an embeddings store for recall, with word-overlap fallback as described in the pre-merge docs where still applicable. `forget` moves facts to a trash capped at 500 entries; the user empties trash in settings — the agent has no purge path. Details beyond store/recall and the 500-cap trash were not re-verified in the 2026-10-19 audits.
 
+**Verify-before-store (echolalia, opt-in):** set `memory.verifyBeforeStore: true` in `config.json` and the `remember` tool no longer writes facts directly. A candidate goes to the pending store (`memory-pending.json`) with its source and source text; a deterministic source check (numbers/entities must appear in the source, negation flips contradict) plus a later matching echo — or an owner confirmation — promotes it to durable memory with its provenance recorded. A failed check quarantines it: held and visible, never recalled as fact. Source-pass with no echo stays pending and is only surfaced, labelled UNVERIFIED, when explicitly inspected. Inspect and decide with the `memory_pending` / `memory_decide` tools or `jarvis memory pending|quarantined|all|submit|promote <id>|drop <id>|verify`; promotions and quarantines are written to the audit log.
+
 ### Gateway
 
 The gateway server binds to 127.0.0.1 with a token, plus Host and Origin checks. The CLI (`serve`, `chat`, `ask`, `where`) and the Electron app share the same agent, gate, and providers.
@@ -163,6 +165,7 @@ Everything lives in `~/.jarvis` (or wherever `JARVIS_HOME` points):
 | `config.json` | brain, models, port, writable folders, allowed commands |
 | `token` | the gateway's access token (only your user account can read it) |
 | `memory.json` | what it remembers, plus the trash |
+| `memory-pending.json` | echolalia pending/quarantined candidate facts (verify-before-store) |
 | `audit.jsonl` | every tool decision |
 | `workspace/` | where it can write without asking |
 | `SOUL.md`, `USER.md` | optional: its personality and who you are; both are added to its instructions |

@@ -4,6 +4,7 @@ import type { AuditLog } from "../gate/audit.js";
 import { Episode, Gate, type Rule } from "../gate/gate.js";
 import { checkClaimWithModel, extractCheckableClaims, type ModelChecker, type NliVerdict } from "../gate/nli.js";
 import { redactSecrets } from "../gate/secrets.js";
+import type { EcholaliaStore } from "../echolalia.js";
 import type { Memory } from "../memory.js";
 import type { Provider, ToolCall, ToolResult, Turn } from "../providers/types.js";
 import type { Embedder } from "../embeddings.js";
@@ -46,6 +47,8 @@ export interface AgentDeps {
   tools: () => Tool[];
   gate: Gate;
   memory: Memory;
+  /** Echolalia pending store when verify-before-store is on; null otherwise. */
+  echolalia?: () => EcholaliaStore | null;
   audit: AuditLog;
   home: string;
   workspace: string;
@@ -377,7 +380,7 @@ export class Agent {
       ep.confirm(t.name, args);
     }
 
-    const ctx: ToolContext = { cwd: this.deps.cwd, workspace: this.deps.workspace, memory: this.deps.memory, embedder: this.deps.embedder(), vision: this.deps.vision(), transcriber: this.deps.transcriber?.() ?? null, signal };
+    const ctx: ToolContext = { cwd: this.deps.cwd, workspace: this.deps.workspace, memory: this.deps.memory, echolalia: this.deps.echolalia?.() ?? null, embedder: this.deps.embedder(), vision: this.deps.vision(), transcriber: this.deps.transcriber?.() ?? null, signal };
     try {
       const out = await t.run(args, ctx);
       const scam = ep.observe(t.name, t.policy.effects, out, !!t.outside);
