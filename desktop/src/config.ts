@@ -50,6 +50,16 @@ export interface Config {
    * open only while this is on, and only through the proxy.
    */
   tor: { enabled: boolean; socksPort: number };
+  nli: {
+    /** The NLI gate on final answers (deterministic contradiction check against this run's tool results). */
+    enabled: boolean;
+    /**
+     * Also escalate deterministic passes to the configured local model for a
+     * strict entailment check. One-directional: the model can only turn a
+     * pass into a fail, never rescue a deterministic fail.
+     */
+    modelCheck: boolean;
+  };
   port: number;
   writableRoots: string[];
   /**
@@ -97,6 +107,7 @@ export function defaults(p: Paths): Config {
     vision: { baseUrl: "", model: "qwen3-vl" },
     screenControl: { enabled: false },
     tor: { enabled: false, socksPort: 9050 },
+    nli: { enabled: true, modelCheck: false },
     port: 7337,
     writableRoots: [p.workspace],
     extraAllowedCommands: [],
@@ -134,6 +145,7 @@ export function loadConfig(p: Paths = paths()): Config {
     vision: { ...base.vision, ...(raw.vision ?? {}) },
     screenControl: { ...base.screenControl, ...(raw.screenControl ?? {}) },
     tor: { ...base.tor, ...(raw.tor ?? {}) },
+    nli: { ...base.nli, ...(raw.nli ?? {}) },
   };
 }
 
