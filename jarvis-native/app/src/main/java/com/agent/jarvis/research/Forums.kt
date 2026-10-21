@@ -4,13 +4,13 @@ import com.agent.jarvis.agent.OnionSafety
 import java.net.URI
 
 /**
- * Forum threads and wiki indexes the owner points at, read generically: posts (author, date,
- * text), explicit next-page links only, and the onion links a wiki index lists, each screened.
+ * Forum threads and wiki indexes, read generically: posts (author, date, text), explicit
+ * next-page links only, and the onion links a wiki index lists, each screened.
  *
  * Heuristics with known limits: a thread is the most common repeated container whose class says
  * post / message / comment / entry / reply; JavaScript-rendered and login-walled boards extract
- * poorly or not at all. Nothing is ever invented: an empty page gives no posts. Pure, JVM-tested,
- * apart from [thread] which fetches through the function it's given (Tor only).
+ * poorly or not at all. An empty page gives no posts. [thread] fetches through the function it's
+ * given (Tor only).
  */
 object Forums {
 
@@ -119,7 +119,7 @@ object Forums {
     private val ONION_HREF = Regex("href=\"((?:https?://)?(?:[a-z0-9-]+\\.)*[a-z2-7]{56}\\.onion(?:[:/][^\"\\s<>]*)?)\"[^>]*>([\\s\\S]{0,200}?)</a>", RegexOption.IGNORE_CASE)
 
     /**
-     * The onion links a wiki index lists, the wikis way: each screened on its address
+     * The onion links a wiki index lists: each screened on its address
      * ([OnionSafety.classify] without the page — TRUSTED, LIKELY_PHISH or UNKNOWN), one per address.
      * The label is the link's text. Nothing is fetched here.
      */

@@ -22,10 +22,9 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * The live diagnostic the floating button runs in the real app (not the test app). The owner taps
- * it, it captures everything the running app actually does for [DURATION_SEC] — real log lines from
- * every subsystem, memory and storage over time, and any crash — then writes one file the owner can
- * share back. This records the real app running; it changes nothing and runs no stand-in.
+ * The live diagnostic the floating button runs in the real app (not the test app). It captures
+ * everything the running app does for [DURATION_SEC] — real log lines from every subsystem, memory
+ * and storage over time, and any crash — then writes one file to share back.
  *
  * logcat with no tag filter and no READ_LOGS still shows a process its own lines only (Android's
  * rule), which is exactly this app's activity. We poll since the last read so a chatty run (ambient
@@ -35,10 +34,10 @@ import java.util.Locale
  * floating button only reads [state].
  */
 object LiveDiagnostic {
-    const val DURATION_SEC = 900          // 15 minutes (owner, 2026-10-20: longer than 5); tap to stop early
+    const val DURATION_SEC = 900          // 15 minutes; tap to stop early
     private const val POLL_MS = 8_000L     // drain logcat + snapshot memory this often
 
-    /** Every log tag the app writes (collected from the source), so nothing it does is missed. */
+    /** Every log tag the app writes. */
     private val TAGS = listOf(
         "JarvisActionGate", "JarvisAmbient", "JarvisApp", "JarvisAudit", "JarvisAuditWriter", "JarvisBrain",
         "JarvisBrowse", "JarvisClaims", "JarvisConnect", "JarvisDownloads", "JarvisFlow", "JarvisGate",
@@ -71,16 +70,12 @@ object LiveDiagnostic {
             val log = StringBuilder()
             val name = fileName(app, started)
             var saved: android.net.Uri? = null
-            // The try wraps everything from here on — including the Downloads create — so the
-            // finally below is the only exit and it always runs. (Before, the create sat outside
-            // the try: a stop landing in that window killed the job with no finally at all.)
             try {
                 var sinceMs = started
                 var lastRam = 0L
                 var lastSave = started
                 var threads = SystemTrace.readThreads()
-                // Saved to Downloads/Jarvis from the start and again every minute, so a capture the
-                // phone kills halfway is still there (owner: saved automatically, without asking).
+                // Saved to Downloads/Jarvis from the start and again every minute.
                 saved = withContext(Dispatchers.IO) { createInDownloads(app, name) }
                 while (isActive && System.currentTimeMillis() - started < DURATION_SEC * 1000L) {
                     delay(POLL_MS)
@@ -92,7 +87,7 @@ object LiveDiagnostic {
                     val (lines, next) = SystemTrace.snapshot(app, threads)
                     threads = next
                     lines.forEach { log.append(it).append('\n') }
-                    // Where the RAM goes, once a minute (owner, 2026-10-20).
+                    // Where the RAM goes, once a minute.
                     if (now - lastRam >= 60_000L) { lastRam = now; RamReport.snapshot(app).forEach { log.append(it).append('\n') } }
                     if (now - lastSave >= 60_000L) {
                         lastSave = now
@@ -112,10 +107,9 @@ object LiveDiagnostic {
                 log.append("(diagnostic capture ended early: ${e.javaClass.simpleName}: ${e.message})").append('\n')
             } finally {
                 remainingSec.intValue = 0
-                // NonCancellable is load-bearing: after stop() cancels this coroutine, a plain
-                // withContext here can never deliver its result — it throws CancellationException
-                // and the two assignments below it never ran, so running stayed true forever:
-                // frozen REC 0:00, no file, and every later tap routed to stop() on a dead job.
+                // NonCancellable is required: after stop() cancels this coroutine, a plain
+                // withContext here throws CancellationException, so the two assignments below it
+                // would never run and running would stay true.
                 val file = withContext(NonCancellable + Dispatchers.IO) { writeReport(app, started, log.toString(), name, saved) }
                 lastFile.value = file
                 running.value = false
@@ -213,9 +207,8 @@ object LiveDiagnostic {
 
     /** Open the Android share sheet for a finished report (send it on, or save it elsewhere). */
     fun share(ctx: Context, file: File) {
-        // Guarded: this runs inside a tap callback, where an exception (a file outside the
-        // FileProvider roots, no activity to launch) would crash the app and read as "SEND is
-        // broken". On failure the report stays in Downloads/Jarvis and on disk; nothing wedges.
+        // Guarded: an exception here (file outside the FileProvider roots, no activity to launch)
+        // must not crash the app; on failure the report stays in Downloads/Jarvis and on disk.
         try {
             val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
             val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {

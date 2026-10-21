@@ -9,13 +9,11 @@ import android.os.PowerManager
 import java.io.File
 
 /**
- * What the app and the phone are doing at one moment, for the live diagnostic (owner, 2026-10-20:
- * "a trace of everything going on in the app, and everything going on in Android that it can").
- * Each poll writes: which of Jarvis's threads used the CPU since the last poll (whisper, the LLM
- * workers, the UI…), every core's clock, thermal state and headroom, battery, screen, network, and
- * the app's own state (brain running, models loaded and busy, listening). Android hides other
- * apps' processes from an app, so the phone side is what the system reports to everyone.
- * Parsing is pure and JVM-tested.
+ * What the app and the phone are doing at one moment, for the live diagnostic. Each poll writes:
+ * which of Jarvis's threads used the CPU since the last poll (whisper, the LLM workers, the UI…),
+ * every core's clock, thermal state and headroom, battery, screen, network, and the app's own state
+ * (brain running, models loaded and busy, listening). Android hides other apps' processes from an
+ * app, so the phone side is what the system reports to everyone.
  */
 object SystemTrace {
 

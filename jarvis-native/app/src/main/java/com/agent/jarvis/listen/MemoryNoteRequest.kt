@@ -1,11 +1,9 @@
 package com.agent.jarvis.listen
 
 /**
- * Notes made later from what was already heard (owner, 2026-10-07: "make notes later on based on
- * previous memories it picked up from always listening"):
+ * Notes made later from what was already heard:
  *  - "make a note of what Sam said about the boiler" → search memory, write one note, save it;
  *  - "save that as a note" / "note that down" → the last answer becomes a note.
- * Pure, JVM-tested.
  */
 object MemoryNoteRequest {
     /** How the owner's own words to Jarvis are kept in memory (Brain.recordTurn). */
@@ -44,7 +42,7 @@ object MemoryNoteRequest {
         return Kind.FromMemory(LEAD.replace(body, "").trim())
     }
 
-    /** The note in the model's reply ("Note: …" line, else its first line), or null for none. Pure. */
+    /** The note in the model's reply ("Note: …" line, else its first line), or null for none. */
     fun noteText(answer: String): String? {
         val lines = answer.lines().map { it.trim() }.filter { it.isNotEmpty() }
         val line = lines.firstOrNull { it.startsWith("note:", ignoreCase = true) }?.substringAfter(':')
@@ -54,7 +52,7 @@ object MemoryNoteRequest {
         return t.take(300)
     }
 
-    /** An answer as a note: without the app's own tags ("(on-device)", "(from model knowledge, unverified)"). Pure. */
+    /** An answer as a note: without the app's own tags ("(on-device)", "(from model knowledge, unverified)"). */
     fun fromAnswer(answer: String): String? =
         answer.replace(Regex("\\((?:on-device|from model knowledge, unverified)\\)"), " ")
             .replace(Regex("\\s+"), " ").trim().take(400).ifBlank { null }

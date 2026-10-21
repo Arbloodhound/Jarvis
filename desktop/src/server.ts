@@ -10,9 +10,7 @@ import type { Runtime } from "./runtime.js";
 
 /**
  * The gateway: one HTTP + WebSocket server on 127.0.0.1. It serves the chat
- * page and streams agent events to every connected client (the page, and
- * later the phone app as a thin client, the way OpenClaw's phone talks to its
- * gateway).
+ * page and streams agent events to every connected client (the page).
  *
  * Who may talk to it:
  * - Only this computer: it binds to 127.0.0.1.

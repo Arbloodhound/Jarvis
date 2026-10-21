@@ -1,9 +1,8 @@
 package com.agent.jarvis.agent
 
 /**
- * "If I already asked Jarvis to do something, it shouldn't ask me to confirm" — the owner's
- * decision of 2026-10-08 (option B): a commitment tap the person asked for in their own words goes
- * ahead without the confirmation card. Everything else still asks:
+ * A commitment tap the person asked for in their own words goes ahead without the confirmation
+ * card. Everything else still asks:
  *  - anything that can cost money (and any screen showing a price),
  *  - deleting, wiping, resetting, uninstalling, signing out,
  *  - agreeing to terms, and labels Jarvis can't read,
@@ -11,7 +10,7 @@ package com.agent.jarvis.agent
  *    the screen ("messaging someone new"),
  *  - anything Jarvis decided on its own (the request doesn't contain a matching verb).
  * The Disagreement check (request vs. screen numbers) still runs first and still stops.
- * Settings → "Don't ask when I asked for it" turns this off. Pure, JVM-tested.
+ * Settings → "Don't ask when I asked for it" turns this off.
  */
 object DirectRequest {
 

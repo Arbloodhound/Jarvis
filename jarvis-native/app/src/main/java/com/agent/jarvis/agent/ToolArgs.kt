@@ -4,12 +4,8 @@ import org.json.JSONObject
 import java.math.BigDecimal
 
 /**
- * Typed tool arguments that fail closed. Pure, JVM-tested.
- *
- * `optBoolean("on", true)` turned the flashlight, Wi-Fi, Bluetooth or Do Not Disturb ON when the
- * model left "on" out or wrote something like "off"; `optInt("percent", 50)` set the volume to 50
- * when "percent" was missing. A device action should not invent a value it was not given, so
- * these return null for anything they cannot read, and the tool refuses instead.
+ * Typed tool arguments that fail closed: these return null for anything they cannot read, and the
+ * tool refuses instead.
  */
 object ToolArgs {
 

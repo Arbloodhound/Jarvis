@@ -13,7 +13,7 @@ import com.agent.jarvis.agent.WebResearchRun
  * Every run calls [ShoppingListings.excludeOnion], so an .onion row (by its source or its link)
  * is dropped and counted.
  *
- * [build] and [render] are pure (JVM-tested); [run] is the thin network wiring over [WebResearchRun].
+ * [run] is the thin network wiring over [WebResearchRun].
  */
 object ShoppingRun {
 
@@ -28,7 +28,7 @@ object ShoppingRun {
 
     /**
      * The listings and reputation from [pages] (url → raw HTML the caller already fetched). Rows on
-     * onion URLs are excluded here and counted, never ranked. Pure.
+     * onion URLs are excluded here and counted, never ranked.
      */
     fun build(pages: List<Pair<String, String>>, fetchedAt: String, sort: String = SORT_PRICE): Built {
         val raw = pages.flatMap { (url, html) -> ShoppingListings.extractListings(html, url, fetchedAt).rows }
@@ -48,7 +48,7 @@ object ShoppingRun {
         return Built(offers, filtered.excluded.size, ranked, merges)
     }
 
-    /** The table for the brain: offers in the labelled order, seller reputation with its source, no pick. Pure. */
+    /** The table for the brain: offers in the labelled order, seller reputation with its source. */
     fun render(query: String, built: Built): String = buildString {
         append("Shopping — ").append(query).append(". ")
         append("${built.offers.count} offers from ${built.ranked.count} sellers")

@@ -52,8 +52,7 @@ class Segmenter(private val onUtterance: (ShortArray, Int) -> Unit) {
 
     fun push(input: ShortArray) {
         // Own copy: the capture loop reuses one read buffer, and preRoll/current
-        // keep frames across calls. Storing the caller's array made every
-        // utterance N copies of the last 32 ms read.
+        // keep frames across calls.
         val frame = input.copyOf()
         val db = dbfs(frame)
         val loud = db > maxOf(floorDb + GATE_ABOVE_FLOOR_DB, GATE_ABS_MIN_DB)
@@ -78,8 +77,7 @@ class Segmenter(private val onUtterance: (ShortArray, Int) -> Unit) {
         if (quietMs >= HANGOVER_MS) flush()
         else if (current.size * FRAME_MS >= maxMs) {
             // Never quiet for the whole segment: the floor is below the room's steady sound (a TV,
-            // a fan), so every frame looks like speech and segments run back to back at the cap
-            // (Pixel log 2026-10-07: every utterance 28000 ms, whisper 2.5-5x behind, 129 dropped).
+            // a fan), so every frame looks like speech and segments run back to back at the cap.
             // The quieter frames of such a segment are the room: raise the floor to them.
             if (maxMs >= MAX_UTTER_MS) floorDb = maxOf(floorDb, roomLevel(current))
             flush()

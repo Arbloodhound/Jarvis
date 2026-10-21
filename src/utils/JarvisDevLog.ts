@@ -2,9 +2,7 @@
  * JarvisDevLog v3 -- Runtime Diagnostic System for Jarvis
  * ============================================================
  *
- * v3 CHANGES (all from JARVISDEVLOG_CAPABILITY_MAP.txt):
- *
- * NEW SENSORS:
+ * SENSORS:
  *   N1. COMPONENT_LIFECYCLE  -- proves ChatScreen mount/unmount
  *   N2. SETTINGS_SAVE        -- save button tap + vault write result
  *   N3. EXECUTE_PHASE        -- named phase entry, narrows crash location
@@ -13,19 +11,6 @@
  *   N6. PROCESS_RESTART      -- Android process kill vs suspension detection
  *   N7. PICKER_CONTENT       -- model list render count inside sheet
  *   N8. CONTEXT_PROVIDER     -- AgentCoreProvider verification sensor
- *
- * DATA QUALITY FIXES:
- *   Q1. listHeightPx=0: messageRendered() warns when listHeight unavailable
- *   Q2. VAULT_WRITE success is now boolean, not byte count
- *   Q3. APP_STATE_CHANGE elapsed correct on first entry (init to Date.now())
- *   Q4. PICKER_ANIMATE mount noise suppressed with 500ms mountedAt guard
- *   Q5. uiState() deduplicates -- skips identical snapshots
- *   Q6. pickerOpen() warns correctly; slideAnim should be read before setValue()
- *
- * NOISE REDUCTION:
- *   R1. conversationList / conversationLoaded only log on count change
- *   R2. High-freq vault reads (api key, base url) deduplicated within 1s
- *   R3. processingState() includes durationMs since last transition
  */
 
 import { Platform, AppState, AppStateStatus } from 'react-native';

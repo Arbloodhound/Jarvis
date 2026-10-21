@@ -14,12 +14,12 @@ import com.agent.jarvis.agent.WebResearch
  * unlisted onion screened before any of its words count, phishing and scam pages blocked and never
  * quoted). [companyCheck]: clearnet presence, whether a claimed onion address is published on the
  * company's own site, lookalikes of known addresses, scam signals on the pages. [compare]: one
- * table sorted mechanically with the key labelled, then a question. Pure apart from [onionLeg],
- * which reads through the function it's given (Tor only). JVM-tested.
+ * table sorted mechanically with the key labelled, then a question. [onionLeg] reads through the
+ * function it's given (Tor only).
  */
 object ProductCheck {
 
-    /** Trust tiers for the mechanical sort. An order, not a judgement of any seller. */
+    /** Trust tiers for the mechanical sort. */
     enum class Tier(val words: String, val rank: Int) {
         KNOWN_GOOD_ONION("known-good onion", 4),
         LISTED_SITE("known site", 3),
@@ -94,7 +94,7 @@ object ProductCheck {
     /**
      * The company check over the clearnet pages read ([pages]: url → raw HTML) and the onion
      * address claimed ([claimed], from the request or a page). "Own site" = a domain containing
-     * the company's first name word. Pure, JVM-tested.
+     * the company's first name word.
      */
     fun companyCheck(name: String, pages: Map<String, String>, claimed: String?, known: Map<String, String>): Company {
         val brand = brandToken(name)
@@ -148,8 +148,7 @@ object ProductCheck {
 
     /**
      * The comparison for the brain: the table sorted by [SORT_KEY] (labelled), blocked sources
-     * named (never as links), the company check, and [QUESTION] at the end. No pick, no
-     * recommendation, no purchase advice. Pure, JVM-tested.
+     * named (never as links), the company check, and [QUESTION] at the end.
      */
     fun compare(product: String, rows: List<Row>, leg: OnionLeg?, company: Company?): String = buildString {
         append("Product check — ").append(product).append(" (clearnet")

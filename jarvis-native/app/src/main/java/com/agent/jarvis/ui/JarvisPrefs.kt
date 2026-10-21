@@ -277,8 +277,7 @@ object JarvisPrefs {
     private const val K_SMS_CODE = "auto_extract_sms_code"
 
     /** Auto-copy verification codes from incoming SMS to the clipboard. Off
-     *  by default: this reads message content as it arrives, which is
-     *  standing collection. Requires the notification listener. */
+     *  by default. Requires the notification listener. */
     fun autoExtractSmsCode(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(K_SMS_CODE, false)
@@ -291,10 +290,8 @@ object JarvisPrefs {
     private const val K_SCAM = "scam_shield"
 
     /** Warn when an incoming message looks like a scam, and hold its numbers and
-     *  links behind a confirm. ON by default, unlike the code auto-copy: it keeps
-     *  nothing on disk (the flagged targets live in memory for 72 h) and the people
-     *  it protects most are the least likely to find a switch. Needs the
-     *  notification listener. */
+     *  links behind a confirm. ON by default. Keeps nothing on disk (the flagged
+     *  targets live in memory for 72 h). Needs the notification listener. */
     fun scamShield(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(K_SCAM, true)

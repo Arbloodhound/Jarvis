@@ -10,7 +10,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * What the offline brain is told it remembers. Pure Kotlin, JVM-tested.
+ * What the offline brain is told it remembers.
  *
  * [provider] is the hook: given the request, it returns a short text of what memory search
  * found (overheard speech, notes), or null/blank for nothing. It is set from outside (the
@@ -20,20 +20,19 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * Only requests that plausibly need memory search it ([wants]): who said what or when,
  * "remind me", "do you remember", past-time words, a person's name with a speech/contact
- * word. A request that only refers back to the chat gets history instead. A fresh question gets no brief — unrelated text in
- * the prompt is what the small-quant model copies from (DEVLOG 2026-10-06).
+ * word. A request that only refers back to the chat gets history instead. A fresh question gets no
+ * brief.
  */
 object MemoryBrief {
 
     /** (query, nowMs) -> brief text; set by the memory search (MemoryRecall). Null: no brief. */
     @Volatile var provider: (suspend (query: String, nowMs: Long) -> String?)? = null
 
-    /** (nowMs) -> the newest notes and heard lines, for "what do you remember?" ([Decision.overview]):
-     *  a search on those words finds nothing useful. Set beside [provider]. */
+    /** (nowMs) -> the newest notes and heard lines, for "what do you remember?" ([Decision.overview]).
+     *  Set beside [provider]. */
     @Volatile var overviewProvider: (suspend (nowMs: Long) -> String?)? = null
 
-    /** The brief when memory was searched and nothing came back: the model is told so, rather
-     *  than getting no block and answering that it has no memory. */
+    /** The brief when memory was searched and nothing came back: the model is told so. */
     const val NOTHING_FOUND = "Nothing on this was found in what I heard or in my notes."
 
     const val HEADER = "What I remember (from listening and notes) — may be incomplete:"
@@ -47,8 +46,7 @@ object MemoryBrief {
 
     /**
      * Questions about Jarvis's memory itself, matched whole (lowercased, punctuation and a
-     * leading "hey jarvis" / "jarvis" removed). None of them matched any rule below, so the
-     * brain got no memory and said it had none (owner, 2026-10-07).
+     * leading "hey jarvis" / "jarvis" removed).
      */
     private val OVERVIEW = listOf(
         "(what|anything) (do|can|did) you (remember|recall)( (about me|about us|from today|from (this|last) week|recently|lately|so far))?",

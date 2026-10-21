@@ -10,9 +10,7 @@ import java.io.File
 
 /**
  * Structured audit log for gate decisions. JSONL, one line per decision.
- *
- * Fields are chosen to be safe for public sharing: no args, no content,
- * no PII. Just the decision pattern — enough to calibrate risk scoring.
+ * Fields carry no args, no content, no PII.
  */
 object GateAuditLog {
 
@@ -49,8 +47,7 @@ object GateAuditLog {
 
     internal fun isInitialized(): Boolean = appContext != null
 
-    /** Line count, read from disk once and kept current afterwards, so the
-     * settings screen does not re-read the file on every composition. */
+    /** Line count, read from disk once and kept current afterwards. */
     @Volatile private var cachedCount: Int? = null
 
     fun record(

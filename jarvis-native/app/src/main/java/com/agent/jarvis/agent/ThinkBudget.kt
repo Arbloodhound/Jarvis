@@ -3,12 +3,8 @@ package com.agent.jarvis.agent
 /**
  * Streaming cap on a reasoning model's <think> trace.
  *
- * Why: Qwen3-30B-A3B-Thinking runs with a 4k context on the phone. An unbounded
- * trace can eat the KV cache before the answer starts. This counts tokens inside
- * the trace and, at the budget, tells the engine to force-feed a short wrap-up
- * plus "</think>" so the model moves on to the answer ("budget forcing").
- *
- * Pure Kotlin, no Android deps: unit-tested on the JVM.
+ * This counts tokens inside the trace and, at the budget, tells the engine to force-feed a short
+ * wrap-up plus "</think>" so the model moves on to the answer ("budget forcing").
  *
  * Engine contract (one call per sampled token):
  *   val step = budget.onToken(piece)

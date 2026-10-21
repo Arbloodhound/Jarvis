@@ -24,11 +24,10 @@ import java.io.File
  *    pivots on the contacts found, each hit a finding with its url and snippet.
  *
  * ## Invariants
- * [CaseFile.addFinding] and [CaseFile.addContact] refuse anything without a source URL — nothing
- * sourceless enters a case. LIKELY_PHISH / SCAM onions never become case links. Outreach is drafts
- * only ([Outreach]): there is no send path in this package; sending is a separate action the owner
- * approves per recipient. Each case is saved as JSON in app-private storage (files/cases/<id>.json).
- * The summary ends with a question. JVM-tested with fakes for every leg.
+ * [CaseFile.addFinding] and [CaseFile.addContact] refuse anything without a source URL.
+ * LIKELY_PHISH / SCAM onions never become case links. Outreach is drafts only ([Outreach]): there
+ * is no send path in this package. Each case is saved as JSON in app-private storage
+ * (files/cases/<id>.json). The summary ends with a question.
  */
 class CaseFile(val id: String, val target: String, val createdAt: Long) {
 
@@ -49,7 +48,7 @@ class CaseFile(val id: String, val target: String, val createdAt: Long) {
 
     fun leg(name: String, status: String, note: String = "") { legs += Leg(name, status, note) }
 
-    /** Refused (IllegalArgumentException) without a source URL: a claim without a source is not evidence. */
+    /** Refused (IllegalArgumentException) without a source URL. */
     fun addFinding(claim: String, url: String, snippet: String, fetchedAt: Long, realm: String): Finding {
         require(url.isNotBlank()) { "finding refused: no source" }
         require(realm == "clearnet" || realm == "tor") { "finding refused: unknown realm $realm" }
@@ -88,11 +87,9 @@ class CaseFile(val id: String, val target: String, val createdAt: Long) {
 }
 
 /**
- * Outreach DRAFTS for a case contact. There is deliberately no way to send anything here — no
- * network, no messaging, no intent: the owner sends, per recipient, through a separate action they
- * approve. Placeholders in the subject and body: {value}, {kind}, {query}, {source_url}; any other
- * {placeholder} is refused so a draft never goes out with a hole in it. A contact without a source
- * is refused: Jarvis never drafts to a recipient it can't trace. Pure, JVM-tested.
+ * Outreach DRAFTS for a case contact. No send path here: no network, no messaging, no intent.
+ * Placeholders in the subject and body: {value}, {kind}, {query}, {source_url}; any other
+ * {placeholder} is refused. A contact without a source is refused.
  */
 object Outreach {
     private val PLACEHOLDER = Regex("\\{([a-z_]+)\\}")
@@ -122,7 +119,7 @@ object Investigation {
     const val QUESTION = "What do you want next — dig deeper (another leg or pivot), check one contact or source further, " +
         "draft a message to a contact (a draft only; you send it), or drop it?"
 
-    /** The operator and pivot queries for leg 4, at most [max]. Pure, JVM-tested. */
+    /** The operator and pivot queries for leg 4, at most [max]. */
     fun osintQueries(target: String, domains: List<String>, contacts: List<Contacts.Contact>, max: Int = 5): List<String> {
         val t = target.trim().replace("\"", "")
         val q = arrayListOf("\"$t\" filetype:pdf", "\"$t\" inurl:contact")
@@ -206,7 +203,7 @@ object Investigation {
         return case
     }
 
-    /** The case summary for the brain: legs, findings [n] with url and fetch time, contacts with provenance, links, red flags, the question. Pure, JVM-tested. */
+    /** The case summary for the brain: legs, findings [n] with url and fetch time, contacts with provenance, links, red flags, the question. */
     fun summary(case: CaseFile, max: Int = 3000): String {
         val head = "Investigation case ${case.id} — ${case.target}. Legs: " +
             case.legs.joinToString("; ") { "${it.name} ${it.status}${if (it.note.isNotBlank()) " (${it.note})" else ""}" } + "\n" +

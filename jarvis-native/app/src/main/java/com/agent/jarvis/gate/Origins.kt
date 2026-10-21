@@ -3,8 +3,7 @@ package com.agent.jarvis.gate
 /**
  * Origin tracking (port of gatellml lang/origins.py): every argument value
  * carries the attested sources it was derived from. Origins mint by WHOLE-TOKEN
- * membership against the operator's request text (tracesToRequest) — substring
- * membership let "ce@example.com" trace through "alice@example.com".
+ * membership against the operator's request text (tracesToRequest).
  */
 
 private val EMAIL_RE = Regex("""[\w.+-]+@[\w-]+\.[\w.]+""")
@@ -26,11 +25,8 @@ private val SENTENCE_BREAK = Regex("""\.(?=[A-Z][a-z]+(?:[\s,;:!?)]|$))""")
 
 /**
  * Normalise the TRUSTED side only. "site.com.They sent" is a sentence break with
- * the space typo'd away. Never run this on an argument: a repair heuristic applied
- * to attacker-influenced text is a tool for the attacker ("alice@example.com.Do"
- * repaired into "alice@example.com. do" traces through a real sentence break, and
- * example.com.do is registrable). The word must end cleanly, so
- * "John.Smith@example.com" is left whole.
+ * the space typo'd away. Never run this on an argument. The word must end cleanly,
+ * so "John.Smith@example.com" is left whole.
  */
 fun normRequest(s: String): String = norm(SENTENCE_BREAK.replace(s, ". "))
 
@@ -41,10 +37,8 @@ val RECIPIENT_ARG_RE = Regex(
     RegexOption.IGNORE_CASE)
 
 /**
- * Any host-shaped token: labels plus an alphabetic TLD, or an IPv4 literal. The old
- * pattern carried a 17-TLD list (evil.ru, evil.dev were invisible), used \b (which
- * fails next to "_", so markdown "_evil.com_" hid) and backtracked to a named prefix
- * ("mybank.com.ru" matched as "mybank.com"). Greedy, with hard boundaries.
+ * Any host-shaped token: labels plus an alphabetic TLD, or an IPv4 literal.
+ * Greedy, with hard boundaries.
  */
 val DOMAIN_RE = Regex(
     """(?<![A-Za-z0-9.-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,24}(?![A-Za-z0-9-]|\.[A-Za-z0-9])""" +
@@ -59,16 +53,15 @@ fun hasInvisible(text: String): Boolean = INVISIBLE.containsMatchIn(text)
 
 /**
  * Whole-token trace: [value]'s words must appear in the request as whole words,
- * in order. The one matching rule for the gate — Gate.saidByUser and every
- * contract go through it, so containment cannot creep back in at one call site.
+ * in order. Gate.saidByUser and every contract go through it.
  * Punctuation is trimmed from both sides, so "...open news.ycombinator.com."
  * still matches. Both sides are normalised here; norm is idempotent.
  */
 fun tracesToRequest(value: String, requestNorm: String): Boolean {
     // A non-ASCII character that lowercases INTO ASCII is a disguise, not a letter: the
-    // Kelvin sign U+212A lowercases to "k", so "mi\u212Ae@" would trace as "mike@". Found
-    // by the shared vectors run ON THE PHONE: Android's ICU regex treats \w as Unicode and
-    // read the whole address, where the desktop JVM (ASCII \w) happened to split it.
+    // Kelvin sign U+212A lowercases to "k", so "mi\u212Ae@" would trace as "mike@".
+    // Android's ICU regex treats \w as Unicode and reads the whole address, where the
+    // desktop JVM (ASCII \w) splits it.
     if (value.any { it.code > 127 && it.lowercaseChar().code < 128 }) return false
     fun tokens(s: String) = s.split(' ')
         .map { it.trim('.', ',', ';', ':', '!', '?', '"', '\'', '(', ')') }
@@ -113,10 +106,8 @@ fun idNeedsNaming(value: String): Boolean {
 }
 
 /**
- * A bare number is only a target if the request names it AS an id. Whole-token
- * tracing let "3 pm" license delete_file("3"); a loose "near the noun" window
- * still let "I have no 5 star reviews" license file 5 and blocked "files 3, 4 and
- * 5". The number must directly follow the tool's object noun ("file 13"), an id
+ * A bare number is only a target if the request names it AS an id.
+ * The number must directly follow the tool's object noun ("file 13"), an id
  * word ("with ID '13'", "whose identifier is 13"), or "<noun> number N". A list is
  * followed back to its head. A sentence break ends the match.
  */
@@ -152,10 +143,9 @@ private fun rot13(s: String) = s.map { c ->
 }.joinToString("")
 
 /**
- * Does outbound text carry this secret? Literal containment is beaten by one
- * inserted space. Compare on letters and digits only, and try the disguises a
- * model can produce without a tool: reversed, rot13, base64, hex, percent-
- * encoding, and the vendor prefix ("sk-") dropped. Raises the cost; not a proof.
+ * Does outbound text carry this secret? Compare on letters and digits only, and try
+ * the disguises a model can produce without a tool: reversed, rot13, base64, hex,
+ * percent-encoding, and the vendor prefix ("sk-") dropped.
  */
 fun leaks(secret: String, outbound: String): Boolean {
     val sq = squash(secret)
@@ -188,8 +178,8 @@ private fun decodedB64Runs(text: String): String = B64_RUN.findAll(text.take(200
 }.joinToString(" ")
 
 /** Origin markers. v0 uses two: User (verbatim in the request) and
- * ToolOrigin (everything else). RequestSpan exists for the future resolve
- * channel — see gatellml SPEC section 2 R4. */
+ * ToolOrigin (everything else). RequestSpan is the resolve channel —
+ * see gatellml SPEC section 2 R4. */
 sealed interface Origin
 object UserOrigin : Origin
 data class ToolOrigin(val tool: String = "<untracked>") : Origin

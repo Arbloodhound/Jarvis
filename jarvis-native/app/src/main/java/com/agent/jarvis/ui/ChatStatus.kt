@@ -3,10 +3,6 @@ package com.agent.jarvis.ui
 /**
  * The transient "it is working" line under the chat while the on-device model is silent.
  *
- * Why: with the Qwen3 thinking MoE the first answer after opening the app waits for a
- * 10 GB load, and every answer then writes a hidden <think> trace (ThinkBudget) before
- * the first visible token. Both phases showed nothing at all.
- *
  * Never part of a [ChatMessage]: it is not persisted and never spoken.
  *
  * Pure, JVM-tested (ChatStatusTest).

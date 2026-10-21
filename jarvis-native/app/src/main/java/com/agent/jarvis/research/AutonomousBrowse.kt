@@ -3,8 +3,7 @@ package com.agent.jarvis.research
 import java.time.Instant
 
 /**
- * Autonomous browsing, clearnet + Tor — port of the TESTED Python
- * reference (jarvis-v4/browse/autonomous.py).
+ * Autonomous browsing, clearnet + Tor.
  *
  * browse() navigates on its own within hard bounds:
  * - Clearnet leg: runs the search pipeline, fetches result pages,
@@ -16,17 +15,12 @@ import java.time.Instant
  *   Tor and their pages screened BEFORE the content is used.
  *
  * Onion URLs found during clearnet browsing are routed to the Tor
- * leg — never fetched over clearnet. Realm routing is not
- * filtering.
+ * leg — never fetched over clearnet.
  *
  * Every collected page carries provenance (URL, where it was
  * found, when, which realm). Blocked URLs are reported, never
  * silently dropped. Cancel checks run between fetches; a cancelled
  * run returns partial results with cancelled=true.
- *
- * SOURCE ONLY: not compiled in this sandbox. For Claude-in-repo
- * to drop into jarvis-native/.../research/ and run under the JVM
- * suite. Pure logic — no Android deps.
  */
 object AutonomousBrowse {
 
@@ -122,8 +116,7 @@ object AutonomousBrowse {
 
     /**
      * Realm routing helper: the .onion host of a URL, or null.
-     * Used ONLY to route onion URLs to the Tor transport — never
-     * to drop or exclude them.
+     * Used to route onion URLs to the Tor transport.
      */
     fun onionHost(url: String): String? {
         val host = HOST_RE.find(url)?.groupValues?.get(1)?.lowercase() ?: return null
@@ -207,8 +200,7 @@ object AutonomousBrowse {
             val (url, depth, foundOn) = queue.removeFirst()
             if (url in visited) continue
             if (onionHost(url) != null) {
-                // Realm routing, NOT filtering: onion URLs go to the
-                // Tor leg; they are never fetched over clearnet.
+                // onion URLs go to the Tor leg; they are never fetched over clearnet.
                 if (url !in onionFrontier) onionFrontier.add(url)
                 visited.add(url)
                 continue

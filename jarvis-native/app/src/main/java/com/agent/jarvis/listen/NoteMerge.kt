@@ -74,12 +74,12 @@ data class Note(
     companion object {
         const val MAX_TAGS = 3
 
-        /** Cleans tags from the model or the owner: lower case, letters/digits/spaces/hyphens, ≤ 20 chars, ≤ [MAX_TAGS]. Pure. */
+        /** Cleans tags from the model or the owner: lower case, letters/digits/spaces/hyphens, ≤ 20 chars, ≤ [MAX_TAGS]. */
         fun cleanTags(raw: List<String>): List<String> = raw.asSequence()
             .map { it.lowercase(Locale.ROOT).trim().trimStart('#').replace(Regex("[^\\p{L}\\p{N} -]+"), "").replace(Regex("\\s+"), " ").trim() }
             .filter { it.length in 2..20 }.distinct().take(MAX_TAGS).toList()
 
-        /** A speaker label without brackets ("[Speaker 2]" → "Speaker 2"); null when blank or too long. Pure. */
+        /** A speaker label without brackets ("[Speaker 2]" → "Speaker 2"); null when blank or too long. */
         fun cleanWho(raw: String?): String? = raw?.replace(Regex("\\s+"), " ")?.trim()?.removePrefix("[")?.removeSuffix("]")?.trim()
             ?.takeIf { it.isNotEmpty() && it.length <= 40 }
 
@@ -89,7 +89,7 @@ data class Note(
 }
 
 /**
- * The librarian's dedupe/merge rule. Pure, JVM-tested.
+ * The librarian's dedupe/merge rule.
  *
  * Duplicate = same kind, similar wording, and (for plans/to-dos) times that agree:
  *  - wording: content words (stop words dropped) with Jaccard ≥ [JACCARD], or, when the
@@ -184,8 +184,7 @@ object NoteMerge {
 
     /**
      * Orders FTS matches for a search: most query words matched (prefix match, like the FTS
-     * query) first, then the newest. Pure, JVM-tested. An OR query alone would rank a note that
-     * shares one common word with the question as high as one that shares all of them.
+     * query) first, then the newest.
      */
     fun rank(query: String, notes: List<Note>, limit: Int): List<Note> {
         val q = tokens(query).filter { it.length >= 2 }

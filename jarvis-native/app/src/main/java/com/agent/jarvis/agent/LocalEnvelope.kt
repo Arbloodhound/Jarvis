@@ -5,7 +5,7 @@ import com.agent.jarvis.harness.SessionEnvelope
 import com.agent.jarvis.harness.reusablePrefixLen
 
 /**
- * Glue between the on-device prompts and harness/PromptEnvelope. Pure, JVM-tested.
+ * Glue between the on-device prompts and harness/PromptEnvelope.
  *
  * The system block is assembled from four fragments in a FIXED order — core_persona,
  * user_profile, loaded_tool_schemas, covered_history — so everything that changes often

@@ -146,7 +146,6 @@ export async function screenshot(file: string): Promise<void> {
  * Synthetic keyboard and mouse. Experimental and off by default: this can act
  * on any window, so every call is gated by a confirm card. Uses the OS's own
  * automation tool; when it isn't installed, the error says which one to get.
- * Nothing here is proven on a real desktop yet.
  */
 async function first(tries: Array<[string, string[]]>, install: string): Promise<string> {
   for (const [cmd, args] of tries) {

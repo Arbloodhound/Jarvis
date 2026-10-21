@@ -25,7 +25,7 @@ enum class CuePattern(val id: String) {
     STRESS_MARKER("stress_marker"),      // pauses, fillers, rate/loudness change
     DECISION("decision"),
     RECURRING_THEME("recurring_theme"),
-    // Sociolinguistics (owner, 2026-10-07: "use actual sociolinguistic literature"):
+    // Sociolinguistics:
     TAG_QUESTION("tag_question"),        // "…, isn't it?", "…, right?" (Lakoff 1975)
     INTENSIFIER("intensifier"),          // "so", "really", "totally" stacked (Lakoff 1975; Tagliamonte)
     ABSOLUTIST("absolutist"),            // always / never / completely / nothing (Al-Mosaiwi & Johnstone 2018)
@@ -156,7 +156,6 @@ data class Observation(
 
 /**
  * Text rules for cue-tagged transcripts and for keeping notes to observations, never verdicts.
- * Pure, JVM-tested.
  *
  * Transcript lines may start with a speaker label ([Me], [Sam], [Speaker 2], [Unknown]) and carry
  * inline cue tags ([pause 1.8s], [overlap], [fast], [slow], [louder], [quieter], (laughs));
@@ -259,7 +258,7 @@ object CueText {
 }
 
 /**
- * How an observation reads in memory, for the big model and the owner. Pure, JVM-tested.
+ * How an observation reads in memory, for the big model and the owner.
  *
  *   Observation (hedging, med confidence): Sam hedged about Friday. Evidence: Sam at 18:01: "maybe Friday, I'll see".
  *   Possible reading (low confidence): may suggest avoidance (moving away from the topic). Alternative: Sam may not know his shifts yet.
@@ -291,12 +290,11 @@ object ObservationText {
 
 /**
  * The optional second, short pass: hedged possible readings for observations the first pass
- * already verified. Pure, JVM-tested. Kept apart so the main librarian prompt stays compact for
- * the 1.7B model; it only runs on chunks that produced observations.
+ * already verified. It only runs on chunks that produced observations.
  */
 object ReadingPrompt {
     const val MAX_TOKENS = 320
-    /** At most this many observations per call (more cannot come from one 640-token answer anyway). */
+    /** At most this many observations per call. */
     const val MAX_OBS = 8
 
     val SYSTEM = """

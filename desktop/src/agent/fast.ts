@@ -3,7 +3,7 @@
  * the phone (FastCommand.kt): "open github.com", "remember that…", "take a
  * screenshot". They still go through the gate and confirm cards like any other
  * call. Questions, compounds ("…and then…") and anything unmatched go to the
- * model; a fast path that guesses is worse than a slow one that doesn't.
+ * model.
  */
 
 export type Fast =

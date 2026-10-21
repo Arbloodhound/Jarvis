@@ -14,16 +14,14 @@ import kotlin.coroutines.coroutineContext
  * The real transports for [AutonomousBrowse]: DuckDuckGo search and clearnet fetch from
  * [WebResearchRun], the onion leg from [OnionAccess] (the Tor proxy) with [OnionSafety] doing the
  * classify-before-fetch and the screening. This file only hands it the transports.
- *
- * [render] is pure (JVM-tested); [run] is the thin wiring.
  */
 object BrowseRun {
 
-    /** Fetch bounds across both legs — small on a phone. */
+    /** Fetch bounds across both legs. */
     const val BROWSE_PAGES = 12
     const val BROWSE_DEPTH = 2
 
-    /** The browse result for the brain: pages with provenance, blocked URLs repeated, notes. Pure. */
+    /** The browse result for the brain: pages with provenance, blocked URLs repeated, notes. */
     fun render(task: String, r: AutonomousBrowse.Result): String = buildString {
         append("Autonomous browse — ").append(task).append(".\n")
         append("${r.pagesFetched} page(s) read")

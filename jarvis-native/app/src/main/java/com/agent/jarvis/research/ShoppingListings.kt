@@ -3,8 +3,7 @@ package com.agent.jarvis.research
 import com.agent.jarvis.agent.WebResearch
 
 /**
- * URL-agnostic listings extraction — port of the TESTED Python
- * reference (jarvis-v4/shopping/listings.py).
+ * URL-agnostic listings extraction.
  *
  * Takes (content, url) and works on whatever it is given: a
  * clearnet shop page, a company's onion shop page, app screen text.
@@ -18,10 +17,6 @@ import com.agent.jarvis.agent.WebResearch
  * [excludeOnion] below is a SEPARATE function; extraction never
  * calls it and never branches on realm — the caller applies it
  * explicitly.
- *
- * SOURCE ONLY: not compiled in this sandbox. For Claude-in-repo
- * to drop into jarvis-native/.../research/ and run under the JVM
- * suite. Pure logic — no Android deps.
  */
 object ShoppingListings {
 
@@ -105,7 +100,7 @@ object ShoppingListings {
         return Table(rows, "price (lowest first)", rows.size)
     }
 
-    /** One searchable/sortable table. Mechanical sorts only, sort key labeled. No buy language. */
+    /** One searchable/sortable table. Mechanical sorts only, sort key labeled. */
     fun compareTable(rows: List<Row>, sort: String = "price"): Table = when (sort) {
         "price" -> Table(rows.sortedBy { it.price?.amount ?: Double.MAX_VALUE },
             "price (lowest first)", rows.size)
@@ -141,12 +136,11 @@ object ShoppingListings {
     }
 
     // ------------------------------------------------- price provenance
-    // Standing rule: a price whose only source is a search-engine snippet is
-    // never quoted or ranked. A price counts only after a full page read
-    // (rendered + OCR + DOM). Snippet-sourced prices are labelled unverified
-    // (the price is cleared so it can't be ranked) or dropped — the caller
-    // decides which. Extraction above is unchanged and provenance-agnostic;
-    // the caller tags the source it read from.
+    // A price whose only source is a search-engine snippet is never quoted or
+    // ranked. A price counts only after a full page read (rendered + OCR + DOM).
+    // Snippet-sourced prices are labelled unverified (the price is cleared so it
+    // can't be ranked) or dropped — the caller decides which. Extraction above is
+    // provenance-agnostic; the caller tags the source it read from.
 
     /** Where a row's price came from. Only [FULL_PAGE] prices may be ranked. */
     enum class PriceSource { FULL_PAGE, SEARCH_SNIPPET }

@@ -4,7 +4,6 @@ import org.json.JSONObject
 
 /**
  * The enforcement runtime (port of gatellml lang/runtime.py).
- * The model is never trusted; the program is.
  *
  * One Episode per user request. Secrets observed in tool results accumulate
  * over the episode and may never leave via egress tools.
@@ -16,7 +15,7 @@ class Gate(private val manifest: Manifest) {
         val secrets = mutableListOf<String>()
         val observations = ObservationLog()
         /** Targets the operator explicitly confirmed this episode (the
-         * resolve/confirm channel — gatellml SPEC §2 R4 made live). */
+         * resolve/confirm channel — gatellml SPEC §2 R4). */
         private val confirmed = mutableSetOf<String>()
 
         init {
@@ -94,9 +93,8 @@ class Gate(private val manifest: Manifest) {
 
             /**
              * Risk score at or below this threshold auto-approves confirmable
-             * blocks. Conservative default — covers READ (0) and RESOLVE (10)
-             * with small obs gap, never EGRESS (40+) or MUTATE+untraced (30+).
-             * Will be tuned with community gate audit data.
+             * blocks. Covers READ (0) and RESOLVE (10) with small obs gap, never
+             * EGRESS (40+) or MUTATE+untraced (30+).
              */
             const val AUTO_APPROVE_THRESHOLD = 15
         }
@@ -106,25 +104,9 @@ class Gate(private val manifest: Manifest) {
      * Did the user actually say this, or does it merely appear inside what they
      * said?
      *
-     * The ported rule was plain substring containment, and that is trivially
-     * satisfied: an argument of "on", "to", "1" or "a" is inside almost any
-     * sentence, so the gate would mark it as coming from the user and let it
-     * through. A check that anything short passes is not a check.
-     *
-     * This is the fourth time today the same shape has been found — a short
-     * value claiming a longer one that merely contains it. It broke
-     * "looks sensitive" (`tor` matching calcula*tor*), task memory ("battery
-     * level" claiming a request about banking), and routine names ("morning
-     * sites" claiming "my morning sites"). Worth stating as a rule: **never let
-     * containment alone decide a match.**
-     *
-     * Whole words now, in order. Punctuation is trimmed from both sides before
+     * Whole words, in order. Punctuation is trimmed from both sides before
      * comparing, so a request ending "...open news.ycombinator.com." still
      * matches the domain argument.
-     *
-     * This is deliberately the strict direction. Being wrong here means either
-     * refusing something the user asked for, which they see and can confirm, or
-     * permitting something they did not, which they never see at all.
      */
     internal fun saidByUser(value: String, requestNorm: String): Boolean =
         tracesToRequest(value, requestNorm)
@@ -152,8 +134,7 @@ class Gate(private val manifest: Manifest) {
         for (key in args.keys()) {
             val v = args.opt(key) ?: continue
             // JSON null is absent. A stringly null (cc="None") is absent only for an
-            // argument the tool marks optional: on a required one "None" is a value, and
-            // dropping it made the recipient check vanish.
+            // argument the tool marks optional: on a required one "None" is a value.
             if (v == JSONObject.NULL) continue
             var s = v.toString()
             if (key in optional && s.trim().lowercase() in setOf("", "none", "null")) continue
@@ -163,7 +144,7 @@ class Gate(private val manifest: Manifest) {
                 if (!d.isInfinite() && !d.isNaN() && d == Math.floor(d)) s = d.toLong().toString()
             }
             if (v is Boolean && isIdArg(key)) s = ""
-            // the argument CONTAINS a secret; the old test was reversed (s in secret)
+            // the argument CONTAINS a secret
             val tainted = ep.secrets.any { secret -> secret.isNotEmpty() && leaks(secret, s) }
             out[key] = TrackedArg(s, OriginSet(mintOrigin(s, ep, function, key).items, tainted))
         }
@@ -194,8 +175,7 @@ class Gate(private val manifest: Manifest) {
         // egress requires operator confirmation. A system API read alongside it
         // does not clear this; only an operator confirmation newer than the
         // LOW observation does.
-        // A search query is exempt: research is search after search, and a confirm card on each
-        // follow-up would make it unusable. Sending, posting and opening a link still ask.
+        // A search query is exempt. Sending, posting and opening a link still ask.
         if (Effect.EGRESS in spec.effects && function !in LOW_EGRESS_FREE &&
             ep.observations.hasUnconfirmedLowToolObservation()) {
             violations += Violation("low_confidence_egress", null,
@@ -203,9 +183,7 @@ class Gate(private val manifest: Manifest) {
         }
 
         // Scam follow-up: a number, link, email or cashtag that arrived in a message the
-        // scam detector flagged. The user naming it is not enough here — getting the user
-        // to name it is how the scam works. Outbound and app-driving tools only; a search
-        // for "is this number a scam" is the right thing to do and stays free.
+        // scam detector flagged. Outbound and app-driving tools only; a search stays free.
         if ((Effect.EGRESS in spec.effects || Effect.MUTATE in spec.effects) && function !in SCAM_FREE) {
             for ((k, b) in bindings) {
                 if (ep.isConfirmed(b.value)) continue
@@ -216,12 +194,10 @@ class Gate(private val manifest: Manifest) {
             }
         }
 
-        // Egress completeness: an argument the manifest never declared is not a free
-        // channel (an undeclared cc walked straight out of gatellml's travel policy).
+        // Egress completeness: an argument the manifest never declared is not a free channel.
         val requires = spec.requires.toMutableList()
         if (Effect.EGRESS in spec.effects) {
-            // Only a contract that TRACES covers an argument: NotTainted(cc) or a
-            // domain check on cc left cc=["mallory"] uncovered while looking declared.
+            // Only a contract that TRACES covers an argument.
             fun declared(arg: String, vararg kinds: kotlin.reflect.KClass<out Contract>) = requires.any { c ->
                 kinds.any { it.isInstance(c) } && (c.arg == arg || (c is AnyArgTraceable && arg in c.args))
             }
@@ -258,9 +234,8 @@ class Gate(private val manifest: Manifest) {
     }
 
     companion object {
-        /** Tools that may carry a flagged target without a confirm: looking it up is safe. A plain
-         * search or a shopping lookup only reads; web_browse actively fetches and follows links, so a
-         * scam-flagged target must still ask first (it is not here). */
+        /** Tools that may carry a flagged target without a confirm (read-only lookups);
+         * web_browse is not here. */
         private val SCAM_FREE = setOf("web_search", "shop_search")
         private val LOW_EGRESS_FREE = setOf("web_search", "shop_search", "web_browse")
 

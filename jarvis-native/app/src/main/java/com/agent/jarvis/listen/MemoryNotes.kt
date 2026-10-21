@@ -19,9 +19,9 @@ data class NoteHit(val text: String, val ts: Long, val kind: String)
 
 /**
  * The librarian's organised notes: short dated notes the small on-device model wrote from
- * overheard speech. Its OWN SQLite file (like [AmbientMemory], not the Room database): derived,
- * rebuildable, and never part of the agent's schema migrations. An FTS4 index over the text
- * (external content, kept in step by triggers) backs [search] and duplicate lookup.
+ * overheard speech. Its own SQLite file (like [AmbientMemory], not the Room database). An FTS4
+ * index over the text (external content, kept in step by triggers) backs [search] and duplicate
+ * lookup.
  */
 class MemoryNotes private constructor(ctx: Context) :
     SQLiteOpenHelper(ctx.applicationContext, "memory_notes.db", null, 2), NoteStore {
@@ -31,7 +31,7 @@ class MemoryNotes private constructor(ctx: Context) :
     override fun onCreate(db: SQLiteDatabase) { SCHEMA.forEach(db::execSQL) }
 
     override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {
-        // 2: who said it, and topic tags (the owner asked for speaker labels and tags on notes)
+        // 2: who said it, and topic tags
         if (o < 2) UPGRADE_2.forEach(db::execSQL)
     }
 
@@ -231,7 +231,7 @@ class MemoryNotes private constructor(ctx: Context) :
             return "((${heard.joinToString(" AND ")}) OR (${span.joinToString(" AND ")}))" to args
         }
 
-        /** Does [n] touch [fromTs, toTs)? Heard in it, or its time span overlaps it. Pure, JVM-tested;
+        /** Does [n] touch [fromTs, toTs)? Heard in it, or its time span overlaps it.
          *  [windowSql] is the same rule in SQL. */
         fun inWindow(n: Note, fromTs: Long?, toTs: Long?): Boolean {
             val heard = (fromTs == null || n.heardTs >= fromTs) && (toTs == null || n.heardTs < toTs)
@@ -240,7 +240,7 @@ class MemoryNotes private constructor(ctx: Context) :
             return heard || ((toTs == null || start < toTs) && (fromTs == null || end >= fromTs))
         }
 
-        /** The hit for one note; see [NoteHit]. Pure. */
+        /** The hit for one note; see [NoteHit]. */
         fun hit(n: Note, zone: ZoneId): NoteHit =
             NoteHit(
                 text = n.whenText(zone)?.let { "${n.text} ($it)" } ?: n.text,

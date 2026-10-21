@@ -5,8 +5,7 @@ import type { Provider, ToolCall, Turn, TurnRequest, TurnResult } from "./types.
 /**
  * The cloud brain: Claude through the official SDK, streamed.
  *
- * - Adaptive thinking with summarized display, so the UI can show what it is
- *   thinking instead of a long silent pause.
+ * - Adaptive thinking with summarized display.
  * - The system prompt and the tool list are stable across requests and marked
  *   for prompt caching; per-request context travels in the user turn.
  * - Server-side refusal fallback ("default") is on; a refusal that still comes

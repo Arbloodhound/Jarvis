@@ -87,7 +87,7 @@ object SellerReputation {
 
     /**
      * Merge the same seller across marketplaces. Each group shows
-     * its method and evidence — no silent merges.
+     * its method and evidence.
      */
     fun mergeSellers(candidates: List<SellerEntry>): List<MergeGroup> {
         val groups = ArrayList<MergeGroup>()
@@ -118,7 +118,7 @@ object SellerReputation {
                 }
                 if (method != null) {
                     val sellers = g.sellers + cand
-                    // keep the weakest method honestly labeled
+                    // keep the weakest method
                     val newMethod =
                         if ((order[method] ?: 0) > (order[g.method] ?: 0)) method else g.method
                     val newEvidence = if (newMethod == method) evidence else g.evidence

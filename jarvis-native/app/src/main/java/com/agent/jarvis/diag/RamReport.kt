@@ -4,10 +4,9 @@ import android.content.Context
 import java.io.File
 
 /**
- * Where the phone's RAM is going, for the live diagnostic (owner, 2026-10-20: "do a full count of
- * where all the RAM usage is going"). Android lets an app see the whole phone's totals
- * (/proc/meminfo) and its own use (/proc/self/status, Debug.MemoryInfo), not other apps one by one;
- * "Android + other apps" is the rest, worked out from those. Parsing is pure and JVM-tested.
+ * Where the phone's RAM is going, for the live diagnostic. Android lets an app see the whole phone's
+ * totals (/proc/meminfo) and its own use (/proc/self/status, Debug.MemoryInfo), not other apps one by
+ * one; "Android + other apps" is the rest, worked out from those.
  */
 object RamReport {
 

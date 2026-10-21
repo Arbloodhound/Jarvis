@@ -7,12 +7,11 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * The librarian noticing that something heard now connects to something heard before, on its own
- * (owner, 2026-10-07: "notice something … a past memory … and make some note out of it"). After a
- * run, each new conversation summary is looked up against older notes ([NoteStore.related]); when
- * some share its words, the small model is shown both and writes up to [MAX_LINKS] follow-up notes:
- * a topic raised again, a plan that changed, a to-do still open, a person seen again. Each is
- * tagged "follow-up" and filed like any note (merged into a duplicate). Pure, JVM-tested.
+ * The librarian noticing that something heard now connects to something heard before, on its own.
+ * After a run, each new conversation summary is looked up against older notes ([NoteStore.related]);
+ * when some share its words, the small model is shown both and writes up to [MAX_LINKS] follow-up
+ * notes: a topic raised again, a plan that changed, a to-do still open, a person seen again. Each is
+ * tagged "follow-up" and filed like any note (merged into a duplicate).
  */
 object LibrarianLinks {
     const val MAX_SUMMARIES = 4

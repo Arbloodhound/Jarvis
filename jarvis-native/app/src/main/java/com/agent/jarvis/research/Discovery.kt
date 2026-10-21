@@ -170,7 +170,7 @@ class Discovery(
         /**
          * The deep-research section for the brain: what the crawl found (pooled links with where
          * they were found), red flags (shortened, never links), thread posts and mentions with
-         * provenance, wiki links with their verdicts, notes. Pure, JVM-tested.
+         * provenance, wiki links with their verdicts, notes.
          */
         fun render(crawl: Crawl?, threads: ThreadResearch?, wikis: List<Pair<String, List<Forums.WikiLink>>>, notes: List<String>): String {
             // Every flagged address is shown shortened, wherever it appears (post text included).

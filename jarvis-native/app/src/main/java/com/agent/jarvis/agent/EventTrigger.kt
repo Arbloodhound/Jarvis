@@ -10,7 +10,7 @@ import android.util.Log
 /**
  * Deterministic event triggers — reactions to phone events that don't need
  * the LLM. Each trigger is a pure function: event in, action out (or null
- * to skip). No brain, no cloud, no latency.
+ * to skip).
  *
  * Two kinds:
  * - [Trigger]: fires on incoming notifications (the listener calls [evaluate]).
@@ -80,7 +80,6 @@ object EventTrigger {
 
     /**
      * Apps re-post the same notification (an update, a re-sort, a reconnect of the listener).
-     * Without this the same scam warning was spoken and the same code copied on every repost.
      * Bounded and time-limited: identical text after [REPOST_WINDOW_MS] is a new message.
      */
     private val recent = LinkedHashMap<String, Long>()
@@ -112,8 +111,7 @@ object EventTrigger {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(ctx: Context, intent: Intent) {
                     // Registering for a sticky broadcast (ACTION_HEADSET_PLUG) delivers its last
-                    // value at once. That is the current state, not an event: without this every
-                    // service start toasted "Headphones disconnected".
+                    // value at once. That is the current state, not an event.
                     if (isInitialStickyBroadcast) return
                     try {
                         val a = st.evaluate(ctx, intent) ?: return

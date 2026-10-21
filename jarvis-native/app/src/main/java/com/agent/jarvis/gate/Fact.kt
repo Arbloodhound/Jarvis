@@ -3,20 +3,13 @@ package com.agent.jarvis.gate
 /**
  * One thing the agent observed, and how much to trust it.
  *
- * The accessibility tree is LOW by construction. A hostile app can render
- * whatever text it wants, so anything read from the tree is exactly as
- * trustworthy as the app that wrote it — and the agent has no way to know
- * which apps are hostile. System APIs (BatteryManager, CameraManager,
+ * The accessibility tree is LOW by construction. System APIs (BatteryManager, CameraManager,
  * ClipboardManager, PackageManager) return ground truth, so they are HIGH.
  *
- * The operator's tap on a gate card is HIGH, but only because it reaches
- * this code through the onClick callback in Jarvis's own process, not through
- * the tree reporting the card "looks confirmed." If the tree were the
- * source, the tap would carry the same LOW as every other tree observation
- * and the gate's one escape hatch would be rebuilt inside the wall.
+ * The operator's tap on a gate card is HIGH; it reaches this code through the onClick callback
+ * in-process, not through the tree.
  *
- * Observations decay. A battery read from ten minutes ago is not a current
- * fact. The default window mirrors ActionGate's 120-second timeout.
+ * Observations decay. The default window mirrors ActionGate's 120-second timeout.
  */
 data class Fact(
     val tool: String,

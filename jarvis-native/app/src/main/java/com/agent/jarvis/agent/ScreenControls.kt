@@ -4,30 +4,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Where a screen's controls are.
+ * Where a screen's controls are. A control is identified by the view id the app gave it
+ * (`#search_src_text`), which is stable across visits even when its tree index changes.
  *
- * The navigator hands the model a freshly numbered list of everything on
- * screen and asks it to pick an index. Those numbers mean nothing beyond the
- * moment: the same search box is [3] now and [11] after the page shifts, so
- * every visit costs a model call to find a control the agent has already found
- * a hundred times.
- *
- * A control has an identity the app gave it. `#search_src_text` is the search
- * box in that app today, tomorrow and after an update that moves it down the
- * page. Remembering that turns "look at everything and choose" into "use the
- * one you already know".
- *
- * ## What is deliberately not remembered
- *
- * **Only the view id and what kind of control it is.** Never the label, never
- * the contents. A button's label is user content — "Send to Mum", "Pay
- * £240.00", a contact's name — and writing that to disk would turn a
- * structural memory into a record of what the user does. A view id is a
- * constant a developer typed into a layout file; it says where the button is,
- * not what it says.
- *
- * The cost of that line is that web pages, which rarely give real ids, mostly
- * cannot have their controls remembered. That is the right trade.
+ * Only the view id and what kind of control it is are remembered. Never the label, never the
+ * contents. Web pages, which rarely give real ids, mostly cannot have their controls remembered.
  */
 object ScreenControls {
 
@@ -42,12 +23,7 @@ object ScreenControls {
     )
 
     /**
-     * The actionable, identifiable controls on a screen.
-     *
-     * A control with no view id is skipped rather than remembered by label,
-     * for the reason in the class comment. It is still perfectly usable in the
-     * moment through the ordinary indexed list — this is about what survives
-     * to the next visit.
+     * The actionable, identifiable controls on a screen. A control with no view id is skipped.
      */
     fun of(nodes: List<Node>): List<Control> = nodes.asSequence()
         .filter { it.enabled }
@@ -75,9 +51,7 @@ object ScreenControls {
         val want = intent.lowercase().trim()
         if (want.isBlank()) return null
         val pool = if (role == null) controls else controls.filter { it.role == role }
-        // Whole word first. Prefix matching alone chose `address_bar_container`
-        // for "add", because "address" starts with it — and the actual add
-        // button was sitting right there in the same list.
+        // Whole word first.
         return pool.firstOrNull { words(it.vid).any { w -> w == want } }
             ?: pool.firstOrNull { words(it.vid).any { w -> w.startsWith(want) } }
             ?: pool.firstOrNull { it.vid.lowercase().contains(want) && want.length >= 5 }
@@ -105,8 +79,7 @@ object ScreenControls {
         }
     } catch (_: Exception) { emptyList() }
 
-    /** A screen with more controls than this is a keyboard or a menu of every
-     * setting; remembering all of it helps nobody. */
+    /** A screen with more controls than this is a keyboard or a menu of every setting. */
     private const val MAX_CONTROLS = 40
 }
 

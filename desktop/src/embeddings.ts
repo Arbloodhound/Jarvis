@@ -3,10 +3,6 @@
  * so any embedding model the owner serves works: EmbeddingGemma-2, nomic-embed,
  * bge, a custom fine-tune, whatever Ollama / llama.cpp / LM Studio / vLLM hosts.
  *
- * Vectors stay on this computer. The embedder is only ever a local server (the
- * cloud brain is never used to embed private memory), and nothing here reaches
- * the network unless the owner pointed baseUrl at something remote themselves.
- *
  * Matryoshka (MRL) truncation: many modern models (EmbeddingGemma-2 among them)
  * are trained so the first N dimensions are a usable smaller vector. Keeping 256
  * instead of 768 cuts storage ~3x for a negligible recall loss, so `dims` just

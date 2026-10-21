@@ -3,13 +3,11 @@ package com.agent.jarvis.research
 import com.agent.jarvis.agent.OnionSafety
 
 /**
- * Contact strings on a page that was actually fetched — emails, phone numbers (conservative),
- * @handles, PGP blocks, and "Name — Role" pairs next to a contact — each with where it was found:
- * the page URL, a snippet around it and the fetch time. A contact without that provenance never
- * exists. Kinds come from the page, not from lists of people or companies.
+ * Contact strings on a fetched page — emails, phone numbers (conservative), @handles, PGP blocks,
+ * and "Name — Role" pairs next to a contact — each with where it was found: the page URL, a
+ * snippet around it and the fetch time.
  *
- * Scope: public pages the research already fetched, or that the owner pointed at. No people-search
- * or data-broker sites ([BROKERS] are skipped), no breached or leaked data. Pure, JVM-tested.
+ * [BROKERS] (people-search / data-broker sites) are skipped.
  */
 object Contacts {
 
@@ -17,10 +15,7 @@ object Contacts {
 
     data class Contact(val kind: String, val value: String, val provenance: Provenance)
 
-    /**
-     * People-search, data-broker and breach-lookup sites: never read for contacts or findings.
-     * Not in the spec, and the owner's research is not meant to go through them.
-     */
+    /** People-search, data-broker and breach-lookup sites: never read for contacts or findings. */
     val BROKERS = setOf(
         "spokeo.com", "whitepages.com", "beenverified.com", "truepeoplesearch.com", "fastpeoplesearch.com",
         "intelius.com", "peoplefinders.com", "radaris.com", "mylife.com", "instantcheckmate.com", "truthfinder.com",

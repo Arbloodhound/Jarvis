@@ -5,9 +5,7 @@ import com.agent.jarvis.agent.TalkStyle
 import com.agent.jarvis.listen.VoiceCatalog
 
 /**
- * Settings → JARVIS'S VOICE and HOW JARVIS TALKS (owner, 2026-10-07: "let me choose the voice …
- * more customization, more settings, but keep it compatible"). Every default is what Jarvis did
- * before, except the voice itself (Kokoro "George" instead of Piper "Norman").
+ * Settings → JARVIS'S VOICE and HOW JARVIS TALKS. Default voice is Kokoro "George".
  */
 object VoicePrefs {
     private const val PREFS = "jarvis_settings"
@@ -15,8 +13,7 @@ object VoicePrefs {
 
     // ── Voice ────────────────────────────────────────────────────────────────
 
-    /** The chosen voice: a [VoiceCatalog] id or [VoiceCatalog.PHONE]. Before this setting existed
-     *  the only choice was the old "Jarvis's own voice" switch: off there means the phone's voice. */
+    /** The chosen voice: a [VoiceCatalog] id or [VoiceCatalog.PHONE]. */
     fun voiceId(c: Context): String =
         p(c).getString("voice_id", null)
             ?: if (p(c).getBoolean("own_voice", true)) VoiceCatalog.DEFAULT else VoiceCatalog.PHONE

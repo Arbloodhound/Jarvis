@@ -57,9 +57,8 @@ class AmbientConfig(context: Context) {
         get() = p.getBoolean("speaker_tags", true)
         set(v) = p.edit().putBoolean("speaker_tags", v).apply()
 
-    /** The larger speech model ([ASR_SMALL_MODEL], 190 MB) for quieter and more distant speech
-     *  (owner, 2026-10-07: "it's not picking up quieter inputs … maybe change the model"). On by
-     *  default; base is used until small has downloaded, and again if small can't keep up. */
+    /** The larger speech model ([ASR_SMALL_MODEL], 190 MB) for quieter and more distant speech.
+     *  On by default; base is used until small has downloaded, and again if small can't keep up. */
     var accurateSpeech: Boolean
         get() = p.getBoolean("accurate_speech", true)
         set(v) = p.edit().putBoolean("accurate_speech", v).putBoolean("small_too_slow", false).apply()
@@ -80,7 +79,6 @@ class AmbientConfig(context: Context) {
         const val FRAME_MS = FRAME * 1000 / SAMPLE_RATE
 
         // Stage 1: energy gate (cheap, runs on every frame)
-        // Speech from across the room (owner, 2026-10-07) sat under the old -50 dBFS / +10 dB gate.
         const val GATE_ABOVE_FLOOR_DB = 8f    // speech must be this far above the room's noise floor
         const val GATE_ABS_MIN_DB = -62f      // and never quieter than this (dBFS)
         const val START_FRAMES = 3            // ~96 ms of loud audio to open a segment
@@ -110,7 +108,7 @@ class AmbientConfig(context: Context) {
         const val ASR_MODEL = "ggml-base.en-q5_1.bin"
         const val ASR_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-q5_1.bin"
         /** whisper small.en, 5-bit: better than base on quiet, distant and accented speech, about 3x
-         *  the compute. Size checked on Hugging Face 2026-10-07 (190,098,681 bytes). */
+         *  the compute. */
         const val ASR_SMALL_MODEL = "ggml-small.en-q5_1.bin"
         const val ASR_SMALL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin"
         const val ASR_SMALL_BYTES = 190_098_681L
