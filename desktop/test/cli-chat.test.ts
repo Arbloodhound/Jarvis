@@ -152,3 +152,24 @@ test("bug 3: jarvis ask waits for a running child and prints its hand-off before
     cli.child.kill("SIGKILL");
   }
 });
+
+test("chat --yes: every card is allowed without a question, and each one is still printed", { timeout: 120_000 }, async () => {
+  parentUsers.length = 0;
+  const home = freshHome();
+  marker = path.join(home, "yes-touched.txt");
+  const cli = interactive(["chat", "--yes"], home);
+  try {
+    assert.ok(await cli.waitFor(() => cli.out().includes("you › ")), cli.out());
+    cli.type("delegate the marker job");
+    const handedOff = await cli.waitFor(() => cli.out().includes("[Hand-off from subagent \"toucher\""), 20_000);
+    cli.child.stdin.end();
+    await cli.exited;
+    const out = cli.out();
+    assert.ok(handedOff, `the child ran and handed off:\n${out}`);
+    assert.ok(existsSync(marker), `the child's command ran with no answer typed:\n${out}`);
+    assert.equal(cli.count("Allow? [y/N]"), 0, `no card asked:\n${out}`);
+    assert.ok(cli.count("(allowed: auto-approve is on)") >= 2, `both cards were printed as auto-allowed:\n${out}`);
+  } finally {
+    cli.child.kill("SIGKILL");
+  }
+});

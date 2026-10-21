@@ -27,7 +27,8 @@ const HELP = `Jarvis desktop
 
   jarvis serve          start the gateway + chat page
   jarvis ask "request"  run one request here (or pipe the request in)
-  jarvis chat           talk in this terminal (Ctrl+C to quit)
+  jarvis chat           talk in this terminal (Ctrl+C to quit); --yes allows
+                        every card (purchases and scam follow-ups still ask)
   jarvis set-key        save the Claude API key to config (stays saved)
   jarvis say "text."    speak a finished sentence with the computer's voice
   jarvis transcribe f   transcribe an audio file (needs voice.sttBaseUrl)
@@ -73,7 +74,7 @@ const ASK_SUBAGENT_WAIT_MS = 120_000;
  * labelled lines (its text arrives whole in its hand-off), so they never
  * splice into the main agent's streamed reply.
  */
-function terminalHooks(term: TerminalPrompt, input: { closed: boolean }): OwnerChannel {
+function terminalHooks(term: TerminalPrompt, input: { closed: boolean }, opts: { autoApprove?: boolean } = {}): OwnerChannel {
   let thinking = false;
   // Tools the owner answered "a" (always) for: their later cards in this
   // chat are allowed without asking. Never purchases (they need fresh
@@ -119,8 +120,9 @@ function terminalHooks(term: TerminalPrompt, input: { closed: boolean }): OwnerC
         process.stdout.write(yellow("  Confirmation unavailable — the input is closed, so this is treated as declined.\n"));
         return false;
       }
-      if (alwaysAllowed.has(card.tool) && !neverAuto(card)) {
-        process.stdout.write(dim(`\n✓ ${card.tool} ${JSON.stringify(card.args).slice(0, 160)} (allowed: you said "always" for ${card.tool} in this chat)\n`));
+      if ((opts.autoApprove || alwaysAllowed.has(card.tool)) && !neverAuto(card)) {
+        const why = opts.autoApprove ? "auto-approve is on" : `you said "always" for ${card.tool} in this chat`;
+        process.stdout.write(dim(`\n✓ ${card.tool} ${JSON.stringify(card.args).slice(0, 160)} (allowed: ${why})\n`));
         return true;
       }
       const offerAlways = !neverAuto(card);
@@ -434,7 +436,7 @@ async function main(): Promise<void> {
     rl.close();
     process.exit(0);
   });
-  const hooks = terminalHooks(term, input);
+  const hooks = terminalHooks(term, input, { autoApprove: rt.cfg.autoApprove || rest.includes("--yes") });
   // Subagents ask and report through this terminal, like the main agent.
   rt.setChannel(hooks);
   if (cmd === "ask") {
@@ -445,7 +447,7 @@ async function main(): Promise<void> {
       if (rest[i] === "--file" && rest[i + 1]) {
         const f = rest[++i]!;
         files.push({ path: path.resolve(f), name: path.basename(f) });
-      } else words.push(rest[i]!);
+      } else if (rest[i] !== "--yes") words.push(rest[i]!);
     }
     const text = words.join(" ").trim() || pipedText;
     if (!text) { console.log('Usage: jarvis ask "what\'s in my Downloads folder?" [--file <path> …]'); rl.close(); return; }
