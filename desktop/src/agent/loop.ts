@@ -8,6 +8,7 @@ import type { Memory } from "../memory.js";
 import type { Provider, ToolCall, ToolResult, Turn } from "../providers/types.js";
 import type { Embedder } from "../embeddings.js";
 import type { Vision } from "../vision.js";
+import type { Transcriber } from "../voice.js";
 import { jsonSchema, type Tool, type ToolContext } from "../tools/index.js";
 import { fastCommand } from "./fast.js";
 import { requestContext, systemPrompt } from "./prompt.js";
@@ -40,6 +41,8 @@ export interface AgentDeps {
   provider: () => Provider;
   embedder: () => Embedder | null;
   vision: () => Vision | null;
+  /** Speech-to-text backend for transcribe_audio; absent = not set up. */
+  transcriber?: () => Transcriber | null;
   tools: () => Tool[];
   gate: Gate;
   memory: Memory;
@@ -374,7 +377,7 @@ export class Agent {
       ep.confirm(t.name, args);
     }
 
-    const ctx: ToolContext = { cwd: this.deps.cwd, workspace: this.deps.workspace, memory: this.deps.memory, embedder: this.deps.embedder(), vision: this.deps.vision(), signal };
+    const ctx: ToolContext = { cwd: this.deps.cwd, workspace: this.deps.workspace, memory: this.deps.memory, embedder: this.deps.embedder(), vision: this.deps.vision(), transcriber: this.deps.transcriber?.() ?? null, signal };
     try {
       const out = await t.run(args, ctx);
       const scam = ep.observe(t.name, t.policy.effects, out, !!t.outside);

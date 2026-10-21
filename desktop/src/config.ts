@@ -41,6 +41,19 @@ export interface Config {
     baseUrl: string;
     model: string;
   };
+  voice: {
+    /**
+     * Speech-to-text server (OpenAI-compatible /audio/transcriptions —
+     * a whisper.cpp / faster-whisper server the owner runs). Empty = not
+     * set up, and transcribe_audio says so. Network-shaped: with
+     * offlineOnly on, only a loopback address is used.
+     */
+    sttBaseUrl: string;
+    /** The transcription model name the server expects. */
+    sttModel: string;
+    /** The speak tool (the OS's own text-to-speech voice). On by default. */
+    ttsEnabled: boolean;
+  };
   /** Synthetic keyboard/mouse. Off by default; experimental; every action still needs a card. */
   screenControl: { enabled: boolean };
   /**
@@ -105,6 +118,7 @@ export function defaults(p: Paths): Config {
     local: { baseUrl: "http://127.0.0.1:11434/v1", model: "qwen3:8b" },
     embeddings: { enabled: false, baseUrl: "", model: "embeddinggemma-2", dims: 256 },
     vision: { baseUrl: "", model: "qwen3-vl" },
+    voice: { sttBaseUrl: "", sttModel: "whisper-1", ttsEnabled: true },
     screenControl: { enabled: false },
     tor: { enabled: false, socksPort: 9050 },
     nli: { enabled: true, modelCheck: false },
@@ -143,6 +157,7 @@ export function loadConfig(p: Paths = paths()): Config {
     local: { ...base.local, ...(raw.local ?? {}) },
     embeddings: { ...base.embeddings, ...(raw.embeddings ?? {}) },
     vision: { ...base.vision, ...(raw.vision ?? {}) },
+    voice: { ...base.voice, ...(raw.voice ?? {}) },
     screenControl: { ...base.screenControl, ...(raw.screenControl ?? {}) },
     tor: { ...base.tor, ...(raw.tor ?? {}) },
     nli: { ...base.nli, ...(raw.nli ?? {}) },

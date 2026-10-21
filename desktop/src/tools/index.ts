@@ -13,6 +13,7 @@ import { resolvePath } from "../gate/gate.js";
 import type { Embedder } from "../embeddings.js";
 import type { Memory } from "../memory.js";
 import type { Vision } from "../vision.js";
+import { speak as speakVoice, type Transcriber } from "../voice.js";
 import * as os from "./platform.js";
 import { shoppingTools } from "./shopping.js";
 
@@ -36,6 +37,8 @@ export interface ToolContext {
   memory: Memory;
   embedder: Embedder | null;
   vision: Vision | null;
+  /** Speech-to-text backend, or null when not set up / withheld offline. */
+  transcriber: Transcriber | null;
   signal: AbortSignal;
   /** How web tools fetch. Set per run by toolsFor (Tor transport when on); direct safeFetch otherwise. */
   webFetch?: WebFetchFn;
@@ -708,6 +711,48 @@ const controlScreenTool = tool({
   },
 });
 
+// ---------- voice ----------
+
+const transcribeAudioTool = tool({
+  name: "transcribe_audio",
+  description: "Transcribe an audio file (wav/mp3/m4a/ogg…) to text with the owner's whisper-class speech-to-text server. The audio is sent to the server set in config (voice.sttBaseUrl); when none is set up, this says so.",
+  schema: z.object({
+    path: z.string().describe("Audio file path; ~ is the home folder"),
+    language: z.string().max(8).optional().describe("Spoken language code, e.g. \"en\"; omit to auto-detect"),
+  }),
+  policy: { effects: ["read"], pathArgs: ["path"] },
+  async run({ path: p, language }, ctx) {
+    if (!ctx.transcriber) {
+      throw new Error("Speech-to-text is not set up. Set voice.sttBaseUrl in config to an OpenAI-compatible transcription server (a whisper.cpp / faster-whisper server you run), or, with offlineOnly on, to one on this computer (a loopback address).");
+    }
+    const abs = resolvePath(p, ctx.cwd);
+    const buf = await readFile(abs);
+    if (buf.length > 25 * 1024 * 1024) throw new Error("That audio file is too large (over 25 MB).");
+    const text = await ctx.transcriber.transcribe(buf, path.basename(abs), { language, signal: ctx.signal });
+    return `Transcript of ${abs}:\n${text}`;
+  },
+});
+
+const speakTool = tool({
+  name: "speak",
+  description: "Speak text aloud with the computer's own text-to-speech voice. Voice only ever speaks finished answers: the text must end in terminal punctuation (. ! ? …) — unfinished text is refused, never clipped. With out_file, the speech is written to an audio file instead of played.",
+  schema: z.object({
+    text: z.string().min(1).max(4000),
+    out_file: z.string().optional().describe("Write the speech to this audio file instead of playing it"),
+  }),
+  policy: { effects: ["mutate"], pathArgs: ["out_file"] },
+  async run({ text, out_file }, ctx) {
+    if (out_file) {
+      const abs = resolvePath(out_file, ctx.workspace);
+      await mkdir(path.dirname(abs), { recursive: true });
+      const r = await speakVoice(text, { outFile: abs });
+      return `Saved speech (${r.chars} characters, via ${r.backend}) to ${abs}.`;
+    }
+    const r = await speakVoice(text);
+    return `Spoke ${r.chars} characters (via ${r.backend}).`;
+  },
+});
+
 const systemInfoTool = tool({
   name: "system_info",
   description: "This computer's OS, CPU, memory, uptime and home folder.",
@@ -768,14 +813,16 @@ export const ALL_TOOLS: Tool[] = [
   readFileTool, listDirTool, findFilesTool, writeFileTool, runCommandTool,
   webSearchTool, webFetchTool, openUrlTool, openAppTool,
   clipboardReadTool, clipboardWriteTool, notifyTool, screenshotTool, seeScreenTool, seeImageTool, controlScreenTool, systemInfoTool,
+  transcribeAudioTool, speakTool,
   rememberTool, recallTool, forgetTool,
   ...shoppingTools(),
 ];
 
-export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean; tor?: TorSettings }): Tool[] {
+export function toolsFor(opts: { offlineOnly: boolean; screenControl: boolean; cloudVision?: boolean; tor?: TorSettings; ttsEnabled?: boolean }): Tool[] {
   return ALL_TOOLS.filter((t) => {
     if (opts.offlineOnly && t.network) return false;
     if (t.name === "control_screen" && !opts.screenControl) return false;
+    if (t.name === "speak" && opts.ttsEnabled === false) return false;
     return true;
   }).map((t) => {
     let out = t;

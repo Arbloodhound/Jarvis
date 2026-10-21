@@ -3,9 +3,11 @@ import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import path from "node:path";
 import type { AgentEvent, RunHooks } from "./agent/loop.js";
+import { readFile } from "node:fs/promises";
 import { accessToken, loadConfig, paths, saveConfig, type Config, type Paths } from "./config.js";
 import { Runtime } from "./runtime.js";
 import { probeTorProxy } from "./tools/index.js";
+import { speak } from "./voice.js";
 import { startServer } from "./server.js";
 
 /**
@@ -21,6 +23,8 @@ const HELP = `Jarvis desktop
   jarvis ask "request"  run one request here (or pipe the request in)
   jarvis chat           talk in this terminal (Ctrl+C to quit)
   jarvis set-key        save the Claude API key to config (stays saved)
+  jarvis say "text."    speak a finished sentence with the computer's voice
+  jarvis transcribe f   transcribe an audio file (needs voice.sttBaseUrl)
   jarvis where          show where Jarvis keeps its files
 
 Attaching context: 'jarvis ask "summarize this" --file notes.md --file chart.png'
@@ -159,6 +163,44 @@ async function main(): Promise<void> {
     return;
   }
   const rt = new Runtime(cfg, p);
+
+  if (cmd === "say") {
+    // The direct voice path: the same finished-utterance rule and OS TTS
+    // backend the speak tool uses. Failures are printed, never hidden.
+    const text = rest.join(" ").trim();
+    if (!text) { console.error('Usage: jarvis say "A finished sentence."'); process.exitCode = 1; return; }
+    if (!cfg.voice.ttsEnabled) { console.error("Text-to-speech is off (voice.ttsEnabled is false in config)."); process.exitCode = 1; return; }
+    const outIdx = rest.indexOf("--out");
+    const outFile = outIdx >= 0 ? rest[outIdx + 1] : undefined;
+    const spoken = outIdx >= 0 ? rest.filter((_, i) => i !== outIdx && i !== outIdx + 1).join(" ").trim() : text;
+    try {
+      const r = await speak(spoken, outFile ? { outFile: path.resolve(outFile) } : {});
+      console.log(r.outFile ? `Saved speech (${r.chars} characters, via ${r.backend}) to ${r.outFile}.` : `Spoke ${r.chars} characters (via ${r.backend}).`);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (cmd === "transcribe") {
+    const file = rest[0];
+    if (!file) { console.error("Usage: jarvis transcribe <audio file>"); process.exitCode = 1; return; }
+    const t = rt.transcriber();
+    if (!t) {
+      console.error("Speech-to-text is not set up. Set voice.sttBaseUrl in config to an OpenAI-compatible transcription server (a whisper.cpp / faster-whisper server you run); with offlineOnly on, only a loopback address is used.");
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      const buf = await readFile(path.resolve(file));
+      console.log(await t.transcribe(buf, path.basename(file)));
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exitCode = 1;
+    }
+    return;
+  }
 
   if (cmd === "serve") {
     const token = accessToken(p);
