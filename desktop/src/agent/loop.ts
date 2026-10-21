@@ -73,7 +73,7 @@ export class Agent {
     this.running?.abort();
   }
 
-  async run(request: string, hooks: RunHooks): Promise<string> {
+  async run(request: string, hooks: RunHooks, extraContext = ""): Promise<string> {
     if (this.running) throw new Error("Already working on something; stop it first.");
     const runId = randomUUID().slice(0, 8);
     const ac = new AbortController();
@@ -84,8 +84,8 @@ export class Agent {
       hooks.emit({ type: "run_start", runId, brain: provider.label });
       this.trim();
       const fast = fastCommand(request);
-      if (fast) return await this.runFast(runId, fast, ep, hooks, ac.signal, request);
-      return await this.runModel(runId, request, provider, ep, hooks, ac.signal);
+      if (fast) return await this.runFast(runId, fast, ep, hooks, ac.signal, request, extraContext);
+      return await this.runModel(runId, request, provider, ep, hooks, ac.signal, extraContext);
     } catch (err) {
       if (ac.signal.aborted) {
         hooks.emit({ type: "done", runId, text: "Stopped.", stopped: true });
@@ -104,6 +104,18 @@ export class Agent {
   reset(): void {
     if (this.running) throw new Error("Stop the current request first.");
     this.turns.length = 0;
+  }
+
+  /**
+   * Replace the conversation with a stored one (a branch switch, a restart
+   * reload). The stored turns are closed the same way a stopped run's are,
+   * so a list saved mid-step can never malformed the next request.
+   */
+  loadTurns(turns: Turn[]): void {
+    if (this.running) throw new Error("Stop the current request first.");
+    this.turns.length = 0;
+    this.turns.push(...turns);
+    this.settle();
   }
 
   /**
@@ -136,7 +148,7 @@ export class Agent {
     }
   }
 
-  private async runFast(runId: string, fast: NonNullable<ReturnType<typeof fastCommand>>, ep: Episode, hooks: RunHooks, signal: AbortSignal, request: string): Promise<string> {
+  private async runFast(runId: string, fast: NonNullable<ReturnType<typeof fastCommand>>, ep: Episode, hooks: RunHooks, signal: AbortSignal, request: string, extraContext = ""): Promise<string> {
     let text: string;
     if (fast.kind === "answer") {
       text = fast.text;
@@ -148,18 +160,19 @@ export class Agent {
         : res!.content.startsWith(DECLINED) ? "Okay, I didn't do it."
         : res!.content;
     }
-    this.turns.push({ role: "user", text: request }, { role: "assistant", text, toolCalls: [], brain: "fast" });
+    this.turns.push({ role: "user", text: extraContext ? `${request}\n\n${extraContext}` : request }, { role: "assistant", text, toolCalls: [], brain: "fast" });
     hooks.emit({ type: "text", runId, delta: text });
     hooks.emit({ type: "done", runId, text });
     return text;
   }
 
-  private async runModel(runId: string, request: string, provider: Provider, ep: Episode, hooks: RunHooks, signal: AbortSignal): Promise<string> {
+  private async runModel(runId: string, request: string, provider: Provider, ep: Episode, hooks: RunHooks, signal: AbortSignal, extraContext = ""): Promise<string> {
     const tools = this.deps.tools();
     const specs = tools.map((t) => ({ name: t.name, description: t.description, inputSchema: jsonSchema(t) }));
     const system = systemPrompt(this.deps.home, platform());
     const embedder = this.deps.embedder();
-    this.turns.push({ role: "user", text: await requestContext(request, this.deps.memory, embedder) });
+    const withContext = await requestContext(request, this.deps.memory, embedder);
+    this.turns.push({ role: "user", text: extraContext ? `${withContext}\n\n${extraContext}` : withContext });
     const cloud = provider.kind === "cloud";
 
     let answer = "";

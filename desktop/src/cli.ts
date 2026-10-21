@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
+import path from "node:path";
 import type { AgentEvent, RunHooks } from "./agent/loop.js";
 import { accessToken, loadConfig, paths, saveConfig, type Config, type Paths } from "./config.js";
 import { Runtime } from "./runtime.js";
@@ -21,6 +22,13 @@ const HELP = `Jarvis desktop
   jarvis chat           talk in this terminal (Ctrl+C to quit)
   jarvis set-key        save the Claude API key to config (stays saved)
   jarvis where          show where Jarvis keeps its files
+
+Attaching context: 'jarvis ask "summarize this" --file notes.md --file chart.png'
+attaches files (repeatable); in any request, @file:path, @folder:path,
+@image:path and @url:https://… point Jarvis at context inline. Attachments
+and references are read as data, not instructions, and ride the one request.
+Conversations live in branches (fork and switch them on the serve page); the
+terminal keeps working on whichever branch is active.
 
 Brain: set "brain" in config.json to "local" (default; any OpenAI-compatible
 server such as Ollama) or "cloud" (Claude; needs ANTHROPIC_API_KEY or
@@ -178,9 +186,19 @@ async function main(): Promise<void> {
   });
   const hooks = terminalHooks(rl, input);
   if (cmd === "ask") {
-    const text = rest.join(" ").trim() || pipedText;
-    if (!text) { console.log('Usage: jarvis ask "what\'s in my Downloads folder?"'); rl.close(); return; }
-    await rt.agent.run(text, hooks);
+    // --file <path> (repeatable) attaches files to this one request.
+    const files: Array<{ path: string; name: string }> = [];
+    const words: string[] = [];
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === "--file" && rest[i + 1]) {
+        const f = rest[++i]!;
+        files.push({ path: path.resolve(f), name: path.basename(f) });
+      } else words.push(rest[i]!);
+    }
+    const text = words.join(" ").trim() || pipedText;
+    if (!text) { console.log('Usage: jarvis ask "what\'s in my Downloads folder?" [--file <path> …]'); rl.close(); return; }
+    await rt.agent.run(text, hooks, await rt.ownerContext(text, files));
+    rt.syncConversation();
     rl.close();
     return;
   }
@@ -194,7 +212,8 @@ async function main(): Promise<void> {
         break; // Piped input ended: end the chat instead of dying on a closed readline.
       }
       if (!line) continue;
-      await rt.agent.run(line, hooks);
+      await rt.agent.run(line, hooks, await rt.ownerContext(line));
+      rt.syncConversation();
     }
   }
   console.log(HELP);

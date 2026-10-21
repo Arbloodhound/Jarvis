@@ -62,10 +62,22 @@
   .warn { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
   .err { color: var(--bad); font-size: 14px; }
   footer { border-top: 1px solid var(--line); background: var(--panel); padding: 10px 16px; }
-  form { max-width: 820px; margin: 0 auto; display: flex; gap: 8px; }
+  footer .wrap { max-width: 820px; margin: 0 auto; }
+  form { display: flex; gap: 8px; }
   textarea { flex: 1; resize: none; min-height: 44px; max-height: 200px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
   form button { font: inherit; padding: 0 16px; border-radius: 10px; border: 0; background: var(--accent); color: var(--accent-text); cursor: pointer; }
   form button.stop { background: var(--bad); color: #fff; }
+  form button.attach { background: transparent; border: 1px solid var(--line); color: var(--text); padding: 0 12px; }
+  footer.dragover { outline: 2px dashed var(--accent); outline-offset: -6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .chips:empty { margin-bottom: 0; }
+  .fchip { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); display: inline-flex; gap: 6px; align-items: center; max-width: 300px; }
+  .fchip .x { cursor: pointer; color: var(--muted); border: 0; background: none; font: inherit; padding: 0; }
+  .fchip.ref { background: var(--user); border-style: dashed; }
+  select#branch { font: inherit; font-size: 13px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); max-width: 180px; }
+  .note { color: var(--muted); text-align: center; font-size: 13px; }
+  .forkbtn { font-size: 12px; padding: 2px 8px; margin-top: 6px; }
+  .atts { color: var(--muted); font-size: 12px; margin-top: 4px; }
   .empty { color: var(--muted); text-align: center; margin-top: 18vh; }
   @media (max-width: 560px) { header { gap: 8px; } .status { width: 100%; order: 9; } }
 </style>
@@ -83,15 +95,23 @@
   <label class="switch" title="Experimental: let Jarvis type and click. Every action still asks you."><input type="checkbox" id="screenctl"> Screen control</label>
   <label class="switch" title="Send web search and fetch through a local Tor proxy (127.0.0.1:9050; Tor Browser uses 9150). .onion links open only with this on."><input type="checkbox" id="tor"> Tor</label>
   <button id="new" type="button" class="plain" title="Start a new conversation (what Jarvis remembers about you stays)">New chat</button>
+  <select id="branch" title="Conversation branch — switching keeps every branch's history"></select>
+  <button id="fork" type="button" class="plain" title="Fork this conversation into a new branch from here">Fork</button>
+  <button id="delbranch" type="button" class="plain" title="Delete the current branch">✕</button>
   <span class="spacer"></span>
   <span class="status" id="status">Connecting…</span>
 </header>
 <main id="main"><div class="log" id="log"><p class="empty" id="empty">Ask me to do something on this computer.</p></div></main>
-<footer>
-  <form id="form">
-    <textarea id="input" rows="1" placeholder="e.g. what's taking space in my Downloads folder?" autofocus></textarea>
-    <button id="send" type="submit">Send</button>
-  </form>
+<footer id="footer">
+  <div class="wrap">
+    <div class="chips" id="chips"></div>
+    <form id="form">
+      <button id="attach" type="button" class="attach" title="Attach files — they ride this one message (text is read in, images are shown to the vision model)">📎</button>
+      <textarea id="input" rows="1" placeholder="e.g. what's taking space in my Downloads folder? (point with @file: @folder: @image: @url:)" autofocus></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+  </div>
+  <input type="file" id="fileinput" multiple hidden>
 </footer>
 <div class="picker" id="picker"><div class="box">
   <h3 id="picker-title">Choose a model</h3>
@@ -112,6 +132,8 @@
   const $ = (id) => document.getElementById(id);
   const log = $("log"), main = $("main"), input = $("input"), sendBtn = $("send"), status = $("status");
   let ws, state = {}, run = null; // run: { el, text, think, thinkBox, tools: Map }
+  let pending = []; // uploaded attachments waiting for the next send: {path, name, size, kind}
+  let lastBox = null; // the most recent assistant box, for its "branch from here" button
 
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const add = (node) => { $("empty")?.remove(); const stick = main.scrollTop + main.clientHeight >= main.scrollHeight - 40; log.appendChild(node); if (stick) main.scrollTop = main.scrollHeight; return node; };
@@ -129,11 +151,23 @@
     status.textContent = `${state.answering || ""}${state.embeddings && state.embedderId ? " · memory: " + state.embedderId : ""}${state.tor ? ` · tor: ${state.torReachable == null ? "on" : state.torReachable ? "proxy ok" : "NO PROXY"}` : ""}${state.busy ? " · working" : ""}`;
     sendBtn.textContent = state.busy ? "Stop" : "Send";
     sendBtn.classList.toggle("stop", !!state.busy);
+    // Branch picker: one option per branch, the active one selected.
+    const sel = $("branch");
+    const branches = state.branches || [];
+    const sig = branches.map((b) => b.id).join(",");
+    if (sel.dataset.sig !== sig) {
+      sel.dataset.sig = sig;
+      sel.replaceChildren(...branches.map((b) => { const o = el("option", null, `${b.name} · ${b.turns}`); o.value = b.id; return o; }));
+    }
+    if (state.activeBranch) sel.value = state.activeBranch;
+    $("delbranch").disabled = branches.length <= 1;
+    $("delbranch").style.opacity = branches.length <= 1 ? .4 : 1;
   }
 
   function ensureRun(runId) {
     if (run && run.id === runId) return run;
     const box = add(el("div", "msg assistant"));
+    lastBox = box;
     const meta = box.appendChild(el("div", "meta"));
     const think = box.appendChild(el("details", "think"));
     think.hidden = true;
@@ -149,11 +183,61 @@
     r.textNode.textContent += delta;
   }
 
+  /** Chips above the composer: pending uploads (removable) + the @-refs the draft points at (live parse). */
+  function renderChips() {
+    const box = $("chips");
+    box.replaceChildren();
+    for (const a of pending) {
+      const c = el("span", "fchip", `${a.kind === "image" ? "🖼" : "📎"} ${a.name}`);
+      const x = el("button", "x", "✕");
+      x.type = "button";
+      x.title = "Remove attachment";
+      x.onclick = () => { pending = pending.filter((p) => p !== a); renderChips(); };
+      c.appendChild(x);
+      box.appendChild(c);
+    }
+    const refs = input.value.match(/@(file|folder|image|url):[^\s"']+/g) || [];
+    for (const r of new Set(refs)) box.appendChild(el("span", "fchip ref", `⌖ ${r}`));
+  }
+
+  /** A "branch from here" button keeping the first `keep` turns. */
+  function forkButton(keep) {
+    const b = el("button", "plain forkbtn", "⑂ Branch from here");
+    b.type = "button";
+    b.onclick = () => ws?.send(JSON.stringify({ type: "branch_fork", keepTurns: keep }));
+    return b;
+  }
+
+  /** Re-render the whole log from stored history (page load, fork, switch). */
+  function renderHistory(entries, branch) {
+    log.replaceChildren();
+    run = null; lastBox = null;
+    if (branch) add(el("div", "note", `— ${branch} —`));
+    if (!entries.length) { const p = el("p", "empty", "Ask me to do something on this computer."); p.id = "empty"; log.appendChild(p); return; }
+    for (const e of entries) {
+      if (e.role === "user") { add(el("div", "msg user", e.text)); continue; }
+      const box = add(el("div", "msg assistant"));
+      lastBox = box;
+      if (e.tools && e.tools.length) box.appendChild(el("div", "meta", `tools: ${e.tools.join(" · ")}`));
+      if (e.text) box.appendChild(el("div", null, e.text));
+      box.appendChild(forkButton(e.keep));
+    }
+    scroll();
+  }
+
   function onEvent(e) {
     switch (e.type) {
       case "state": state = e; showState(); break;
+      case "branches": state.branches = e.branches; state.activeBranch = e.activeBranch; showState(); break;
+      case "history": renderHistory(e.entries || [], e.branch); break;
+      case "turns": if (lastBox && !lastBox.querySelector(".forkbtn")) lastBox.appendChild(forkButton(e.count)); break;
       case "models": showModels(e.models || [], e.error); break;
-      case "user": add(el("div", "msg user", e.text)); scroll(); break;
+      case "user": {
+        const b = add(el("div", "msg user", e.text));
+        if (e.attachments && e.attachments.length) b.appendChild(el("div", "atts", `📎 ${e.attachments.join(", ")}`));
+        scroll();
+        break;
+      }
       case "run_start": { const r = ensureRun(e.runId); r.meta.textContent = e.brain; state.busy = true; showState(); break; }
       case "thinking": { const r = ensureRun(e.runId); r.think.hidden = false; r.thinkBox.textContent += e.delta; break; }
       case "text": appendText(ensureRun(e.runId), e.delta); break;
@@ -195,7 +279,7 @@
       }
       case "warning": ensureRun(e.runId).body.appendChild(el("div", "warn", e.text)); break;
       case "error": (e.runId ? ensureRun(e.runId).body : log).appendChild(el("div", "err", e.message)); break;
-      case "reset": log.replaceChildren(el("p", "empty", "New conversation. Ask me to do something on this computer.")); log.firstChild.id = "empty"; run = null; break;
+      case "reset": log.replaceChildren(el("p", "empty", "New conversation. Ask me to do something on this computer.")); log.firstChild.id = "empty"; run = null; lastBox = null; break;
       case "done": if (e.stopped) ensureRun(e.runId).body.appendChild(el("div", "meta", "Stopped.")); run = null; break;
     }
   }
@@ -214,13 +298,52 @@
     if (state.busy) { ws?.send(JSON.stringify({ type: "stop" })); return; }
     const text = input.value.trim();
     if (!text || !ws || ws.readyState !== 1) return;
-    ws.send(JSON.stringify({ type: "send", text }));
+    ws.send(JSON.stringify({ type: "send", text, attachments: pending.filter((a) => a.path).map((a) => ({ path: a.path, name: a.name })) }));
+    pending = [];
+    renderChips();
     input.value = ""; input.style.height = "";
   };
   // Enter sends; while Jarvis is working it does nothing (only the Stop button stops).
   input.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); if (!state.busy) $("form").requestSubmit(); } });
   $("new").onclick = () => ws?.send(JSON.stringify({ type: "reset" }));
-  input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 200) + "px"; });
+  $("fork").onclick = () => ws?.send(JSON.stringify({ type: "branch_fork" }));
+  $("branch").onchange = (ev) => { if (ev.target.value && ev.target.value !== state.activeBranch) ws?.send(JSON.stringify({ type: "branch_switch", id: ev.target.value })); };
+  $("delbranch").onclick = () => {
+    const b = (state.branches || []).find((x) => x.id === state.activeBranch);
+    if (b && confirm(`Delete the branch "${b.name}" and its history?`)) ws?.send(JSON.stringify({ type: "branch_delete", id: b.id }));
+  };
+  input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 200) + "px"; renderChips(); });
+
+  // Attachments: picker, drag-and-drop, each file uploaded to the gateway
+  // (which stores it under the Jarvis home) and held for the next send.
+  const fileInput = $("fileinput");
+  $("attach").onclick = () => fileInput.click();
+  fileInput.onchange = () => { for (const f of fileInput.files) void upload(f); fileInput.value = ""; };
+  const footer = $("footer");
+  footer.addEventListener("dragover", (ev) => { ev.preventDefault(); footer.classList.add("dragover"); });
+  footer.addEventListener("dragleave", () => footer.classList.remove("dragover"));
+  footer.addEventListener("drop", (ev) => {
+    ev.preventDefault(); footer.classList.remove("dragover");
+    for (const f of ev.dataTransfer?.files ?? []) void upload(f);
+  });
+  async function upload(file) {
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode(...bytes.subarray(i, i + 32768));
+      const res = await fetch(`/api/upload?token=${encodeURIComponent(token)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: file.name, data: btoa(bin) }),
+      });
+      const out = await res.json();
+      if (!out.ok) throw new Error(out.error || `upload failed (${res.status})`);
+      pending.push(out);
+    } catch (err) {
+      pending.push({ path: "", name: `${file.name} — upload failed: ${err instanceof Error ? err.message : String(err)}`, kind: "other", failed: true });
+    }
+    renderChips();
+  }
   const picker = $("picker"), pInput = $("picker-input"), pList = $("picker-list"), pNote = $("picker-note");
   function openPicker() {
     const which = state.brain === "cloud" ? "cloud" : "local";
