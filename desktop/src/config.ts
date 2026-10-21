@@ -216,7 +216,17 @@ export function loadConfig(p: Paths = paths()): Config {
     tor: { ...base.tor, ...(raw.tor ?? {}) },
     nli: { ...base.nli, ...(raw.nli ?? {}) },
     memory: { ...base.memory, ...(raw.memory ?? {}) },
-    notifications: { ...base.notifications, ...(raw.notifications ?? {}) },
+    // Validated field by field: a null or string allowedApps would break state() or become a Set of characters.
+    notifications: {
+      allowedApps: Array.isArray(raw.notifications?.allowedApps)
+        ? raw.notifications.allowedApps.filter((s): s is string => typeof s === "string")
+        : base.notifications.allowedApps,
+      quietStart: isHour(raw.notifications?.quietStart) ? raw.notifications.quietStart : base.notifications.quietStart,
+      quietEnd: isHour(raw.notifications?.quietEnd) ? raw.notifications.quietEnd : base.notifications.quietEnd,
+      maxPerMinutePerApp: isPositiveInt(raw.notifications?.maxPerMinutePerApp)
+        ? raw.notifications.maxPerMinutePerApp
+        : base.notifications.maxPerMinutePerApp,
+    },
     skills: {
       allow: Array.isArray(raw.skills?.allow) ? raw.skills.allow.filter((s): s is string => typeof s === "string") : base.skills.allow,
       roots: Array.isArray(raw.skills?.roots) ? raw.skills.roots.filter((s): s is string => typeof s === "string") : base.skills.roots,
@@ -224,6 +234,9 @@ export function loadConfig(p: Paths = paths()): Config {
     subagents: { ...base.subagents, ...(raw.subagents ?? {}) },
   };
 }
+
+const isHour = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 23;
+const isPositiveInt = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0;
 
 export function saveConfig(cfg: Config, p: Paths = paths()): void {
   writeFileSync(p.config, JSON.stringify(cfg, null, 2) + "\n", { mode: 0o600 });

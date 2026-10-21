@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -128,9 +128,19 @@ export function isBrokerUrl(url: string): boolean {
 
 // ---------- slugs ----------
 
+/**
+ * A target -> a folder name assertSlug accepts. Accents fold to ASCII
+ * ("Müller GmbH" -> "muller-gmbh"); a target whose letters have no ASCII
+ * form (CJK, Cyrillic …) gets a stable hash slug ("case-1a2b3c4d") rather
+ * than a name the store would then refuse. No letters or digits at all: "case".
+ */
 export function slugify(target: string): string {
-  const s = target.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/g, "");
-  return s || "case";
+  const ascii = target.normalize("NFKD").replace(/\p{M}+/gu, "").toLowerCase();
+  const s = ascii.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/g, "");
+  if (s) return s;
+  const t = target.trim();
+  if (!/[\p{L}\p{N}]/u.test(t)) return "case";
+  return `case-${createHash("sha256").update(t).digest("hex").slice(0, 8)}`;
 }
 
 const SLUG_OK = /^[a-z0-9][a-z0-9-]*$/;

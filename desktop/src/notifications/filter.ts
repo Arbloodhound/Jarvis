@@ -14,12 +14,18 @@
  * Gate design adapted from OpenClaw's NotificationForwardingPolicy
  * (MIT, Copyright (c) 2026 OpenClaw Foundation).
  *
- * Two desktop adaptations, neither of which changes the gate math:
+ * Three desktop adaptations:
  * - Times are epoch milliseconds (JS `Date.now()`), not epoch seconds.
  *   The fixed window is `floor(at / 60000)`, the minute bucket of `at`.
  * - The clock is injectable (`now`) so tests can pin "now" — the Python
  *   filter took the time from each notification's `at` field, and this
  *   one does too; `now` only supplies `at` when a notification has none.
+ * - Every gate judges `at`, the arrival time, never the time of the check.
+ *   The inbox file is drained later than its lines arrived, so arrivals can
+ *   reach the filter out of order; the rate gate therefore counts each
+ *   minute window separately instead of keeping only the latest one, which
+ *   an older arrival would reset. For in-order arrivals the result is the
+ *   same as the Python filter's single window.
  */
 
 /** This app's own package id (package.json build.appId). Its notifications never reach the agent. */
@@ -69,8 +75,8 @@ export class NotificationFilter {
   readonly quietEnd: number;
   readonly maxPerMinute: number;
   private readonly now: () => number;
-  /** app -> [window, count] — one fixed minute window per app, as in the Python filter. */
-  private readonly buckets = new Map<string, [number, number]>();
+  /** app -> (minute window -> count). Windows a day behind the app's newest are pruned. */
+  private readonly buckets = new Map<string, Map<number, number>>();
 
   constructor(opts: FilterOptions = {}) {
     this.allowedApps = new Set(opts.allowedApps ?? []);
@@ -81,7 +87,11 @@ export class NotificationFilter {
     this.now = opts.now ?? Date.now;
   }
 
-  /** Fill in the fields an intake may omit, using the injected clock for `at`. */
+  /**
+   * Fill in the fields an intake may omit. A missing `at` means "arrived
+   * now" (the gateway's case); an intake that knows better, like the inbox
+   * file drain, supplies `at` itself.
+   */
   normalize(input: NotificationInput): Notification {
     return {
       app: input.app,
@@ -104,17 +114,19 @@ export class NotificationFilter {
    * Gate 3's fixed window: the first maxPerMinute notifications from an app
    * in a minute window pass; the rest fail. A passing check consumes a slot —
    * this mutates, exactly like the Python `_burst_ok`, and it is only ever
-   * called after gates 1 and 2 have passed.
+   * called after gates 1 and 2 have passed. The window is the arrival
+   * minute, counted on its own, so a late backlog neither borrows a newer
+   * minute's slots nor resets them.
    */
   private burstOk(app: string, at: number): boolean {
     const window = Math.floor(at / 60_000);
-    const [start, count] = this.buckets.get(app) ?? [window, 0];
-    const cur: [number, number] = start !== window ? [window, 0] : [start, count];
-    if (cur[1] >= this.maxPerMinute) {
-      this.buckets.set(app, cur);
-      return false;
-    }
-    this.buckets.set(app, [cur[0], cur[1] + 1]);
+    let windows = this.buckets.get(app);
+    if (!windows) this.buckets.set(app, (windows = new Map()));
+    const count = windows.get(window) ?? 0;
+    if (count >= this.maxPerMinute) return false;
+    windows.set(window, count + 1);
+    const newest = Math.max(...windows.keys());
+    for (const w of windows.keys()) if (w < newest - 1440) windows.delete(w);
     return true;
   }
 
